@@ -2,9 +2,8 @@
 
 from pkg_resources import resource_filename
 
-from twisted.trial.unittest import TestCase
-
 from vumi.tests.utils import PersistenceMixin
+from vumi.tests.helpers import VumiTestCase
 
 
 def make_cfg(args):
@@ -25,16 +24,14 @@ def make_cfg(args):
     return TestConfigHolder(options)
 
 
-class TagPoolBaseTestCase(TestCase, PersistenceMixin):
+class TagPoolBaseTestCase(VumiTestCase, PersistenceMixin):
     sync_persistence = True
 
     def setUp(self):
         self._persist_setUp()
+        self.add_cleanup(self._persist_tearDown)
         # Make sure we start fresh.
         self.get_redis_manager()._purge_all()
-
-    def tearDown(self):
-        return self._persist_tearDown()
 
 
 class CreatePoolCmdTestCase(TagPoolBaseTestCase):
@@ -70,7 +67,7 @@ class CreatePoolCmdTestCase(TagPoolBaseTestCase):
 
 
 class UpdatePoolMetadataCmdTestCase(TagPoolBaseTestCase):
-    def test_create_pool_range_tags(self):
+    def test_update_tagpool_metadata(self):
         cfg = make_cfg(["update-pool-metadata", "shortcode"])
         cfg.run()
         self.assertEqual(cfg.output, [
@@ -79,6 +76,36 @@ class UpdatePoolMetadataCmdTestCase(TagPoolBaseTestCase):
             ])
         self.assertEqual(cfg.tagpool.get_metadata("shortcode"),
                          {'transport_type': 'sms'})
+
+
+class UpdateAllPoolMetadataCmdTestCase(TagPoolBaseTestCase):
+    def test_update_all_metadata(self):
+        cfg = make_cfg(["update-all-metadata"])
+        cfg.tagpool.declare_tags([("xmpp", "tag"), ("longcode", "tag")])
+        cfg.run()
+        self.assertEqual(cfg.output, [
+            'Updating pool metadata.',
+            'Note: Pools not present in both the config and tagpool'
+            ' store will not be updated.',
+            '  Updating metadata for pool longcode ...',
+            '  Updating metadata for pool xmpp ...',
+            'Done.'
+            ])
+        self.assertEqual(cfg.tagpool.get_metadata("longcode"),
+                         {u'transport_type': u'sms'})
+        self.assertEqual(cfg.tagpool.get_metadata("xmpp"),
+                         {u'transport_type': u'xmpp'})
+        self.assertEqual(cfg.tagpool.get_metadata("shortcode"), {})
+
+    def test_no_pools(self):
+        cfg = make_cfg(["update-all-metadata"])
+        cfg.run()
+        self.assertEqual(cfg.output, [
+            'Updating pool metadata.',
+            'Note: Pools not present in both the config and tagpool'
+            ' store will not be updated.',
+            'No pools found.',
+            ])
 
 
 class PurgePoolCmdTestCase(TagPoolBaseTestCase):
@@ -167,3 +194,33 @@ class ListPoolsCmdTestCase(TagPoolBaseTestCase):
             'Pools only in tagpool:',
             '   other',
             ])
+
+
+class ReleaseTagCmdTestCase(TagPoolBaseTestCase):
+
+    def setUp(self):
+        super(ReleaseTagCmdTestCase, self).setUp()
+        self.test_tags = [("foo", "tag%d" % i) for
+                          i in [1, 2, 3, 5, 6, 7, 9]]
+
+    def test_release_tag_not_in_use(self):
+        cfg = make_cfg(["release-tag", "foo", "tag1"])
+        cfg.tagpool.declare_tags(self.test_tags)
+        cfg.run()
+        self.assertEqual(cfg.output,
+                         ["Tag ('foo', 'tag1') not in use."])
+
+    def test_release_unknown_tag(self):
+        cfg = make_cfg(["release-tag", "foo", "tag1"])
+        cfg.run()
+        self.assertEqual(cfg.output,
+                         ["Unknown tag ('foo', 'tag1')."])
+
+    def test_release_tag(self):
+        cfg = make_cfg(["release-tag", "foo", "tag1"])
+        cfg.tagpool.declare_tags(self.test_tags)
+        cfg.tagpool.acquire_specific_tag(('foo', 'tag1'))
+        self.assertEqual(cfg.tagpool.inuse_tags('foo'), [('foo', 'tag1')])
+        cfg.run()
+        self.assertEqual(cfg.tagpool.inuse_tags('foo'), [])
+        self.assertEqual(cfg.output, ["Released ('foo', 'tag1')."])

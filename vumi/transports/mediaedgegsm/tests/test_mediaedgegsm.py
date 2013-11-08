@@ -10,7 +10,7 @@ from vumi.utils import http_request, http_request_full
 from vumi.tests.utils import MockHttpServer
 from vumi.transports.tests.utils import TransportTestCase
 from vumi.transports.mediaedgegsm import MediaEdgeGSMTransport
-from vumi.message import TransportUserMessage
+from vumi.transports.tests.helpers import TransportHelper
 
 
 class TestMediaEdgeGSMTransport(TransportTestCase):
@@ -43,7 +43,9 @@ class TestMediaEdgeGSMTransport(TransportTestCase):
                 }
             }
         }
-        self.transport = yield self.get_transport(self.config)
+        self.tx_helper = TransportHelper(self)
+        self.add_cleanup(self.tx_helper.cleanup)
+        self.transport = yield self.tx_helper.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url()
         self.mediaedgegsm_response = ''
         self.mediaedgegsm_response_code = http.OK
@@ -87,19 +89,14 @@ class TestMediaEdgeGSMTransport(TransportTestCase):
     def test_inbound(self):
         url = self.mkurl('hello')
         deferred = http_request(url, '', method='GET')
-        [msg] = yield self.wait_for_dispatched_messages(1)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assertEqual(msg['transport_name'], self.transport_name)
         self.assertEqual(msg['to_addr'], "12345")
         self.assertEqual(msg['from_addr'], "2371234567")
         self.assertEqual(msg['content'], "hello")
 
-        tum = TransportUserMessage(**msg.payload)
-        reply_msg = tum.reply('message received')
-
-        yield self.dispatch(reply_msg)
-
+        yield self.tx_helper.make_dispatch_reply(msg, 'message received')
         response = yield deferred
-
         self.assertEqual(response, 'message received')
 
     @inlineCallbacks
@@ -109,8 +106,8 @@ class TestMediaEdgeGSMTransport(TransportTestCase):
 
         sent_messages = []
         for msisdn in msisdns:
-            msg = self.mkmsg_out(to_addr=msisdn)
-            yield self.dispatch(msg)
+            msg = yield self.tx_helper.make_dispatch_outbound(
+                "outbound", to_addr=msisdn)
             sent_messages.append(msg)
 
         req1 = yield self.mediaedgegsm_calls.get()
@@ -138,11 +135,11 @@ class TestMediaEdgeGSMTransport(TransportTestCase):
         self.mediaedgegsm_response_code = http.NOT_FOUND
         self.mediaedgegsm_response = 'Not Found'
 
-        msg = self.mkmsg_out(to_addr='+41791200000')
-        yield self.dispatch(msg)
+        msg = yield self.tx_helper.make_dispatch_outbound(
+            "outbound", to_addr='+41791200000')
 
         yield self.mediaedgegsm_calls.get()
-        [nack] = yield self.wait_for_dispatched_events(1)
+        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(nack['user_message_id'], msg['message_id'])
         self.assertEqual(nack['sent_message_id'], msg['message_id'])
         self.assertEqual(nack['nack_reason'],
@@ -178,15 +175,13 @@ class TestMediaEdgeGSMTransport(TransportTestCase):
     def test_handle_non_ascii_input(self):
         url = self.mkurl(u"öæł".encode("utf-8"))
         deferred = http_request_full(url, '', method='GET')
-        [msg] = yield self.wait_for_dispatched_messages(1)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assertEqual(msg['transport_name'], self.transport_name)
         self.assertEqual(msg['to_addr'], "12345")
         self.assertEqual(msg['from_addr'], "2371234567")
         self.assertEqual(msg['content'], u"öæł")
 
-        tum = TransportUserMessage(**msg.payload)
-        reply_msg = tum.reply(u'Zoë says hi')
-        yield self.dispatch(reply_msg)
+        yield self.tx_helper.make_dispatch_reply(msg, u'Zoë says hi')
 
         response = yield deferred
         self.assertEqual(response.headers.getRawHeaders('Content-Type'),

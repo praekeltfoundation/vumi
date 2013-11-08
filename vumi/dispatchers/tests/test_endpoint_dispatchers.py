@@ -1,12 +1,17 @@
-from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.defer import inlineCallbacks
 
 from vumi.dispatchers.endpoint_dispatchers import RoutingTableDispatcher
 from vumi.tests.utils import VumiWorkerTestCase
+from vumi.dispatchers.tests.helpers import DispatcherHelper
 
 
 class TestRoutingTableDispatcher(VumiWorkerTestCase):
 
-    @inlineCallbacks
+    def setUp(self):
+        self.disp_helper = DispatcherHelper(RoutingTableDispatcher, self)
+        self.add_cleanup(self.disp_helper.cleanup)
+        return super(TestRoutingTableDispatcher, self).setUp()
+
     def get_dispatcher(self, **config_extras):
         config = {
             "receive_inbound_connectors": ["transport1", "transport2"],
@@ -29,92 +34,80 @@ class TestRoutingTableDispatcher(VumiWorkerTestCase):
                 },
             }
         config.update(config_extras)
-        dispatcher = yield self.get_worker(config, RoutingTableDispatcher)
-        returnValue(dispatcher)
+        return self.disp_helper.get_dispatcher(config)
 
-    def with_endpoint(self, msg, endpoint=None):
-        msg.set_routing_endpoint(endpoint)
-        return msg
+    def ch(self, connector_name):
+        return self.disp_helper.get_connector_helper(connector_name)
 
     def assert_rkeys_used(self, *rkeys):
-        self.assertEqual(set(rkeys), set(self._amqp.dispatched['vumi'].keys()))
+        broker = self.disp_helper.worker_helper.broker
+        self.assertEqual(set(rkeys), set(broker.dispatched['vumi'].keys()))
+
+    def assert_dispatched_endpoint(self, msg, endpoint, dispatched_msgs):
+        msg.set_routing_endpoint(endpoint)
+        self.assertEqual([msg], dispatched_msgs)
 
     @inlineCallbacks
     def test_inbound_message_routing(self):
         yield self.get_dispatcher()
-        msg = self.mkmsg_in()
-        yield self.dispatch_inbound(msg, 'transport1')
+        msg = yield self.ch("transport1").make_dispatch_inbound("inbound")
         self.assert_rkeys_used('transport1.inbound', 'app1.inbound')
-        self.assertEqual(
-            [self.with_endpoint(msg)], self.get_dispatched_inbound('app1'))
+        self.assert_dispatched_endpoint(
+            msg, 'default', self.ch('app1').get_dispatched_inbound())
 
-        self.clear_all_dispatched()
-        msg = self.mkmsg_in()
-        yield self.dispatch_inbound(msg, 'transport2')
+        self.disp_helper.clear_all_dispatched()
+        msg = yield self.ch("transport2").make_dispatch_inbound("inbound")
         self.assert_rkeys_used('transport2.inbound', 'app2.inbound')
-        self.assertEqual(
-            [self.with_endpoint(msg)], self.get_dispatched_inbound('app2'))
+        self.assert_dispatched_endpoint(
+            msg, 'default', self.ch('app2').get_dispatched_inbound())
 
-        self.clear_all_dispatched()
-        msg = self.mkmsg_in()
-        msg.set_routing_endpoint('ep1')
-        yield self.dispatch_inbound(msg, 'transport2')
+        self.disp_helper.clear_all_dispatched()
+        msg = yield self.ch("transport2").make_dispatch_inbound(
+            "inbound", endpoint='ep1')
         self.assert_rkeys_used('transport2.inbound', 'app1.inbound')
-        self.assertEqual(
-            [self.with_endpoint(msg, 'ep1')],
-            self.get_dispatched_inbound('app1'))
+        self.assert_dispatched_endpoint(
+            msg, 'ep1', self.ch('app1').get_dispatched_inbound())
 
     @inlineCallbacks
     def test_outbound_message_routing(self):
         yield self.get_dispatcher()
-        msg = self.mkmsg_in()
-        yield self.dispatch_outbound(msg, 'app1')
+        msg = yield self.ch('app1').make_dispatch_outbound("outbound")
         self.assert_rkeys_used('app1.outbound', 'transport1.outbound')
-        self.assertEqual(
-            [self.with_endpoint(msg)],
-            self.get_dispatched_outbound('transport1'))
+        self.assert_dispatched_endpoint(
+            msg, 'default', self.ch('transport1').get_dispatched_outbound())
 
-        self.clear_all_dispatched()
-        msg = self.mkmsg_in()
-        yield self.dispatch_outbound(msg, 'app2')
+        self.disp_helper.clear_all_dispatched()
+        msg = yield self.ch('app2').make_dispatch_outbound("outbound")
         self.assert_rkeys_used('app2.outbound', 'transport2.outbound')
-        self.assertEqual(
-            [self.with_endpoint(msg)],
-            self.get_dispatched_outbound('transport2'))
+        self.assert_dispatched_endpoint(
+            msg, 'default', self.ch('transport2').get_dispatched_outbound())
 
-        self.clear_all_dispatched()
-        msg = self.mkmsg_in()
-        msg.set_routing_endpoint('ep2')
-        yield self.dispatch_outbound(msg, 'app1')
+        self.disp_helper.clear_all_dispatched()
+        msg = yield self.ch('app1').make_dispatch_outbound(
+            "outbound", endpoint='ep2')
         self.assert_rkeys_used('app1.outbound', 'transport2.outbound')
-        self.assertEqual(
-            [self.with_endpoint(msg)],
-            self.get_dispatched_outbound('transport2'))
+        self.assert_dispatched_endpoint(
+            msg, 'default', self.ch('transport2').get_dispatched_outbound())
 
     @inlineCallbacks
     def test_inbound_event_routing(self):
         yield self.get_dispatcher()
-        msg = self.mkmsg_ack()
-        yield self.dispatch_event(msg, 'transport1')
+        msg = yield self.ch('transport1').make_dispatch_ack()
         self.assert_rkeys_used('transport1.event', 'app1.event')
-        self.assertEqual(
-            [self.with_endpoint(msg)], self.get_dispatched_events('app1'))
+        self.assert_dispatched_endpoint(
+            msg, 'default', self.ch('app1').get_dispatched_events())
 
-        self.clear_all_dispatched()
-        msg = self.mkmsg_ack()
-        yield self.dispatch_event(msg, 'transport2')
+        self.disp_helper.clear_all_dispatched()
+        msg = yield self.ch('transport2').make_dispatch_ack()
         self.assert_rkeys_used('transport2.event', 'app2.event')
-        self.assertEqual(
-            [self.with_endpoint(msg)], self.get_dispatched_events('app2'))
+        self.assert_dispatched_endpoint(
+            msg, 'default', self.ch('app2').get_dispatched_events())
 
-        self.clear_all_dispatched()
-        msg = self.mkmsg_ack()
-        msg.set_routing_endpoint('ep1')
-        yield self.dispatch_event(msg, 'transport2')
+        self.disp_helper.clear_all_dispatched()
+        msg = yield self.ch('transport2').make_dispatch_ack(endpoint='ep1')
         self.assert_rkeys_used('transport2.event', 'app1.event')
-        self.assertEqual(
-            [self.with_endpoint(msg, 'ep1')],
-            self.get_dispatched_events('app1'))
+        self.assert_dispatched_endpoint(
+            msg, 'ep1', self.ch('app1').get_dispatched_events())
 
     def get_dispatcher_consumers(self, dispatcher):
         consumers = []

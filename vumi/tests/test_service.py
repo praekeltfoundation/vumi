@@ -1,19 +1,13 @@
-from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.service import Worker, WorkerCreator
 from vumi.tests.utils import (fake_amq_message, get_stubbed_worker)
 from vumi.message import Message
+from vumi.tests.helpers import VumiTestCase
 
 
-class ServiceTestCase(TestCase):
-
-    def setUp(self):
-        pass
-
-    def tearDown(self):
-        pass
-
+class ServiceTestCase(VumiTestCase):
+    @inlineCallbacks
     def test_consume(self):
         """The consume helper should direct all incoming messages matching the
         specified routing_key, queue_name & exchange to the given callback"""
@@ -22,15 +16,16 @@ class ServiceTestCase(TestCase):
         worker = get_stubbed_worker(Worker)
 
         # buffer to check messages consumed
-        log = [Message.from_json(message.content.body)]
+        log = []
         # consume all messages on the given routing key and append
         # them to the log
-        worker.consume('test.routing.key', lambda msg: log.append(msg))
+        yield worker.consume('test.routing.key', lambda msg: log.append(msg))
         # if all works well then the consume method should funnel the test
         # message straight to the callback, the callback will apend it to the
         # log and we can test it.
         worker._amqp_client.broker.basic_publish('vumi', 'test.routing.key',
                                                  message.content)
+        yield worker._amqp_client.broker.wait_delivery()
         self.assertEquals(log, [Message(key="value")])
 
     @inlineCallbacks
@@ -45,6 +40,7 @@ class ServiceTestCase(TestCase):
 
         self.assertEquals(published_msg.body, '{"key": "value"}')
         self.assertEquals(published_msg.properties, {'delivery mode': 2})
+        yield worker._amqp_client.broker.wait_delivery()
 
 
 class LoadableTestWorker(Worker):
@@ -57,7 +53,7 @@ class NoQueueWorkerCreator(WorkerCreator):
         pass
 
 
-class TestWorkerCreator(TestCase):
+class TestWorkerCreator(VumiTestCase):
     def get_creator(self, **options):
         vumi_options = {
             "hostname": "localhost",

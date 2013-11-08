@@ -1,11 +1,10 @@
-from twisted.trial.unittest import TestCase
-
 from vumi.tests.utils import RegexMatcher, UTCNearNow
 from vumi.message import (Message, TransportMessage, TransportEvent,
                           TransportUserMessage)
+from vumi.tests.helpers import VumiTestCase
 
 
-class MessageTest(TestCase):
+class MessageTest(VumiTestCase):
 
     def test_message_equality(self):
         self.assertEqual(Message(a=5), Message(a=5))
@@ -26,6 +25,11 @@ class TransportMessageTestMixin(object):
         msg = self.make_message()
         self.assertEqual('20110921', msg['message_version'])
         self.assertEqual(UTCNearNow(), msg['timestamp'])
+
+    def test_helper_metadata(self):
+        self.assertEqual({}, self.make_message()['helper_metadata'])
+        msg = self.make_message(helper_metadata={'foo': 'bar'})
+        self.assertEqual({'foo': 'bar'}, msg['helper_metadata'])
 
     def test_routing_metadata(self):
         self.assertEqual({}, self.make_message().routing_metadata)
@@ -55,7 +59,7 @@ class TransportMessageTestMixin(object):
         self.assertEqual('foo', msg.routing_metadata['endpoint_name'])
 
 
-class TransportMessageTest(TransportMessageTestMixin, TestCase):
+class TransportMessageTest(TransportMessageTestMixin, VumiTestCase):
     def make_message(self, **extra_fields):
         fields = dict(message_type='foo')
         fields.update(extra_fields)
@@ -68,7 +72,7 @@ class TransportMessageTest(TransportMessageTestMixin, TestCase):
         self.assertEqual('foo', msg['message_type'])
 
 
-class TransportUserMessageTest(TransportMessageTestMixin, TestCase):
+class TransportUserMessageTest(TransportMessageTestMixin, VumiTestCase):
     def make_message(self, **extra_fields):
         fields = dict(
             # message_id='abc',
@@ -264,7 +268,7 @@ class TransportUserMessageTest(TransportMessageTestMixin, TestCase):
         self.assertEqual(msg['helper_metadata'], {})
 
 
-class TransportEventTest(TransportMessageTestMixin, TestCase):
+class TransportEventTest(TransportMessageTestMixin, VumiTestCase):
     def make_message(self, **extra_fields):
         fields = dict(
             event_id='def',
@@ -288,6 +292,7 @@ class TransportEventTest(TransportMessageTestMixin, TestCase):
         self.assertEqual('abc', msg['user_message_id'])
         self.assertEqual('20110921', msg['message_version'])
         self.assertEqual('ghi', msg['sent_message_id'])
+        self.assertEqual({}, msg['helper_metadata'])
 
     def test_transport_event_nack(self):
         msg = TransportEvent(
@@ -302,6 +307,7 @@ class TransportEventTest(TransportMessageTestMixin, TestCase):
         self.assertEqual('def', msg['event_id'])
         self.assertEqual('abc', msg['user_message_id'])
         self.assertEqual('20110921', msg['message_version'])
+        self.assertEqual({}, msg['helper_metadata'])
 
     def test_transport_event_delivery_report(self):
         msg = TransportEvent(
@@ -320,3 +326,4 @@ class TransportEventTest(TransportMessageTestMixin, TestCase):
         self.assertEqual('20110921', msg['message_version'])
         # self.assertEqual('sphex', msg['transport_name'])
         self.assertEqual('delivered', msg['delivery_status'])
+        self.assertEqual({}, msg['helper_metadata'])

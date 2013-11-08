@@ -218,6 +218,17 @@ class Vas2NetsTransport(Transport):
         self.receipt_resource = yield self.start_web_resources(
             resources, self.config['web_port'], LogFilterSite)
 
+    def get_transport_url(self):
+        """
+        Get the URL for the HTTP resource. Requires the worker to be started.
+
+        This is mostly useful in tests, and probably shouldn't be used in
+        non-test code, because the API might live behind a load balancer or
+        proxy.
+        """
+        addr = self.receipt_resource.getHost()
+        return "http://%s:%s" % (addr.host, addr.port)
+
     @inlineCallbacks
     def handle_outbound_message(self, message):
         """

@@ -366,8 +366,12 @@ class FakeRedis(object):
     @maybe_async
     def ltrim(self, key, start, stop):
         lval = self._data.get(key, [])
+        if stop != -1:
+            # -1 means "end of list", so we skip the deletion. Otherwise we
+            # increment the "stop" value to avoid deleting the last value we
+            # want to keep.
+            del lval[stop + 1:]
         del lval[:start]
-        del lval[stop:]
 
     # Expiry operations
 

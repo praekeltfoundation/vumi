@@ -1,10 +1,10 @@
-from twisted.trial.unittest import TestCase
-from twisted.internet.defer import inlineCallbacks, succeed
+from twisted.internet.defer import inlineCallbacks, succeed, Deferred
 
 from vumi.worker import BaseConfig, BaseWorker
 from vumi.connectors import ReceiveInboundConnector, ReceiveOutboundConnector
-from vumi.tests.utils import VumiWorkerTestCase, LogCatcher, get_stubbed_worker
+from vumi.tests.utils import VumiWorkerTestCase, LogCatcher
 from vumi.middleware.base import BaseMiddleware
+from vumi.tests.helpers import VumiTestCase, MessageHelper, WorkerHelper
 
 
 class DummyWorker(BaseWorker):
@@ -41,7 +41,7 @@ class CallRecorder(object):
         return self.func(*args, **kwargs)
 
 
-class TestBaseConfig(TestCase):
+class TestBaseConfig(VumiTestCase):
     def test_no_amqp_prefetch(self):
         config = BaseConfig({})
         self.assertEqual(config.amqp_prefetch_count, 20)
@@ -56,7 +56,11 @@ class TestBaseWorker(VumiWorkerTestCase):
     @inlineCallbacks
     def setUp(self):
         yield super(TestBaseWorker, self).setUp()
-        self.worker = yield self.get_worker({}, DummyWorker, False)
+        self.msg_helper = MessageHelper()
+        self.worker_helper = WorkerHelper()
+        self.add_cleanup(self.worker_helper.cleanup)
+        self.worker = yield self.worker_helper.get_worker(
+            DummyWorker, {}, False)
 
     @inlineCallbacks
     def test_start_worker(self):
@@ -102,7 +106,7 @@ class TestBaseWorker(VumiWorkerTestCase):
         ])
 
     def test_setup_connectors_raises(self):
-        worker = get_stubbed_worker(BaseWorker, {}, None)  # None -> dummy AMQP
+        worker = self.worker_helper.get_worker_raw(BaseWorker, {})
         self.assertRaises(NotImplementedError, worker.setup_connectors)
 
     @inlineCallbacks
@@ -113,16 +117,16 @@ class TestBaseWorker(VumiWorkerTestCase):
         self.assertFalse(connector._consumers['inbound'].keep_consuming)
 
     def test_setup_worker_raises(self):
-        worker = get_stubbed_worker(BaseWorker, {}, None)  # None -> dummy AMQP
+        worker = self.worker_helper.get_worker_raw(BaseWorker, {})
         self.assertRaises(NotImplementedError, worker.setup_worker)
 
     def test_teardown_worker_raises(self):
-        worker = get_stubbed_worker(BaseWorker, {}, None)  # None -> dummy AMQP
+        worker = self.worker_helper.get_worker_raw(BaseWorker, {})
         self.assertRaises(NotImplementedError, worker.teardown_worker)
 
     @inlineCallbacks
     def test_setup_middleware(self):
-        worker = get_stubbed_worker(DummyWorker, {
+        worker = self.worker_helper.get_worker_raw(DummyWorker, {
             'middleware': [{'mw': 'vumi.tests.test_worker'
                                   '.DummyMiddleware'}],
         })
@@ -132,7 +136,7 @@ class TestBaseWorker(VumiWorkerTestCase):
 
     @inlineCallbacks
     def test_teardown_middleware(self):
-        worker = get_stubbed_worker(DummyWorker, {
+        worker = self.worker_helper.get_worker_raw(DummyWorker, {
             'middleware': [{'mw': 'vumi.tests.test_worker'
                                   '.DummyMiddleware'}],
         })
@@ -147,7 +151,7 @@ class TestBaseWorker(VumiWorkerTestCase):
 
     @inlineCallbacks
     def test_get_config(self):
-        msg = self.mkmsg_in()
+        msg = self.msg_helper.make_inbound("inbound")
         cfg = yield self.worker.get_config(msg)
         self.assertEqual([f.name for f in cfg.fields], ['amqp_prefetch_count'])
         self.assertEqual(cfg.amqp_prefetch_count, 20)
@@ -207,3 +211,27 @@ class TestBaseWorker(VumiWorkerTestCase):
         connector.pause()
         self.worker.unpause_connectors()
         self.assertFalse(connector.paused)
+
+    @inlineCallbacks
+    def test_pause_connectors_unprocessed_messages(self):
+        handler_wait = Deferred()
+        handler_continue = Deferred()
+
+        def handler(msg):
+            handler_wait.callback(None)
+            return handler_continue
+
+        connector = yield self.worker.setup_ri_connector('foo')
+        connector.set_default_inbound_handler(handler)
+        connector.unpause()
+        self.worker_helper.dispatch_inbound(
+            self.msg_helper.make_inbound("inbound"), 'foo')
+
+        yield handler_wait
+        d = self.worker.pause_connectors()
+        self.assertTrue(connector.paused)
+        self.assertFalse(d.called)
+
+        handler_continue.callback(None)
+        yield d
+        self.assertTrue(connector.paused)

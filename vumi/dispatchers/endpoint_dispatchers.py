@@ -29,8 +29,9 @@ class Dispatcher(BaseWorker):
         return d
 
     def teardown_worker(self):
-        self.pause_connectors()
-        return self.teardown_dispatcher()
+        d = self.pause_connectors()
+        d.addCallback(lambda r: self.teardown_dispatcher())
+        return d
 
     def setup_dispatcher(self):
         """

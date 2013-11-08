@@ -1,12 +1,10 @@
 # -*- test-case-name: vumi.transports.smpp.tests.test_smpp -*-
 
-from datetime import datetime
-
 from twisted.internet import reactor
-from twisted.internet.endpoints import clientFromString
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi import log
+from vumi.reconnecting_client import ReconnectingClientService
 from vumi.utils import get_operator_number
 from vumi.transports.base import Transport
 from vumi.transports.smpp.clientserver.client import (
@@ -32,6 +30,27 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
         ' +[Tt]ext:(?P<text>.{,20})'
         '.*'
     )
+
+    DELIVERY_REPORT_STATUS_MAPPING = {
+        # Output values should map to themselves:
+        'delivered': 'delivered',
+        'failed': 'failed',
+        'pending': 'pending',
+        # SMPP `message_state` values:
+        'ENROUTE': 'pending',
+        'DELIVERED': 'delivered',
+        'EXPIRED': 'failed',
+        'DELETED': 'failed',
+        'UNDELIVERABLE': 'failed',
+        'ACCEPTED': 'delivered',
+        'UNKNOWN': 'pending',
+        'REJECTED': 'failed',
+        # From the most common regex-extracted format:
+        'DELIVRD': 'delivered',
+        'REJECTD': 'failed',
+        # Currently we will accept this for Yo! TODO: investigate
+        '0': 'delivered',
+    }
 
     twisted_endpoint = ConfigClientEndpoint(
         'The SMPP endpoint to connect to.',
@@ -79,6 +98,16 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
     delivery_report_regex = ConfigRegex(
         'What regex to use for matching delivery reports',
         default=DELIVERY_REPORT_REGEX, static=True)
+    delivery_report_status_mapping = ConfigDict(
+        "Mapping from delivery report message state to "
+        "(`delivered`, `failed`, `pending`)",
+        static=True, default=DELIVERY_REPORT_STATUS_MAPPING)
+    submit_sm_encoding = ConfigText(
+        'How to encode the SMS before putting on the wire', static=True,
+        default='utf-8')
+    submit_sm_data_coding = ConfigInt(
+        'What data_coding value to tell the SMSC we\'re using when putting'
+        'an SMS on the wire', static=True, default=0)
     data_coding_overrides = ConfigDict(
         "Overrides for data_coding character set mapping. This is useful for "
         "setting the default encoding (0), adding additional undefined "
@@ -91,6 +120,14 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
         "`message_payload` optional field instead of the `short_message` "
         "field. Default is `False`, simply because that maintains previous "
         "behaviour.", default=False, static=True)
+    send_multipart_sar = ConfigBool(
+        "If `True`, messages longer than 140 bytes will be sent as a series "
+        "of smaller messages with the sar_* parameters set. Default is "
+        "`False`.", default=False, static=True)
+    send_multipart_udh = ConfigBool(
+        "If `True`, messages longer than 140 bytes will be sent as a series "
+        "of smaller messages with the user data headers. Default is `False`.",
+        default=False, static=True)
     split_bind_prefix = ConfigText(
         "This is the Redis prefix to use for storing things like sequence "
         "numbers and message ids for delivery report handling. It defaults "
@@ -103,7 +140,7 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
         "work.", default='', static=True)
     throttle_delay = ConfigFloat(
         "Delay (in seconds) before retrying a message after receiving "
-        "`ESME_RTHROTTLED`.", default=0.1, static=True)
+        "`ESME_RTHROTTLED` or `ESME_RMSGQFUL`.", default=0.1, static=True)
     COUNTRY_CODE = ConfigText(
         "Used to translate a leading zero in a destination MSISDN into a "
         "country code. Default ''", default="", static=True)
@@ -119,6 +156,15 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
         "E.g. { 'NETWORK1': '27761234567'}", default={}, static=True)
     redis_manager = ConfigDict(
         'How to connect to Redis', default={}, static=True)
+
+    def post_validate(self):
+        long_message_params = (
+            'send_long_messages', 'send_multipart_sar', 'send_multipart_udh')
+        set_params = [p for p in long_message_params if getattr(self, p)]
+        if len(set_params) > 1:
+            params = ', '.join(set_params)
+            self.raise_config_error(
+                "The following parameters are mutually exclusive: %s" % params)
 
 
 class SmppTransport(Transport):
@@ -153,6 +199,8 @@ class SmppTransport(Transport):
         log.msg("Starting the SmppTransport for %s" % (
             config.twisted_endpoint))
 
+        self.submit_sm_encoding = config.submit_sm_encoding
+        self.submit_sm_data_coding = config.submit_sm_data_coding
         default_prefix = "%s@%s" % (config.system_id, config.transport_name)
 
         r_config = config.redis_manager
@@ -171,16 +219,18 @@ class SmppTransport(Transport):
             delivery_report=self.delivery_report,
             deliver_sm=self.deliver_sm)
 
+        self._reconn_service = None
         if not hasattr(self, 'esme_client'):
             # start the Smpp transport (if we don't have one)
             self.factory = self.make_factory()
-            yield config.twisted_endpoint.connect(self.factory)
+            self._reconn_service = ReconnectingClientService(
+                config.twisted_endpoint, self.factory)
+            self._reconn_service.startService()
 
     @inlineCallbacks
     def teardown_transport(self):
-        if hasattr(self, 'factory'):
-            self.factory.stopTrying()
-            self.factory.esme.transport.loseConnection()
+        if self._reconn_service is not None:
+            yield self._reconn_service.stopService()
         yield self.redis._close()
 
     def get_smpp_bind_params(self):
@@ -212,13 +262,15 @@ class SmppTransport(Transport):
 
     @inlineCallbacks
     def _submit_outbound_message(self, message):
-        sequence_number = yield self.send_smpp(message)
-        yield self.r_set_id_for_sequence(
-            sequence_number, message.payload.get("message_id"))
+        sequence_numbers = yield self.send_smpp(message)
+        # TODO: Handle multiple acks for a single message that we split up.
+        for sequence_number in sequence_numbers:
+            yield self.r_set_id_for_sequence(
+                sequence_number, message.payload.get("message_id"))
 
     def esme_disconnected(self):
         log.msg("ESME Disconnected")
-        self.pause_connectors()
+        return self.pause_connectors()
 
     # Redis message storing methods
 
@@ -305,7 +357,7 @@ class SmppTransport(Transport):
                 # The sms was submitted ok
                 yield self.submit_sm_success(sent_sms_id, transport_msg_id)
                 yield self._stop_throttling()
-            elif status == 'ESME_RTHROTTLED':
+            elif status in ('ESME_RTHROTTLED', 'ESME_RMSGQFUL'):
                 yield self._start_throttling()
                 yield self.submit_sm_throttled(sent_sms_id)
             else:
@@ -351,28 +403,13 @@ class SmppTransport(Transport):
                            self._submit_outbound_message, message)
 
     def delivery_status(self, state):
-        if state in [
-                "DELIVRD",
-                "0"  # Currently we will accept this for Yo! TODO: investigate
-                ]:
-            return "delivered"
-        if state in [
-                "REJECTD"
-                ]:
-            return "failed"
-        return "pending"
+        config = self.get_static_config()
+        return config.delivery_report_status_mapping.get(state, 'pending')
 
     @inlineCallbacks
-    def delivery_report(self, *args, **kwargs):
-        transport_metadata = {
-                "message": kwargs['delivery_report'],
-                "date": datetime.strptime(
-                    kwargs['delivery_report']['done_date'], "%y%m%d%H%M%S")
-                }
-        delivery_status = self.delivery_status(
-            kwargs['delivery_report']['stat'])
-        message_id = yield self.r_get_id_for_third_party_id(
-            kwargs['delivery_report']['id'])
+    def delivery_report(self, message_id, message_state):
+        delivery_status = self.delivery_status(message_state)
+        message_id = yield self.r_get_id_for_third_party_id(message_id)
         if message_id is None:
             log.warning("Failed to retrieve message id for delivery report."
                         " Delivery report from %s discarded."
@@ -382,8 +419,7 @@ class SmppTransport(Transport):
                                                     delivery_status))
         returnValue((yield self.publish_delivery_report(
                     user_message_id=message_id,
-                    delivery_status=delivery_status,
-                    transport_metadata=transport_metadata)))
+                    delivery_status=delivery_status)))
 
     def deliver_sm(self, *args, **kwargs):
         message_type = kwargs.get('message_type', 'sms')
@@ -429,7 +465,8 @@ class SmppTransport(Transport):
                                     config.OPERATOR_PREFIX,
                                     config.OPERATOR_NUMBER)
         return self.esme_client.submit_sm(
-            short_message=text.encode('utf-8'),
+            short_message=text.encode(self.submit_sm_encoding),
+            data_coding=self.submit_sm_data_coding,
             destination_addr=str(to_addr),
             source_addr=route or from_addr,
             message_type=message['transport_type'],

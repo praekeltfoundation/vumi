@@ -2,7 +2,7 @@ from twisted.internet.defer import (
     Deferred, inlineCallbacks, gatherResults, maybeDeferred)
 from twisted.internet import reactor
 from twisted.internet.protocol import Protocol
-from twisted.internet.protocol import Factory, ClientFactory, ClientCreator
+from twisted.internet.protocol import Factory, ClientCreator
 
 from vumi.transports.mtn_nigeria.xml_over_tcp import XmlOverTcpClient
 

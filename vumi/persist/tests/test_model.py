@@ -2,7 +2,6 @@
 
 from datetime import datetime
 
-from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.persist.model import (
@@ -12,6 +11,7 @@ from vumi.persist.fields import (
     ForeignKey, ManyToMany, Timestamp)
 from vumi.message import TransportUserMessage
 from vumi.tests.utils import import_skip
+from vumi.tests.helpers import VumiTestCase
 
 
 class SimpleModel(Model):
@@ -114,7 +114,7 @@ class UnknownVersionedModel(Model):
     d = Integer()
 
 
-class TestModelOnTxRiak(TestCase):
+class TestModelOnTxRiak(VumiTestCase):
 
     # TODO: all copies of mkmsg must be unified!
     def mkmsg(self, **kw):
@@ -131,11 +131,17 @@ class TestModelOnTxRiak(TestCase):
         except ImportError, e:
             import_skip(e, 'riakasaurus', 'riakasaurus.riak')
         self.manager = TxRiakManager.from_config({'bucket_prefix': 'test.'})
+        self.add_cleanup(self.manager.purge_all)
         yield self.manager.purge_all()
 
     @Manager.calls_manager
-    def tearDown(self):
-        yield self.manager.purge_all()
+    def filter_tombstones(self, model_cls, keys):
+        live_keys = []
+        for key in keys:
+            model = yield model_cls.load(key)
+            if model is not None:
+                live_keys.append(key)
+        returnValue(live_keys)
 
     def test_simple_class(self):
         field_names = SimpleModel.field_descriptors.keys()
@@ -313,6 +319,37 @@ class TestModelOnTxRiak(TestCase):
         simple_model = self.manager.proxy(SimpleModel)
         s = yield simple_model.load("foo")
         self.assertEqual(s, None)
+
+    @Manager.calls_manager
+    def test_all_keys(self):
+        simple_model = self.manager.proxy(SimpleModel)
+
+        keys = yield self.filter_tombstones(
+            simple_model, (yield simple_model.all_keys()))
+        self.assertEqual(keys, [])
+
+        yield simple_model("foo-1", a=5, b=u'1').save()
+        yield simple_model("foo-2", a=5, b=u'2').save()
+
+        keys = yield self.filter_tombstones(
+            simple_model, (yield simple_model.all_keys()))
+        self.assertEqual(sorted(keys), [u"foo-1", u"foo-2"])
+
+    @Manager.calls_manager
+    def test_index_keys(self):
+        indexed_model = self.manager.proxy(IndexedModel)
+        yield indexed_model("foo1", a=1, b=u"one").save()
+        yield indexed_model("foo2", a=2, b=u"one").save()
+        yield indexed_model("foo3", a=2, b=None).save()
+
+        keys = yield indexed_model.index_keys('a', 1)
+        self.assertEqual(keys, ["foo1"])
+
+        keys = yield indexed_model.index_keys('b', u"one")
+        self.assertEqual(sorted(keys), ["foo1", "foo2"])
+
+        keys = yield indexed_model.index_keys('b', None)
+        self.assertEqual(keys, ["foo3"])
 
     @Manager.calls_manager
     def test_index_lookup(self):

@@ -1,16 +1,16 @@
-from twisted.internet.defer import inlineCallbacks
-from twisted.trial.unittest import TestCase
+from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.transports.tests.utils import TransportTestCase
 from vumi.utils import http_request_full
 from vumi.message import TransportUserMessage
 from vumi.transports.mtech_ussd import MtechUssdTransport
 from vumi.transports.mtech_ussd.mtech_ussd import MtechUssdResponse
+from vumi.transports.tests.helpers import TransportHelper
+from vumi.tests.helpers import VumiTestCase
 
 
 class TestMtechUssdTransport(TransportTestCase):
 
-    timeout = 1
     transport_name = 'mtech_ussd'
     transport_class = MtechUssdTransport
 
@@ -26,7 +26,9 @@ class TestMtechUssdTransport(TransportTestCase):
             'username': 'testuser',
             'password': 'testpass',
         }
-        self.transport = yield self.get_transport(self.config)
+        self.tx_helper = TransportHelper(self)
+        self.add_cleanup(self.tx_helper.cleanup)
+        self.transport = yield self.tx_helper.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url().rstrip('/')
         self.url = "%s%s" % (self.transport_url, self.config['web_path'])
         yield self.transport.session_manager.redis._purge_all()  # just in case
@@ -48,15 +50,11 @@ class TestMtechUssdTransport(TransportTestCase):
         return self.make_ussd_request_full(session_id, **kwargs).addCallback(
             lambda r: r.delivered_body)
 
-    def reply_to_message(self, *args, **kw):
-        d = self.wait_for_dispatched_messages(1)
-
-        def reply(r):
-            msg = TransportUserMessage(**r[0].payload)
-            self.dispatch(msg.reply(*args, **kw))
-            return msg
-
-        return d.addCallback(reply)
+    @inlineCallbacks
+    def reply_to_message(self, content, **kw):
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        yield self.tx_helper.make_dispatch_reply(msg, content, **kw)
+        returnValue(msg)
 
     @inlineCallbacks
     def test_empty_request(self):
@@ -131,9 +129,8 @@ class TestMtechUssdTransport(TransportTestCase):
 
     @inlineCallbacks
     def test_nack(self):
-        msg = self.mkmsg_out()
-        yield self.dispatch(msg)
-        [nack] = yield self.wait_for_dispatched_events(1)
+        msg = yield self.tx_helper.make_dispatch_outbound("outbound")
+        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(nack['user_message_id'], msg['message_id'])
         self.assertEqual(nack['sent_message_id'], msg['message_id'])
         self.assertEqual(nack['nack_reason'],
@@ -178,7 +175,7 @@ class TestMtechUssdTransport(TransportTestCase):
                 ])
         self.assertEqual(response, correct_response)
 
-        self.clear_all_dispatched()
+        self.tx_helper.clear_all_dispatched()
 
         response_d = self.make_ussd_request(sid, page_id="indexX", data="foo")
 
@@ -212,7 +209,7 @@ class TestMtechUssdTransport(TransportTestCase):
         yield self.transport.save_session(sid, '2348085832481', '*120*666#')
         response_d = self.make_ussd_request(sid, page_id="indexX", data="foo")
 
-        msg = yield self.reply_to_message("OK", False)
+        msg = yield self.reply_to_message("OK", continue_session=False)
 
         self.assertEqual(msg['transport_name'], self.transport_name)
         self.assertEqual(msg['transport_type'], "ussd")
@@ -248,7 +245,7 @@ class TestMtechUssdTransport(TransportTestCase):
         self.assertEqual(response, correct_response)
 
 
-class TestMtechUssdResponse(TestCase):
+class TestMtechUssdResponse(VumiTestCase):
     def setUp(self):
         self.mur = MtechUssdResponse("sid123")
 

@@ -2,7 +2,8 @@
 
 """Tests for vumi.demos.hangman."""
 
-from twisted.trial import unittest
+import string
+
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet import reactor
 from twisted.web.server import Site
@@ -12,15 +13,15 @@ from twisted.web.static import Data
 from vumi.application.tests.utils import ApplicationTestCase
 from vumi.demos.hangman import HangmanGame, HangmanWorker
 from vumi.message import TransportUserMessage
-
-import string
+from vumi.application.tests.helpers import ApplicationHelper
+from vumi.tests.helpers import VumiTestCase
 
 
 def mkstate(word, guesses, msg):
     return {'word': word, 'guesses': guesses, 'msg': msg}
 
 
-class TestHangmanGame(unittest.TestCase):
+class TestHangmanGame(VumiTestCase):
     def test_easy_game(self):
         game = HangmanGame(word='moo')
         game.event('m')
@@ -154,20 +155,22 @@ class TestHangmanWorker(ApplicationTestCase):
         addr = self.webserver.getHost()
         random_word_url = "http://%s:%s/word" % (addr.host, addr.port)
 
-        self.worker = yield self.get_application({
-                'worker_name': 'test_hangman',
-                'random_word_url': random_word_url,
-                })
+        self.app_helper = ApplicationHelper(self)
+        self.add_cleanup(self.app_helper.cleanup)
+
+        self.worker = yield self.app_helper.get_application({
+            'worker_name': 'test_hangman',
+            'random_word_url': random_word_url,
+        })
         yield self.worker.session_manager.redis._purge_all()  # just in case
 
-    @inlineCallbacks
     def send(self, content, session_event=None):
-        msg = self.mkmsg_in(content=content, session_event=session_event)
-        yield self.dispatch(msg)
+        return self.app_helper.make_dispatch_inbound(
+            content, session_event=session_event)
 
     @inlineCallbacks
     def recv(self, n=0):
-        msgs = yield self.wait_for_dispatched_messages(n)
+        msgs = yield self.app_helper.wait_for_dispatched_outbound(n)
 
         def reply_code(msg):
             if msg['session_event'] == TransportUserMessage.SESSION_CLOSE:

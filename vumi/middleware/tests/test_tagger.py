@@ -2,13 +2,12 @@
 
 import re
 
-from twisted.trial.unittest import TestCase
-
 from vumi.middleware.tagger import TaggingMiddleware
 from vumi.message import TransportUserMessage
+from vumi.tests.helpers import VumiTestCase
 
 
-class TaggingMiddlewareTestCase(TestCase):
+class TaggingMiddlewareTestCase(VumiTestCase):
 
     DEFAULT_CONFIG = {
         'incoming': {

@@ -1,13 +1,15 @@
+from base64 import b64encode
+import json
 from urllib import urlencode
+
 from twisted.internet.defer import inlineCallbacks
 from twisted.web import http
 
 from vumi.utils import http_request, http_request_full
 from vumi.transports.tests.utils import TransportTestCase
-from vumi.transports.api import (OldSimpleHttpTransport,
-                                 OldTemplateHttpTransport)
-from base64 import b64encode
-import json
+from vumi.transports.api import (
+    OldSimpleHttpTransport, OldTemplateHttpTransport)
+from vumi.transports.tests.helpers import TransportHelper
 
 
 class TestOldSimpleHttpTransport(TransportTestCase):
@@ -23,8 +25,10 @@ class TestOldSimpleHttpTransport(TransportTestCase):
             'web_path': "foo",
             'web_port': 0,
         }
+        self.tx_helper = TransportHelper(self)
+        self.add_cleanup(self.tx_helper.cleanup)
 
-        self.transport = yield self.get_transport(self.config)
+        self.transport = yield self.tx_helper.get_transport(self.config)
         addr = self.transport.web_resource.getHost()
         self.transport_url = "http://%s:%s/" % (addr.host, addr.port)
 
@@ -47,7 +51,7 @@ class TestOldSimpleHttpTransport(TransportTestCase):
             ])
         )
         response = yield http_request(url, '', method='GET')
-        [msg1, msg2] = self.get_dispatched_messages()
+        [msg1, msg2] = self.tx_helper.get_dispatched_inbound()
         payload1 = msg1.payload
         payload2 = msg2.payload
         self.assertEqual(payload1['transport_name'], self.transport_name)
@@ -78,7 +82,7 @@ class TestOldSimpleHttpTransport(TransportTestCase):
                 'username': 'password',
             }
         })
-        transport = yield self.get_transport(http_auth_config)
+        transport = yield self.tx_helper.get_transport(http_auth_config)
         url = '%s%s?%s' % (
             transport.get_transport_url(),
             self.config['web_path'],
@@ -90,13 +94,13 @@ class TestOldSimpleHttpTransport(TransportTestCase):
 
         response = yield http_request_full(url, '', method='GET')
         self.assertEqual(response.code, http.UNAUTHORIZED)
-        self.assertEqual([], self.get_dispatched_messages())
+        self.assertEqual([], self.tx_helper.get_dispatched_inbound())
 
         response = yield http_request_full(url, '', headers={
             'Authorization': ['Basic %s' % b64encode('username:password')]
         }, method='GET')
         self.assertEqual(response.code, http.OK)
-        [msg] = self.get_dispatched_messages()
+        [msg] = self.tx_helper.get_dispatched_inbound()
         self.assertEqual(msg['content'], 'hello')
         self.assertEqual(msg['transport_metadata'], {
             'http_user': 'username',
@@ -116,8 +120,10 @@ class TestOldTemplateHttpTransport(TransportTestCase):
             'web_path': "foo",
             'web_port': 0,
         }
+        self.tx_helper = TransportHelper(self)
+        self.add_cleanup(self.tx_helper.cleanup)
 
-        self.transport = yield self.get_transport(self.config)
+        self.transport = yield self.tx_helper.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url()
 
     @inlineCallbacks
@@ -138,7 +144,7 @@ class TestOldTemplateHttpTransport(TransportTestCase):
         )
 
         response = yield http_request(url, '', method='GET')
-        [msg1, msg2] = self.get_dispatched_messages()
+        [msg1, msg2] = self.tx_helper.get_dispatched_inbound()
         payload1 = msg1.payload
         payload2 = msg2.payload
         self.assertEqual(payload1['transport_name'], self.transport_name)

@@ -1,12 +1,12 @@
 
-from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.dispatchers.simple.dispatcher import SimpleDispatcher
 from vumi.tests.utils import get_stubbed_worker
+from vumi.tests.helpers import VumiTestCase
 
 
-class TestTransport(TestCase):
+class TestDispatcher(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
@@ -23,11 +23,9 @@ class TestTransport(TestCase):
             }
         self.worker = get_stubbed_worker(SimpleDispatcher, config)
         self.broker = self.worker._amqp_client.broker
+        self.add_cleanup(self.broker.wait_delivery)
         yield self.worker.startWorker()
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield self.worker.stopWorker()
+        self.add_cleanup(self.worker.stopWorker)
 
     @inlineCallbacks
     def test_1_to_2_and_3(self):

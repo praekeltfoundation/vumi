@@ -5,7 +5,6 @@
 import time
 import json
 
-from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.tests.utils import get_stubbed_worker
@@ -13,6 +12,7 @@ from vumi.blinkenlights.heartbeat import publisher
 from vumi.blinkenlights.heartbeat import monitor
 from vumi.blinkenlights.heartbeat.storage import issue_key
 from vumi.utils import generate_worker_id
+from vumi.tests.helpers import VumiTestCase
 
 
 def expected_wkr_dict():
@@ -36,7 +36,7 @@ def expected_sys_dict():
     return sys
 
 
-class TestWorkerInstance(TestCase):
+class TestWorkerInstance(VumiTestCase):
 
     def test_create(self):
         worker = monitor.WorkerInstance('foo', 34)
@@ -61,7 +61,7 @@ class TestWorkerInstance(TestCase):
         self.assertNotEqual(hash(worker1), hash(worker4))
 
 
-class TestWorker(TestCase):
+class TestWorker(VumiTestCase):
 
     def test_to_dict(self):
         wkr = monitor.Worker('system-1', 'foo', 1)
@@ -97,7 +97,7 @@ class TestWorker(TestCase):
         self.assertEqual(len(wkr._instances), 2)
 
 
-class TestSystem(TestCase):
+class TestSystem(VumiTestCase):
 
     def test_to_dict(self):
         wkr = monitor.Worker('system-1', 'foo', 1)
@@ -119,7 +119,7 @@ class TestSystem(TestCase):
         self.assertEqual(obj, expected_sys_dict())
 
 
-class TestHeartBeatMonitor(TestCase):
+class TestHeartBeatMonitor(VumiTestCase):
 
     def setUp(self):
         config = {
@@ -143,9 +143,14 @@ class TestHeartBeatMonitor(TestCase):
             }
         }
         self.worker = get_stubbed_worker(monitor.HeartBeatMonitor, config)
+        self.add_cleanup(self.cleanup_worker)
 
-    def tearDown(self):
-        self.worker.stopWorker()
+    @inlineCallbacks
+    def cleanup_worker(self):
+        redis = self.worker._redis
+        yield redis._purge_all()
+        yield redis.close_manager()
+        yield self.worker.stopWorker()
 
     def gen_fake_attrs(self, timestamp):
         sys_id = 'system-1'
@@ -200,12 +205,12 @@ class TestHeartBeatMonitor(TestCase):
         attrs = self.gen_fake_attrs(time.time())
         wkr_id = attrs['worker_id']
         # process the fake message ()
-        self.worker.update(attrs)
+        yield self.worker.update(attrs)
 
         wkr = self.worker._workers[attrs['worker_id']]
         wkr.snapshot()
 
-        wkr.audit(self.worker._storage)
+        yield wkr.audit(self.worker._storage)
 
         # test that an issue was opened
         self.assertEqual(wkr.procs_count, 1)
@@ -224,14 +229,14 @@ class TestHeartBeatMonitor(TestCase):
         attrs = self.gen_fake_attrs(time.time())
         wkr_id = attrs['worker_id']
         # process the fake message ()
-        self.worker.update(attrs)
+        yield self.worker.update(attrs)
         attrs['pid'] = 2342
-        self.worker.update(attrs)
+        yield self.worker.update(attrs)
 
         wkr = self.worker._workers[attrs['worker_id']]
         wkr.snapshot()
 
-        wkr.audit(self.worker._storage)
+        yield wkr.audit(self.worker._storage)
 
         # verify that no issue has been opened
         self.assertEqual(wkr.procs_count, 2)
@@ -252,7 +257,7 @@ class TestHeartBeatMonitor(TestCase):
         # process the fake message
         self.worker.update(attrs)
 
-        self.worker._periodic_task()
+        yield self.worker._periodic_task()
 
         # this blob is what should be persisted into redis (as JSON)
         expected = {

@@ -83,6 +83,7 @@ class SessionManager(object):
         """
         Create a new session using the given user_id
         """
+        yield self.clear_session(user_id)
         defaults = {
             'created_at': time.time()
         }

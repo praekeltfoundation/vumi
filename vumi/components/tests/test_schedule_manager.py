@@ -2,13 +2,12 @@
 
 from datetime import datetime
 
-from twisted.trial.unittest import TestCase
-
 from vumi.components.schedule_manager import ScheduleManager
 from vumi.tests.utils import LogCatcher
+from vumi.tests.helpers import VumiTestCase
 
 
-class ScheduleManagerTestCase(TestCase):
+class ScheduleManagerTestCase(VumiTestCase):
     def assert_schedule_next(self, config, since_dt, expected_next_dt):
         sm = ScheduleManager(config)
         self.assertEqual(sm.get_next(since_dt), expected_next_dt)

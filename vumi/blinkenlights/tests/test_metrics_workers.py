@@ -1,4 +1,3 @@
-from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks, Deferred, DeferredQueue
 from twisted.internet.protocol import DatagramProtocol
 from twisted.internet import reactor
@@ -7,6 +6,7 @@ from vumi.tests.utils import get_stubbed_worker, get_stubbed_channel
 from vumi.tests.fake_amqp import FakeAMQPBroker
 from vumi.blinkenlights import metrics_workers
 from vumi.blinkenlights.message20110818 import MetricMessage
+from vumi.tests.helpers import VumiTestCase
 
 
 class BrokerWrapper(object):
@@ -30,13 +30,14 @@ class BrokerWrapper(object):
         return [msg.datapoints() for msg in msgs]
 
 
-class TestMetricTimeBucket(TestCase):
+class TestMetricTimeBucket(VumiTestCase):
     @inlineCallbacks
     def test_bucketing(self):
         config = {'buckets': 4, 'bucket_size': 5}
         worker = get_stubbed_worker(metrics_workers.MetricTimeBucket,
                                     config=config)
         broker = BrokerWrapper(worker._amqp_client.broker)
+        self.add_cleanup(broker.wait_delivery)
         yield worker.startWorker()
 
         datapoints = [
@@ -62,16 +63,10 @@ class TestMetricTimeBucket(TestCase):
         yield worker.stopWorker()
 
 
-class TestMetricAggregator(TestCase):
+class TestMetricAggregator(VumiTestCase):
 
     def setUp(self):
         self.now = 0
-        self.workers = []
-
-    @inlineCallbacks
-    def tearDown(self):
-        for worker in self.workers:
-            yield worker.stopWorker()
 
     def fake_time(self):
         return self.now
@@ -80,7 +75,7 @@ class TestMetricAggregator(TestCase):
         if config is None:
             config = {}
         worker = get_stubbed_worker(cls, config=config)
-        self.workers.append(worker)
+        self.add_cleanup(worker.stopWorker)
         return worker
 
     @inlineCallbacks
@@ -90,6 +85,7 @@ class TestMetricAggregator(TestCase):
                                  config=config)
         worker._time = self.fake_time
         broker = BrokerWrapper(worker._amqp_client.broker)
+        self.add_cleanup(broker.wait_delivery)
         yield worker.startWorker()
 
         datapoints = [
@@ -128,6 +124,7 @@ class TestMetricAggregator(TestCase):
                                  config=config)
         worker._time = self.fake_time
         broker = BrokerWrapper(worker._amqp_client.broker)
+        self.add_cleanup(broker.wait_delivery)
         yield worker.startWorker()
 
         datapoints = [
@@ -166,6 +163,7 @@ class TestMetricAggregator(TestCase):
                                  config=config)
         worker._time = self.fake_time
         broker = BrokerWrapper(worker._amqp_client.broker)
+        self.add_cleanup(broker.wait_delivery)
         yield worker.startWorker()
 
         datapoints = [
@@ -198,7 +196,7 @@ class TestMetricAggregator(TestCase):
         self.assertEqual(recv(), expected)
 
 
-class TestAggregationSystem(TestCase):
+class TestAggregationSystem(VumiTestCase):
     """Tests tying MetricTimeBucket and MetricAggregator together."""
 
     def setUp(self):
@@ -226,6 +224,7 @@ class TestAggregationSystem(TestCase):
     @inlineCallbacks
     def _setup_workers(self, bucketters, aggregators, bucket_size):
         broker = FakeAMQPBroker()
+        self.add_cleanup(broker.wait_delivery)
         self.broker = BrokerWrapper(broker)
 
         bucket_config = {
@@ -272,7 +271,7 @@ class TestAggregationSystem(TestCase):
             ])
 
 
-class TestGraphitePublisher(TestCase):
+class TestGraphitePublisher(VumiTestCase):
 
     def _check_msg(self, channel, metric, value, timestamp):
         [msg] = self.broker.get_dispatched("graphite", metric)
@@ -282,6 +281,7 @@ class TestGraphitePublisher(TestCase):
     @inlineCallbacks
     def test_publish_metric(self):
         self.broker = FakeAMQPBroker()
+        self.add_cleanup(self.broker.wait_delivery)
         datapoint = ("vumi.test.v1", 1.0, 1234)
         channel = yield get_stubbed_channel(self.broker)
         pub = metrics_workers.GraphitePublisher()
@@ -290,11 +290,12 @@ class TestGraphitePublisher(TestCase):
         self._check_msg(channel, *datapoint)
 
 
-class TestGraphiteMetricsCollector(TestCase):
+class TestGraphiteMetricsCollector(VumiTestCase):
     @inlineCallbacks
     def test_single_message(self):
         worker = get_stubbed_worker(metrics_workers.GraphiteMetricsCollector)
         broker = BrokerWrapper(worker._amqp_client.broker)
+        self.add_cleanup(broker.wait_delivery)
         yield worker.startWorker()
 
         datapoints = [("vumi.test.foo", "", [(1234, 1.5)])]
@@ -317,22 +318,20 @@ class UDPMetricsCatcher(DatagramProtocol):
         self.queue.put(datagram)
 
 
-class TestUDPMetricsCollector(TestCase):
+class TestUDPMetricsCollector(VumiTestCase):
     @inlineCallbacks
     def setUp(self):
         self.udp_protocol = UDPMetricsCatcher()
         self.udp_server = yield reactor.listenUDP(0, self.udp_protocol)
+        self.add_cleanup(self.udp_server.stopListening)
         self.worker = get_stubbed_worker(metrics_workers.UDPMetricsCollector, {
                 'metrics_host': 'localhost',
                 'metrics_port': self.udp_server.getHost().port,
                 })
         self.broker = BrokerWrapper(self.worker._amqp_client.broker)
+        self.add_cleanup(self.broker.wait_delivery)
         yield self.worker.startWorker()
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield self.worker.stopWorker()
-        yield self.udp_server.stopListening()
+        self.add_cleanup(self.worker.stopWorker)
 
     def send_metrics(self, *metrics):
         datapoints = [("vumi.test.foo", "", list(metrics))]
@@ -355,7 +354,7 @@ class TestUDPMetricsCollector(TestCase):
         self.assertEqual('1970-01-01 00:20:35 vumi.test.foo 2.5\n', received)
 
 
-class TestRandomMetricsGenerator(TestCase):
+class TestRandomMetricsGenerator(VumiTestCase):
 
     def setUp(self):
         self._on_run = Deferred()
@@ -384,6 +383,7 @@ class TestRandomMetricsGenerator(TestCase):
         self._workers.append(worker)
         worker.on_run = self.on_run
         broker = BrokerWrapper(worker._amqp_client.broker)
+        self.add_cleanup(broker.wait_delivery)
         yield worker.startWorker()
 
         yield self.wake_after_run()

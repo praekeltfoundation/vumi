@@ -1,21 +1,22 @@
 """Tests for vumi.persist.txredis_manager."""
 
-from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.persist.txredis_manager import TxRedisManager
+from vumi.tests.helpers import VumiTestCase
 
 
-class RedisManagerTestCase(TestCase):
+class RedisManagerTestCase(VumiTestCase):
     @inlineCallbacks
     def setUp(self):
         self.manager = yield TxRedisManager.from_config(
             {'FAKE_REDIS': 'yes',
              'key_prefix': 'redistest'})
+        self.add_cleanup(self.cleanup_manager)
         yield self.manager._purge_all()
 
     @inlineCallbacks
-    def tearDown(self):
+    def cleanup_manager(self):
         yield self.manager._purge_all()
         yield self.manager._close()
 
@@ -37,3 +38,8 @@ class RedisManagerTestCase(TestCase):
         yield self.manager.set('foo', 'baz')
         self.assertEqual(['foo'], (yield self.manager.keys()))
         self.assertEqual('baz', (yield self.manager.get('foo')))
+
+    @inlineCallbacks
+    def test_disconnect_twice(self):
+        yield self.manager._close()
+        yield self.manager._close()

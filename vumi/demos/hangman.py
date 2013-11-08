@@ -7,7 +7,7 @@ from twisted.python import log
 
 from vumi.application import ApplicationWorker
 from vumi.utils import http_request
-from vumi.components import SessionManager
+from vumi.components.session import SessionManager
 from vumi.config import ConfigText, ConfigDict
 
 

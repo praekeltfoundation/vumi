@@ -95,7 +95,9 @@ class XmlOverTcpClient(Protocol):
     # field. '15' is used for ASCII, and is the default. The documentation
     # does not offer any other codes.
     DATA_CODING_SCHEME = '15'
-    ENCODING = 'ASCII'
+
+    # By observation, it appears that latin1 is the protocol's encoding
+    ENCODING = 'latin1'
 
     # Data requests and responses need to include a 'phase' field. The
     # documentation does not provide any information about 'phase', but we are
@@ -212,8 +214,8 @@ class XmlOverTcpClient(Protocol):
         return self._buffer[:n]
 
     @classmethod
-    def remove_nullbytes(cls, str):
-        return str.replace('\0', '')
+    def remove_nullbytes(cls, s):
+        return s.replace('\0', '')
 
     @classmethod
     def deserialize_header(cls, header):
@@ -221,19 +223,25 @@ class XmlOverTcpClient(Protocol):
 
         # The headers appear to be padded with trailing nullbytes, so we need
         # to remove these before doing any other parsing
-        return (cls.remove_nullbytes(session_id.decode(cls.ENCODING)),
-                int(cls.remove_nullbytes(length.decode(cls.ENCODING))))
+        return (cls.remove_nullbytes(session_id),
+                int(cls.remove_nullbytes(length)))
 
     @classmethod
     def deserialize_body(cls, body):
         # The 'requestId' field often has nullbytes in it. We suspect this
-        # happens when the requestId length is shorter that 16 bytes, so they
+        # happens when the requestId length is shorter than 16 bytes, so they
         # just pad it with trailing nullbytes. We need to remove the nullbytes
         # before parsing the xml to prevent parse errors
-        root = ET.fromstring(cls.remove_nullbytes(body))
+        body = cls.remove_nullbytes(body.decode(cls.ENCODING))
+
+        # We transcode from the configured encoding to UTF-8, since ElementTree
+        # needs bytes, and all XML parsers need to accept UTF-8.
+        # http://www.w3.org/TR/xml/#charsets
+        root = ET.fromstring(body.encode('utf-8'))
 
         packet_type = root.tag
         params = dict((el.tag.strip(), el.text.strip()) for el in root)
+
         return packet_type, params
 
     def packet_received(self, session_id, packet_type, params):
@@ -334,7 +342,7 @@ class XmlOverTcpClient(Protocol):
 
     @classmethod
     def serialize_header_field(cls, header, header_size):
-        return str(header).ljust(header_size, '\0').encode(cls.ENCODING)
+        return str(header).ljust(header_size, '\0')
 
     @classmethod
     def serialize_header(cls, session_id, body):
@@ -348,9 +356,8 @@ class XmlOverTcpClient(Protocol):
     def serialize_body(cls, packet_type, params):
         root = ET.Element(packet_type)
         for param_name, param_value in params:
-            param_value = str(param_value).encode(cls.ENCODING)
             ET.SubElement(root, param_name).text = param_value
-        return ET.tostring(root)
+        return ET.tostring(root).encode(cls.ENCODING)
 
     @classmethod
     def serialize_packet(cls, session_id, packet_type, params):
@@ -383,7 +390,7 @@ class XmlOverTcpClient(Protocol):
         # NOTE: The protocol requires request ids to be number only ids. With a
         # request id length of 10 digits, generating ids using randint could
         # well cause collisions to occur, although this should be unlikely.
-        return randint(0, (10 ** cls.REQUEST_ID_LENGTH) - 1)
+        return str(randint(0, (10 ** cls.REQUEST_ID_LENGTH) - 1))
 
     def login(self):
         params = [

@@ -1,12 +1,12 @@
 """Tests for vumi.demos.words."""
 
-from twisted.trial import unittest
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.tests.utils import get_stubbed_worker
 from vumi.demos.words import (SimpleAppWorker, EchoWorker, ReverseWorker,
                               WordCountWorker)
 from vumi.message import TransportUserMessage
+from vumi.tests.helpers import VumiTestCase
 
 
 class EchoTestApp(SimpleAppWorker):
@@ -15,7 +15,7 @@ class EchoTestApp(SimpleAppWorker):
         return 'echo:%s' % data
 
 
-class TestSimpleAppWorker(unittest.TestCase):
+class TestSimpleAppWorker(VumiTestCase):
     @inlineCallbacks
     def setUp(self):
         self.transport_name = 'test_transport'
@@ -50,6 +50,7 @@ class TestSimpleAppWorker(unittest.TestCase):
 
     @inlineCallbacks
     def tearDown(self):
+        yield self.broker.wait_delivery()
         yield self.worker.stopWorker()
 
     @inlineCallbacks
@@ -72,7 +73,7 @@ class TestSimpleAppWorker(unittest.TestCase):
         self.assertRaises(NotImplementedError, worker.process_message, 'foo')
 
 
-class TestEchoWorker(unittest.TestCase):
+class TestEchoWorker(VumiTestCase):
 
     def setUp(self):
         self.worker = get_stubbed_worker(EchoWorker, {
@@ -85,7 +86,7 @@ class TestEchoWorker(unittest.TestCase):
         self.assertEqual(self.worker.get_help(), "Enter text to echo:")
 
 
-class TestReverseWorker(unittest.TestCase):
+class TestReverseWorker(VumiTestCase):
 
     def setUp(self):
         self.worker = get_stubbed_worker(ReverseWorker, {
@@ -98,7 +99,7 @@ class TestReverseWorker(unittest.TestCase):
         self.assertEqual(self.worker.get_help(), "Enter text to reverse:")
 
 
-class TestWordCountWorker(unittest.TestCase):
+class TestWordCountWorker(VumiTestCase):
 
     def setUp(self):
         self.worker = get_stubbed_worker(WordCountWorker, {

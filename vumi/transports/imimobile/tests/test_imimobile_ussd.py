@@ -8,12 +8,12 @@ from vumi.utils import http_request_full
 from vumi.message import TransportUserMessage
 from vumi.transports.tests.utils import TransportTestCase
 from vumi.transports.imimobile import ImiMobileUssdTransport
+from vumi.transports.tests.helpers import TransportHelper
 
 
 class TestImiMobileUssdTransportTestCase(TransportTestCase):
 
     transport_class = ImiMobileUssdTransport
-    timeout = 1
 
     _from_addr = '9221234567'
     _to_addr = '56263'
@@ -36,9 +36,11 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
             'suffix_to_addrs': {
                 'some-suffix': self._to_addr,
                 'some-other-suffix': '56264',
-             }
+            }
         }
-        self.transport = yield self.get_transport(self.config)
+        self.tx_helper = TransportHelper(self)
+        self.add_cleanup(self.tx_helper.cleanup)
+        self.transport = yield self.tx_helper.get_transport(self.config)
         self.session_manager = self.transport.session_manager
         self.transport_url = self.transport.get_transport_url(
             self.config['web_path'])
@@ -104,20 +106,20 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
         # Second connect is the actual start of the session
         user_content = "Who are you?"
         d = self.mk_request('some-suffix', msg=user_content)
-        [msg] = yield self.wait_for_dispatched_messages(1)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assert_inbound_message(msg,
             session_event=TransportUserMessage.SESSION_NEW,
             content=user_content)
 
         reply_content = "We are the Knights Who Say ... Ni!"
         reply = self.mk_reply(msg, reply_content)
-        self.dispatch(reply)
+        self.tx_helper.dispatch_outbound(reply)
         response = yield d
         self.assertEqual(response.delivered_body, reply_content)
         self.assertEqual(
             response.headers.getRawHeaders('X-USSD-SESSION'), ['1'])
 
-        [ack] = yield self.wait_for_dispatched_events(1)
+        [ack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assert_ack(ack, reply)
 
     @inlineCallbacks
@@ -127,14 +129,14 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
 
         user_content = "Well, what is it you want?"
         d = self.mk_request('some-suffix', msg=user_content)
-        [msg] = yield self.wait_for_dispatched_messages(1)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assert_inbound_message(msg,
             session_event=TransportUserMessage.SESSION_RESUME,
             content=user_content)
 
         reply_content = "We want ... a shrubbery!"
         reply = self.mk_reply(msg, reply_content, continue_session=False)
-        self.dispatch(reply)
+        self.tx_helper.dispatch_outbound(reply)
         response = yield d
         self.assertEqual(response.delivered_body, reply_content)
         self.assertEqual(
@@ -144,7 +146,7 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
         session = yield self.session_manager.load_session(from_addr)
         self.assertEqual(session, {})
 
-        [ack] = yield self.wait_for_dispatched_events(1)
+        [ack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assert_ack(ack, reply)
 
     @inlineCallbacks
@@ -153,30 +155,30 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
 
         user_content = "Well, what is it you want?"
         d = self.mk_request('some-suffix', msg=user_content)
-        [msg] = yield self.wait_for_dispatched_messages(1)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assert_inbound_message(msg,
             session_event=TransportUserMessage.SESSION_RESUME,
             content=user_content)
 
         reply_content = "We want ... a shrubbery!"
         reply = self.mk_reply(msg, reply_content, continue_session=True)
-        self.dispatch(reply)
+        self.tx_helper.dispatch_outbound(reply)
         response = yield d
         self.assertEqual(response.delivered_body, reply_content)
         self.assertEqual(
             response.headers.getRawHeaders('X-USSD-SESSION'), ['1'])
 
-        [ack] = yield self.wait_for_dispatched_events(1)
+        [ack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assert_ack(ack, reply)
 
     @inlineCallbacks
     def test_inbound_close_and_reply(self):
         from_addr = '9221234567'
-        self.mk_session(from_addr=from_addr)
+        yield self.mk_session(from_addr=from_addr)
 
         user_content = "Farewell, sweet Concorde!"
         d = self.mk_request('some-suffix', msg=user_content)
-        [msg] = yield self.wait_for_dispatched_messages(1)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assert_inbound_message(msg,
             session_event=TransportUserMessage.SESSION_CLOSE,
             content=user_content)
@@ -214,30 +216,30 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
         response = yield self.mk_request(
             'some-suffix', unexpected_p1='', unexpected_p2='')
 
-        self.assertEqual(
-            response.delivered_body,
-            json.dumps({
-                'unexpected_parameter': ['unexpected_p1', 'unexpected_p2']
-            }))
         self.assertEqual(response.code, 400)
+        body = json.loads(response.delivered_body)
+        self.assertEqual(set(['unexpected_parameter']), set(body.keys()))
+        self.assertEqual(
+            sorted(body['unexpected_parameter']),
+            ['unexpected_p1', 'unexpected_p2'])
 
     @inlineCallbacks
     def test_nack_insufficient_message_fields(self):
-        reply = self.mkmsg_out(message_id='23', in_reply_to=None, content=None)
-        self.dispatch(reply)
-        [nack] = yield self.wait_for_dispatched_events(1)
+        reply = self.tx_helper.make_outbound(
+            None, message_id='23', in_reply_to=None)
+        self.tx_helper.dispatch_outbound(reply)
+        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assert_nack(
             nack, reply, self.transport.INSUFFICIENT_MSG_FIELDS_ERROR)
 
     @inlineCallbacks
     def test_nack_http_http_response_failure(self):
         self.patch(self.transport, 'finish_request', lambda *a, **kw: None)
-        reply = self.mkmsg_out(
-            message_id='23',
-            in_reply_to='some-number',
-            content='There are some who call me ... Tim!')
-        self.dispatch(reply)
-        [nack] = yield self.wait_for_dispatched_events(1)
+        reply = self.tx_helper.make_outbound(
+            'There are some who call me ... Tim!', message_id='23',
+            in_reply_to='some-number')
+        self.tx_helper.dispatch_outbound(reply)
+        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assert_nack(
             nack, reply, self.transport.RESPONSE_FAILURE_ERROR)
 

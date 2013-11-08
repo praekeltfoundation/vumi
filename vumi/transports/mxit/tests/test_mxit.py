@@ -4,8 +4,8 @@ from twisted.web.http import Request, BAD_REQUEST
 from vumi.transports.tests.utils import TransportTestCase
 from vumi.transports.mxit import MxitTransport
 from vumi.transports.mxit.responses import ResponseParser
-from vumi.message import TransportUserMessage
 from vumi.utils import http_request_full
+from vumi.transports.tests.helpers import TransportHelper
 
 
 class TestMxitTransportTestCase(TransportTestCase):
@@ -43,7 +43,9 @@ class TestMxitTransportTestCase(TransportTestCase):
         self.sample_unicode_menu_resp = unicode(
             self.sample_menu_resp.replace('o', slashed_o), 'utf-8')
 
-        self.transport = yield self.get_transport(self.config)
+        self.tx_helper = TransportHelper(self)
+        self.add_cleanup(self.tx_helper.cleanup)
+        self.transport = yield self.tx_helper.get_transport(self.config)
         self.url = self.transport.get_transport_url(self.config['web_path'])
 
     def test_is_mxit_request(self):
@@ -134,10 +136,8 @@ class TestMxitTransportTestCase(TransportTestCase):
     def test_request(self):
         resp_d = http_request_full(
             self.url, headers=self.sample_req_headers)
-        [msg] = yield self.wait_for_dispatched_messages(1)
-        reply = TransportUserMessage(**msg.payload).reply(
-            self.sample_menu_resp, continue_session=True)
-        self.dispatch(reply)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        self.tx_helper.make_dispatch_reply(msg, self.sample_menu_resp)
         resp = yield resp_d
         self.assertTrue('1. option 1' in resp.delivered_body)
         self.assertTrue('2. option 2' in resp.delivered_body)
@@ -164,10 +164,8 @@ class TestMxitTransportTestCase(TransportTestCase):
     def test_unicode_rendering(self):
         resp_d = http_request_full(
             self.url, headers=self.sample_req_headers)
-        [msg] = yield self.wait_for_dispatched_messages(1)
-        reply = TransportUserMessage(**msg.payload).reply(
-            self.sample_unicode_menu_resp, continue_session=True)
-        self.dispatch(reply)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        self.tx_helper.make_dispatch_reply(msg, self.sample_unicode_menu_resp)
         resp = yield resp_d
         self.assertTrue(
             'Hell\xc3\xb8' in resp.delivered_body)

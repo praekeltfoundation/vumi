@@ -10,7 +10,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from vumi import log
 from vumi.message import TransportUserMessage
 from vumi.transports.httprpc import HttpRpcTransport
-from vumi.components import SessionManager
+from vumi.components.session import SessionManager
 
 
 class InfobipTransport(HttpRpcTransport):

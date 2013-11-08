@@ -2,9 +2,10 @@
 
 import json
 import uuid
+from random import randint
 
 from twisted.internet import reactor
-from twisted.internet.protocol import Protocol, ReconnectingClientFactory
+from twisted.internet.protocol import Protocol, ClientFactory
 from twisted.internet.task import LoopingCall
 from twisted.internet.defer import inlineCallbacks, returnValue, DeferredQueue
 
@@ -12,11 +13,21 @@ import binascii
 from smpp.pdu import unpack_pdu
 from smpp.pdu_builder import (
     BindTransceiver, BindTransmitter, BindReceiver, DeliverSMResp, SubmitSM,
-    EnquireLink, EnquireLinkResp, QuerySM)
+    EnquireLink, EnquireLinkResp, QuerySM, PDU)
 from smpp.pdu_inspector import (
     MultipartMessage, detect_multipart, multipart_key)
 
 from vumi import log
+
+
+GSM_MAX_SMS_BYTES = 140
+
+
+class UnbindResp(PDU):
+    # pdu_builder doesn't have one of these yet.
+    def __init__(self, sequence_number, **kwargs):
+        super(UnbindResp, self).__init__(
+            'unbind_resp', 'ESME_ROK', sequence_number, **kwargs)
 
 
 def unpacked_pdu_opts(unpacked_pdu):
@@ -182,6 +193,7 @@ class EsmeTransceiver(Protocol):
         self.stop_enquire_link()
         self.cancel_drop_connection_call()
         log.msg('STATE: %s' % (self.state))
+        self.esme_callbacks.disconnect()
 
     def dataReceived(self, data):
         self.datastream += data
@@ -217,6 +229,12 @@ class EsmeTransceiver(Protocol):
         if self._lose_conn is not None:
             self._lose_conn.cancel()
             self._lose_conn = None
+
+    @inlineCallbacks
+    def handle_unbind(self, pdu):
+        yield self.send_pdu(UnbindResp(
+            sequence_number=pdu['header']['sequence_number']))
+        self.transport.loseConnection()
 
     @inlineCallbacks
     def handle_bind_transceiver_resp(self, pdu):
@@ -299,22 +317,32 @@ class EsmeTransceiver(Protocol):
         pdu_params = pdu['body']['mandatory_parameters']
         pdu_opts = unpacked_pdu_opts(pdu)
 
+        # This might be a delivery receipt with PDU parameters. If we get a
+        # delivery receipt without these parameters we'll try a regex match
+        # later once we've decoded the message properly.
+        receipted_message_id = pdu_opts.get('receipted_message_id', None)
+        message_state = pdu_opts.get('message_state', None)
+        if receipted_message_id is not None and message_state is not None:
+            yield self.esme_callbacks.delivery_report(
+                message_id=receipted_message_id,
+                message_state={
+                    1: 'ENROUTE',
+                    2: 'DELIVERED',
+                    3: 'EXPIRED',
+                    4: 'DELETED',
+                    5: 'UNDELIVERABLE',
+                    6: 'ACCEPTED',
+                    7: 'UNKNOWN',
+                    8: 'REJECTED',
+                }.get(message_state, 'UNKNOWN'),
+            )
+
         # We might have a `message_payload` optional field to worry about.
         message_payload = pdu_opts.get('message_payload', None)
         if message_payload is not None:
             pdu_params['short_message'] = message_payload.decode('hex')
 
-        delivery_report = self.config.delivery_report_regex.search(
-            pdu_params['short_message'] or '')
-
-        if delivery_report:
-            # We have a delivery report.
-            yield self.esme_callbacks.delivery_report(
-                destination_addr=pdu_params['destination_addr'],
-                source_addr=pdu_params['source_addr'],
-                delivery_report=delivery_report.groupdict(),
-                )
-        elif detect_ussd(pdu_opts):
+        if detect_ussd(pdu_opts):
             # We have a USSD message.
             yield self._handle_deliver_sm_ussd(pdu, pdu_params, pdu_opts)
         elif detect_multipart(pdu):
@@ -323,6 +351,24 @@ class EsmeTransceiver(Protocol):
         else:
             # We have a standard SMS.
             yield self._handle_deliver_sm_sms(pdu_params)
+
+    def _deliver_sm(self, source_addr, destination_addr, short_message, **kw):
+        delivery_report = self.config.delivery_report_regex.search(
+            short_message or '')
+        if delivery_report:
+            # We have a delivery report.
+            fields = delivery_report.groupdict()
+            return self.esme_callbacks.delivery_report(
+                message_id=fields['id'],
+                message_state=fields['stat'])
+
+        message_id = str(uuid.uuid4())
+        return self.esme_callbacks.deliver_sm(
+            source_addr=source_addr,
+            destination_addr=destination_addr,
+            short_message=short_message,
+            message_id=message_id,
+            **kw)
 
     def _handle_deliver_sm_ussd(self, pdu, pdu_params, pdu_opts):
         # Some of this stuff might be specific to Tata's setup.
@@ -356,33 +402,26 @@ class EsmeTransceiver(Protocol):
             # We have an explicit "end session" flag.
             session_event = 'close'
 
-        message_id = str(uuid.uuid4())
         decoded_msg = self._decode_message(pdu_params['short_message'],
                                            pdu_params['data_coding'])
-        return self.esme_callbacks.deliver_sm(
-            destination_addr=pdu_params['destination_addr'],
+        return self._deliver_sm(
             source_addr=pdu_params['source_addr'],
+            destination_addr=pdu_params['destination_addr'],
             short_message=decoded_msg,
-            message_id=message_id,
             message_type='ussd',
             session_event=session_event,
-            session_info=session_info,
-            )
+            session_info=session_info)
 
     def _handle_deliver_sm_sms(self, pdu_params):
-        message_id = str(uuid.uuid4())
         decoded_msg = self._decode_message(pdu_params['short_message'],
                                            pdu_params['data_coding'])
-        return self.esme_callbacks.deliver_sm(
-            destination_addr=pdu_params['destination_addr'],
+        return self._deliver_sm(
             source_addr=pdu_params['source_addr'],
-            short_message=decoded_msg,
-            message_id=message_id,
-            )
+            destination_addr=pdu_params['destination_addr'],
+            short_message=decoded_msg)
 
     @inlineCallbacks
     def _handle_deliver_sm_multipart(self, pdu, pdu_params):
-        message_id = str(uuid.uuid4())
         redis_key = "multi_%s" % (multipart_key(detect_multipart(pdu)),)
         log.debug("Redis multipart key: %s" % (redis_key))
         value = yield self.redis.get(redis_key)
@@ -399,12 +438,10 @@ class EsmeTransceiver(Protocol):
             decoded_msg = self._decode_message(completed['message'],
                                                pdu_params['data_coding'])
             # and we can finally pass the whole message on
-            yield self.esme_callbacks.deliver_sm(
-                destination_addr=completed['to_msisdn'],
+            yield self._deliver_sm(
                 source_addr=completed['from_msisdn'],
-                short_message=decoded_msg,
-                message_id=message_id,
-                )
+                destination_addr=completed['to_msisdn'],
+                short_message=decoded_msg)
         else:
             yield self.redis.set(
                 redis_key, json.dumps(multi.get_array()))
@@ -444,28 +481,121 @@ class EsmeTransceiver(Protocol):
                      'dropping message: %s' % (self.state, kwargs)))
             returnValue(0)
 
-        sequence_number = yield self.get_next_seq()
         pdu_params = self.bind_params.copy()
         pdu_params.update(kwargs)
+        message = pdu_params['short_message']
+
+        # We use GSM_MAX_SMS_BYTES here because we may have already-encoded
+        # UCS-2 data to send and therefore can't use the 160 (7-bit) character
+        # limit everyone knows and loves. If we have some other encoding
+        # instead, this may result in unnecessarily short message parts. The
+        # SMSC is probably going to treat whatever we send it as whatever
+        # encoding it likes best and then encode (or mangle) it into a form it
+        # thinks should be in the GSM message payload. Basically, when we have
+        # to split messages up ourselves here we've already lost and the best
+        # we can hope for is not getting hurt too badly by the inevitable
+        # breakages.
+        if len(message) > GSM_MAX_SMS_BYTES:
+            if self.config.send_multipart_sar:
+                sequence_numbers = yield self._submit_multipart_sar(
+                    **pdu_params)
+                returnValue(sequence_numbers)
+            elif self.config.send_multipart_udh:
+                sequence_numbers = yield self._submit_multipart_udh(
+                    **pdu_params)
+                returnValue(sequence_numbers)
+
+        sequence_number = yield self._submit_sm(**pdu_params)
+        returnValue([sequence_number])
+
+    @inlineCallbacks
+    def _submit_sm(self, **pdu_params):
+        sequence_number = yield self.get_next_seq()
+        message = pdu_params['short_message']
+        sar_params = pdu_params.pop('sar_params', None)
 
         pdu = SubmitSM(sequence_number, **pdu_params)
-        if kwargs.get('message_type', 'sms') == 'ussd':
-            update_ussd_pdu(pdu, kwargs.get('continue_session', True),
-                            kwargs.get('session_info', None))
+        if pdu_params.get('message_type', 'sms') == 'ussd':
+            update_ussd_pdu(pdu, pdu_params.get('continue_session', True),
+                            pdu_params.get('session_info', None))
 
-        message = pdu_params['short_message']
         if self.config.send_long_messages and len(message) > 254:
             pdu.add_message_payload(''.join('%02x' % ord(c) for c in message))
+
+        if sar_params:
+            pdu.set_sar_msg_ref_num(sar_params['msg_ref_num'])
+            pdu.set_sar_total_segments(sar_params['total_segments'])
+            pdu.set_sar_segment_seqnum(sar_params['segment_seqnum'])
 
         self.send_pdu(pdu)
         yield self.push_unacked(sequence_number)
         returnValue(sequence_number)
 
     @inlineCallbacks
+    def _submit_multipart_sar(self, **pdu_params):
+        message = pdu_params['short_message']
+        split_msg = []
+        # We chop the message into 130 byte chunks to leave 10 bytes for the
+        # user data header the SMSC is presumably going to add for us. This is
+        # a guess based mostly on optimism and the hope that we'll never have
+        # to deal with this stuff in production.
+        # FIXME: If we have utf-8 encoded data, we might break in the
+        # middle of a multibyte character.
+        payload_length = GSM_MAX_SMS_BYTES - 10
+        while message:
+            split_msg.append(message[:payload_length])
+            message = message[payload_length:]
+        ref_num = randint(1, 255)
+        sequence_numbers = []
+        for i, msg in enumerate(split_msg):
+            params = pdu_params.copy()
+            params['short_message'] = msg
+            params['sar_params'] = {
+                'msg_ref_num': ref_num,
+                'total_segments': len(split_msg),
+                'segment_seqnum': i + 1,
+            }
+            sequence_number = yield self._submit_sm(**params)
+            sequence_numbers.append(sequence_number)
+        returnValue(sequence_numbers)
+
+    @inlineCallbacks
+    def _submit_multipart_udh(self, **pdu_params):
+        message = pdu_params['short_message']
+        split_msg = []
+        # We chop the message into 130 byte chunks to leave 10 bytes for the
+        # 6-byte user data header we add and a little extra space in case the
+        # SMSC does unexpected things with our message.
+        # FIXME: If we have utf-8 encoded data, we might break in the
+        # middle of a multibyte character.
+        payload_length = GSM_MAX_SMS_BYTES - 10
+        while message:
+            split_msg.append(message[:payload_length])
+            message = message[payload_length:]
+        ref_num = randint(1, 255)
+        sequence_numbers = []
+        for i, msg in enumerate(split_msg):
+            params = pdu_params.copy()
+            # 0x40 is the UDHI flag indicating that this payload contains a
+            # user data header.
+            params['esm_class'] = 0x40
+            # See http://en.wikipedia.org/wiki/User_Data_Header for an
+            # explanation of the magic numbers below. We should probably
+            # abstract this out into a class that makes it less magic and
+            # opaque.
+            udh = '\05\00\03%s%s%s' % (
+                chr(ref_num), chr(len(split_msg)), chr(i + 1))
+            params['short_message'] = udh + msg
+            sequence_number = yield self._submit_sm(**params)
+            sequence_numbers.append(sequence_number)
+        returnValue(sequence_numbers)
+
+    @inlineCallbacks
     def enquire_link(self, **kwargs):
         if self.state in ['BOUND_TX', 'BOUND_RX', 'BOUND_TRX']:
             sequence_number = yield self.get_next_seq()
-            pdu = EnquireLink(sequence_number, **dict(self.bind_params, **kwargs))
+            pdu = EnquireLink(
+                sequence_number, **dict(self.bind_params, **kwargs))
             self.send_pdu(pdu)
             returnValue(sequence_number)
         returnValue(0)
@@ -507,7 +637,7 @@ class EsmeReceiver(EsmeTransceiver):
         log.msg('STATE: %s' % (self.state))
 
 
-class EsmeTransceiverFactory(ReconnectingClientFactory):
+class EsmeTransceiverFactory(ClientFactory):
 
     def __init__(self, config, bind_params, redis, esme_callbacks):
         self.config = config
@@ -525,20 +655,16 @@ class EsmeTransceiverFactory(ReconnectingClientFactory):
         log.msg('Connected')
         self.esme = EsmeTransceiver(
             self.config, self.bind_params, self.redis, self.esme_callbacks)
-        self.resetDelay()
         return self.esme
 
     @inlineCallbacks
     def clientConnectionLost(self, connector, reason):
         log.msg('Lost connection.  Reason:', reason)
-        yield self.esme_callbacks.disconnect()
-        ReconnectingClientFactory.clientConnectionLost(
-                self, connector, reason)
+        ClientFactory.clientConnectionLost(self, connector, reason)
 
     def clientConnectionFailed(self, connector, reason):
         log.err(reason, 'Connection failed')
-        ReconnectingClientFactory.clientConnectionFailed(
-                self, connector, reason)
+        ClientFactory.clientConnectionFailed(self, connector, reason)
 
 
 class EsmeTransmitterFactory(EsmeTransceiverFactory):
@@ -547,7 +673,6 @@ class EsmeTransmitterFactory(EsmeTransceiverFactory):
         log.msg('Connected')
         self.esme = EsmeTransmitter(
             self.config, self.bind_params, self.redis, self.esme_callbacks)
-        self.resetDelay()
         return self.esme
 
 
@@ -557,7 +682,6 @@ class EsmeReceiverFactory(EsmeTransceiverFactory):
         log.msg('Connected')
         self.esme = EsmeReceiver(
             self.config, self.bind_params, self.redis, self.esme_callbacks)
-        self.resetDelay()
         return self.esme
 
 
