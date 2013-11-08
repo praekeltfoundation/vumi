@@ -40,6 +40,18 @@ class ParlayXTransportConfig(Transport.CONFIG_CLASS):
 
 
 class ParlayXTransport(Transport):
+    """ParlayX SMS transport.
+
+    ParlayX is a defunkt standard web service API for telephone networks.
+    See http://en.wikipedia.org/wiki/Parlay_X for an overview.
+
+    .. warning::
+
+       This transport has not been tested against another ParlayX
+       implementation. If you use it, please provide feedback to the
+       Vumi development team on your experiences.
+    """
+
     CONFIG_CLASS = ParlayXTransportConfig
     transport_type = 'sms'
 
