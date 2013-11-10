@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from twisted.internet.task import Clock
 from twisted.internet.defer import inlineCallbacks, returnValue
 from smpp.pdu_builder import DeliverSM, BindTransceiverResp, Unbind
