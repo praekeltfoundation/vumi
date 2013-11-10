@@ -492,11 +492,11 @@ class EsmeReceiverMixin(EsmeGenericMixin):
     @inlineCallbacks
     def test_deliver_sm_multipart_arabic_ucs2(self):
         esme = yield self.get_esme(
-            deliver_sm=self.assertion_cb(u'ﻚﻌﻣ ﻪﻠﻟا ﻚﻌﻣ ﻪﻠﻟا', 'short_message'))
+            deliver_sm=self.assertion_cb('\xd8\xa7\xd9\x84\xd9\x84\xd9\x87 \xd9\x85\xd8\xb9\xd9\x83', 'short_message'))
         yield esme.handle_deliver_sm(self.get_sm(
-            "\x05\x00\x03\xff\x02\x02\xff\xfe'\x06D\x06D\x06G\x06 \x00E\x069\x06C\x06 ", 8))
+            "\x05\x00\x03\xff\x02\x01\xd8\xa7\xd9\x84\xd9\x84\xd9\x87 ", 8))
         yield esme.handle_deliver_sm(self.get_sm(
-            "\x05\x00\x03\xff\x02\x01\xff\xfe'\x06D\x06D\x06G\x06 \x00E\x069\x06C\x06", 8))
+            "\x05\x00\x03\xff\x02\x02\xd9\x85\xd8\xb9\xd9\x83", 8))
 
     @inlineCallbacks
     def test_deliver_sm_ussd_start(self):

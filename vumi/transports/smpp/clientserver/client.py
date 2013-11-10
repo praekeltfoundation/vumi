@@ -422,11 +422,23 @@ class EsmeTransceiver(Protocol):
 
     @inlineCallbacks
     def _handle_deliver_sm_multipart(self, pdu, pdu_params):
+
+        def hex_for_redis(data_dict):
+            for index, part in data_dict.items():
+                part['part_message'] = part['part_message'].encode('hex')
+            return data_dict
+
+        def unhex_from_redis(data_dict):
+            for index, part in data_dict.items():
+                part['part_message'] = part['part_message'].decode('hex')
+            return data_dict
+
         redis_key = "multi_%s" % (multipart_key(detect_multipart(pdu)),)
         log.debug("Redis multipart key: %s" % (redis_key))
         value = yield self.redis.get(redis_key)
-        value = json.loads(value or 'null')
+        value = json.loads(value) if value else {}
         log.debug("Retrieved value: %s" % (repr(value)))
+        value = unhex_from_redis(value)
         multi = MultipartMessage(value)
         multi.add_pdu(pdu)
         completed = multi.get_completed()
@@ -444,7 +456,7 @@ class EsmeTransceiver(Protocol):
                 short_message=decoded_msg)
         else:
             yield self.redis.set(
-                redis_key, json.dumps(multi.get_array()))
+                redis_key, json.dumps(hex_for_redis(multi.get_array())))
 
     def handle_enquire_link(self, pdu):
         if pdu['header']['command_status'] == 'ESME_ROK':
