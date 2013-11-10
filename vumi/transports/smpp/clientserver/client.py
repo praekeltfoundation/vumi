@@ -421,13 +421,31 @@ class EsmeTransceiver(Protocol):
             short_message=decoded_msg)
 
     @inlineCallbacks
+    def load_multipart_message(self, redis_key):
+        value = yield self.redis.get(redis_key)
+        value = json.loads(value) if value else {}
+        log.debug("Retrieved value: %s" % (repr(value)))
+        returnValue(MultipartMessage(self._unhex_from_redis(value)))
+
+    def save_multipart_message(self, redis_key, multipart_message):
+        data_dict = self._hex_for_redis(multipart_message.get_array())
+        return self.redis.set(redis_key, json.dumps(data_dict))
+
+    def _hex_for_redis(self, data_dict):
+        for index, part in data_dict.items():
+            part['part_message'] = part['part_message'].encode('hex')
+        return data_dict
+
+    def _unhex_from_redis(self, data_dict):
+        for index, part in data_dict.items():
+            part['part_message'] = part['part_message'].decode('hex')
+        return data_dict
+
+    @inlineCallbacks
     def _handle_deliver_sm_multipart(self, pdu, pdu_params):
         redis_key = "multi_%s" % (multipart_key(detect_multipart(pdu)),)
         log.debug("Redis multipart key: %s" % (redis_key))
-        value = yield self.redis.get(redis_key)
-        value = json.loads(value or 'null')
-        log.debug("Retrieved value: %s" % (repr(value)))
-        multi = MultipartMessage(value)
+        multi = yield self.load_multipart_message(redis_key)
         multi.add_pdu(pdu)
         completed = multi.get_completed()
         if completed:
@@ -443,8 +461,7 @@ class EsmeTransceiver(Protocol):
                 destination_addr=completed['to_msisdn'],
                 short_message=decoded_msg)
         else:
-            yield self.redis.set(
-                redis_key, json.dumps(multi.get_array()))
+            yield self.save_multipart_message(redis_key, multi)
 
     def handle_enquire_link(self, pdu):
         if pdu['header']['command_status'] == 'ESME_ROK':

@@ -488,6 +488,22 @@ class EsmeReceiverMixin(EsmeGenericMixin):
                 "\x05\x00\x03\xff\x02\x01\x00h\x00e\x00", 8))
 
     @inlineCallbacks
+    def test_deliver_sm_multipart_arabic_ucs2(self):
+        esme = yield self.get_esme(
+            deliver_sm=self.assertion_cb(
+                ('\xd8\xa7\xd9\x84\xd9\x84\xd9\x87 '
+                 '\xd9\x85\xd8\xb9\xd9\x83').decode('utf-8'), 'short_message'),
+            config={
+                'data_coding_overrides': {
+                    8: 'utf-8'
+                }
+            })
+        yield esme.handle_deliver_sm(self.get_sm(
+            "\x05\x00\x03\xff\x02\x01\xd8\xa7\xd9\x84\xd9\x84\xd9\x87 ", 8))
+        yield esme.handle_deliver_sm(self.get_sm(
+            "\x05\x00\x03\xff\x02\x02\xd9\x85\xd8\xb9\xd9\x83", 8))
+
+    @inlineCallbacks
     def test_deliver_sm_ussd_start(self):
         def assert_ussd(value):
             self.assertEqual('ussd', value['message_type'])
