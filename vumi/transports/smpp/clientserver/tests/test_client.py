@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 from twisted.internet.task import Clock
 from twisted.internet.defer import inlineCallbacks, returnValue
 from smpp.pdu_builder import DeliverSM, BindTransceiverResp, Unbind
@@ -486,6 +488,15 @@ class EsmeReceiverMixin(EsmeGenericMixin):
                 "\x05\x00\x03\xff\x02\x02l\x00l\x00o", 8))
         yield esme.handle_deliver_sm(self.get_sm(
                 "\x05\x00\x03\xff\x02\x01\x00h\x00e\x00", 8))
+
+    @inlineCallbacks
+    def test_deliver_sm_multipart_arabic_ucs2(self):
+        esme = yield self.get_esme(
+            deliver_sm=self.assertion_cb(u'ﻚﻌﻣ ﻪﻠﻟا ﻚﻌﻣ ﻪﻠﻟا', 'short_message'))
+        yield esme.handle_deliver_sm(self.get_sm(
+            "\x05\x00\x03\xff\x02\x02\xff\xfe'\x06D\x06D\x06G\x06 \x00E\x069\x06C\x06 ", 8))
+        yield esme.handle_deliver_sm(self.get_sm(
+            "\x05\x00\x03\xff\x02\x01\xff\xfe'\x06D\x06D\x06G\x06 \x00E\x069\x06C\x06", 8))
 
     @inlineCallbacks
     def test_deliver_sm_ussd_start(self):
