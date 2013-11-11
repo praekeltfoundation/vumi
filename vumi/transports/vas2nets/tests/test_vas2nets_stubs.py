@@ -12,12 +12,11 @@ from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, Deferred
 from twisted.web.test.test_web import DummyRequest
 
-from vumi.tests.utils import get_stubbed_worker
 from vumi.service import Worker
 from vumi.transports.vas2nets.transport_stubs import (
     FakeVas2NetsHandler, FakeVas2NetsWorker)
 from vumi.utils import StringProducer
-from vumi.tests.helpers import VumiTestCase
+from vumi.tests.helpers import VumiTestCase, WorkerHelper
 
 
 def create_request(params={}, path='/', method='POST'):
@@ -74,18 +73,20 @@ class StubbedFakeVas2NetsWorker(FakeVas2NetsWorker):
 
 class TestFakeVas2NetsWorker(VumiTestCase):
 
+    @inlineCallbacks
     def setUp(self):
+        self.worker_helper = WorkerHelper()
+        self.add_cleanup(self.worker_helper.cleanup)
         self.config = {
             'web_port': 9999,
             'web_receive_path': '/t/receive',
             'web_receipt_path': '/t/receipt',
             'url': 'http://localhost:9998/t/send',
         }
-        self.worker = get_stubbed_worker(
-            StubbedFakeVas2NetsWorker, self.config)
-        self.add_cleanup(self.worker.stopWorker)
-        self.test_worker = get_stubbed_worker(TestWorker, self.config)
-        self.add_cleanup(self.test_worker.stopWorker)
+        self.worker = yield self.worker_helper.get_worker(
+            StubbedFakeVas2NetsWorker, self.config, start=False)
+        self.test_worker = yield self.worker_helper.get_worker(
+            TestWorker, self.config, start=False)
         self.today = datetime.utcnow().date()
 
     def render_request(self, resource, request):

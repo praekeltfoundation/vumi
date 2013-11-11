@@ -1,19 +1,23 @@
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.service import Worker, WorkerCreator
-from vumi.tests.utils import (fake_amq_message, get_stubbed_worker)
+from vumi.tests.utils import fake_amq_message
 from vumi.message import Message
-from vumi.tests.helpers import VumiTestCase
+from vumi.tests.helpers import VumiTestCase, WorkerHelper
 
 
 class TestService(VumiTestCase):
+    def setUp(self):
+        self.worker_helper = WorkerHelper()
+        self.add_cleanup(self.worker_helper.cleanup)
+
     @inlineCallbacks
     def test_consume(self):
         """The consume helper should direct all incoming messages matching the
         specified routing_key, queue_name & exchange to the given callback"""
 
         message = fake_amq_message({"key": "value"})
-        worker = get_stubbed_worker(Worker)
+        worker = yield self.worker_helper.get_worker(Worker, {}, start=False)
 
         # buffer to check messages consumed
         log = []
@@ -23,15 +27,15 @@ class TestService(VumiTestCase):
         # if all works well then the consume method should funnel the test
         # message straight to the callback, the callback will apend it to the
         # log and we can test it.
-        worker._amqp_client.broker.basic_publish('vumi', 'test.routing.key',
-                                                 message.content)
-        yield worker._amqp_client.broker.wait_delivery()
+        self.worker_helper.broker.basic_publish('vumi', 'test.routing.key',
+                                                message.content)
+        yield self.worker_helper.broker.wait_delivery()
         self.assertEquals(log, [Message(key="value")])
 
     @inlineCallbacks
     def test_start_publisher(self):
         """The publisher should publish"""
-        worker = get_stubbed_worker(Worker)
+        worker = WorkerHelper.get_worker_raw(Worker, {})
         publisher = yield worker.publish_to('test.routing.key')
         self.assertEquals(publisher.routing_key, 'test.routing.key')
         publisher.publish_message(Message(key="value"))
@@ -40,7 +44,6 @@ class TestService(VumiTestCase):
 
         self.assertEquals(published_msg.body, '{"key": "value"}')
         self.assertEquals(published_msg.properties, {'delivery mode': 2})
-        yield worker._amqp_client.broker.wait_delivery()
 
 
 class LoadableTestWorker(Worker):

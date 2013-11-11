@@ -2,10 +2,9 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.application.base import ApplicationWorker, SESSION_NEW, SESSION_CLOSE
 from vumi.message import TransportUserMessage
-from vumi.tests.utils import get_stubbed_worker
 
 from vumi.application.tests.helpers import ApplicationHelper
-from vumi.tests.helpers import VumiTestCase
+from vumi.tests.helpers import VumiTestCase, WorkerHelper
 
 
 class DummyApplicationWorker(ApplicationWorker):
@@ -157,8 +156,8 @@ class TestApplicationWorker(VumiTestCase):
         self.assert_msgs_match(sends, expecteds)
 
     def test_subclassing_api(self):
-        worker = get_stubbed_worker(ApplicationWorker,
-                                    {'transport_name': 'test'})
+        worker = WorkerHelper.get_worker_raw(
+            ApplicationWorker, {'transport_name': 'test'})
         worker.consume_ack(self.app_helper.make_ack())
         worker.consume_nack(self.app_helper.make_nack())
         worker.consume_delivery_report(self.app_helper.make_delivery_report())
