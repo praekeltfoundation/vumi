@@ -1,14 +1,11 @@
 # -*- test-case-name: vumi.tests.test_testutils -*-
 
 import re
-import json
 from datetime import datetime, timedelta
-from collections import namedtuple
 import warnings
 from functools import wraps
 
 import pytz
-from twisted.trial.unittest import SkipTest
 from twisted.internet import reactor
 from twisted.internet.error import ConnectionRefusedError
 from twisted.web.resource import Resource
@@ -22,18 +19,9 @@ from vumi.message import TransportUserMessage, TransportEvent
 from vumi.tests.fake_amqp import FakeAMQPBroker, FakeAMQClient
 from vumi.tests.helpers import VumiTestCase
 
-
-def import_filter(exc, *expected):
-    msg = exc.args[0]
-    module = msg.split()[-1]
-    if expected and (module not in expected):
-        raise
-    return module
-
-
-def import_skip(exc, *expected):
-    module = import_filter(exc, *expected)
-    raise SkipTest("Failed to import '%s'." % (module,))
+# For backcompat:
+from vumi.tests.helpers import import_filter, import_skip
+import_filter, import_skip
 
 
 class UTCNearNow(object):

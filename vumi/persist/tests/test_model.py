@@ -10,8 +10,7 @@ from vumi.persist.fields import (
     ValidationError, Integer, Unicode, VumiMessage, Dynamic, ListOf,
     ForeignKey, ManyToMany, Timestamp)
 from vumi.message import TransportUserMessage
-from vumi.tests.utils import import_skip
-from vumi.tests.helpers import VumiTestCase
+from vumi.tests.helpers import VumiTestCase, import_skip
 
 
 class SimpleModel(Model):

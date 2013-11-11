@@ -13,8 +13,7 @@ from vumi.utils import (normalize_msisdn, vumi_resource_path, cleanup_msisdn,
                         get_first_word, redis_from_config, build_web_site,
                         LogFilterSite)
 from vumi.persist.fake_redis import FakeRedis
-from vumi.tests.utils import import_skip
-from vumi.tests.helpers import VumiTestCase
+from vumi.tests.helpers import VumiTestCase, import_skip
 
 
 class DummyRequest(object):
