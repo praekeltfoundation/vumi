@@ -55,7 +55,7 @@ class MockParlayXClient(object):
             'send_sms', [to_addr, content, linkid, message_id])
 
 
-class ParlayXTransportTestCase(VumiTestCase):
+class TestParlayXTransport(VumiTestCase):
     """
     Tests for `vumi.transports.parlayx.ParlayXTransport`.
     """
