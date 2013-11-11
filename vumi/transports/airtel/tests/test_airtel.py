@@ -4,14 +4,14 @@ from urllib import urlencode
 from twisted.internet.defer import inlineCallbacks
 from twisted.web import http
 
-from vumi.transports.tests.utils import TransportTestCase
+from vumi.tests.helpers import VumiTestCase
 from vumi.transports.airtel import AirtelUSSDTransport
 from vumi.message import TransportUserMessage
 from vumi.utils import http_request_full
 from vumi.transports.tests.helpers import TransportHelper
 
 
-class TestAirtelUSSDTransportTestCase(TransportTestCase):
+class TestAirtelUSSDTransportTestCase(VumiTestCase):
 
     transport_class = AirtelUSSDTransport
     airtel_username = None
@@ -20,7 +20,6 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        yield super(TestAirtelUSSDTransportTestCase, self).setUp()
         self.tx_helper = TransportHelper(self)
         self.add_cleanup(self.tx_helper.cleanup)
         self.config = {
@@ -334,13 +333,11 @@ class TestAirtelUSSDTransportTestCaseWithAuth(TestAirtelUSSDTransportTestCase):
         })
 
 
-class LoadBalancedAirtelUSSDTransportTestCase(TransportTestCase):
+class TestLoadBalancedAirtelUSSDTransport(VumiTestCase):
 
     transport_class = AirtelUSSDTransport
 
-    @inlineCallbacks
     def setUp(self):
-        yield super(LoadBalancedAirtelUSSDTransportTestCase, self).setUp()
         self.default_config = {
             'web_port': 0,
             'web_path': '/api/v1/airtel/ussd/',

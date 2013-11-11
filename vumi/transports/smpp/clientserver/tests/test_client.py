@@ -3,12 +3,12 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from smpp.pdu_builder import DeliverSM, BindTransceiverResp, Unbind
 from smpp.pdu import unpack_pdu
 
-from vumi.tests.utils import LogCatcher, PersistenceMixin
+from vumi.tests.utils import LogCatcher
 from vumi.transports.smpp.clientserver.client import (
     EsmeTransceiver, EsmeReceiver, EsmeTransmitter, EsmeCallbacks, ESME,
     unpacked_pdu_opts)
 from vumi.transports.smpp.transport import SmppTransportConfig
-from vumi.tests.helpers import VumiTestCase
+from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 
 
 class FakeTransport(object):
@@ -59,12 +59,12 @@ class FakeEsmeTransmitter(EsmeTransmitter, FakeEsmeMixin):
         return self.fake_send_pdu(pdu)
 
 
-class EsmeTestCaseBase(VumiTestCase, PersistenceMixin):
+class EsmeTestCaseBase(VumiTestCase):
     ESME_CLASS = None
 
     def setUp(self):
-        self._persist_setUp()
-        self.add_cleanup(self._persist_tearDown)
+        self.persistence_helper = PersistenceHelper()
+        self.add_cleanup(self.persistence_helper.cleanup)
         self._expected_callbacks = []
         self.add_cleanup(
             self.assertEqual, self._expected_callbacks, [],
@@ -89,7 +89,7 @@ class EsmeTestCaseBase(VumiTestCase, PersistenceMixin):
             d.addCallback(lambda result: redis_manager)
             return d
 
-        redis_d = self.get_redis_manager()
+        redis_d = self.persistence_helper.get_redis_manager()
         redis_d.addCallback(purge_manager)
         return redis_d.addCallback(
             lambda r: self.ESME_CLASS(config, {

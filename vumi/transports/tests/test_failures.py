@@ -4,9 +4,9 @@ from datetime import datetime, timedelta
 
 from twisted.internet.defer import inlineCallbacks
 
-from vumi.tests.utils import get_stubbed_worker, PersistenceMixin
+from vumi.tests.utils import get_stubbed_worker
 from vumi.transports.failures import FailureWorker
-from vumi.tests.helpers import VumiTestCase
+from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 
 
 def mktimestamp(delta=0):
@@ -14,16 +14,16 @@ def mktimestamp(delta=0):
     return timestamp.isoformat().split('.')[0]
 
 
-class FailureWorkerTestCase(VumiTestCase, PersistenceMixin):
+class FailureWorkerTestCase(VumiTestCase):
 
     def setUp(self):
-        self._persist_setUp()
-        self.add_cleanup(self._persist_tearDown)
+        self.persistence_helper = PersistenceHelper()
+        self.add_cleanup(self.persistence_helper.cleanup)
         return self.make_worker()
 
     @inlineCallbacks
     def make_worker(self, retry_delivery_period=0):
-        self.config = self.mk_config({
+        self.config = self.persistence_helper.mk_config({
                 'transport_name': 'sphex',
                 'retry_routing_key': 'sms.outbound.%(transport_name)s',
                 'failures_routing_key': 'sms.failures.%(transport_name)s',

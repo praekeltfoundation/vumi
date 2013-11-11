@@ -1,6 +1,5 @@
 from twisted.internet.defer import inlineCallbacks
 
-from vumi.application.tests.utils import ApplicationTestCase
 from vumi.message import TransportUserMessage
 from vumi.demos.rps import RockPaperScissorsGame, RockPaperScissorsWorker
 from vumi.application.tests.helpers import ApplicationHelper
@@ -59,13 +58,12 @@ class TestRockPaperScissorsGame(VumiTestCase):
         self.assertEquals((1, 2), game.scores)
 
 
-class TestRockPaperScissorsWorker(ApplicationTestCase):
+class TestRockPaperScissorsWorker(VumiTestCase):
 
     application_class = RockPaperScissorsWorker
 
     @inlineCallbacks
     def setUp(self):
-        super(TestRockPaperScissorsWorker, self).setUp()
         self.app_helper = ApplicationHelper(self)
         self.add_cleanup(self.app_helper.cleanup)
         self.worker = yield self.app_helper.get_application({})

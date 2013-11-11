@@ -9,11 +9,11 @@ from vumi.message import TransportUserMessage
 from vumi.transports.mtn_rwanda.mtn_rwanda_ussd import (
         MTNRwandaUSSDTransport, MTNRwandaXMLRPCResource, RequestTimedOutError,
         InvalidRequest)
-from vumi.transports.tests.utils import TransportTestCase
+from vumi.tests.helpers import VumiTestCase
 from vumi.transports.tests.helpers import TransportHelper
 
 
-class MTNRwandaUSSDTransportTestCase(TransportTestCase):
+class MTNRwandaUSSDTransportTestCase(VumiTestCase):
 
     transport_class = MTNRwandaUSSDTransport
     transport_name = 'test_mtn_rwanda_ussd_transport'
@@ -40,15 +40,13 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
         """
         Create the server (i.e. vumi transport instance)
         """
-        super(MTNRwandaUSSDTransportTestCase, self).setUp()
         self.clock = Clock()
-        config = self.mk_config({
+        self.tx_helper = TransportHelper(self)
+        self.add_cleanup(self.tx_helper.cleanup)
+        self.transport = yield self.tx_helper.get_transport({
             'twisted_endpoint': 'tcp:port=0',
             'timeout': '30',
         })
-        self.tx_helper = TransportHelper(self)
-        self.add_cleanup(self.tx_helper.cleanup)
-        self.transport = yield self.tx_helper.get_transport(config)
         self.transport.callLater = self.clock.callLater
         self.session_manager = self.transport.session_manager
 

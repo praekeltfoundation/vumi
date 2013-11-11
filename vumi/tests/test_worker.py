@@ -2,7 +2,7 @@ from twisted.internet.defer import inlineCallbacks, succeed, Deferred
 
 from vumi.worker import BaseConfig, BaseWorker
 from vumi.connectors import ReceiveInboundConnector, ReceiveOutboundConnector
-from vumi.tests.utils import VumiWorkerTestCase, LogCatcher
+from vumi.tests.utils import LogCatcher
 from vumi.middleware.base import BaseMiddleware
 from vumi.tests.helpers import VumiTestCase, MessageHelper, WorkerHelper
 
@@ -51,11 +51,10 @@ class TestBaseConfig(VumiTestCase):
         self.assertEqual(config.amqp_prefetch_count, 10)
 
 
-class TestBaseWorker(VumiWorkerTestCase):
+class TestBaseWorker(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        yield super(TestBaseWorker, self).setUp()
         self.msg_helper = MessageHelper()
         self.worker_helper = WorkerHelper()
         self.add_cleanup(self.worker_helper.cleanup)

@@ -10,7 +10,6 @@ from twisted.web.server import Site
 from twisted.web.resource import Resource
 from twisted.web.static import Data
 
-from vumi.application.tests.utils import ApplicationTestCase
 from vumi.demos.hangman import HangmanGame, HangmanWorker
 from vumi.message import TransportUserMessage
 from vumi.application.tests.helpers import ApplicationHelper
@@ -139,13 +138,12 @@ class TestHangmanGame(VumiTestCase):
         self.assertTrue(game.won())
 
 
-class TestHangmanWorker(ApplicationTestCase):
+class TestHangmanWorker(VumiTestCase):
 
     application_class = HangmanWorker
 
     @inlineCallbacks
     def setUp(self):
-        super(TestHangmanWorker, self).setUp()
         root = Resource()
         # data is elephant with a UTF-8 encoded BOM
         # it is a sad elephant (as seen in the wild)

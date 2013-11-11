@@ -15,7 +15,6 @@ from vumi.transports.smpp.transport import (SmppTransport,
 from vumi.transports.smpp.service import SmppService
 from vumi.transports.smpp.clientserver.client import unpacked_pdu_opts
 from vumi.transports.smpp.clientserver.tests.utils import SmscTestServer
-from vumi.transports.tests.utils import TransportTestCase
 from vumi.tests.utils import LogCatcher
 from vumi.transports.tests.helpers import TransportHelper
 from vumi.tests.helpers import VumiTestCase
@@ -64,26 +63,25 @@ class TestSmppTransportConfig(VumiTestCase):
             "send_long_messages, send_multipart_sar, send_multipart_udh"))
 
 
-class SmppTransportTestCase(TransportTestCase):
+class TestSmppTransport(VumiTestCase):
     transport_class = SmppTransport
 
     @inlineCallbacks
     def setUp(self):
-        super(SmppTransportTestCase, self).setUp()
-        self.config = self.mk_config({
+        config = {
             "system_id": "vumitest-vumitest-vumitest",
             "twisted_endpoint": "tcp:host=localhost:port=0",
             "password": "password",
             "smpp_bind_timeout": 12,
             "smpp_enquire_link_interval": 123,
             "third_party_id_expiry": 3600,  # just 1 hour
-        })
+        }
 
         # hack a lot of transport setup
         self.tx_helper = TransportHelper(self)
         self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(
-            self.config, start=False)
+            config, start=False)
         self.transport.esme_client = None
         yield self.transport.startWorker()
 
@@ -343,7 +341,7 @@ def mk_expected_pdu(direction, sequence_number, command_id, **extras):
     return {"direction": direction, "pdu": {"header": headers}}
 
 
-class EsmeToSmscTestCase(TransportTestCase):
+class EsmeToSmscTestCase(VumiTestCase):
 
     transport_name = "esme_testing_transport"
     transport_class = MockSmppTransport
@@ -370,7 +368,6 @@ class EsmeToSmscTestCase(TransportTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        yield super(EsmeToSmscTestCase, self).setUp()
         server_config = {
             "system_id": "VumiTestSMSC",
             "password": "password",
@@ -845,7 +842,7 @@ class EsmeToSmscTestCaseDeliveryOverrideMapping(EsmeToSmscTestCase):
         self.expected_delivery_status = 'delivered'  # stat:0 means delivered
 
 
-class TxEsmeToSmscTestCase(TransportTestCase):
+class TxEsmeToSmscTestCase(VumiTestCase):
 
     transport_name = "esme_testing_transport"
     transport_class = MockSmppTxTransport
@@ -862,7 +859,6 @@ class TxEsmeToSmscTestCase(TransportTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        yield super(TxEsmeToSmscTestCase, self).setUp()
         self.config = {
             "system_id": "VumiTestSMSC",
             "password": "password",
@@ -917,7 +913,7 @@ class TxEsmeToSmscTestCase(TransportTestCase):
         self.assertEqual(dispatched_failures, [])
 
 
-class RxEsmeToSmscTestCase(TransportTestCase):
+class RxEsmeToSmscTestCase(VumiTestCase):
 
     transport_name = "esme_testing_transport"
     transport_class = MockSmppRxTransport
@@ -937,7 +933,6 @@ class RxEsmeToSmscTestCase(TransportTestCase):
         from twisted.internet.base import DelayedCall
         DelayedCall.debug = True
 
-        yield super(RxEsmeToSmscTestCase, self).setUp()
         self.config = {
             "system_id": "VumiTestSMSC",
             "password": "password",

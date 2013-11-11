@@ -6,12 +6,12 @@ from twisted.internet.defer import inlineCallbacks
 
 from vumi.utils import http_request_full
 from vumi.message import TransportUserMessage
-from vumi.transports.tests.utils import TransportTestCase
+from vumi.tests.helpers import VumiTestCase
 from vumi.transports.imimobile import ImiMobileUssdTransport
 from vumi.transports.tests.helpers import TransportHelper
 
 
-class TestImiMobileUssdTransportTestCase(TransportTestCase):
+class TestImiMobileUssdTransportTestCase(VumiTestCase):
 
     transport_class = ImiMobileUssdTransport
 
@@ -27,7 +27,6 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        yield super(TestImiMobileUssdTransportTestCase, self).setUp()
         self.config = {
             'web_port': 0,
             'web_path': '/api/v1/imimobile/ussd/',

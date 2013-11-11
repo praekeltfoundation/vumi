@@ -4,8 +4,8 @@ from twisted.internet.defer import inlineCallbacks
 from twisted.internet.task import Clock
 
 from vumi.utils import http_request, http_request_full
+from vumi.tests.helpers import VumiTestCase
 from vumi.tests.utils import LogCatcher
-from vumi.transports.tests.test_base import TransportTestCase
 from vumi.transports.httprpc import HttpRpcTransport
 from vumi.message import TransportUserMessage
 from vumi.transports.tests.helpers import TransportHelper
@@ -27,13 +27,12 @@ class OkTransport(HttpRpcTransport):
                 )
 
 
-class TestTransport(TransportTestCase):
+class TestTransport(VumiTestCase):
 
     transport_class = OkTransport
 
     @inlineCallbacks
     def setUp(self):
-        yield super(TestTransport, self).setUp()
         self.clock = Clock()
         self.patch(OkTransport, 'get_clock', lambda _: self.clock)
         config = {
@@ -107,13 +106,12 @@ class JSONTransport(HttpRpcTransport):
                 )
 
 
-class TestJSONTransport(TransportTestCase):
+class TestJSONTransport(VumiTestCase):
 
     transport_class = JSONTransport
 
     @inlineCallbacks
     def setUp(self):
-        yield super(TestJSONTransport, self).setUp()
         config = {
             'web_path': "foo",
             'web_port': 0,
@@ -155,12 +153,11 @@ class CustomOutboundTransport(OkTransport):
                 headers=self.RESPONSE_HEADERS)
 
 
-class TestCustomOutboundTransport(TransportTestCase):
+class TestCustomOutboundTransport(VumiTestCase):
     transport_class = CustomOutboundTransport
 
     @inlineCallbacks
     def setUp(self):
-        yield super(TestCustomOutboundTransport, self).setUp()
         config = {
             'web_path': "foo",
             'web_port': 0,

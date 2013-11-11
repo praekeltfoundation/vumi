@@ -3,9 +3,9 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from vumi.application.base import ApplicationWorker, SESSION_NEW, SESSION_CLOSE
 from vumi.message import TransportUserMessage
 from vumi.tests.utils import get_stubbed_worker
-from vumi.application.tests.utils import ApplicationTestCase
 
 from vumi.application.tests.helpers import ApplicationHelper
+from vumi.tests.helpers import VumiTestCase
 
 
 class DummyApplicationWorker(ApplicationWorker):
@@ -43,7 +43,7 @@ class EchoApplicationWorker(ApplicationWorker):
         self.reply_to(message, message['content'])
 
 
-class TestApplicationWorker(ApplicationTestCase):
+class TestApplicationWorker(VumiTestCase):
 
     application_class = DummyApplicationWorker
 
@@ -202,7 +202,7 @@ class TestApplicationWorker(ApplicationTestCase):
             self.assertFalse(consumer.channel.qos_prefetch_count)
 
 
-class TestApplicationWorkerWithSendToConfig(ApplicationTestCase):
+class TestApplicationWorkerWithSendToConfig(VumiTestCase):
 
     application_class = DummyApplicationWorker
 
@@ -280,7 +280,7 @@ class TestApplicationWorkerWithSendToConfig(ApplicationTestCase):
             self.send_to('+12345', "Hi!", "outbound_unknown"), ValueError)
 
 
-class TestApplicationMiddlewareHooks(ApplicationTestCase):
+class TestApplicationMiddlewareHooks(VumiTestCase):
 
     transport_name = 'carrier_pigeon'
     application_class = ApplicationWorker

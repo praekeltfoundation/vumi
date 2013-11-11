@@ -7,26 +7,22 @@ from twisted.internet.defer import inlineCallbacks, DeferredQueue, returnValue
 
 from vumi.utils import http_request, http_request_full
 from vumi.tests.utils import MockHttpServer
-from vumi.transports.tests.utils import TransportTestCase
+from vumi.tests.helpers import VumiTestCase
 from vumi.transports.cellulant import CellulantSmsTransport
 from vumi.transports.tests.helpers import TransportHelper
 
 
-class TestCellulantSmsTransport(TransportTestCase):
+class TestCellulantSmsTransport(VumiTestCase):
 
-    transport_name = 'test_cellulant_sms_transport'
     transport_class = CellulantSmsTransport
 
     @inlineCallbacks
     def setUp(self):
-        super(TestCellulantSmsTransport, self).setUp()
-
         self.cellulant_sms_calls = DeferredQueue()
         self.mock_cellulant_sms = MockHttpServer(self.handle_request)
         yield self.mock_cellulant_sms.start()
 
         self.config = {
-            'transport_name': self.transport_name,
             'web_path': "foo",
             'web_port': 0,
             'credentials': {
@@ -83,7 +79,7 @@ class TestCellulantSmsTransport(TransportTestCase):
         url = self.mkurl('hello')
         response = yield http_request(url, '', method='GET')
         [msg] = self.tx_helper.get_dispatched_inbound()
-        self.assertEqual(msg['transport_name'], self.transport_name)
+        self.assertEqual(msg['transport_name'], self.tx_helper.transport_name)
         self.assertEqual(msg['to_addr'], "12345")
         self.assertEqual(msg['from_addr'], "2371234567")
         self.assertEqual(msg['content'], "hello")
@@ -138,7 +134,7 @@ class TestCellulantSmsTransport(TransportTestCase):
         url = self.mkurl(u"öæł".encode("utf-8"))
         response = yield http_request(url, '', method='GET')
         [msg] = self.tx_helper.get_dispatched_inbound()
-        self.assertEqual(msg['transport_name'], self.transport_name)
+        self.assertEqual(msg['transport_name'], self.tx_helper.transport_name)
         self.assertEqual(msg['to_addr'], "12345")
         self.assertEqual(msg['from_addr'], "2371234567")
         self.assertEqual(msg['content'], u"öæł")
@@ -172,21 +168,18 @@ class TestCellulantSmsTransport(TransportTestCase):
                          {'message_id': msg['message_id']})
 
 
-class TestAcksCellulantSmsTransport(TransportTestCase):
+class TestAcksCellulantSmsTransport(VumiTestCase):
 
     transport_class = CellulantSmsTransport
 
     @inlineCallbacks
     def setUp(self):
-        super(TestAcksCellulantSmsTransport, self).setUp()
-
         self.cellulant_sms_calls = DeferredQueue()
         self.mock_cellulant_sms = MockHttpServer(self.handle_request)
         self._mock_response = ''
         yield self.mock_cellulant_sms.start()
 
         self.config = {
-            'transport_name': self.transport_name,
             'web_path': "foo",
             'web_port': 0,
             'credentials': {
@@ -275,21 +268,17 @@ class TestAcksCellulantSmsTransport(TransportTestCase):
         self.assertEqual(event['user_message_id'], 'id_1')
 
 
-class TestPermissiveCellulantSmsTransport(TransportTestCase):
+class TestPermissiveCellulantSmsTransport(VumiTestCase):
 
-    transport_name = 'test_cellulant_sms_transport'
     transport_class = CellulantSmsTransport
 
     @inlineCallbacks
     def setUp(self):
-        super(TestPermissiveCellulantSmsTransport, self).setUp()
-
         self.cellulant_sms_calls = DeferredQueue()
         self.mock_cellulant_sms = MockHttpServer(self.handle_request)
         yield self.mock_cellulant_sms.start()
 
         self.config = {
-            'transport_name': self.transport_name,
             'web_path': "foo",
             'web_port': 0,
             'credentials': {

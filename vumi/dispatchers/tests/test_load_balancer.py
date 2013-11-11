@@ -2,13 +2,13 @@
 
 from twisted.internet.defer import inlineCallbacks
 
-from vumi.tests.utils import VumiWorkerTestCase, LogCatcher
-from vumi.dispatchers.tests.utils import DummyDispatcher
 from vumi.dispatchers.load_balancer import LoadBalancingRouter
-from vumi.tests.helpers import MessageHelper
+from vumi.dispatchers.tests.helpers import DummyDispatcher
+from vumi.tests.helpers import VumiTestCase, MessageHelper
+from vumi.tests.utils import LogCatcher
 
 
-class BaseLoadBalancingTestCase(VumiWorkerTestCase):
+class BaseLoadBalancingTestCase(VumiTestCase):
 
     reply_affinity = None
     rewrite_transport_names = None

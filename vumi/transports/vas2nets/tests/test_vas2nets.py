@@ -8,18 +8,18 @@ from twisted.python import log
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.utils import http_request_full
-from vumi.transports.tests.utils import TransportTestCase
 from vumi.message import TransportMessage
 from vumi.transports.failures import TemporaryFailure, PermanentFailure
 from vumi.transports.base import FailureMessage
 from vumi.transports.vas2nets.vas2nets import (
     Vas2NetsTransport, validate_characters, Vas2NetsTransportError,
     Vas2NetsEncodingError, normalize_outbound_msisdn)
+from vumi.tests.helpers import VumiTestCase
 from vumi.tests.utils import MockHttpServer
 from vumi.transports.tests.helpers import TransportHelper
 
 
-class Vas2NetsTransportTestCase(TransportTestCase):
+class Vas2NetsTransportTestCase(VumiTestCase):
 
     transport_name = 'vas2nets'
     transport_type = 'sms'
@@ -27,7 +27,6 @@ class Vas2NetsTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        yield super(Vas2NetsTransportTestCase, self).setUp()
         self.config = {
             'transport_name': 'vas2nets',
             'url': None,

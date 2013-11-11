@@ -3,7 +3,6 @@ from xml.etree import ElementTree
 from urllib import urlencode
 
 from twisted.internet.defer import inlineCallbacks
-from vumi.transports.tests.utils import TransportTestCase
 from vumi.utils import http_request
 from vumi.transports.vodacom_messaging import (VodacomMessagingResponse,
     VodacomMessagingTransport)
@@ -12,14 +11,12 @@ from vumi.transports.tests.helpers import TransportHelper
 from vumi.tests.helpers import VumiTestCase
 
 
-class TestVodacomMessagingTransport(TransportTestCase):
+class TestVodacomMessagingTransport(VumiTestCase):
 
-    transport_name = 'vodacom_messaging'
     transport_class = VodacomMessagingTransport
 
     @inlineCallbacks
     def setUp(self):
-        yield super(TestVodacomMessagingTransport, self).setUp()
         self.config = {
             'transport_type': 'ussd',
             'ussd_string_prefix': '*120*666#',
@@ -47,7 +44,7 @@ class TestVodacomMessagingTransport(TransportTestCase):
             }))
         d = http_request(url, '', method='GET')
         msg, = yield self.tx_helper.wait_for_dispatched_inbound(1)
-        self.assertEqual(msg['transport_name'], self.transport_name)
+        self.assertEqual(msg['transport_name'], self.tx_helper.transport_name)
         self.assertEqual(msg['transport_type'], "ussd")
         self.assertEqual(msg['transport_metadata'], {
             "session_id": "123"
@@ -79,16 +76,14 @@ class TestVodacomMessagingTransport(TransportTestCase):
         )
         d = http_request(url, '', method='GET')
         msg, = yield self.tx_helper.wait_for_dispatched_inbound(1)
-        payload = msg.payload
-        self.assertEqual(payload['transport_name'], self.transport_name)
-        self.assertEqual(payload['transport_type'], "ussd")
-        self.assertEqual(payload['transport_metadata'],
-                         {"session_id": "123"})
-        self.assertEqual(payload['session_event'],
-                         TransportUserMessage.SESSION_RESUME)
-        self.assertEqual(payload['from_addr'], '555')
-        self.assertEqual(payload['to_addr'], '')
-        self.assertEqual(payload['content'], '1')
+        self.assertEqual(msg['transport_name'], self.tx_helper.transport_name)
+        self.assertEqual(msg['transport_type'], "ussd")
+        self.assertEqual(msg['transport_metadata'], {"session_id": "123"})
+        self.assertEqual(
+            msg['session_event'], TransportUserMessage.SESSION_RESUME)
+        self.assertEqual(msg['from_addr'], '555')
+        self.assertEqual(msg['to_addr'], '')
+        self.assertEqual(msg['content'], '1')
         self.tx_helper.make_dispatch_reply(msg, "OK")
         response = yield d
         correct_response = '<request>\n\t<headertext>OK</headertext>\n\t' \
@@ -111,16 +106,14 @@ class TestVodacomMessagingTransport(TransportTestCase):
         )
         d = http_request(url, '', method='GET')
         msg, = yield self.tx_helper.wait_for_dispatched_inbound(1)
-        payload = msg.payload
-        self.assertEqual(payload['transport_name'], self.transport_name)
-        self.assertEqual(payload['transport_type'], "ussd")
-        self.assertEqual(payload['transport_metadata'],
-                         {"session_id": "123"})
-        self.assertEqual(payload['session_event'],
-                         TransportUserMessage.SESSION_RESUME)
-        self.assertEqual(payload['from_addr'], '555')
-        self.assertEqual(payload['to_addr'], '')
-        self.assertEqual(payload['content'], '1')
+        self.assertEqual(msg['transport_name'], self.tx_helper.transport_name)
+        self.assertEqual(msg['transport_type'], "ussd")
+        self.assertEqual(msg['transport_metadata'], {"session_id": "123"})
+        self.assertEqual(
+            msg['session_event'], TransportUserMessage.SESSION_RESUME)
+        self.assertEqual(msg['from_addr'], '555')
+        self.assertEqual(msg['to_addr'], '')
+        self.assertEqual(msg['content'], '1')
         self.tx_helper.make_dispatch_reply(msg, "OK", continue_session=False)
         response = yield d
         correct_response = '<request>\n\t<headertext>OK' + \

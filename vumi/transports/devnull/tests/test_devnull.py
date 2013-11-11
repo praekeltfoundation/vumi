@@ -1,17 +1,16 @@
 from twisted.internet.defer import inlineCallbacks
 
-from vumi.transports.tests.utils import TransportTestCase
+from vumi.tests.helpers import VumiTestCase
 from vumi.transports.devnull import DevNullTransport
 from vumi.tests.utils import LogCatcher
 from vumi.transports.tests.helpers import TransportHelper
 
 
-class DevNullTransportTestCase(TransportTestCase):
+class TestDevNullTransport(VumiTestCase):
 
     transport_class = DevNullTransport
 
     def setUp(self):
-        super(DevNullTransportTestCase, self).setUp()
         self.tx_helper = TransportHelper(self)
         self.add_cleanup(self.tx_helper.cleanup)
 

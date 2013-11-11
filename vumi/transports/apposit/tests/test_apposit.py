@@ -9,18 +9,16 @@ from twisted.internet.defer import inlineCallbacks, DeferredQueue
 from vumi.tests.utils import MockHttpServer
 from vumi.utils import http_request_full
 from vumi.transports.apposit import AppositTransport
-from vumi.transports.tests.utils import TransportTestCase
+from vumi.tests.helpers import VumiTestCase
 from vumi.transports.tests.helpers import TransportHelper
 
 
-class TestAppositTransport(TransportTestCase):
+class TestAppositTransport(VumiTestCase):
     transport_name = 'test_apposit_transport'
     transport_class = AppositTransport
 
     @inlineCallbacks
     def setUp(self):
-        super(TestAppositTransport, self).setUp()
-
         self.mock_server = MockHttpServer(self.handle_inbound_request)
         self.outbound_requests = DeferredQueue()
         self.mock_server_response = ''

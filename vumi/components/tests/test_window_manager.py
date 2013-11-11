@@ -2,17 +2,16 @@ from twisted.internet.defer import inlineCallbacks
 from twisted.internet.task import Clock
 
 from vumi.components.window_manager import WindowManager, WindowException
-from vumi.tests.utils import PersistenceMixin
-from vumi.tests.helpers import VumiTestCase
+from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 
 
-class WindowManagerTestCase(VumiTestCase, PersistenceMixin):
+class WindowManagerTestCase(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self._persist_setUp()
-        self.add_cleanup(self._persist_tearDown)
-        redis = yield self.get_redis_manager()
+        self.persistence_helper = PersistenceHelper()
+        self.add_cleanup(self.persistence_helper.cleanup)
+        redis = yield self.persistence_helper.get_redis_manager()
         self.window_id = 'window_id'
 
         # Patch the clock so we can control time
@@ -211,13 +210,13 @@ class WindowManagerTestCase(VumiTestCase, PersistenceMixin):
         self.assertEqual(set(cleanup_callbacks), set(window_ids))
 
 
-class ConcurrentWindowManagerTestCase(VumiTestCase, PersistenceMixin):
+class ConcurrentWindowManagerTestCase(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self._persist_setUp()
-        self.add_cleanup(self._persist_tearDown)
-        redis = yield self.get_redis_manager()
+        self.persistence_helper = PersistenceHelper()
+        self.add_cleanup(self.persistence_helper.cleanup)
+        redis = yield self.persistence_helper.get_redis_manager()
         self.window_id = 'window_id'
 
         # Patch the count_waiting so we can fake the race condition

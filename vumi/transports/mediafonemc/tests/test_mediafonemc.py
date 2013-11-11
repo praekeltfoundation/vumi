@@ -8,25 +8,22 @@ from twisted.web import http
 
 from vumi.utils import http_request, http_request_full
 from vumi.tests.utils import MockHttpServer
-from vumi.transports.tests.utils import TransportTestCase
+from vumi.tests.helpers import VumiTestCase
 from vumi.transports.mediafonemc import MediafoneTransport
 from vumi.transports.tests.helpers import TransportHelper
 
 
-class TestMediafoneTransport(TransportTestCase):
+class TestMediafoneTransport(VumiTestCase):
 
     transport_class = MediafoneTransport
 
     @inlineCallbacks
     def setUp(self):
-        super(TestMediafoneTransport, self).setUp()
-
         self.mediafone_calls = DeferredQueue()
         self.mock_mediafone = MockHttpServer(self.handle_request)
         yield self.mock_mediafone.start()
 
         self.config = {
-            'transport_name': self.transport_name,
             'web_path': "foo",
             'web_port': 0,
             'username': 'user',
@@ -77,7 +74,7 @@ class TestMediafoneTransport(TransportTestCase):
         url = self.mkurl('hello')
         response = yield http_request(url, '', method='GET')
         [msg] = self.tx_helper.get_dispatched_inbound()
-        self.assertEqual(msg['transport_name'], self.transport_name)
+        self.assertEqual(msg['transport_name'], self.tx_helper.transport_name)
         self.assertEqual(msg['to_addr'], "12345")
         self.assertEqual(msg['from_addr'], "2371234567")
         self.assertEqual(msg['content'], "hello")
@@ -118,7 +115,7 @@ class TestMediafoneTransport(TransportTestCase):
         url = self.mkurl(u"öæł".encode("utf-8"))
         response = yield http_request(url, '', method='GET')
         [msg] = self.tx_helper.get_dispatched_inbound()
-        self.assertEqual(msg['transport_name'], self.transport_name)
+        self.assertEqual(msg['transport_name'], self.tx_helper.transport_name)
         self.assertEqual(msg['to_addr'], "12345")
         self.assertEqual(msg['from_addr'], "2371234567")
         self.assertEqual(msg['content'], u"öæł")

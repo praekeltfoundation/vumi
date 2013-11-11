@@ -5,14 +5,13 @@ from twisted.web import http
 from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
 
 from vumi.message import from_json
-from vumi.tests.utils import (
-    PersistenceMixin, get_stubbed_worker, MockHttpServer)
+from vumi.tests.utils import get_stubbed_worker, MockHttpServer
 from vumi.tests.fake_amqp import FakeAMQPBroker
 from vumi.transports.failures import (
     FailureMessage, FailureWorker, TemporaryFailure)
 from vumi.transports.vas2nets.vas2nets import (
     Vas2NetsTransport, Vas2NetsTransportError)
-from vumi.tests.helpers import VumiTestCase, MessageHelper
+from vumi.tests.helpers import VumiTestCase, MessageHelper, PersistenceHelper
 
 
 class FailureCounter(object):
@@ -27,14 +26,14 @@ class FailureCounter(object):
             self.deferred.callback(None)
 
 
-class Vas2NetsFailureWorkerTestCase(VumiTestCase, PersistenceMixin):
+class Vas2NetsFailureWorkerTestCase(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self._persist_setUp()
-        self.add_cleanup(self._persist_tearDown)
+        self.persistence_helper = PersistenceHelper()
+        self.add_cleanup(self.persistence_helper.cleanup)
         self.today = datetime.utcnow().date()
-        self.config = self.mk_config({
+        config = {
             'transport_name': 'vas2nets',
             'url': None,
             'username': 'username',
@@ -45,17 +44,17 @@ class Vas2NetsFailureWorkerTestCase(VumiTestCase, PersistenceMixin):
             'web_receive_path': '/receive',
             'web_receipt_path': '/receipt',
             'web_port': 0,
-        })
-        self.fail_config = self.mk_config({
+        }
+        fail_config = {
             'transport_name': 'vas2nets',
             'retry_routing_key': '%(transport_name)s.outbound',
             'failures_routing_key': '%(transport_name)s.failures',
-            })
+        }
         self.broker = FakeAMQPBroker()
         self.add_cleanup(self.broker.wait_delivery)
-        self.worker = yield self.mk_transport_worker(self.config, self.broker)
+        self.worker = yield self.mk_transport_worker(config, self.broker)
         self.fail_worker = yield self.mk_failure_worker(
-            self.fail_config, self.broker)
+            fail_config, self.broker)
         self.msg_helper = MessageHelper()
 
     @inlineCallbacks
@@ -67,6 +66,7 @@ class Vas2NetsFailureWorkerTestCase(VumiTestCase, PersistenceMixin):
 
     @inlineCallbacks
     def mk_failure_worker(self, config, broker):
+        config = self.persistence_helper.mk_config(config)
         w = get_stubbed_worker(FailureWorker, config, broker)
         self.add_cleanup(w.stopWorker)
         w.retry_publisher = yield self.worker.publish_to("foo")

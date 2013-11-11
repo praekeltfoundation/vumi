@@ -6,7 +6,7 @@ from urllib import urlencode
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.utils import http_request, http_request_full
-from vumi.transports.tests.utils import TransportTestCase
+from vumi.tests.helpers import VumiTestCase
 from vumi.transports.api import HttpApiTransport
 from vumi.transports.tests.helpers import TransportHelper
 
@@ -18,15 +18,12 @@ def config_override(**config):
     return deco
 
 
-class TestHttpApiTransport(TransportTestCase):
-    transport_name = 'test_http_api_transport'
+class TestHttpApiTransport(VumiTestCase):
     transport_class = HttpApiTransport
 
     @inlineCallbacks
     def setUp(self):
-        super(TestHttpApiTransport, self).setUp()
         self.config = {
-            'transport_name': self.transport_name,
             'web_path': "foo",
             'web_port': 0,
         }
@@ -66,7 +63,7 @@ class TestHttpApiTransport(TransportTestCase):
         url = self.mkurl('hello')
         response = yield http_request(url, '', method='GET')
         [msg] = self.tx_helper.get_dispatched_inbound()
-        self.assertEqual(msg['transport_name'], self.transport_name)
+        self.assertEqual(msg['transport_name'], self.tx_helper.transport_name)
         self.assertEqual(msg['to_addr'], "555")
         self.assertEqual(msg['from_addr'], "123")
         self.assertEqual(msg['content'], "hello")
@@ -78,7 +75,7 @@ class TestHttpApiTransport(TransportTestCase):
         url = self.mkurl(u"öæł".encode("utf-8"))
         response = yield http_request(url, '', method='GET')
         [msg] = self.tx_helper.get_dispatched_inbound()
-        self.assertEqual(msg['transport_name'], self.transport_name)
+        self.assertEqual(msg['transport_name'], self.tx_helper.transport_name)
         self.assertEqual(msg['to_addr'], "555")
         self.assertEqual(msg['from_addr'], "123")
         self.assertEqual(msg['content'], u"öæł")
@@ -125,7 +122,7 @@ class TestHttpApiTransport(TransportTestCase):
         url = self.mkurl_raw(content='hello', from_addr='123')
         response = yield http_request(url, '', method='GET')
         [msg] = self.tx_helper.get_dispatched_inbound()
-        self.assertEqual(msg['transport_name'], self.transport_name)
+        self.assertEqual(msg['transport_name'], self.tx_helper.transport_name)
         self.assertEqual(msg['to_addr'], "555")
         self.assertEqual(msg['from_addr'], "123")
         self.assertEqual(msg['content'], "hello")
@@ -139,7 +136,7 @@ class TestHttpApiTransport(TransportTestCase):
         url = self.mkurl_raw(content='hello', from_addr='123')
         response = yield http_request(url, '', method='GET')
         [msg] = self.tx_helper.get_dispatched_inbound()
-        self.assertEqual(msg['transport_name'], self.transport_name)
+        self.assertEqual(msg['transport_name'], self.tx_helper.transport_name)
         self.assertEqual(msg['to_addr'], "555")
         self.assertEqual(msg['from_addr'], "123")
         self.assertEqual(msg['content'], "hello")

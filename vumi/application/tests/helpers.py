@@ -1,5 +1,8 @@
+from twisted.internet.defer import inlineCallbacks
+
 from vumi.tests.helpers import (
-    MessageHelper, WorkerHelper, MessageDispatchHelper, generate_proxies,
+    MessageHelper, WorkerHelper, MessageDispatchHelper, PersistenceHelper,
+    generate_proxies,
 )
 
 
@@ -14,13 +17,15 @@ class ApplicationHelper(object):
     #          methods. This can probably be avoided with a little effort.
     def __init__(self, test_case, msg_helper_args=None):
         self._test_case = test_case
-        self.worker_helper = WorkerHelper(self._test_case.transport_name)
-        msg_helper_kw = {
-            'transport_name': self._test_case.transport_name,
-        }
+        self.persistence_helper = PersistenceHelper()
+        msg_helper_kw = {}
+        # TODO: Get rid of this transport_name attr on the test class.
+        if hasattr(test_case, 'transport_name'):
+            msg_helper_kw['transport_name'] = test_case.transport_name
         if msg_helper_args is not None:
             msg_helper_kw.update(msg_helper_args)
         self.msg_helper = MessageHelper(**msg_helper_kw)
+        self.worker_helper = WorkerHelper(self.msg_helper.transport_name)
         self.dispatch_helper = MessageDispatchHelper(
             self.msg_helper, self.worker_helper)
 
@@ -28,9 +33,12 @@ class ApplicationHelper(object):
         generate_proxies(self, self.msg_helper)
         generate_proxies(self, self.worker_helper)
         generate_proxies(self, self.dispatch_helper)
+        generate_proxies(self, self.persistence_helper)
 
+    @inlineCallbacks
     def cleanup(self):
-        return self.worker_helper.cleanup()
+        yield self.worker_helper.cleanup()
+        yield self.persistence_helper.cleanup()
 
     def get_application(self, config, cls=None, start=True):
         """
@@ -49,6 +57,6 @@ class ApplicationHelper(object):
 
         if cls is None:
             cls = self._test_case.application_class
-        config = self._test_case.mk_config(config)
-        config.setdefault('transport_name', self._test_case.transport_name)
+        config = self.mk_config(config)
+        config.setdefault('transport_name', self.msg_helper.transport_name)
         return self.get_worker(cls, config, start)

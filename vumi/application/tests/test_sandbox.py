@@ -16,16 +16,14 @@ from twisted.internet.defer import (
 from twisted.internet.error import ProcessTerminated
 from twisted.trial.unittest import SkipTest
 
-from vumi.application.tests.utils import ApplicationTestCase
 from vumi.application.sandbox import (
     Sandbox, SandboxApi, SandboxCommand, SandboxResources,
     SandboxResource, RedisResource, OutboundResource, JsSandboxResource,
     LoggingResource, HttpClientResource, JsSandbox, JsFileSandbox,
     HttpClientContextFactory)
-from vumi.tests.utils import LogCatcher, PersistenceMixin
-from vumi.tests.helpers import VumiTestCase
-
 from vumi.application.tests.helpers import ApplicationHelper
+from vumi.tests.utils import LogCatcher
+from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 
 
 class MockResource(SandboxResource):
@@ -44,7 +42,7 @@ class ListLoggingResource(LoggingResource):
         self.msgs.append((level, msg))
 
 
-class SandboxTestCaseBase(ApplicationTestCase):
+class SandboxTestCaseBase(VumiTestCase):
 
     application_class = Sandbox
 
@@ -147,7 +145,7 @@ class SandboxTestCase(SandboxTestCaseBase):
 
     @inlineCallbacks
     def test_resource_setup(self):
-        r_server = yield self.get_redis_manager()
+        r_server = yield self.app_helper.get_redis_manager()
         json_data = SandboxCommand(cmd='db.set', key='foo',
                                    value={'a': 1, 'b': 2}).to_json()
         app = yield self.setup_app(
@@ -573,15 +571,16 @@ class ResourceTestCaseBase(VumiTestCase):
         return self.resource.dispatch_request(self.api, msg)
 
 
-class TestRedisResource(ResourceTestCaseBase, PersistenceMixin):
+class TestRedisResource(ResourceTestCaseBase):
 
     resource_cls = RedisResource
 
     @inlineCallbacks
     def setUp(self):
         super(TestRedisResource, self).setUp()
-        yield self._persist_setUp()
-        self.r_server = yield self.get_redis_manager()
+        self.persistence_helper = PersistenceHelper()
+        self.add_cleanup(self.persistence_helper.cleanup)
+        self.r_server = yield self.persistence_helper.get_redis_manager()
         yield self.create_resource({})
 
     def create_resource(self, config):
@@ -590,11 +589,6 @@ class TestRedisResource(ResourceTestCaseBase, PersistenceMixin):
             'key_prefix': self.r_server._key_prefix,
         })
         return super(TestRedisResource, self).create_resource(config)
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield super(TestRedisResource, self).tearDown()
-        yield self._persist_tearDown()
 
     def check_reply(self, reply, success=True, **kw):
         self.assertEqual(reply['success'], success)

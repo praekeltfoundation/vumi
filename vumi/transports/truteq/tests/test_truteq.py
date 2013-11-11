@@ -10,10 +10,10 @@ from twisted.internet.protocol import ServerFactory
 from ssmi import client
 
 from vumi.message import TransportUserMessage
-from vumi.transports.tests.utils import TransportTestCase
-from vumi.transports.truteq.truteq import TruteqTransport
+from vumi.tests.helpers import VumiTestCase
 from vumi.tests.utils import LogCatcher
 from vumi.transports.tests.helpers import TransportHelper
+from vumi.transports.truteq.truteq import TruteqTransport
 
 
 # To reduce verbosity.
@@ -59,17 +59,17 @@ class FakeSSMIFactory(ServerFactory):
         self.ussd_calls = DeferredQueue()
 
 
-class TestTruteqTransport(TransportTestCase):
+class TestTruteqTransport(VumiTestCase):
 
-    transport_name = 'test_truteq_transport'
     transport_class = TruteqTransport
 
     @inlineCallbacks
     def setUp(self):
-        super(TestTruteqTransport, self).setUp()
+        self.tx_helper = TransportHelper(self)
         self.server_factory = FakeSSMIFactory()
         self.fake_server = reactor.listenTCP(
             0, self.server_factory, interface='localhost')
+        self.add_cleanup(self.fake_server.stopListening)
         addr = self.fake_server.getHost()
         self.config = {
             'username': 'vumitest',
@@ -77,14 +77,8 @@ class TestTruteqTransport(TransportTestCase):
             'host': addr.host,
             'port': addr.port,
             }
-        self.tx_helper = TransportHelper(self)
         self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(self.config)
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield self.fake_server.stopListening()
-        yield super(TestTruteqTransport, self).tearDown()
 
     def _incoming_ussd(self, msisdn="+12345", ussd_type=SSMI_EXISTING,
                        phase="ignored", message="Hello"):
@@ -99,11 +93,11 @@ class TestTruteqTransport(TransportTestCase):
                    session_event=None, helper_metadata=None):
         default_hmd = {'truteq': {'genfields': {}}}
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
-        self.assertEqual(msg['transport_name'], self.transport_name)
+        self.assertEqual(msg['transport_name'], self.tx_helper.transport_name)
         self.assertEqual(msg['transport_type'], 'ussd')
         self.assertEqual(msg['transport_metadata'], {})
-        self.assertEqual(msg['helper_metadata'],
-                         helper_metadata or default_hmd)
+        self.assertEqual(
+            msg['helper_metadata'], helper_metadata or default_hmd)
         self.assertEqual(msg['from_addr'], from_addr)
         self.assertEqual(msg['to_addr'], to_addr)
         self.assertEqual(msg['content'], content)

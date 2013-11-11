@@ -2,17 +2,15 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.dispatchers.base import (
     BaseDispatchWorker, ToAddrRouter, FromAddrMultiplexRouter)
-from vumi.tests.utils import VumiWorkerTestCase, LogCatcher
-from vumi.dispatchers.tests.utils import DispatcherTestCase, DummyDispatcher
-from vumi.tests.helpers import MessageHelper
-from vumi.dispatchers.tests.helpers import DispatcherHelper
+from vumi.dispatchers.tests.helpers import DispatcherHelper, DummyDispatcher
+from vumi.tests.utils import LogCatcher
+from vumi.tests.helpers import VumiTestCase, MessageHelper
 
 
-class TestBaseDispatchWorker(VumiWorkerTestCase):
+class TestBaseDispatchWorker(VumiTestCase):
     def setUp(self):
         self.disp_helper = DispatcherHelper(BaseDispatchWorker, self)
         self.add_cleanup(self.disp_helper.cleanup)
-        return super(TestBaseDispatchWorker, self).setUp()
 
     def get_dispatcher(self, **config_extras):
         config = {
@@ -235,11 +233,10 @@ class TestBaseDispatchWorker(VumiWorkerTestCase):
             self.assertFalse(consumer.channel.qos_prefetch_count)
 
 
-class TestToAddrRouter(VumiWorkerTestCase):
+class TestToAddrRouter(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        yield super(TestToAddrRouter, self).setUp()
         self.config = {
             'transport_names': ['transport1'],
             'exposed_names': ['app1', 'app2'],
@@ -278,11 +275,10 @@ class TestToAddrRouter(VumiWorkerTestCase):
         self.assertEqual(publishers['transport1'].msgs, [msg])
 
 
-class TestTransportToTransportRouter(VumiWorkerTestCase):
+class TestTransportToTransportRouter(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        yield super(TestTransportToTransportRouter, self).setUp()
         self.disp_helper = DispatcherHelper(BaseDispatchWorker, self)
         self.add_cleanup(self.disp_helper.cleanup)
         self.worker = yield self.disp_helper.get_worker(BaseDispatchWorker, {
@@ -309,11 +305,10 @@ class TestTransportToTransportRouter(VumiWorkerTestCase):
         self.assertEqual([], tx2_helper.get_dispatched_inbound())
 
 
-class TestFromAddrMultiplexRouter(VumiWorkerTestCase):
+class TestFromAddrMultiplexRouter(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        yield super(TestFromAddrMultiplexRouter, self).setUp()
         config = {
             "transport_names": [
                 "transport_1",
@@ -330,13 +325,9 @@ class TestFromAddrMultiplexRouter(VumiWorkerTestCase):
             }
         self.dispatcher = DummyDispatcher(config)
         self.router = FromAddrMultiplexRouter(self.dispatcher, config)
+        self.add_cleanup(self.router.teardown_routing)
         yield self.router.setup_routing()
         self.msg_helper = MessageHelper()
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield super(TestFromAddrMultiplexRouter, self).tearDown()
-        yield self.router.teardown_routing()
 
     def make_inbound_mux(self, content, from_addr, transport_name):
         return self.msg_helper.make_inbound(
@@ -376,11 +367,10 @@ class TestFromAddrMultiplexRouter(VumiWorkerTestCase):
         self.assertEqual(publishers['transport_2'].msgs, [msg2])
 
 
-class UserGroupingRouterTestCase(DispatcherTestCase):
+class UserGroupingRouterTestCase(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        yield super(UserGroupingRouterTestCase, self).setUp()
         self.disp_helper = DispatcherHelper(BaseDispatchWorker, self)
         self.add_cleanup(self.disp_helper.cleanup)
         self.dispatcher = yield self.disp_helper.get_dispatcher({
@@ -405,11 +395,6 @@ class UserGroupingRouterTestCase(DispatcherTestCase):
         yield self.router._redis_d
         self.redis = self.router.redis
         yield self.redis._purge_all()  # just in case
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield super(UserGroupingRouterTestCase, self).tearDown()
-        yield self.redis.close_manager()
 
     @inlineCallbacks
     def test_group_assignment(self):
@@ -471,11 +456,10 @@ class UserGroupingRouterTestCase(DispatcherTestCase):
         self.assertEqual(app_msg, tx_msg)
 
 
-class TestContentKeywordRouter(DispatcherTestCase):
+class TestContentKeywordRouter(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        yield super(TestContentKeywordRouter, self).setUp()
         self.disp_helper = DispatcherHelper(BaseDispatchWorker, self)
         self.add_cleanup(self.disp_helper.cleanup)
         self.dispatcher = yield self.disp_helper.get_dispatcher({
@@ -504,13 +488,9 @@ class TestContentKeywordRouter(DispatcherTestCase):
         })
         self.router = self.dispatcher._router
         yield self.router._redis_d
+        self.add_cleanup(self.router.session_manager.stop)
         self.redis = self.router.redis
         yield self.redis._purge_all()  # just in case
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield self.router.session_manager.stop()
-        yield super(TestContentKeywordRouter, self).tearDown()
 
     def ch(self, connector_name):
         return self.disp_helper.get_connector_helper(connector_name)
@@ -582,7 +562,7 @@ class TestContentKeywordRouter(DispatcherTestCase):
         self.assertEqual(session['name'], 'app2')
 
 
-class TestRedirectOutboundRouterForSMPP(DispatcherTestCase):
+class TestRedirectOutboundRouterForSMPP(VumiTestCase):
     """
     This is a test to cover our use case when using SMPP 3.4 with
     split Tx and Rx binds. The outbound traffic needs to go to the Tx, while
@@ -593,7 +573,6 @@ class TestRedirectOutboundRouterForSMPP(DispatcherTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        yield super(TestRedirectOutboundRouterForSMPP, self).setUp()
         self.disp_helper = DispatcherHelper(BaseDispatchWorker, self)
         self.add_cleanup(self.disp_helper.cleanup)
         self.dispatcher = yield self.disp_helper.get_dispatcher({
@@ -656,11 +635,10 @@ class TestRedirectOutboundRouterForSMPP(DispatcherTestCase):
                                 err['message'][0])
 
 
-class TestRedirectOutboundRouter(DispatcherTestCase):
+class TestRedirectOutboundRouter(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        yield super(TestRedirectOutboundRouter, self).setUp()
         self.disp_helper = DispatcherHelper(BaseDispatchWorker, self)
         self.add_cleanup(self.disp_helper.cleanup)
         self.dispatcher = yield self.disp_helper.get_dispatcher({

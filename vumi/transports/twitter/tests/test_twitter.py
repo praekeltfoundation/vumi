@@ -2,9 +2,9 @@ from twisted.internet.defer import inlineCallbacks
 from twisted.internet import defer
 from twisted.web import error
 
-from vumi.transports.twitter import TwitterTransport
-from vumi.transports.tests.utils import TransportTestCase
 from vumi.message import TransportUserMessage
+from vumi.tests.helpers import VumiTestCase
+from vumi.transports.twitter import TwitterTransport
 from vumi.transports.tests.helpers import TransportHelper
 
 
@@ -46,15 +46,13 @@ class FakeTwitter(object):
             self.track_delegate(status)
 
 
-class TwitterTransportTestCase(TransportTestCase):
+class TestTwitterTransport(VumiTestCase):
 
-    transport_name = 'test_twitter'
     transport_class = TwitterTransport
 
     @inlineCallbacks
     def setUp(self):
-        yield super(TwitterTransportTestCase, self).setUp()
-        self.config = {
+        config = {
             'app_name': 'testapp',
             'consumer_key': 'consumer1',
             'consumer_secret': 'consumersecret1',
@@ -65,7 +63,7 @@ class TwitterTransportTestCase(TransportTestCase):
         self.tx_helper = TransportHelper(self)
         self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(
-            self.config, start=False)
+            config, start=False)
         self.transport._twitter_class = FakeTwitter
         yield self.transport.startWorker()
 

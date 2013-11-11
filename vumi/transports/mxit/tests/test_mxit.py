@@ -1,21 +1,20 @@
 from twisted.internet.defer import inlineCallbacks
 from twisted.web.http import Request, BAD_REQUEST
 
-from vumi.transports.tests.utils import TransportTestCase
 from vumi.transports.mxit import MxitTransport
 from vumi.transports.mxit.responses import ResponseParser
 from vumi.utils import http_request_full
+from vumi.tests.helpers import VumiTestCase
 from vumi.transports.tests.helpers import TransportHelper
 
 
-class TestMxitTransportTestCase(TransportTestCase):
+class TestMxitTransport(VumiTestCase):
 
     transport_class = MxitTransport
 
     @inlineCallbacks
     def setUp(self):
-        yield super(TestMxitTransportTestCase, self).setUp()
-        self.config = {
+        config = {
             'web_port': 0,
             'web_path': '/api/v1/mxit/mobiportal/',
         }
@@ -45,8 +44,8 @@ class TestMxitTransportTestCase(TransportTestCase):
 
         self.tx_helper = TransportHelper(self)
         self.add_cleanup(self.tx_helper.cleanup)
-        self.transport = yield self.tx_helper.get_transport(self.config)
-        self.url = self.transport.get_transport_url(self.config['web_path'])
+        self.transport = yield self.tx_helper.get_transport(config)
+        self.url = self.transport.get_transport_url(config['web_path'])
 
     def test_is_mxit_request(self):
         req = Request(None, True)

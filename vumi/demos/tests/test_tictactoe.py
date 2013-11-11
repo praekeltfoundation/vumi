@@ -1,7 +1,6 @@
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.demos.tictactoe import TicTacToeGame, TicTacToeWorker
-from vumi.application.tests.utils import ApplicationTestCase
 from vumi.message import TransportUserMessage
 from vumi.application.tests.helpers import ApplicationHelper
 from vumi.tests.helpers import VumiTestCase
@@ -70,13 +69,12 @@ class TestTicTacToeGame(VumiTestCase):
         self.assertEqual('X', game.check_win())
 
 
-class TestTicTacToeWorker(ApplicationTestCase):
+class TestTicTacToeWorker(VumiTestCase):
 
     application_class = TicTacToeWorker
 
     @inlineCallbacks
     def setUp(self):
-        yield super(TestTicTacToeWorker, self).setUp()
         self.app_helper = ApplicationHelper(self)
         self.add_cleanup(self.app_helper.cleanup)
         self.worker = yield self.app_helper.get_application({})

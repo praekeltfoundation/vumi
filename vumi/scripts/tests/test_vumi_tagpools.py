@@ -2,8 +2,7 @@
 
 from pkg_resources import resource_filename
 
-from vumi.tests.utils import PersistenceMixin
-from vumi.tests.helpers import VumiTestCase
+from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 
 
 def make_cfg(args):
@@ -24,14 +23,12 @@ def make_cfg(args):
     return TestConfigHolder(options)
 
 
-class TagPoolBaseTestCase(VumiTestCase, PersistenceMixin):
-    sync_persistence = True
-
+class TagPoolBaseTestCase(VumiTestCase):
     def setUp(self):
-        self._persist_setUp()
-        self.add_cleanup(self._persist_tearDown)
+        self.persistence_helper = PersistenceHelper(is_sync=True)
+        self.add_cleanup(self.persistence_helper.cleanup)
         # Make sure we start fresh.
-        self.get_redis_manager()._purge_all()
+        self.persistence_helper.get_redis_manager()._purge_all()
 
 
 class CreatePoolCmdTestCase(TagPoolBaseTestCase):

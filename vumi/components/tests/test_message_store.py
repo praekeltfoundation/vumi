@@ -7,24 +7,23 @@ from datetime import datetime, timedelta
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.message import TransportEvent
-from vumi.tests.utils import import_skip, PersistenceMixin
-from vumi.tests.helpers import VumiTestCase, MessageHelper
+from vumi.tests.helpers import (
+    VumiTestCase, MessageHelper, PersistenceHelper, import_skip,
+)
 
 
-class TestMessageStoreBase(VumiTestCase, PersistenceMixin):
-    use_riak = True
+class TestMessageStoreBase(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self._persist_setUp()
-        self.add_cleanup(self._persist_tearDown)
-        super(TestMessageStoreBase, self).setUp()
+        self.persistence_helper = PersistenceHelper(use_riak=True)
+        self.add_cleanup(self.persistence_helper.cleanup)
         try:
             from vumi.components.message_store import MessageStore
         except ImportError, e:
             import_skip(e, 'riakasaurus', 'riakasaurus.riak')
-        self.redis = yield self.get_redis_manager()
-        self.manager = self.get_riak_manager()
+        self.redis = yield self.persistence_helper.get_redis_manager()
+        self.manager = self.persistence_helper.get_riak_manager()
         self.store = MessageStore(self.manager, self.redis)
         self.msg_helper = MessageHelper()
 

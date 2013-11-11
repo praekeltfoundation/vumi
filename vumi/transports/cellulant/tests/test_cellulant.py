@@ -2,20 +2,19 @@ from urllib import urlencode
 
 from twisted.internet.defer import inlineCallbacks
 
-from vumi.transports.tests.utils import TransportTestCase
+from vumi.tests.helpers import VumiTestCase
 from vumi.transports.cellulant import CellulantTransport
 from vumi.message import TransportUserMessage
 from vumi.utils import http_request
 from vumi.transports.tests.helpers import TransportHelper
 
 
-class TestCellulantTransportTestCase(TransportTestCase):
+class TestCellulantTransportTestCase(VumiTestCase):
 
     transport_class = CellulantTransport
 
     @inlineCallbacks
     def setUp(self):
-        yield super(TestCellulantTransportTestCase, self).setUp()
         self.config = {
             'web_port': 0,
             'web_path': '/api/v1/ussd/cellulant/',

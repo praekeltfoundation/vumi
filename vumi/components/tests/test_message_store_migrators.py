@@ -2,8 +2,9 @@
 
 from twisted.internet.defer import inlineCallbacks
 
-from vumi.tests.utils import PersistenceMixin, import_skip
-from vumi.tests.helpers import VumiTestCase, MessageHelper
+from vumi.tests.helpers import (
+    VumiTestCase, MessageHelper, PersistenceHelper, import_skip,
+)
 
 try:
     from vumi.components.tests.message_store_old_models import (
@@ -16,16 +17,13 @@ except ImportError, e:
     riak_import_error = e
 
 
-class TestMigratorBase(VumiTestCase, PersistenceMixin):
-    use_riak = True
-
-    @inlineCallbacks
+class TestMigratorBase(VumiTestCase):
     def setUp(self):
-        yield self._persist_setUp()
-        self.add_cleanup(self._persist_tearDown)
+        self.persistence_helper = PersistenceHelper(use_riak=True)
+        self.add_cleanup(self.persistence_helper.cleanup)
         if riak_import_error is not None:
             import_skip(riak_import_error, 'riakasaurus', 'riakasaurus.riak')
-        self.manager = self.get_riak_manager()
+        self.manager = self.persistence_helper.get_riak_manager()
         self.msg_helper = MessageHelper()
 
 

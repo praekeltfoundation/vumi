@@ -1,6 +1,5 @@
 from twisted.internet.defer import inlineCallbacks, returnValue
 
-from vumi.transports.tests.utils import TransportTestCase
 from vumi.utils import http_request_full
 from vumi.message import TransportUserMessage
 from vumi.transports.mtech_ussd import MtechUssdTransport
@@ -9,14 +8,12 @@ from vumi.transports.tests.helpers import TransportHelper
 from vumi.tests.helpers import VumiTestCase
 
 
-class TestMtechUssdTransport(TransportTestCase):
+class TestMtechUssdTransport(VumiTestCase):
 
-    transport_name = 'mtech_ussd'
     transport_class = MtechUssdTransport
 
     @inlineCallbacks
     def setUp(self):
-        yield super(TestMtechUssdTransport, self).setUp()
         self.config = {
             'transport_type': 'ussd',
             'ussd_string_prefix': '*120*666#',
@@ -75,7 +72,7 @@ class TestMtechUssdTransport(TransportTestCase):
 
         msg = yield self.reply_to_message("OK\n1 < 2")
 
-        self.assertEqual(msg['transport_name'], self.transport_name)
+        self.assertEqual(msg['transport_name'], self.tx_helper.transport_name)
         self.assertEqual(msg['transport_type'], "ussd")
         self.assertEqual(msg['transport_metadata'], {"session_id": sid})
         self.assertEqual(msg['session_event'],
@@ -105,7 +102,7 @@ class TestMtechUssdTransport(TransportTestCase):
 
         msg = yield self.reply_to_message("OK")
 
-        self.assertEqual(msg['transport_name'], self.transport_name)
+        self.assertEqual(msg['transport_name'], self.tx_helper.transport_name)
         self.assertEqual(msg['transport_type'], "ussd")
         self.assertEqual(msg['transport_metadata'], {"session_id": sid})
         self.assertEqual(msg['session_event'],
@@ -153,7 +150,7 @@ class TestMtechUssdTransport(TransportTestCase):
 
         msg = yield self.reply_to_message("OK\n1 < 2")
 
-        self.assertEqual(msg['transport_name'], self.transport_name)
+        self.assertEqual(msg['transport_name'], self.tx_helper.transport_name)
         self.assertEqual(msg['transport_type'], "ussd")
         self.assertEqual(msg['transport_metadata'], {"session_id": sid})
         self.assertEqual(msg['session_event'],
@@ -181,7 +178,7 @@ class TestMtechUssdTransport(TransportTestCase):
 
         msg = yield self.reply_to_message("OK")
 
-        self.assertEqual(msg['transport_name'], self.transport_name)
+        self.assertEqual(msg['transport_name'], self.tx_helper.transport_name)
         self.assertEqual(msg['transport_type'], "ussd")
         self.assertEqual(msg['transport_metadata'], {"session_id": sid})
         self.assertEqual(msg['session_event'],
@@ -211,7 +208,7 @@ class TestMtechUssdTransport(TransportTestCase):
 
         msg = yield self.reply_to_message("OK", continue_session=False)
 
-        self.assertEqual(msg['transport_name'], self.transport_name)
+        self.assertEqual(msg['transport_name'], self.tx_helper.transport_name)
         self.assertEqual(msg['transport_type'], "ussd")
         self.assertEqual(msg['transport_metadata'], {"session_id": sid})
         self.assertEqual(msg['session_event'],

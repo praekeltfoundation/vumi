@@ -3,14 +3,14 @@ from twisted.internet.task import Clock
 from twisted.internet.error import ConnectionLost
 from twisted.web.xmlrpc import Proxy
 
-from vumi.transports.tests.utils import TransportTestCase
 from vumi.message import TransportUserMessage
-from vumi.transports.trueafrican.transport import TrueAfricanUssdTransport
+from vumi.tests.helpers import VumiTestCase
 from vumi.tests.utils import LogCatcher
 from vumi.transports.tests.helpers import TransportHelper
+from vumi.transports.trueafrican.transport import TrueAfricanUssdTransport
 
 
-class TestTrueAfricanUssdTransport(TransportTestCase):
+class TestTrueAfricanUssdTransport(VumiTestCase):
 
     transport_class = TrueAfricanUssdTransport
 
@@ -22,17 +22,15 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        yield super(TestTrueAfricanUssdTransport, self).setUp()
-        self.config = {
+        self.tx_helper = TransportHelper(self)
+        self.clock = Clock()
+        self.patch(TrueAfricanUssdTransport, 'get_clock', lambda _: self.clock)
+        self.add_cleanup(self.tx_helper.cleanup)
+        self.transport = yield self.tx_helper.get_transport({
             'interface': '127.0.0.1',
             'port': 0,
             'request_timeout': 10,
-        }
-        self.clock = Clock()
-        self.patch(TrueAfricanUssdTransport, 'get_clock', lambda _: self.clock)
-        self.tx_helper = TransportHelper(self)
-        self.add_cleanup(self.tx_helper.cleanup)
-        self.transport = yield self.tx_helper.get_transport(self.config)
+        })
         self.service_url = self.get_service_url(self.transport)
 
     def get_service_url(self, transport):
@@ -54,7 +52,7 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
         self.tx_helper.make_dispatch_reply(msg, "Oh Hai!")
 
         # verify the transport -> application message
-        self.assertEqual(msg['transport_name'], self.transport_name)
+        self.assertEqual(msg['transport_name'], self.tx_helper.transport_name)
         self.assertEqual(msg['transport_type'], "ussd")
         self.assertEqual(msg['session_event'],
                          TransportUserMessage.SESSION_NEW)
@@ -96,7 +94,7 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
         self.tx_helper.make_dispatch_reply(msg, "ping")
 
         # verify the dispatched inbound message
-        self.assertEqual(msg['transport_name'], self.transport_name)
+        self.assertEqual(msg['transport_name'], self.tx_helper.transport_name)
         self.assertEqual(msg['transport_type'], "ussd")
         self.assertEqual(msg['session_event'],
                          TransportUserMessage.SESSION_RESUME)
@@ -134,7 +132,7 @@ class TestTrueAfricanUssdTransport(TransportTestCase):
         )
 
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
-        self.assertEqual(msg['transport_name'], self.transport_name)
+        self.assertEqual(msg['transport_name'], self.tx_helper.transport_name)
         self.assertEqual(msg['transport_type'], "ussd")
         self.assertEqual(msg['session_event'],
                          TransportUserMessage.SESSION_CLOSE)

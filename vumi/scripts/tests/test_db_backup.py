@@ -6,8 +6,7 @@ import datetime
 import yaml
 
 from vumi.scripts.db_backup import ConfigHolder, Options, vumi_version
-from vumi.tests.utils import PersistenceMixin
-from vumi.tests.helpers import VumiTestCase
+from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 
 
 class TestConfigHolder(ConfigHolder):
@@ -28,15 +27,13 @@ class TestConfigHolder(ConfigHolder):
         return self.testcase.get_sub_redis(config)
 
 
-class DbBackupBaseTestCase(VumiTestCase, PersistenceMixin):
-    sync_persistence = True
-
+class DbBackupBaseTestCase(VumiTestCase):
     def setUp(self):
-        self._persist_setUp()
-        self.add_cleanup(self._persist_tearDown)
+        self.persistence_helper = PersistenceHelper(is_sync=True)
+        self.add_cleanup(self.persistence_helper.cleanup)
+        self.redis = self.persistence_helper.get_redis_manager()
         # Make sure we start fresh.
-        self.get_redis_manager()._purge_all()
-        self.redis = self.get_redis_manager()
+        self.redis._purge_all()
 
     def make_cfg(self, args):
         options = Options()
@@ -61,7 +58,7 @@ class DbBackupBaseTestCase(VumiTestCase, PersistenceMixin):
         config = config.copy()
         config['FAKE_REDIS'] = self.redis._client
         config['key_prefix'] = self.redis._key(config['key_prefix'])
-        return self.get_redis_manager(config)
+        return self.persistence_helper.get_redis_manager(config)
 
     def mkdbbackup(self, data=None, raw=False):
         if data is None:

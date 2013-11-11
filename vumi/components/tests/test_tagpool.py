@@ -7,17 +7,16 @@ import json
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.components.tagpool import TagpoolManager, TagpoolError
-from vumi.tests.utils import PersistenceMixin
-from vumi.tests.helpers import VumiTestCase
+from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 
 
-class TestTxTagpoolManager(VumiTestCase, PersistenceMixin):
+class TestTxTagpoolManager(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self._persist_setUp()
-        self.add_cleanup(self._persist_tearDown)
-        self.redis = yield self.get_redis_manager()
+        self.persistence_helper = PersistenceHelper()
+        self.add_cleanup(self.persistence_helper.cleanup)
+        self.redis = yield self.persistence_helper.get_redis_manager()
         yield self.redis._purge_all()  # Just in case
         self.tpm = TagpoolManager(self.redis)
 

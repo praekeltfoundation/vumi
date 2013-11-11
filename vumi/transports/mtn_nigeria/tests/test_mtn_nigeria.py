@@ -4,7 +4,7 @@ from twisted.internet.defer import Deferred, inlineCallbacks
 
 from vumi.message import TransportUserMessage
 from vumi.transports.mtn_nigeria.tests import utils
-from vumi.transports.tests.utils import TransportTestCase
+from vumi.tests.helpers import VumiTestCase
 from vumi.transports.mtn_nigeria import MtnNigeriaUssdTransport
 from vumi.transports.mtn_nigeria import mtn_nigeria_ussd
 from vumi.transports.mtn_nigeria.tests.utils import MockXmlOverTcpServerMixin
@@ -13,8 +13,7 @@ from vumi.transports.mtn_nigeria.xml_over_tcp import (
 from vumi.transports.tests.helpers import TransportHelper
 
 
-class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
-                                          MockXmlOverTcpServerMixin):
+class TestMtnNigeriaUssdTransport(VumiTestCase, MockXmlOverTcpServerMixin):
 
     transport_class = MtnNigeriaUssdTransport
     transport_name = 'test_mtn_nigeria_ussd_transport'
@@ -92,11 +91,12 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
 
     @inlineCallbacks
     def setUp(self):
-        super(TestMtnNigeriaUssdTransportTestCase, self).setUp()
-
+        self.tx_helper = TransportHelper(self)
+        self.add_cleanup(self.tx_helper.cleanup)
         deferred_login = self.fake_login(
             mtn_nigeria_ussd.MtnNigeriaUssdClientFactory.protocol)
         deferred_server = self.start_server()
+        self.add_cleanup(self.stop_server)
 
         config = {
             'transport_name': self.transport_name,
@@ -109,9 +109,9 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
             'timeout_period': 120,
             'user_termination_response': 'Bye',
         }
-        self.tx_helper = TransportHelper(self)
-        self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(config)
+        # We need to tear the transport down before stopping the server.
+        self.add_cleanup(self.transport.stopWorker)
         yield deferred_server
 
         self.session_manager = self.transport.session_manager
@@ -119,12 +119,6 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
 
         yield deferred_login
         self.client = self.transport.factory.client
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield self.transport.teardown_transport()
-        yield self.stop_server()
-        yield super(TestMtnNigeriaUssdTransportTestCase, self).tearDown()
 
     def fake_login(self, protocol_cls):
         d = Deferred()
