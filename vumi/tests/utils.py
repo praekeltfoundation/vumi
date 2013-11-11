@@ -222,6 +222,9 @@ class PersistenceMixin(object):
     sync_or_async = staticmethod(maybe_async('sync_persistence'))
 
     def _persist_setUp(self):
+        warnings.warn("PersistenceMixin is deprecated. "
+                      "Use PersistenceHelper from vumi.tests.helpers instead.",
+                      category=DeprecationWarning)
         self._persist_patches = []
         self._persist_riak_managers = []
         self._persist_redis_managers = []
@@ -448,6 +451,10 @@ class VumiWorkerTestCase(VumiTestCase):
     MSG_ID_MATCHER = RegexMatcher(r'^[0-9a-fA-F]{32}$')
 
     def setUp(self):
+        warnings.warn("VumiWorkerTestCase and its subclasses are deprecated. "
+                      "Use VumiTestCase and other tools from "
+                      "vumi.tests.helpers instead.",
+                      category=DeprecationWarning)
         self._workers = []
         self._amqp = FakeAMQPBroker()
 
