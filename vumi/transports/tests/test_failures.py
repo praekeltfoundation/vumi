@@ -14,7 +14,7 @@ def mktimestamp(delta=0):
     return timestamp.isoformat().split('.')[0]
 
 
-class FailureWorkerTestCase(VumiTestCase):
+class TestFailureWorker(VumiTestCase):
 
     def setUp(self):
         self.persistence_helper = PersistenceHelper()

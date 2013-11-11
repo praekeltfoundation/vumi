@@ -21,7 +21,7 @@ class FakeXMLRPCService(object):
         return maybeDeferred(self.callback, *args, **kwargs)
 
 
-class OperaTransportTestCase(VumiTestCase):
+class TestOperaTransport(VumiTestCase):
     transport_class = OperaTransport
 
     @inlineCallbacks

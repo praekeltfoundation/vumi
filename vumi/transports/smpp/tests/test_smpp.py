@@ -396,6 +396,7 @@ class EsmeToSmscTestCase(VumiTestCase):
 
     @inlineCallbacks
     def tearDown(self):
+        # TODO: Replace this teardown with .add_cleanup()
         yield super(EsmeToSmscTestCase, self).tearDown()
         yield self.service.listening.stopListening()
         yield self.service.listening.loseConnection()
@@ -769,7 +770,7 @@ class EsmeToSmscTestCase(VumiTestCase):
                           "esme_testing_transport discarded.",))
 
 
-class EsmeToSmscTestCaseDeliveryYo(EsmeToSmscTestCase):
+class TestDeliveryYo(EsmeToSmscTestCase):
     # This tests a slightly non-standard delivery report format for Yo!
     # the following delivery_report_regex is required as a config option
     # "id:(?P<id>\S{,65}) +sub:(?P<sub>.{1,3}) +dlvrd:(?P<dlvrd>.{1,3})"
@@ -779,6 +780,7 @@ class EsmeToSmscTestCaseDeliveryYo(EsmeToSmscTestCase):
 
     @inlineCallbacks
     def setUp(self):
+        # TODO: Get rid of this skip-my-parent setup code.
         yield super(EsmeToSmscTestCase, self).setUp()
         delivery_report_regex = "id:(?P<id>\S{,65})" \
             " +sub:(?P<sub>.{1,3})" \
@@ -812,11 +814,12 @@ class EsmeToSmscTestCaseDeliveryYo(EsmeToSmscTestCase):
         self.expected_delivery_status = 'delivered'  # stat:0 means delivered
 
 
-class EsmeToSmscTestCaseDeliveryOverrideMapping(EsmeToSmscTestCase):
+class TestDeliveryOverrideMapping(EsmeToSmscTestCase):
     # This tests a non-standard delivery report status mapping.
 
     @inlineCallbacks
     def setUp(self):
+        # TODO: Get rid of this skip-my-parent setup code.
         yield super(EsmeToSmscTestCase, self).setUp()
 
         self.config = {
@@ -842,7 +845,7 @@ class EsmeToSmscTestCaseDeliveryOverrideMapping(EsmeToSmscTestCase):
         self.expected_delivery_status = 'delivered'  # stat:0 means delivered
 
 
-class TxEsmeToSmscTestCase(VumiTestCase):
+class TestEsmeToSmscTx(VumiTestCase):
 
     transport_name = "esme_testing_transport"
     transport_class = MockSmppTxTransport
@@ -884,7 +887,8 @@ class TxEsmeToSmscTestCase(VumiTestCase):
 
     @inlineCallbacks
     def tearDown(self):
-        yield super(TxEsmeToSmscTestCase, self).tearDown()
+        # TODO: Replace this teardown with .add_cleanup()
+        yield super(TestEsmeToSmscTx, self).tearDown()
         yield self.service.listening.stopListening()
         yield self.service.listening.loseConnection()
 
@@ -913,7 +917,7 @@ class TxEsmeToSmscTestCase(VumiTestCase):
         self.assertEqual(dispatched_failures, [])
 
 
-class RxEsmeToSmscTestCase(VumiTestCase):
+class TestEsmeToSmscRx(VumiTestCase):
 
     transport_name = "esme_testing_transport"
     transport_class = MockSmppRxTransport
@@ -958,7 +962,8 @@ class RxEsmeToSmscTestCase(VumiTestCase):
 
     @inlineCallbacks
     def tearDown(self):
-        yield super(RxEsmeToSmscTestCase, self).tearDown()
+        # TODO: Replace this teardown with .add_cleanup()
+        yield super(TestEsmeToSmscRx, self).tearDown()
         yield self.service.listening.stopListening()
         yield self.service.listening.loseConnection()
 

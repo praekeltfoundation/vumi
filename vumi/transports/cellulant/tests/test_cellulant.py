@@ -9,7 +9,7 @@ from vumi.utils import http_request
 from vumi.transports.tests.helpers import TransportHelper
 
 
-class TestCellulantTransportTestCase(VumiTestCase):
+class TestCellulantTransport(VumiTestCase):
 
     transport_class = CellulantTransport
 

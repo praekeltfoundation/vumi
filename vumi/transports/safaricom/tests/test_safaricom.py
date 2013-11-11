@@ -10,7 +10,7 @@ from vumi.transports.tests.helpers import TransportHelper
 from vumi.utils import http_request
 
 
-class TestSafaricomTransportTestCase(VumiTestCase):
+class TestSafaricomTransport(VumiTestCase):
 
     transport_class = SafaricomTransport
 

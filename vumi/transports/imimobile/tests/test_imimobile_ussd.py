@@ -11,7 +11,7 @@ from vumi.transports.imimobile import ImiMobileUssdTransport
 from vumi.transports.tests.helpers import TransportHelper
 
 
-class TestImiMobileUssdTransportTestCase(VumiTestCase):
+class TestImiMobileUssdTransport(VumiTestCase):
 
     transport_class = ImiMobileUssdTransport
 

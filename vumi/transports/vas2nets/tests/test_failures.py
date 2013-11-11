@@ -26,7 +26,7 @@ class FailureCounter(object):
             self.deferred.callback(None)
 
 
-class Vas2NetsFailureWorkerTestCase(VumiTestCase):
+class TestVas2NetsFailureWorker(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):

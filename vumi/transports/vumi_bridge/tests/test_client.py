@@ -9,7 +9,7 @@ from vumi.message import Message
 from vumi.tests.helpers import VumiTestCase
 
 
-class ClientTestCase(VumiTestCase):
+class TestStreamingClient(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):

@@ -519,12 +519,12 @@ class EsmeReceiverMixin(EsmeGenericMixin):
         yield esme.handle_deliver_sm(unpack_pdu(sm.get_bin()))
 
 
-class EsmeTransceiverTestCase(EsmeTestCaseBase, EsmeReceiverMixin,
-                              EsmeTransmitterMixin):
+class TestEsmeTransceiver(EsmeTestCaseBase, EsmeReceiverMixin,
+                          EsmeTransmitterMixin):
     ESME_CLASS = FakeEsmeTransceiver
 
 
-class EsmeTransmitterTestCase(EsmeTestCaseBase, EsmeTransmitterMixin):
+class TestEsmeTransmitter(EsmeTestCaseBase, EsmeTransmitterMixin):
     ESME_CLASS = FakeEsmeTransmitter
 
     @inlineCallbacks
@@ -542,7 +542,7 @@ class EsmeTransmitterTestCase(EsmeTestCaseBase, EsmeTransmitterMixin):
             self.assertTrue('deliver_sm in wrong state' in error['message'][0])
 
 
-class EsmeReceiverTestCase(EsmeTestCaseBase, EsmeReceiverMixin):
+class TestEsmeReceiver(EsmeTestCaseBase, EsmeReceiverMixin):
     ESME_CLASS = FakeEsmeReceiver
 
     @inlineCallbacks
@@ -558,7 +558,7 @@ class EsmeReceiverTestCase(EsmeTestCaseBase, EsmeReceiverMixin):
                              error['message'][0]))
 
 
-class ESMETestCase(VumiTestCase):
+class TestESME(VumiTestCase):
 
     def setUp(self):
         config = SmppTransportConfig({

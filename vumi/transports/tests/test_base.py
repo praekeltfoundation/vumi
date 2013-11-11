@@ -5,7 +5,7 @@ from vumi.transports.base import Transport
 from vumi.transports.tests.helpers import TransportHelper
 
 
-class BaseTransportTestCase(VumiTestCase):
+class TestBaseTransport(VumiTestCase):
 
     transport_class = Transport
 

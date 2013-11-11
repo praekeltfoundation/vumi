@@ -19,7 +19,7 @@ from vumi.tests.utils import MockHttpServer
 from vumi.transports.tests.helpers import TransportHelper
 
 
-class Vas2NetsTransportTestCase(VumiTestCase):
+class TestVas2NetsTransport(VumiTestCase):
 
     transport_name = 'vas2nets'
     transport_type = 'sms'

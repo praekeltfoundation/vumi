@@ -7,7 +7,7 @@ from vumi.transports.integrat.utils import HigateXMLParser
 from vumi.tests.helpers import VumiTestCase
 
 
-class HigateXMLTestCases(VumiTestCase):
+class TestHigateXML(VumiTestCase):
     '''
     Tests for the Sample XML found at:
     http://www.integrat.co.za/wiki/index.php/Sample_xml

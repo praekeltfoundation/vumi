@@ -68,11 +68,11 @@ class TestWorker(Worker):
             self.resource.stopListening()
 
 
-class TestFakeVas2NetsWorker(FakeVas2NetsWorker):
+class StubbedFakeVas2NetsWorker(FakeVas2NetsWorker):
     delay_choices = (0,)
 
 
-class FakeVas2NetsWorkerTestCase(VumiTestCase):
+class TestFakeVas2NetsWorker(VumiTestCase):
 
     def setUp(self):
         self.config = {
@@ -81,7 +81,8 @@ class FakeVas2NetsWorkerTestCase(VumiTestCase):
             'web_receipt_path': '/t/receipt',
             'url': 'http://localhost:9998/t/send',
         }
-        self.worker = get_stubbed_worker(TestFakeVas2NetsWorker, self.config)
+        self.worker = get_stubbed_worker(
+            StubbedFakeVas2NetsWorker, self.config)
         self.add_cleanup(self.worker.stopWorker)
         self.test_worker = get_stubbed_worker(TestWorker, self.config)
         self.add_cleanup(self.test_worker.stopWorker)

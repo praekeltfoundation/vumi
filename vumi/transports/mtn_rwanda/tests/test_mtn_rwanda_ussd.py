@@ -13,7 +13,7 @@ from vumi.tests.helpers import VumiTestCase
 from vumi.transports.tests.helpers import TransportHelper
 
 
-class MTNRwandaUSSDTransportTestCase(VumiTestCase):
+class TestMTNRwandaUSSDTransport(VumiTestCase):
 
     transport_class = MTNRwandaUSSDTransport
     transport_name = 'test_mtn_rwanda_ussd_transport'

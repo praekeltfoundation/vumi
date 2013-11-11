@@ -14,7 +14,7 @@ from vumi.transports.tests.helpers import TransportHelper
 from vumi.transports.vumi_bridge import GoConversationTransport
 
 
-class GoConversationTransportTestCase(VumiTestCase):
+class TestGoConversationTransport(VumiTestCase):
 
     transport_class = GoConversationTransport
 

@@ -8,7 +8,7 @@ from vumi.transports.xmpp.tests import test_xmpp_stubs
 from vumi.transports.tests.helpers import TransportHelper
 
 
-class XMPPTransportTestCase(VumiTestCase):
+class TestXMPPTransport(VumiTestCase):
 
     transport_class = XMPPTransport
 
