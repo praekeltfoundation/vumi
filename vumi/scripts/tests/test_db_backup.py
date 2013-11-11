@@ -70,7 +70,7 @@ class DbBackupBaseTestCase(VumiTestCase):
         return self.mkfile("\n".join([dumps(x) for x in data]))
 
 
-class BackupDbCmdTestCase(DbBackupBaseTestCase):
+class TestBackupDbCmd(DbBackupBaseTestCase):
     def test_backup_db(self):
         self.redis.set("foo", 1)
         self.redis.set("bar:bar", 2)
@@ -147,7 +147,7 @@ class BackupDbCmdTestCase(DbBackupBaseTestCase):
                                       'value': "foo"})
 
 
-class RestoreDbCmdTestCase(DbBackupBaseTestCase):
+class TestRestoreDbCmd(DbBackupBaseTestCase):
 
     DB_BACKUP = [
         {'backup_type': 'redis',
@@ -283,7 +283,7 @@ class RestoreDbCmdTestCase(DbBackupBaseTestCase):
         self.assertTrue(0 < self.redis.ttl("bar:s") <= 30)
 
 
-class MigrateDbCmdTestCase(DbBackupBaseTestCase):
+class TestMigrateDbCmd(DbBackupBaseTestCase):
 
     def mkrules(self, rules):
         config = {
@@ -343,7 +343,7 @@ class MigrateDbCmdTestCase(DbBackupBaseTestCase):
                          [])
 
 
-class AnalyzeCmdTestCase(DbBackupBaseTestCase):
+class TestAnalyzeCmd(DbBackupBaseTestCase):
     def mkkeysbackup(self, keys):
         records = [{'backup_type': 'redis'}]
         records.extend({'key': k} for k in keys)

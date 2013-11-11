@@ -47,7 +47,6 @@ class SandboxTestCaseBase(VumiTestCase):
     application_class = Sandbox
 
     def setUp(self):
-        super(SandboxTestCaseBase, self).setUp()
         self.app_helper = ApplicationHelper(self)
         self.add_cleanup(self.app_helper.cleanup)
 
@@ -67,10 +66,10 @@ class SandboxTestCaseBase(VumiTestCase):
         return self.app_helper.get_application(config)
 
 
-class SandboxTestCase(SandboxTestCaseBase):
+class TestSandbox(SandboxTestCaseBase):
 
     def setup_app(self, python_code, extra_config=None):
-        return super(SandboxTestCase, self).setup_app(
+        return super(TestSandbox, self).setup_app(
             sys.executable, ['-c', python_code],
             extra_config=extra_config)
 
@@ -379,22 +378,7 @@ class SandboxTestCase(SandboxTestCaseBase):
         return self.event_dispatch_check(ack)
 
 
-class JsSandboxTestCase(SandboxTestCaseBase):
-
-    application_class = JsSandbox
-
-    def setUp(self):
-        super(JsSandboxTestCase, self).setUp()
-        if JsSandbox.find_nodejs() is None:
-            raise SkipTest("No node.js executable found.")
-
-    def setup_app(self, javascript_code, extra_config=None):
-        extra_config = extra_config or {}
-        extra_config.update({
-            'javascript': javascript_code,
-        })
-        return super(JsSandboxTestCase, self).setup_app(
-            extra_config=extra_config)
+class JsSandboxTestMixin(object):
 
     @inlineCallbacks
     def test_js_sandboxer(self):
@@ -444,9 +428,32 @@ class JsSandboxTestCase(SandboxTestCaseBase):
         ])
 
 
-class JsFileSandboxTestCase(JsSandboxTestCase):
+class TestJsSandbox(SandboxTestCaseBase, JsSandboxTestMixin):
+
+    application_class = JsSandbox
+
+    def setUp(self):
+        if JsSandbox.find_nodejs() is None:
+            raise SkipTest("No node.js executable found.")
+        super(TestJsSandbox, self).setUp()
+
+    def setup_app(self, javascript_code, extra_config=None):
+        extra_config = extra_config or {}
+        extra_config.update({
+            'javascript': javascript_code,
+        })
+        return super(TestJsSandbox, self).setup_app(
+            extra_config=extra_config)
+
+
+class TestJsFileSandbox(SandboxTestCaseBase, JsSandboxTestMixin):
 
     application_class = JsFileSandbox
+
+    def setUp(self):
+        if JsSandbox.find_nodejs() is None:
+            raise SkipTest("No node.js executable found.")
+        super(TestJsFileSandbox, self).setUp()
 
     def setup_app(self, javascript, extra_config=None):
         tmp_file_name = self.mktemp()
@@ -459,7 +466,7 @@ class JsFileSandboxTestCase(JsSandboxTestCase):
             'javascript_file': tmp_file_name,
         })
 
-        return super(JsSandboxTestCase, self).setup_app(
+        return super(TestJsFileSandbox, self).setup_app(
             extra_config=extra_config)
 
 
@@ -500,7 +507,7 @@ class DummyAppWorker(object):
         return mock_method
 
 
-class SandboxApiTestCase(VumiTestCase):
+class TestSandboxApi(VumiTestCase):
     def setUp(self):
         self.sent_messages = DeferredQueue()
         self.patch(SandboxApi, 'sandbox_send',

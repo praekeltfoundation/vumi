@@ -16,7 +16,6 @@ from vumi.transports.tests.helpers import TransportHelper
 class TestMtnNigeriaUssdTransport(VumiTestCase, MockXmlOverTcpServerMixin):
 
     transport_class = MtnNigeriaUssdTransport
-    transport_name = 'test_mtn_nigeria_ussd_transport'
 
     REQUEST_PARAMS = {
         'request_id': '1291850641',
@@ -70,22 +69,13 @@ class TestMtnNigeriaUssdTransport(VumiTestCase, MockXmlOverTcpServerMixin):
         "</USSDResponse>"
     )
 
-    EXPECTED_INBOUND_PAYLOAD = {
-        'message_id': '1291850641',
-        'content': '',
-        'from_addr': '27845335367',
-        'to_addr': '*123#',
-        'session_event': TransportUserMessage.SESSION_RESUME,
-        'transport_name': transport_name,
-        'transport_type': 'ussd',
-        'transport_metadata': {
-            'mtn_nigeria_ussd': {
-                'session_id': '0',
-                'clientId': '0123',
-                'phase': '2',
-                'dcs': '15',
-                'starCode': '123',
-            },
+    EXPECTED_TRANSPORT_METADATA = {
+        'mtn_nigeria_ussd': {
+            'session_id': '0',
+            'clientId': '0123',
+            'phase': '2',
+            'dcs': '15',
+            'starCode': '123',
         },
     }
 
@@ -98,8 +88,7 @@ class TestMtnNigeriaUssdTransport(VumiTestCase, MockXmlOverTcpServerMixin):
         deferred_server = self.start_server()
         self.add_cleanup(self.stop_server)
 
-        config = {
-            'transport_name': self.transport_name,
+        self.transport = yield self.tx_helper.get_transport({
             'server_hostname': '127.0.0.1',
             'server_port': self.get_server_port(),
             'username': 'root',
@@ -108,8 +97,7 @@ class TestMtnNigeriaUssdTransport(VumiTestCase, MockXmlOverTcpServerMixin):
             'enquire_link_interval': 240,
             'timeout_period': 120,
             'user_termination_response': 'Bye',
-        }
-        self.transport = yield self.tx_helper.get_transport(config)
+        })
         # We need to tear the transport down before stopping the server.
         self.add_cleanup(self.transport.stopWorker)
         yield deferred_server
@@ -161,7 +149,16 @@ class TestMtnNigeriaUssdTransport(VumiTestCase, MockXmlOverTcpServerMixin):
         self.server.send_data(packet)
 
     def assert_inbound_message(self, msg, **field_values):
-        expected_payload = self.EXPECTED_INBOUND_PAYLOAD.copy()
+        expected_payload = {
+            'message_id': '1291850641',
+            'content': '',
+            'from_addr': '27845335367',
+            'to_addr': '*123#',
+            'session_event': TransportUserMessage.SESSION_RESUME,
+            'transport_name': self.tx_helper.transport_name,
+            'transport_type': 'ussd',
+            'transport_metadata': self.EXPECTED_TRANSPORT_METADATA,
+        }
         expected_payload.update(field_values)
 
         for field, expected_value in expected_payload.iteritems():
@@ -295,7 +292,7 @@ class TestMtnNigeriaUssdTransport(VumiTestCase, MockXmlOverTcpServerMixin):
             'send_data_response',
             stubbed_send_data_response)
 
-        tm = self.EXPECTED_INBOUND_PAYLOAD['transport_metadata'].copy()
+        tm = self.EXPECTED_TRANSPORT_METADATA.copy()
         msg = self.tx_helper.make_inbound("foo", transport_metadata=tm)
         reply = yield self.tx_helper.make_dispatch_reply(msg, "It's a trap!")
 

@@ -49,12 +49,9 @@ class TestApplicationWorker(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        yield super(TestApplicationWorker, self).setUp()
-        self.transport_name = 'test'
-        self.config = {'transport_name': self.transport_name}
         self.app_helper = ApplicationHelper(self)
         self.add_cleanup(self.app_helper.cleanup)
-        self.worker = yield self.app_helper.get_application(self.config)
+        self.worker = yield self.app_helper.get_application({})
 
     def assert_msgs_match(self, msgs, expected_msgs):
         for key in ['timestamp', 'message_id']:
@@ -122,7 +119,7 @@ class TestApplicationWorker(VumiTestCase):
 
         # Start the app and process stuff.
         self.application_class = EchoApplicationWorker
-        self.worker = yield self.app_helper.get_application(self.config)
+        self.worker = yield self.app_helper.get_application({})
 
         replies = yield self.app_helper.wait_for_dispatched_outbound(1)
 
@@ -208,22 +205,18 @@ class TestApplicationWorkerWithSendToConfig(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        yield super(TestApplicationWorkerWithSendToConfig, self).setUp()
-        self.transport_name = 'test'
-        self.config = {
-            'transport_name': self.transport_name,
+        self.app_helper = ApplicationHelper(self)
+        self.add_cleanup(self.app_helper.cleanup)
+        self.worker = yield self.app_helper.get_application({
             'send_to': {
                 'default': {
                     'transport_name': 'default_transport',
-                    },
+                },
                 'outbound1': {
                     'transport_name': 'outbound1_transport',
-                    },
                 },
-            }
-        self.app_helper = ApplicationHelper(self)
-        self.add_cleanup(self.app_helper.cleanup)
-        self.worker = yield self.app_helper.get_application(self.config)
+            },
+        })
 
     def assert_msgs_match(self, msgs, expected_msgs):
         for key in ['timestamp', 'message_id']:
@@ -282,7 +275,6 @@ class TestApplicationWorkerWithSendToConfig(VumiTestCase):
 
 class TestApplicationMiddlewareHooks(VumiTestCase):
 
-    transport_name = 'carrier_pigeon'
     application_class = ApplicationWorker
 
     TEST_MIDDLEWARE_CONFIG = {
@@ -292,9 +284,7 @@ class TestApplicationMiddlewareHooks(VumiTestCase):
         ],
     }
 
-    @inlineCallbacks
     def setUp(self):
-        yield super(TestApplicationMiddlewareHooks, self).setUp()
         self.app_helper = ApplicationHelper(self)
         self.add_cleanup(self.app_helper.cleanup)
 
@@ -307,8 +297,8 @@ class TestApplicationMiddlewareHooks(VumiTestCase):
         yield self.app_helper.make_dispatch_inbound("hi")
         [msg] = msgs
         self.assertEqual(msg['record'], [
-            ('mw1', 'inbound', self.transport_name),
-            ('mw2', 'inbound', self.transport_name),
+            ('mw1', 'inbound', self.app_helper.transport_name),
+            ('mw2', 'inbound', self.app_helper.transport_name),
             ])
 
     @inlineCallbacks
@@ -320,8 +310,8 @@ class TestApplicationMiddlewareHooks(VumiTestCase):
         yield self.app_helper.make_dispatch_ack()
         [msg] = msgs
         self.assertEqual(msg['record'], [
-            ('mw1', 'event', self.transport_name),
-            ('mw2', 'event', self.transport_name),
+            ('mw1', 'event', self.app_helper.transport_name),
+            ('mw2', 'event', self.app_helper.transport_name),
             ])
 
     @inlineCallbacks
@@ -333,6 +323,6 @@ class TestApplicationMiddlewareHooks(VumiTestCase):
         msgs = self.app_helper.get_dispatched_outbound()
         [msg] = msgs
         self.assertEqual(msg['record'], [
-            ['mw2', 'outbound', self.transport_name],
-            ['mw1', 'outbound', self.transport_name],
+            ['mw2', 'outbound', self.app_helper.transport_name],
+            ['mw1', 'outbound', self.app_helper.transport_name],
             ])

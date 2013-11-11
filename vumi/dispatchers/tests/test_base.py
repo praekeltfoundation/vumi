@@ -367,7 +367,7 @@ class TestFromAddrMultiplexRouter(VumiTestCase):
         self.assertEqual(publishers['transport_2'].msgs, [msg2])
 
 
-class UserGroupingRouterTestCase(VumiTestCase):
+class TestUserGroupingRouter(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):

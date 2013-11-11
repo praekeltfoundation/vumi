@@ -4,7 +4,7 @@ from vumi.tests.utils import import_skip
 from vumi.tests.helpers import VumiTestCase
 
 
-class RedisManagerTestCase(VumiTestCase):
+class TestRedisManager(VumiTestCase):
     def setUp(self):
         try:
             from vumi.persist.redis_manager import RedisManager

@@ -41,7 +41,7 @@ class StubbedMultiWorker(MultiWorker):
         return DeferredList([w._d for w in self.workers])
 
 
-class MultiWorkerTestCase(VumiTestCase):
+class TestMultiWorker(VumiTestCase):
 
     base_config = {
         'workers': {
@@ -58,11 +58,10 @@ class MultiWorkerTestCase(VumiTestCase):
         self.msg_helper = MessageHelper()
         self.worker_helper = WorkerHelper()
         self.add_cleanup(self.worker_helper.cleanup)
-        ToyWorker.events[:] = []
+        self.clear_events()
+        self.add_cleanup(self.clear_events)
 
-    @inlineCallbacks
-    def tearDown(self):
-        yield super(MultiWorkerTestCase, self).tearDown()
+    def clear_events(self):
         ToyWorker.events[:] = []
 
     def dispatch(self, msg, connector_name):

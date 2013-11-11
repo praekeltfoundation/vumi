@@ -27,10 +27,10 @@ class TestMigratorBase(VumiTestCase):
         self.msg_helper = MessageHelper()
 
 
-class OutboundMessageMigratorTestCase(TestMigratorBase):
+class TestOutboundMessageMigrator(TestMigratorBase):
     @inlineCallbacks
     def setUp(self):
-        yield super(OutboundMessageMigratorTestCase, self).setUp()
+        yield super(TestOutboundMessageMigrator, self).setUp()
         self.outbound_vnone = self.manager.proxy(OutboundMessageVNone)
         self.outbound_v1 = self.manager.proxy(OutboundMessageV1)
         self.batch_vnone = self.manager.proxy(BatchVNone)
@@ -57,11 +57,11 @@ class OutboundMessageMigratorTestCase(TestMigratorBase):
         self.assertEqual(new_record.batches.keys(), [])
 
 
-class InboundMessageMigratorTestCase(TestMigratorBase):
+class TestInboundMessageMigrator(TestMigratorBase):
 
     @inlineCallbacks
     def setUp(self):
-        yield super(InboundMessageMigratorTestCase, self).setUp()
+        yield super(TestInboundMessageMigrator, self).setUp()
         self.inbound_vnone = self.manager.proxy(InboundMessageVNone)
         self.inbound_v1 = self.manager.proxy(InboundMessageV1)
         self.batch_vnone = self.manager.proxy(BatchVNone)

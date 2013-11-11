@@ -5,7 +5,7 @@ from vumi.components.window_manager import WindowManager, WindowException
 from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 
 
-class WindowManagerTestCase(VumiTestCase):
+class TestWindowManager(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
@@ -210,7 +210,7 @@ class WindowManagerTestCase(VumiTestCase):
         self.assertEqual(set(cleanup_callbacks), set(window_ids))
 
 
-class ConcurrentWindowManagerTestCase(VumiTestCase):
+class TestConcurrentWindowManager(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):

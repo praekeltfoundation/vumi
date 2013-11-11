@@ -23,7 +23,7 @@ class DummyRequest(object):
         self.prepath = prepath
 
 
-class UtilsTestCase(VumiTestCase):
+class TestUtils(VumiTestCase):
     def test_normalize_msisdn(self):
         self.assertEqual(normalize_msisdn('0761234567', '27'),
                          '+27761234567')
@@ -113,7 +113,7 @@ class FakeHTTP10(Protocol):
         self.transport.loseConnection()
 
 
-class HttpUtilsTestCase(VumiTestCase):
+class TestHttpUtils(VumiTestCase):
 
     class InterruptHttp(Exception):
         """Indicates that test server should halt http reply"""

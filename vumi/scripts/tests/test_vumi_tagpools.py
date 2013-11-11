@@ -31,7 +31,7 @@ class TagPoolBaseTestCase(VumiTestCase):
         self.persistence_helper.get_redis_manager()._purge_all()
 
 
-class CreatePoolCmdTestCase(TagPoolBaseTestCase):
+class TestCreatePoolCmd(TagPoolBaseTestCase):
     def test_create_pool_range_tags(self):
         cfg = make_cfg(["create-pool", "shortcode"])
         cfg.run()
@@ -63,7 +63,7 @@ class CreatePoolCmdTestCase(TagPoolBaseTestCase):
         self.assertEqual(cfg.tagpool.inuse_tags("xmpp"), [])
 
 
-class UpdatePoolMetadataCmdTestCase(TagPoolBaseTestCase):
+class TestUpdatePoolMetadataCmd(TagPoolBaseTestCase):
     def test_update_tagpool_metadata(self):
         cfg = make_cfg(["update-pool-metadata", "shortcode"])
         cfg.run()
@@ -75,7 +75,7 @@ class UpdatePoolMetadataCmdTestCase(TagPoolBaseTestCase):
                          {'transport_type': 'sms'})
 
 
-class UpdateAllPoolMetadataCmdTestCase(TagPoolBaseTestCase):
+class TestUpdateAllPoolMetadataCmd(TagPoolBaseTestCase):
     def test_update_all_metadata(self):
         cfg = make_cfg(["update-all-metadata"])
         cfg.tagpool.declare_tags([("xmpp", "tag"), ("longcode", "tag")])
@@ -105,7 +105,7 @@ class UpdateAllPoolMetadataCmdTestCase(TagPoolBaseTestCase):
             ])
 
 
-class PurgePoolCmdTestCase(TagPoolBaseTestCase):
+class TestPurgePoolCmd(TagPoolBaseTestCase):
     def test_purge_pool(self):
         cfg = make_cfg(["purge-pool", "foo"])
         cfg.tagpool.declare_tags([("foo", "tag1"), ("foo", "tag2")])
@@ -119,9 +119,9 @@ class PurgePoolCmdTestCase(TagPoolBaseTestCase):
         self.assertEqual(cfg.tagpool.get_metadata("foo"), {})
 
 
-class ListKeysCmdTestCase(TagPoolBaseTestCase):
+class TestListKeysCmd(TagPoolBaseTestCase):
     def setUp(self):
-        super(ListKeysCmdTestCase, self).setUp()
+        super(TestListKeysCmd, self).setUp()
         self.test_tags = [("foo", "tag%d" % i) for
                           i in [1, 2, 3, 5, 6, 7, 9]]
 
@@ -152,7 +152,7 @@ class ListKeysCmdTestCase(TagPoolBaseTestCase):
             ])
 
 
-class ListPoolsCmdTestCase(TagPoolBaseTestCase):
+class TestListPoolsCmd(TagPoolBaseTestCase):
     def test_list_pools_with_only_pools_in_config(self):
         cfg = make_cfg(["list-pools"])
         cfg.run()
@@ -193,10 +193,10 @@ class ListPoolsCmdTestCase(TagPoolBaseTestCase):
             ])
 
 
-class ReleaseTagCmdTestCase(TagPoolBaseTestCase):
+class TestReleaseTagCmd(TagPoolBaseTestCase):
 
     def setUp(self):
-        super(ReleaseTagCmdTestCase, self).setUp()
+        super(TestReleaseTagCmd, self).setUp()
         self.test_tags = [("foo", "tag%d" % i) for
                           i in [1, 2, 3, 5, 6, 7, 9]]
 

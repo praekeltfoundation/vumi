@@ -14,7 +14,6 @@ from vumi.transports.tests.helpers import TransportHelper
 
 
 class TestAppositTransport(VumiTestCase):
-    transport_name = 'test_apposit_transport'
     transport_class = AppositTransport
 
     @inlineCallbacks
@@ -26,7 +25,6 @@ class TestAppositTransport(VumiTestCase):
         yield self.mock_server.start()
 
         config = {
-            'transport_name': self.transport_name,
             'web_path': 'api/v1/apposit/sms',
             'web_port': 0,
             'credentials': {
@@ -44,7 +42,6 @@ class TestAppositTransport(VumiTestCase):
             'outbound_url': self.mock_server.url,
         }
         self.tx_helper = TransportHelper(self, msg_helper_args={
-            'transport_name': self.transport_name,
             'transport_type': 'sms',
             'transport_addr': '8123',
             'mobile_addr': '251911223344',
@@ -107,7 +104,7 @@ class TestAppositTransport(VumiTestCase):
 
     def assert_message_fields(self, msg, **kwargs):
         fields = {
-            'transport_name': self.transport_name,
+            'transport_name': self.tx_helper.transport_name,
             'transport_type': 'sms',
             'from_addr': '251911223344',
             'to_addr': '8123',
@@ -142,7 +139,7 @@ class TestAppositTransport(VumiTestCase):
 
         [msg] = self.tx_helper.get_dispatched_inbound()
         self.assert_message_fields(msg,
-            transport_name=self.transport_name,
+            transport_name=self.tx_helper.transport_name,
             transport_type='sms',
             from_addr='251911223344',
             to_addr='8123',

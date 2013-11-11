@@ -13,14 +13,12 @@ from vumi.application.tests.helpers import ApplicationHelper
 from vumi.tests.helpers import VumiTestCase
 
 
-class RapidSMSRelayTestCase(VumiTestCase):
+class TestRapidSMSRelay(VumiTestCase):
 
     application_class = RapidSMSRelay
     path = '/test/resource/path'
 
-    @inlineCallbacks
     def setUp(self):
-        yield super(RapidSMSRelayTestCase, self).setUp()
         self.app_helper = ApplicationHelper(self)
         self.add_cleanup(self.app_helper.cleanup)
 

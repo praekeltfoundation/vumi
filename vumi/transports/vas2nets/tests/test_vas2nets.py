@@ -21,14 +21,12 @@ from vumi.transports.tests.helpers import TransportHelper
 
 class TestVas2NetsTransport(VumiTestCase):
 
-    transport_name = 'vas2nets'
     transport_type = 'sms'
     transport_class = Vas2NetsTransport
 
     @inlineCallbacks
     def setUp(self):
         self.config = {
-            'transport_name': 'vas2nets',
             'url': None,
             'username': 'username',
             'password': 'password',
@@ -39,7 +37,7 @@ class TestVas2NetsTransport(VumiTestCase):
             'web_receipt_path': '/receipt',
             'web_port': 0,
         }
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(self, transport_name='vas2nets')
         self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url()

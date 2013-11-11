@@ -200,7 +200,6 @@ class TestSingleSmsSync(VumiTestCase):
 
 class TestMultiSmsSync(TestSingleSmsSync):
 
-    transport_name = 'test_multismssync_transport'
     transport_class = MultiSmsSync
     account_in_url = True
 

@@ -49,7 +49,7 @@ SAMPLE_SMPP_OUTBOUND_LINE = (
 )
 
 
-class ParseSMPPLogMessagesTestCase(VumiTestCase):
+class TestParseSMPPLogMessages(VumiTestCase):
 
     def test_parsing_of_line(self):
         parser = DummyLogParser({

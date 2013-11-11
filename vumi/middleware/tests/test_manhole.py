@@ -27,7 +27,7 @@ class DummyWorker(object):
     pass
 
 
-class ManholeMiddlewareTestCase(VumiTestCase):
+class TestManholeMiddleware(VumiTestCase):
 
     def setUp(self):
         if not ssh:

@@ -6,7 +6,7 @@ from vumi.message import Message
 from vumi.tests.helpers import VumiTestCase
 
 
-class ServiceTestCase(VumiTestCase):
+class TestService(VumiTestCase):
     @inlineCallbacks
     def test_consume(self):
         """The consume helper should direct all incoming messages matching the

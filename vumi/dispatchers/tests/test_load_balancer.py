@@ -15,7 +15,6 @@ class BaseLoadBalancingTestCase(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        yield super(BaseLoadBalancingTestCase, self).setUp()
         config = {
             "transport_names": [
                 "transport_1",
@@ -31,13 +30,9 @@ class BaseLoadBalancingTestCase(VumiTestCase):
             config['rewrite_transport_names'] = self.rewrite_transport_names
         self.dispatcher = DummyDispatcher(config)
         self.router = LoadBalancingRouter(self.dispatcher, config)
+        self.add_cleanup(self.router.teardown_routing)
         yield self.router.setup_routing()
         self.msg_helper = MessageHelper()
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield super(BaseLoadBalancingTestCase, self).tearDown()
-        yield self.router.teardown_routing()
 
 
 class TestLoadBalancingWithoutReplyAffinity(BaseLoadBalancingTestCase):

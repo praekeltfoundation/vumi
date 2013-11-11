@@ -7,7 +7,7 @@ from vumi.message import TransportUserMessage, TransportEvent
 from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 
 
-class StoringMiddlewareTestCase(VumiTestCase):
+class TestStoringMiddleware(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):

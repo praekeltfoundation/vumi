@@ -4,7 +4,7 @@ from vumi.persist.redis_base import Manager
 from vumi.tests.helpers import VumiTestCase
 
 
-class ManagerTestCase(VumiTestCase):
+class TestBaseRedisManager(VumiTestCase):
     def mk_manager(self, key_prefix='test', client=None, config=None):
         if client is None:
             client = object()

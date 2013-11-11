@@ -6,7 +6,7 @@ from vumi.persist.txredis_manager import TxRedisManager
 from vumi.tests.helpers import VumiTestCase
 
 
-class RedisManagerTestCase(VumiTestCase):
+class TestTxRedisManager(VumiTestCase):
     @inlineCallbacks
     def setUp(self):
         self.manager = yield TxRedisManager.from_config(

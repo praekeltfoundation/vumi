@@ -16,15 +16,14 @@ class TransportHelper(object):
     #       2. We look at all the test setup class attributes (.transport_name,
     #          .transport_class, etc.) to avoid passing them into various
     #          methods. This can probably be avoided with a little effort.
-    def __init__(self, test_case, msg_helper_args=None):
+    def __init__(self, test_case, transport_name=None, msg_helper_args=None):
         self._test_case = test_case
         self.persistence_helper = PersistenceHelper()
         msg_helper_kw = {}
-        # TODO: Get rid of this transport_name attr on the test class.
-        if hasattr(test_case, 'transport_name'):
-            msg_helper_kw['transport_name'] = test_case.transport_name
         if msg_helper_args is not None:
             msg_helper_kw.update(msg_helper_args)
+        if transport_name is not None:
+            msg_helper_kw['transport_name'] = transport_name
         self.msg_helper = MessageHelper(**msg_helper_kw)
         self.transport_name = self.msg_helper.transport_name
         self.worker_helper = WorkerHelper(self.transport_name)

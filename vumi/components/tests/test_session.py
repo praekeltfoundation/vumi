@@ -8,7 +8,7 @@ from vumi.components.session import SessionManager
 from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 
 
-class SessionManagerTestCase(VumiTestCase):
+class TestSessionManager(VumiTestCase):
     @inlineCallbacks
     def setUp(self):
         self.persistence_helper = PersistenceHelper()
