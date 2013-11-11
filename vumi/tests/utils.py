@@ -57,13 +57,6 @@ class RegexMatcher(object):
         return self.regex.match(other)
 
 
-def fake_amq_message(dictionary, delivery_tag='delivery_tag'):
-    Content = namedtuple('Content', ['body'])
-    Message = namedtuple('Message', ['content', 'delivery_tag'])
-    return Message(delivery_tag=delivery_tag,
-                   content=Content(body=json.dumps(dictionary)))
-
-
 def get_fake_amq_client(broker=None):
     spec = get_spec(vumi_resource_path("amqp-spec-0-8.xml"))
     return FakeAMQClient(spec, {}, broker)

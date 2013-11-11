@@ -1,9 +1,18 @@
+import json
+from collections import namedtuple
+
 from twisted.internet.defer import inlineCallbacks
 
-from vumi.service import Worker, WorkerCreator
-from vumi.tests.utils import fake_amq_message
 from vumi.message import Message
+from vumi.service import Worker, WorkerCreator
 from vumi.tests.helpers import VumiTestCase, WorkerHelper
+
+
+def fake_amq_message(dictionary, delivery_tag='delivery_tag'):
+    Content = namedtuple('Content', ['body'])
+    AMQMessage = namedtuple('Message', ['content', 'delivery_tag'])
+    return AMQMessage(delivery_tag=delivery_tag,
+                      content=Content(body=json.dumps(dictionary)))
 
 
 class TestService(VumiTestCase):
