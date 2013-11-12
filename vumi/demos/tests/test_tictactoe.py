@@ -71,11 +71,9 @@ class TestTicTacToeGame(VumiTestCase):
 
 class TestTicTacToeWorker(VumiTestCase):
 
-    application_class = TicTacToeWorker
-
     @inlineCallbacks
     def setUp(self):
-        self.app_helper = ApplicationHelper(self)
+        self.app_helper = ApplicationHelper(TicTacToeWorker)
         self.add_cleanup(self.app_helper.cleanup)
         self.worker = yield self.app_helper.get_application({})
 

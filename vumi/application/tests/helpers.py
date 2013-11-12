@@ -7,21 +7,10 @@ from vumi.tests.helpers import (
 
 
 class ApplicationHelper(object):
-    # TODO: Decide if we actually want to pass the test case in here.
-    #       We currently do this for two reasons:
-    #       1. We need to get at .mk_config from the persistence mixin. This
-    #          should be going away soon when the persistence stuff becomes a
-    #          helper.
-    #       2. We look at all the test setup class attributes (.transport_name,
-    #          .application_class, etc.) to avoid passing them into various
-    #          methods. This can probably be avoided with a little effort.
-    def __init__(self, test_case, msg_helper_args=None):
-        self._test_case = test_case
+    def __init__(self, application_class, **msg_helper_args):
+        self.application_class = application_class
         self.persistence_helper = PersistenceHelper()
-        msg_helper_kw = {}
-        if msg_helper_args is not None:
-            msg_helper_kw.update(msg_helper_args)
-        self.msg_helper = MessageHelper(**msg_helper_kw)
+        self.msg_helper = MessageHelper(**msg_helper_args)
         self.transport_name = self.msg_helper.transport_name
         self.worker_helper = WorkerHelper(self.msg_helper.transport_name)
         self.dispatch_helper = MessageDispatchHelper(
@@ -54,7 +43,7 @@ class ApplicationHelper(object):
         """
 
         if cls is None:
-            cls = self._test_case.application_class
+            cls = self.application_class
         config = self.mk_config(config)
         config.setdefault('transport_name', self.msg_helper.transport_name)
         return self.get_worker(cls, config, start)

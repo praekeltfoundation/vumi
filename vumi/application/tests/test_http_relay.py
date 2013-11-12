@@ -13,13 +13,11 @@ from vumi.tests.helpers import VumiTestCase
 
 class TestHTTPRelay(VumiTestCase):
 
-    application_class = HTTPRelayApplication
-
     @inlineCallbacks
     def setUp(self):
         yield super(TestHTTPRelay, self).setUp()
         self.path = '/path'
-        self.app_helper = ApplicationHelper(self)
+        self.app_helper = ApplicationHelper(HTTPRelayApplication)
         self.add_cleanup(self.app_helper.cleanup)
 
     @inlineCallbacks

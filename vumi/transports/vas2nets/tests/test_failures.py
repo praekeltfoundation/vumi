@@ -4,7 +4,6 @@ from datetime import datetime
 from twisted.web import http
 from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
 
-from vumi.message import from_json
 from vumi.tests.utils import MockHttpServer
 from vumi.transports.failures import (
     FailureMessage, FailureWorker, TemporaryFailure)

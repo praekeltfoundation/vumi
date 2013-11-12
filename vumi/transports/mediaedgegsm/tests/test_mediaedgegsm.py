@@ -15,8 +15,6 @@ from vumi.transports.tests.helpers import TransportHelper
 
 class TestMediaEdgeGSMTransport(VumiTestCase):
 
-    transport_class = MediaEdgeGSMTransport
-
     @inlineCallbacks
     def setUp(self):
         self.mediaedgegsm_calls = DeferredQueue()
@@ -40,7 +38,7 @@ class TestMediaEdgeGSMTransport(VumiTestCase):
                 }
             }
         }
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(MediaEdgeGSMTransport)
         self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url()

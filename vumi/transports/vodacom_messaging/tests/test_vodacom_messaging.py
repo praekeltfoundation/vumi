@@ -13,8 +13,6 @@ from vumi.tests.helpers import VumiTestCase
 
 class TestVodacomMessagingTransport(VumiTestCase):
 
-    transport_class = VodacomMessagingTransport
-
     @inlineCallbacks
     def setUp(self):
         self.config = {
@@ -26,7 +24,7 @@ class TestVodacomMessagingTransport(VumiTestCase):
             'username': 'testuser',
             'password': 'testpass',
         }
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(VodacomMessagingTransport)
         self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url().rstrip('/')

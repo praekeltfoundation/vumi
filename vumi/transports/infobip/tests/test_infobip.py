@@ -14,11 +14,9 @@ from vumi.transports.tests.helpers import TransportHelper
 
 class TestInfobipUssdTransport(VumiTestCase):
 
-    transport_class = InfobipTransport
-
     @inlineCallbacks
     def setUp(self):
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(InfobipTransport)
         self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport({
             'transport_type': 'ussd',

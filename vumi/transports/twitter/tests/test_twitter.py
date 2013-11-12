@@ -48,8 +48,6 @@ class FakeTwitter(object):
 
 class TestTwitterTransport(VumiTestCase):
 
-    transport_class = TwitterTransport
-
     @inlineCallbacks
     def setUp(self):
         config = {
@@ -60,7 +58,7 @@ class TestTwitterTransport(VumiTestCase):
             'access_token_secret': 'tokensecret1',
             'terms': ['some', 'trending', 'topic'],
         }
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(TwitterTransport)
         self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(
             config, start=False)

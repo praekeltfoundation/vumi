@@ -10,11 +10,9 @@ from vumi.transports.tests.helpers import TransportHelper
 
 class TestXMPPTransport(VumiTestCase):
 
-    transport_class = XMPPTransport
-
     @inlineCallbacks
     def mk_transport(self):
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(XMPPTransport)
         self.add_cleanup(self.tx_helper.cleanup)
         transport = yield self.tx_helper.get_transport({
             'username': 'user@xmpp.domain.com',

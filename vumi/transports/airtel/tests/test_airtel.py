@@ -13,14 +13,13 @@ from vumi.transports.tests.helpers import TransportHelper
 
 class TestAirtelUSSDTransport(VumiTestCase):
 
-    transport_class = AirtelUSSDTransport
     airtel_username = None
     airtel_password = None
     session_id = 'session-id'
 
     @inlineCallbacks
     def setUp(self):
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(AirtelUSSDTransport)
         self.add_cleanup(self.tx_helper.cleanup)
         self.config = {
             'web_port': 0,
@@ -331,15 +330,13 @@ class TestAirtelUSSDTransportWithAuth(TestAirtelUSSDTransport):
 
 class TestLoadBalancedAirtelUSSDTransport(VumiTestCase):
 
-    transport_class = AirtelUSSDTransport
-
     def setUp(self):
         self.default_config = {
             'web_port': 0,
             'web_path': '/api/v1/airtel/ussd/',
             'validation_mode': 'permissive',
         }
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(AirtelUSSDTransport)
         self.add_cleanup(self.tx_helper.cleanup)
 
     @inlineCallbacks

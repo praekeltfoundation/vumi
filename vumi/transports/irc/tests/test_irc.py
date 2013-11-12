@@ -205,14 +205,13 @@ class StubbyIrcServer(ServerFactory):
 
 class TestIrcTransport(VumiTestCase):
 
-    transport_class = IrcTransport
     nick = 'vumibottest'
 
     @inlineCallbacks
     def setUp(self):
         self.irc_server = StubbyIrcServer()
         self.add_cleanup(lambda: self.irc_server.finished_d)
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(IrcTransport)
         self.add_cleanup(self.tx_helper.cleanup)
         self.irc_connector = yield reactor.listenTCP(0, self.irc_server)
         self.add_cleanup(self.irc_connector.stopListening)

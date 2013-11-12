@@ -14,8 +14,6 @@ from vumi.transports.tests.helpers import TransportHelper
 
 class TestCellulantSmsTransport(VumiTestCase):
 
-    transport_class = CellulantSmsTransport
-
     @inlineCallbacks
     def setUp(self):
         self.cellulant_sms_calls = DeferredQueue()
@@ -37,7 +35,7 @@ class TestCellulantSmsTransport(VumiTestCase):
             },
             'outbound_url': self.mock_cellulant_sms.url,
         }
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(CellulantSmsTransport)
         self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url()
@@ -170,8 +168,6 @@ class TestCellulantSmsTransport(VumiTestCase):
 
 class TestAcksCellulantSmsTransport(VumiTestCase):
 
-    transport_class = CellulantSmsTransport
-
     @inlineCallbacks
     def setUp(self):
         self.cellulant_sms_calls = DeferredQueue()
@@ -195,7 +191,7 @@ class TestAcksCellulantSmsTransport(VumiTestCase):
             'outbound_url': self.mock_cellulant_sms.url,
             'validation_mode': 'permissive',
         }
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(CellulantSmsTransport)
         self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url()
@@ -270,8 +266,6 @@ class TestAcksCellulantSmsTransport(VumiTestCase):
 
 class TestPermissiveCellulantSmsTransport(VumiTestCase):
 
-    transport_class = CellulantSmsTransport
-
     @inlineCallbacks
     def setUp(self):
         self.cellulant_sms_calls = DeferredQueue()
@@ -294,7 +288,7 @@ class TestPermissiveCellulantSmsTransport(VumiTestCase):
             'outbound_url': self.mock_cellulant_sms.url,
             'validation_mode': 'permissive',
         }
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(CellulantSmsTransport)
         self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url()

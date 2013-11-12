@@ -15,8 +15,6 @@ from vumi.transports.tests.helpers import TransportHelper
 
 class TestMtnNigeriaUssdTransport(VumiTestCase, MockXmlOverTcpServerMixin):
 
-    transport_class = MtnNigeriaUssdTransport
-
     REQUEST_PARAMS = {
         'request_id': '1291850641',
         'msisdn': '27845335367',
@@ -81,7 +79,7 @@ class TestMtnNigeriaUssdTransport(VumiTestCase, MockXmlOverTcpServerMixin):
 
     @inlineCallbacks
     def setUp(self):
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(MtnNigeriaUssdTransport)
         self.add_cleanup(self.tx_helper.cleanup)
         deferred_login = self.fake_login(
             mtn_nigeria_ussd.MtnNigeriaUssdClientFactory.protocol)

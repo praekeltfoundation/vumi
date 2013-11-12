@@ -59,7 +59,6 @@ class TestParlayXTransport(VumiTestCase):
     """
     Tests for `vumi.transports.parlayx.ParlayXTransport`.
     """
-    transport_class = ParlayXTransport
 
     @inlineCallbacks
     def setUp(self):
@@ -73,14 +72,16 @@ class TestParlayXTransport(VumiTestCase):
             'remote_send_uri': 'send_uri',
             'remote_notification_uri': 'notification_uri',
         }
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(ParlayXTransport)
         self.add_cleanup(self.tx_helper.cleanup)
         self.uri = 'http://localhost:%s%s' % (
             self.port, config['web_notification_path'])
 
         def _create_client(transport, config):
             return MockParlayXClient()
-        self.patch(self.transport_class, '_create_client', _create_client)
+        self.patch(
+            self.tx_helper.transport_class, '_create_client',
+            _create_client)
         self.transport = yield self.tx_helper.get_transport(
             config, start=False)
 
@@ -127,7 +128,9 @@ class TestParlayXTransport(VumiTestCase):
         def _create_client(transport, config):
             return MockParlayXClient(
                 send_sms=partial(fail, ValueError('failed')))
-        self.patch(self.transport_class, '_create_client', _create_client)
+        self.patch(
+            self.tx_helper.transport_class, '_create_client',
+            _create_client)
 
         yield self.transport.startWorker()
         msg = yield self.tx_helper.make_dispatch_outbound("hi")
@@ -151,7 +154,9 @@ class TestParlayXTransport(VumiTestCase):
             return MockParlayXClient(
                 send_sms=partial(
                     fail, expected_exception('soapenv:Client', 'failed')))
-        self.patch(self.transport_class, '_create_client', _create_client)
+        self.patch(
+            self.tx_helper.transport_class, '_create_client',
+            _create_client)
 
         yield self.transport.startWorker()
         msg = yield self.tx_helper.make_dispatch_outbound("hi")

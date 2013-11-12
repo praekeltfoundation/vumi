@@ -12,15 +12,13 @@ from vumi.utils import http_request
 
 class TestSafaricomTransport(VumiTestCase):
 
-    transport_class = SafaricomTransport
-
     @inlineCallbacks
     def setUp(self):
         config = {
             'web_port': 0,
             'web_path': '/api/v1/safaricom/ussd/',
         }
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(SafaricomTransport)
         self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(config)
         self.session_manager = self.transport.session_manager

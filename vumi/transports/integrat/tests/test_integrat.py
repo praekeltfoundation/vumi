@@ -130,7 +130,6 @@ class TestIntegratHttpResource(VumiTestCase):
 
 
 class TestIntegratTransport(VumiTestCase):
-    transport_class = IntegratTransport
 
     @inlineCallbacks
     def setUp(self):
@@ -145,7 +144,7 @@ class TestIntegratTransport(VumiTestCase):
             'username': 'testuser',
             'password': 'testpass',
             }
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(IntegratTransport)
         self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(config)
         addr = self.transport.web_resource.getHost()

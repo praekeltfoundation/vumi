@@ -14,15 +14,13 @@ from vumi.transports.tests.helpers import TransportHelper
 
 class TestOldSimpleHttpTransport(VumiTestCase):
 
-    transport_class = OldSimpleHttpTransport
-
     @inlineCallbacks
     def setUp(self):
         self.config = {
             'web_path': "foo",
             'web_port': 0,
         }
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(OldSimpleHttpTransport)
         self.add_cleanup(self.tx_helper.cleanup)
 
         self.transport = yield self.tx_helper.get_transport(self.config)
@@ -104,15 +102,13 @@ class TestOldSimpleHttpTransport(VumiTestCase):
 
 class TestOldTemplateHttpTransport(VumiTestCase):
 
-    transport_class = OldTemplateHttpTransport
-
     @inlineCallbacks
     def setUp(self):
         self.config = {
             'web_path': "foo",
             'web_port': 0,
         }
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(OldTemplateHttpTransport)
         self.add_cleanup(self.tx_helper.cleanup)
 
         self.transport = yield self.tx_helper.get_transport(self.config)

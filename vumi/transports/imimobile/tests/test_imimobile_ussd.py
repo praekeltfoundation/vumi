@@ -13,8 +13,6 @@ from vumi.transports.tests.helpers import TransportHelper
 
 class TestImiMobileUssdTransport(VumiTestCase):
 
-    transport_class = ImiMobileUssdTransport
-
     _from_addr = '9221234567'
     _to_addr = '56263'
     _request_defaults = {
@@ -37,7 +35,7 @@ class TestImiMobileUssdTransport(VumiTestCase):
                 'some-other-suffix': '56264',
             }
         }
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(ImiMobileUssdTransport)
         self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(self.config)
         self.session_manager = self.transport.session_manager

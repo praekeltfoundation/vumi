@@ -8,10 +8,8 @@ from vumi.transports.tests.helpers import TransportHelper
 
 class TestDevNullTransport(VumiTestCase):
 
-    transport_class = DevNullTransport
-
     def setUp(self):
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(DevNullTransport)
         self.add_cleanup(self.tx_helper.cleanup)
 
     @inlineCallbacks

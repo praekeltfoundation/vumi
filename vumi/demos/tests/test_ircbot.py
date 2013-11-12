@@ -10,11 +10,9 @@ from vumi.tests.helpers import VumiTestCase
 
 class TestMemoWorker(VumiTestCase):
 
-    application_class = MemoWorker
-
     @inlineCallbacks
     def setUp(self):
-        self.app_helper = ApplicationHelper(self)
+        self.app_helper = ApplicationHelper(MemoWorker)
         self.add_cleanup(self.app_helper.cleanup)
         self.worker = yield self.app_helper.get_application(
             {'worker_name': 'testmemo'})

@@ -16,11 +16,9 @@ from vumi.transports.vumi_bridge import GoConversationTransport
 
 class TestGoConversationTransport(VumiTestCase):
 
-    transport_class = GoConversationTransport
-
     @inlineCallbacks
     def setUp(self):
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(GoConversationTransport)
         self.add_cleanup(self.tx_helper.cleanup)
         self.mock_server = MockHttpServer(self.handle_inbound_request)
         self.add_cleanup(self.mock_server.stop)

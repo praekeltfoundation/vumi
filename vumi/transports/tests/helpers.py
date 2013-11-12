@@ -8,23 +8,10 @@ from vumi.tests.helpers import (
 
 
 class TransportHelper(object):
-    # TODO: Decide if we actually want to pass the test case in here.
-    #       We currently do this for two reasons:
-    #       1. We need to get at .mk_config from the persistence mixin. This
-    #          should be going away soon when the persistence stuff becomes a
-    #          helper.
-    #       2. We look at all the test setup class attributes (.transport_name,
-    #          .transport_class, etc.) to avoid passing them into various
-    #          methods. This can probably be avoided with a little effort.
-    def __init__(self, test_case, transport_name=None, msg_helper_args=None):
-        self._test_case = test_case
+    def __init__(self, transport_class, **msg_helper_args):
+        self.transport_class = transport_class
         self.persistence_helper = PersistenceHelper()
-        msg_helper_kw = {}
-        if msg_helper_args is not None:
-            msg_helper_kw.update(msg_helper_args)
-        if transport_name is not None:
-            msg_helper_kw['transport_name'] = transport_name
-        self.msg_helper = MessageHelper(**msg_helper_kw)
+        self.msg_helper = MessageHelper(**msg_helper_args)
         self.transport_name = self.msg_helper.transport_name
         self.worker_helper = WorkerHelper(self.transport_name)
         self.dispatch_helper = MessageDispatchHelper(
@@ -57,7 +44,7 @@ class TransportHelper(object):
         """
 
         if cls is None:
-            cls = self._test_case.transport_class
+            cls = self.transport_class
         config = self.mk_config(config)
         config.setdefault('transport_name', self.transport_name)
         return self.get_worker(cls, config, start)

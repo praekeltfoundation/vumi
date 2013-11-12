@@ -15,8 +15,6 @@ from vumi.transports.tests.helpers import TransportHelper
 
 class TestMediafoneTransport(VumiTestCase):
 
-    transport_class = MediafoneTransport
-
     @inlineCallbacks
     def setUp(self):
         self.mediafone_calls = DeferredQueue()
@@ -30,7 +28,7 @@ class TestMediafoneTransport(VumiTestCase):
             'password': 'pass',
             'outbound_url': self.mock_mediafone.url,
         }
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(MediafoneTransport)
         self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url()

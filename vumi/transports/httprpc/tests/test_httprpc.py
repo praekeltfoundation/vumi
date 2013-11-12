@@ -29,8 +29,6 @@ class OkTransport(HttpRpcTransport):
 
 class TestTransport(VumiTestCase):
 
-    transport_class = OkTransport
-
     @inlineCallbacks
     def setUp(self):
         self.clock = Clock()
@@ -44,7 +42,7 @@ class TestTransport(VumiTestCase):
             'request_timeout_status_code': 418,
             'request_timeout_body': 'I am a teapot',
             }
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(OkTransport)
         self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(config)
         self.transport_url = self.transport.get_transport_url()
@@ -108,8 +106,6 @@ class JSONTransport(HttpRpcTransport):
 
 class TestJSONTransport(VumiTestCase):
 
-    transport_class = JSONTransport
-
     @inlineCallbacks
     def setUp(self):
         config = {
@@ -118,7 +114,7 @@ class TestJSONTransport(VumiTestCase):
             'username': 'testuser',
             'password': 'testpass',
             }
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(JSONTransport)
         self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(config)
         self.transport_url = self.transport.get_transport_url()
@@ -154,7 +150,6 @@ class CustomOutboundTransport(OkTransport):
 
 
 class TestCustomOutboundTransport(VumiTestCase):
-    transport_class = CustomOutboundTransport
 
     @inlineCallbacks
     def setUp(self):
@@ -164,7 +159,7 @@ class TestCustomOutboundTransport(VumiTestCase):
             'username': 'testuser',
             'password': 'testpass',
             }
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(CustomOutboundTransport)
         self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(config)
         self.transport_url = self.transport.get_transport_url()

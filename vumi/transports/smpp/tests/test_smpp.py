@@ -64,7 +64,6 @@ class TestSmppTransportConfig(VumiTestCase):
 
 
 class TestSmppTransport(VumiTestCase):
-    transport_class = SmppTransport
 
     @inlineCallbacks
     def setUp(self):
@@ -78,7 +77,7 @@ class TestSmppTransport(VumiTestCase):
         }
 
         # hack a lot of transport setup
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(SmppTransport)
         self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(
             config, start=False)
@@ -343,8 +342,6 @@ def mk_expected_pdu(direction, sequence_number, command_id, **extras):
 
 class EsmeToSmscTestCase(VumiTestCase):
 
-    transport_class = MockSmppTransport
-
     CONFIG_OVERRIDE = {}
 
     @inlineCallbacks
@@ -365,7 +362,7 @@ class EsmeToSmscTestCase(VumiTestCase):
         client_config = server_config.copy()
         client_config['twisted_endpoint'] = 'tcp:host=%s:port=%s' % (
             host.host, host.port)
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(MockSmppTransport)
         self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(
             client_config, start=False)
@@ -810,8 +807,6 @@ class TestDeliveryOverrideMapping(EsmeToSmscTestCase):
 
 class TestEsmeToSmscTx(VumiTestCase):
 
-    transport_class = MockSmppTxTransport
-
     def assert_pdu_header(self, expected, actual, field):
         self.assertEqual(expected['pdu']['header'][field],
                          actual['pdu']['header'][field])
@@ -836,7 +831,7 @@ class TestEsmeToSmscTx(VumiTestCase):
         yield self.service.startWorker()
         self.service.factory.protocol = SmscTestServer
         self.config['port'] = self.service.listening.getHost().port
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(MockSmppTxTransport)
         self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(
             self.config, start=False)
@@ -878,8 +873,6 @@ class TestEsmeToSmscTx(VumiTestCase):
 
 class TestEsmeToSmscRx(VumiTestCase):
 
-    transport_class = MockSmppRxTransport
-
     def assert_pdu_header(self, expected, actual, field):
         self.assertEqual(expected['pdu']['header'][field],
                          actual['pdu']['header'][field])
@@ -907,7 +900,7 @@ class TestEsmeToSmscRx(VumiTestCase):
         yield self.service.startWorker()
         self.service.factory.protocol = SmscTestServer
         self.config['port'] = self.service.listening.getHost().port
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(MockSmppRxTransport)
         self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(
             self.config, start=False)

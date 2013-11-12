@@ -44,11 +44,9 @@ class EchoApplicationWorker(ApplicationWorker):
 
 class TestApplicationWorker(VumiTestCase):
 
-    application_class = DummyApplicationWorker
-
     @inlineCallbacks
     def setUp(self):
-        self.app_helper = ApplicationHelper(self)
+        self.app_helper = ApplicationHelper(DummyApplicationWorker)
         self.add_cleanup(self.app_helper.cleanup)
         self.worker = yield self.app_helper.get_application({})
 
@@ -117,8 +115,8 @@ class TestApplicationWorker(VumiTestCase):
         msg = yield self.app_helper.make_dispatch_inbound("Hello!")
 
         # Start the app and process stuff.
-        self.application_class = EchoApplicationWorker
-        self.worker = yield self.app_helper.get_application({})
+        self.worker = yield self.app_helper.get_application(
+            {}, EchoApplicationWorker)
 
         replies = yield self.app_helper.wait_for_dispatched_outbound(1)
 
@@ -200,11 +198,9 @@ class TestApplicationWorker(VumiTestCase):
 
 class TestApplicationWorkerWithSendToConfig(VumiTestCase):
 
-    application_class = DummyApplicationWorker
-
     @inlineCallbacks
     def setUp(self):
-        self.app_helper = ApplicationHelper(self)
+        self.app_helper = ApplicationHelper(DummyApplicationWorker)
         self.add_cleanup(self.app_helper.cleanup)
         self.worker = yield self.app_helper.get_application({
             'send_to': {
@@ -274,8 +270,6 @@ class TestApplicationWorkerWithSendToConfig(VumiTestCase):
 
 class TestApplicationMiddlewareHooks(VumiTestCase):
 
-    application_class = ApplicationWorker
-
     TEST_MIDDLEWARE_CONFIG = {
         "middleware": [
             {"mw1": "vumi.middleware.tests.utils.RecordingMiddleware"},
@@ -284,7 +278,7 @@ class TestApplicationMiddlewareHooks(VumiTestCase):
     }
 
     def setUp(self):
-        self.app_helper = ApplicationHelper(self)
+        self.app_helper = ApplicationHelper(ApplicationWorker)
         self.add_cleanup(self.app_helper.cleanup)
 
     @inlineCallbacks

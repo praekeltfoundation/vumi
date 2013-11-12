@@ -15,7 +15,6 @@ from vumi.transports.tests.helpers import TransportHelper
 
 class TestMTNRwandaUSSDTransport(VumiTestCase):
 
-    transport_class = MTNRwandaUSSDTransport
     session_id = 'session_id'
 
     @inlineCallbacks
@@ -24,7 +23,7 @@ class TestMTNRwandaUSSDTransport(VumiTestCase):
         Create the server (i.e. vumi transport instance)
         """
         self.clock = Clock()
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(MTNRwandaUSSDTransport)
         self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport({
             'twisted_endpoint': 'tcp:port=0',

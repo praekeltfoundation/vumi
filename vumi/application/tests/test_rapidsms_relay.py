@@ -15,11 +15,8 @@ from vumi.tests.helpers import VumiTestCase
 
 class TestRapidSMSRelay(VumiTestCase):
 
-    application_class = RapidSMSRelay
-    path = '/test/resource/path'
-
     def setUp(self):
-        self.app_helper = ApplicationHelper(self)
+        self.app_helper = ApplicationHelper(RapidSMSRelay)
         self.add_cleanup(self.app_helper.cleanup)
 
     @inlineCallbacks
@@ -29,7 +26,7 @@ class TestRapidSMSRelay(VumiTestCase):
         self.mock_server = MockHttpServer(callback)
         self.add_cleanup(self.mock_server.stop)
         yield self.mock_server.start()
-        url = '%s%s' % (self.mock_server.url, self.path)
+        url = '%s%s' % (self.mock_server.url, '/test/resource/path')
         self.app = yield self.setup_app(url, auth=auth)
 
     def setup_app(self, url, auth=None):

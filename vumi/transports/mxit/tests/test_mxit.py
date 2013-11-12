@@ -10,8 +10,6 @@ from vumi.transports.tests.helpers import TransportHelper
 
 class TestMxitTransport(VumiTestCase):
 
-    transport_class = MxitTransport
-
     @inlineCallbacks
     def setUp(self):
         config = {
@@ -42,7 +40,7 @@ class TestMxitTransport(VumiTestCase):
         self.sample_unicode_menu_resp = unicode(
             self.sample_menu_resp.replace('o', slashed_o), 'utf-8')
 
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(MxitTransport)
         self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(config)
         self.url = self.transport.get_transport_url(config['web_path'])

@@ -7,8 +7,6 @@ from vumi.transports.tests.helpers import TransportHelper
 
 class TestBaseTransport(VumiTestCase):
 
-    transport_class = Transport
-
     TEST_MIDDLEWARE_CONFIG = {
         "middleware": [
             {"mw1": "vumi.middleware.tests.utils.RecordingMiddleware"},
@@ -17,7 +15,7 @@ class TestBaseTransport(VumiTestCase):
     }
 
     def setUp(self):
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(Transport)
         self.add_cleanup(self.tx_helper.cleanup)
 
     @inlineCallbacks

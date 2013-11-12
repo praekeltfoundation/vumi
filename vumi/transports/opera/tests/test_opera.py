@@ -22,13 +22,11 @@ class FakeXMLRPCService(object):
 
 
 class TestOperaTransport(VumiTestCase):
-    transport_class = OperaTransport
 
     @inlineCallbacks
     def setUp(self):
-        self.tx_helper = TransportHelper(self, msg_helper_args={
-            'mobile_addr': '27761234567',
-        })
+        self.tx_helper = TransportHelper(
+            OperaTransport, mobile_addr='27761234567')
         self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport({
             'url': 'http://testing.domain',

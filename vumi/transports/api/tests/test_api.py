@@ -19,7 +19,6 @@ def config_override(**config):
 
 
 class TestHttpApiTransport(VumiTestCase):
-    transport_class = HttpApiTransport
 
     @inlineCallbacks
     def setUp(self):
@@ -30,7 +29,7 @@ class TestHttpApiTransport(VumiTestCase):
         test_method = getattr(self, self._testMethodName)
         config_override = getattr(test_method, 'config_override', {})
         self.config.update(config_override)
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(HttpApiTransport)
         self.add_cleanup(self.tx_helper.cleanup)
 
         self.transport = yield self.tx_helper.get_transport(self.config)

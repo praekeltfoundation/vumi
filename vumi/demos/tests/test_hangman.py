@@ -140,8 +140,6 @@ class TestHangmanGame(VumiTestCase):
 
 class TestHangmanWorker(VumiTestCase):
 
-    application_class = HangmanWorker
-
     @inlineCallbacks
     def setUp(self):
         root = Resource()
@@ -153,7 +151,7 @@ class TestHangmanWorker(VumiTestCase):
         addr = self.webserver.getHost()
         random_word_url = "http://%s:%s/word" % (addr.host, addr.port)
 
-        self.app_helper = ApplicationHelper(self)
+        self.app_helper = ApplicationHelper(HangmanWorker)
         self.add_cleanup(self.app_helper.cleanup)
 
         self.worker = yield self.app_helper.get_application({

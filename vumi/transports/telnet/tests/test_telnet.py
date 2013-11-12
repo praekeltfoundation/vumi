@@ -37,12 +37,12 @@ class ClientProtocol(LineReceiver):
 
 class BaseTelnetServerTransortTestCase(VumiTestCase):
 
-    transport_type = 'telnet'
     transport_class = TelnetServerTransport
+    transport_type = 'telnet'
 
     @inlineCallbacks
     def setUp(self):
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(self.transport_class)
         self.add_cleanup(self.tx_helper.cleanup)
         self.worker = yield self.tx_helper.get_transport({'telnet_port': 0})
         self.client = yield self.make_client()

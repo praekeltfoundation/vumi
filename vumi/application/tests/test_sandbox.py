@@ -47,7 +47,7 @@ class SandboxTestCaseBase(VumiTestCase):
     application_class = Sandbox
 
     def setUp(self):
-        self.app_helper = ApplicationHelper(self)
+        self.app_helper = ApplicationHelper(self.application_class)
         self.add_cleanup(self.app_helper.cleanup)
 
     def setup_app(self, executable=None, args=None, extra_config=None):

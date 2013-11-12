@@ -11,8 +11,6 @@ from vumi.transports.tests.helpers import TransportHelper
 
 class TestCellulantTransport(VumiTestCase):
 
-    transport_class = CellulantTransport
-
     @inlineCallbacks
     def setUp(self):
         self.config = {
@@ -20,7 +18,7 @@ class TestCellulantTransport(VumiTestCase):
             'web_path': '/api/v1/ussd/cellulant/',
             'ussd_session_timeout': 60,
         }
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(CellulantTransport)
         self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url(

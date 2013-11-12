@@ -12,8 +12,6 @@ from vumi.transports.trueafrican.transport import TrueAfricanUssdTransport
 
 class TestTrueAfricanUssdTransport(VumiTestCase):
 
-    transport_class = TrueAfricanUssdTransport
-
     SESSION_INIT_BODY = {
         'session': '1',
         'msisdn': '+27724385170',
@@ -22,7 +20,7 @@ class TestTrueAfricanUssdTransport(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(TrueAfricanUssdTransport)
         self.clock = Clock()
         self.patch(TrueAfricanUssdTransport, 'get_clock', lambda _: self.clock)
         self.add_cleanup(self.tx_helper.cleanup)

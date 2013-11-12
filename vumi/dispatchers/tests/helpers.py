@@ -35,19 +35,11 @@ class DummyDispatcher(BaseDispatchWorker):
 
 
 class DispatcherHelper(object):
-    # TODO: Decide if we actually want to pass the test case in here.
-    #       We currently do this because we need to get at .mk_config from the
-    #       persistence mixin. This should be going away soon when the
-    #       persistence stuff becomes a helper.
-    def __init__(self, dispatcher_class, test_case, msg_helper_args=None):
-        self._test_case = test_case
-        self._dispatcher_class = dispatcher_class
+    def __init__(self, dispatcher_class, **msg_helper_args):
+        self.dispatcher_class = dispatcher_class
         self.worker_helper = WorkerHelper()
         self.persistence_helper = PersistenceHelper()
-        msg_helper_kw = {}
-        if msg_helper_args is not None:
-            msg_helper_kw.update(msg_helper_args)
-        self.msg_helper = MessageHelper(**msg_helper_kw)
+        self.msg_helper = MessageHelper(**msg_helper_args)
         self.dispatch_helper = MessageDispatchHelper(
             self.msg_helper, self.worker_helper)
 
@@ -63,7 +55,7 @@ class DispatcherHelper(object):
 
     def get_dispatcher(self, config, cls=None, start=True):
         if cls is None:
-            cls = self._dispatcher_class
+            cls = self.dispatcher_class
         config = self.persistence_helper.mk_config(config)
         return self.get_worker(cls, config, start)
 

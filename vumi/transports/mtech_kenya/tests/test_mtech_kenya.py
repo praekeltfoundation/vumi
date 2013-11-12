@@ -14,8 +14,6 @@ from vumi.transports.tests.helpers import TransportHelper
 
 class TestMTechKenyaTransport(VumiTestCase):
 
-    transport_class = MTechKenyaTransport
-
     @inlineCallbacks
     def setUp(self):
         self.cellulant_sms_calls = DeferredQueue()
@@ -32,9 +30,8 @@ class TestMTechKenyaTransport(VumiTestCase):
             'outbound_url': self.mock_mtech_sms.url,
         }
         self.config.update(self.valid_creds)
-        self.tx_helper = TransportHelper(self, msg_helper_args={
-            'mobile_addr': '2371234567',
-        })
+        self.tx_helper = TransportHelper(
+            MTechKenyaTransport, mobile_addr='2371234567')
         self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url()

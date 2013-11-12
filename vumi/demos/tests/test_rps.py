@@ -60,11 +60,9 @@ class TestRockPaperScissorsGame(VumiTestCase):
 
 class TestRockPaperScissorsWorker(VumiTestCase):
 
-    application_class = RockPaperScissorsWorker
-
     @inlineCallbacks
     def setUp(self):
-        self.app_helper = ApplicationHelper(self)
+        self.app_helper = ApplicationHelper(RockPaperScissorsWorker)
         self.add_cleanup(self.app_helper.cleanup)
         self.worker = yield self.app_helper.get_application({})
 
