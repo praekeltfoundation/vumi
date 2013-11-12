@@ -64,9 +64,7 @@ class DispatcherHelper(object):
     def get_dispatcher(self, config, cls=None, start=True):
         if cls is None:
             cls = self._dispatcher_class
-        # We might need to do persistence config mangling.
-        if hasattr(self._test_case, 'mk_config'):
-            config = self._test_case.mk_config(config)
+        config = self.persistence_helper.mk_config(config)
         return self.get_worker(cls, config, start)
 
     def get_connector_helper(self, connector_name):
