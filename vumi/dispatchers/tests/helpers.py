@@ -35,10 +35,10 @@ class DummyDispatcher(BaseDispatchWorker):
 
 
 class DispatcherHelper(object):
-    def __init__(self, dispatcher_class, **msg_helper_args):
+    def __init__(self, dispatcher_class, use_riak=False, **msg_helper_args):
         self.dispatcher_class = dispatcher_class
         self.worker_helper = WorkerHelper()
-        self.persistence_helper = PersistenceHelper()
+        self.persistence_helper = PersistenceHelper(use_riak=use_riak)
         self.msg_helper = MessageHelper(**msg_helper_args)
         self.dispatch_helper = MessageDispatchHelper(
             self.msg_helper, self.worker_helper)
