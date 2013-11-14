@@ -1,6 +1,6 @@
 """Tests for vumi.demos.words."""
 
-from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.defer import inlineCallbacks
 
 from vumi.demos.words import (SimpleAppWorker, EchoWorker, ReverseWorker,
                               WordCountWorker)
@@ -38,8 +38,9 @@ class TestSimpleAppWorker(VumiTestCase):
         self.assertEqual(reply['session_event'], None)
         self.assertEqual(reply['content'], 'echo:test')
 
+    @inlineCallbacks
     def test_base_process_message(self):
-        worker = yield self.worker_helper.get_worker({}, SimpleAppWorker)
+        worker = yield self.app_helper.get_application({}, SimpleAppWorker)
         self.assertRaises(NotImplementedError, worker.process_message, 'foo')
 
 
