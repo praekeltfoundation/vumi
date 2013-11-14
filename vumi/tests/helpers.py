@@ -473,7 +473,6 @@ class PersistenceHelper(object):
 
         for patch in reversed(self._patches):
             patch.restore()
-        pass
 
     def _get_riak_managers_for_cleanup(self):
         """Get a list of Riak managers and whether they should be purged.

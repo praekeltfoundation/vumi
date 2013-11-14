@@ -4,7 +4,7 @@ from vumi.tests.utils import VumiWorkerTestCase, PersistenceMixin
 
 # For backcompat
 from .helpers import DummyDispatcher
-DummyDispatcher
+DummyDispatcher  # To keep pyflakes happy.
 
 
 class DispatcherTestCase(VumiWorkerTestCase, PersistenceMixin):

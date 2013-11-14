@@ -21,7 +21,7 @@ from vumi.tests.helpers import VumiTestCase
 
 # For backcompat:
 from vumi.tests.helpers import import_filter, import_skip
-import_filter, import_skip
+import_filter, import_skip  # To keep pyflakes happy.
 
 
 class UTCNearNow(object):
