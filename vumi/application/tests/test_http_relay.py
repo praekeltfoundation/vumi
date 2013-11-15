@@ -3,23 +3,21 @@ from base64 import b64decode
 from twisted.internet.defer import inlineCallbacks
 from twisted.web import http
 
-from vumi.application.tests.utils import ApplicationTestCase
 from vumi.tests.utils import MockHttpServer
 from vumi.application.http_relay import HTTPRelayApplication
 from vumi.message import TransportEvent
 
 from vumi.application.tests.helpers import ApplicationHelper
+from vumi.tests.helpers import VumiTestCase
 
 
-class HTTPRelayTestCase(ApplicationTestCase):
-
-    application_class = HTTPRelayApplication
+class TestHTTPRelay(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        yield super(HTTPRelayTestCase, self).setUp()
+        yield super(TestHTTPRelay, self).setUp()
         self.path = '/path'
-        self.app_helper = ApplicationHelper(self)
+        self.app_helper = ApplicationHelper(HTTPRelayApplication)
         self.add_cleanup(self.app_helper.cleanup)
 
     @inlineCallbacks

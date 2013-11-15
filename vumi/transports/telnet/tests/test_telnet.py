@@ -8,9 +8,9 @@ from twisted.protocols.basic import LineReceiver
 from twisted.internet import reactor, protocol
 
 from vumi.message import TransportUserMessage
-from vumi.transports.telnet import (TelnetServerTransport,
-                                    AddressedTelnetServerTransport)
-from vumi.transports.tests.utils import TransportTestCase
+from vumi.tests.helpers import VumiTestCase
+from vumi.transports.telnet import (
+    TelnetServerTransport, AddressedTelnetServerTransport)
 from vumi.transports.tests.helpers import TransportHelper
 
 
@@ -35,28 +35,27 @@ class ClientProtocol(LineReceiver):
         self.disconnect_d.callback(None)
 
 
-class BaseTelnetServerTransortTestCase(TransportTestCase):
+class BaseTelnetServerTransortTestCase(VumiTestCase):
 
-    transport_type = 'telnet'
     transport_class = TelnetServerTransport
+    transport_type = 'telnet'
 
     @inlineCallbacks
     def setUp(self):
-        super(BaseTelnetServerTransortTestCase, self).setUp()
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(self.transport_class)
         self.add_cleanup(self.tx_helper.cleanup)
         self.worker = yield self.tx_helper.get_transport({'telnet_port': 0})
         self.client = yield self.make_client()
+        self.add_cleanup(self.wait_for_client_deregistration)
         yield self.wait_for_client_start()
 
     @inlineCallbacks
-    def tearDown(self):
+    def wait_for_client_deregistration(self):
         if self.client.transport.connected:
             self.client.transport.loseConnection()
             yield self.client.disconnect_d
             # Kick off the delivery of the deregistration message.
             yield self.tx_helper.kick_delivery()
-        yield super(BaseTelnetServerTransortTestCase, self).tearDown()
 
     def wait_for_client_start(self):
         return self.client.connect_d
@@ -69,7 +68,7 @@ class BaseTelnetServerTransortTestCase(TransportTestCase):
         returnValue(client)
 
 
-class TelnetServerTransportTestCase(BaseTelnetServerTransortTestCase):
+class TestTelnetServerTransport(BaseTelnetServerTransortTestCase):
 
     @inlineCallbacks
     def test_client_register(self):
@@ -184,17 +183,9 @@ class TelnetServerTransportTestCase(BaseTelnetServerTransortTestCase):
         self.assertEqual(msg['transport_type'], 'foo')
 
 
-class AddressedTelnetServerTransportTestCase(BaseTelnetServerTransortTestCase):
+class TestAddressedTelnetServerTransport(BaseTelnetServerTransortTestCase):
 
     transport_class = AddressedTelnetServerTransport
-
-    @inlineCallbacks
-    def setUp(self):
-        super(BaseTelnetServerTransortTestCase, self).setUp()
-        self.tx_helper = TransportHelper(self)
-        self.add_cleanup(self.tx_helper.cleanup)
-        self.worker = yield self.tx_helper.get_transport({'telnet_port': 0})
-        self.client = yield self.make_client()
 
     def wait_for_server(self):
         """Wait for first message from client to be ready."""

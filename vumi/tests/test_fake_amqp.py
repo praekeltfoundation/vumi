@@ -24,7 +24,7 @@ class TestWorker(Worker):
         self.msgs.append(msg)
 
 
-class FakeAMQPTestCase(VumiTestCase):
+class TestFakeAMQP(VumiTestCase):
     def setUp(self):
         self.broker = fake_amqp.FakeAMQPBroker()
         self.add_cleanup(self.broker.wait_delivery)

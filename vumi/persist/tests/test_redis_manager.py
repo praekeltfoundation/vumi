@@ -1,10 +1,9 @@
 """Tests for vumi.persist.redis_manager."""
 
-from vumi.tests.utils import import_skip
-from vumi.tests.helpers import VumiTestCase
+from vumi.tests.helpers import VumiTestCase, import_skip
 
 
-class RedisManagerTestCase(VumiTestCase):
+class TestRedisManager(VumiTestCase):
     def setUp(self):
         try:
             from vumi.persist.redis_manager import RedisManager

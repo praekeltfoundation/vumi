@@ -5,7 +5,7 @@ from vumi.persist.fake_redis import FakeRedis
 from vumi.tests.helpers import VumiTestCase
 
 
-class FakeRedisTestCase(VumiTestCase):
+class TestFakeRedis(VumiTestCase):
 
     def setUp(self):
         self.redis = FakeRedis()
@@ -331,7 +331,7 @@ class FakeRedisTestCase(VumiTestCase):
         yield self.assert_redis_op('hash', 'type', 'hash_key')
 
 
-class FakeRedisCharsetHandlingTestCase(VumiTestCase):
+class TestFakeRedisCharsetHandling(VumiTestCase):
 
     def get_redis(self, *args, **kwargs):
         redis = FakeRedis(*args, **kwargs)
@@ -364,7 +364,7 @@ class FakeRedisCharsetHandlingTestCase(VumiTestCase):
             'get', 'name')
 
 
-class FakeTxRedisTestCase(FakeRedisTestCase):
+class TestFakeRedisAsync(TestFakeRedis):
     def setUp(self):
         self.redis = FakeRedis(async=True)
 

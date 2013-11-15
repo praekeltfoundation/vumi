@@ -2,10 +2,9 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.application.base import ApplicationWorker, SESSION_NEW, SESSION_CLOSE
 from vumi.message import TransportUserMessage
-from vumi.tests.utils import get_stubbed_worker
-from vumi.application.tests.utils import ApplicationTestCase
 
 from vumi.application.tests.helpers import ApplicationHelper
+from vumi.tests.helpers import VumiTestCase, WorkerHelper
 
 
 class DummyApplicationWorker(ApplicationWorker):
@@ -43,18 +42,13 @@ class EchoApplicationWorker(ApplicationWorker):
         self.reply_to(message, message['content'])
 
 
-class TestApplicationWorker(ApplicationTestCase):
-
-    application_class = DummyApplicationWorker
+class TestApplicationWorker(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        yield super(TestApplicationWorker, self).setUp()
-        self.transport_name = 'test'
-        self.config = {'transport_name': self.transport_name}
-        self.app_helper = ApplicationHelper(self)
+        self.app_helper = ApplicationHelper(DummyApplicationWorker)
         self.add_cleanup(self.app_helper.cleanup)
-        self.worker = yield self.app_helper.get_application(self.config)
+        self.worker = yield self.app_helper.get_application({})
 
     def assert_msgs_match(self, msgs, expected_msgs):
         for key in ['timestamp', 'message_id']:
@@ -121,8 +115,8 @@ class TestApplicationWorker(ApplicationTestCase):
         msg = yield self.app_helper.make_dispatch_inbound("Hello!")
 
         # Start the app and process stuff.
-        self.application_class = EchoApplicationWorker
-        self.worker = yield self.app_helper.get_application(self.config)
+        self.worker = yield self.app_helper.get_application(
+            {}, EchoApplicationWorker)
 
         replies = yield self.app_helper.wait_for_dispatched_outbound(1)
 
@@ -160,8 +154,8 @@ class TestApplicationWorker(ApplicationTestCase):
         self.assert_msgs_match(sends, expecteds)
 
     def test_subclassing_api(self):
-        worker = get_stubbed_worker(ApplicationWorker,
-                                    {'transport_name': 'test'})
+        worker = WorkerHelper.get_worker_raw(
+            ApplicationWorker, {'transport_name': 'test'})
         worker.consume_ack(self.app_helper.make_ack())
         worker.consume_nack(self.app_helper.make_nack())
         worker.consume_delivery_report(self.app_helper.make_delivery_report())
@@ -202,28 +196,22 @@ class TestApplicationWorker(ApplicationTestCase):
             self.assertFalse(consumer.channel.qos_prefetch_count)
 
 
-class TestApplicationWorkerWithSendToConfig(ApplicationTestCase):
-
-    application_class = DummyApplicationWorker
+class TestApplicationWorkerWithSendToConfig(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        yield super(TestApplicationWorkerWithSendToConfig, self).setUp()
-        self.transport_name = 'test'
-        self.config = {
-            'transport_name': self.transport_name,
+        self.app_helper = ApplicationHelper(DummyApplicationWorker)
+        self.add_cleanup(self.app_helper.cleanup)
+        self.worker = yield self.app_helper.get_application({
             'send_to': {
                 'default': {
                     'transport_name': 'default_transport',
-                    },
+                },
                 'outbound1': {
                     'transport_name': 'outbound1_transport',
-                    },
                 },
-            }
-        self.app_helper = ApplicationHelper(self)
-        self.add_cleanup(self.app_helper.cleanup)
-        self.worker = yield self.app_helper.get_application(self.config)
+            },
+        })
 
     def assert_msgs_match(self, msgs, expected_msgs):
         for key in ['timestamp', 'message_id']:
@@ -280,10 +268,7 @@ class TestApplicationWorkerWithSendToConfig(ApplicationTestCase):
             self.send_to('+12345', "Hi!", "outbound_unknown"), ValueError)
 
 
-class TestApplicationMiddlewareHooks(ApplicationTestCase):
-
-    transport_name = 'carrier_pigeon'
-    application_class = ApplicationWorker
+class TestApplicationMiddlewareHooks(VumiTestCase):
 
     TEST_MIDDLEWARE_CONFIG = {
         "middleware": [
@@ -292,10 +277,8 @@ class TestApplicationMiddlewareHooks(ApplicationTestCase):
         ],
     }
 
-    @inlineCallbacks
     def setUp(self):
-        yield super(TestApplicationMiddlewareHooks, self).setUp()
-        self.app_helper = ApplicationHelper(self)
+        self.app_helper = ApplicationHelper(ApplicationWorker)
         self.add_cleanup(self.app_helper.cleanup)
 
     @inlineCallbacks
@@ -307,8 +290,8 @@ class TestApplicationMiddlewareHooks(ApplicationTestCase):
         yield self.app_helper.make_dispatch_inbound("hi")
         [msg] = msgs
         self.assertEqual(msg['record'], [
-            ('mw1', 'inbound', self.transport_name),
-            ('mw2', 'inbound', self.transport_name),
+            ('mw1', 'inbound', self.app_helper.transport_name),
+            ('mw2', 'inbound', self.app_helper.transport_name),
             ])
 
     @inlineCallbacks
@@ -320,8 +303,8 @@ class TestApplicationMiddlewareHooks(ApplicationTestCase):
         yield self.app_helper.make_dispatch_ack()
         [msg] = msgs
         self.assertEqual(msg['record'], [
-            ('mw1', 'event', self.transport_name),
-            ('mw2', 'event', self.transport_name),
+            ('mw1', 'event', self.app_helper.transport_name),
+            ('mw2', 'event', self.app_helper.transport_name),
             ])
 
     @inlineCallbacks
@@ -333,6 +316,6 @@ class TestApplicationMiddlewareHooks(ApplicationTestCase):
         msgs = self.app_helper.get_dispatched_outbound()
         [msg] = msgs
         self.assertEqual(msg['record'], [
-            ['mw2', 'outbound', self.transport_name],
-            ['mw1', 'outbound', self.transport_name],
+            ['mw2', 'outbound', self.app_helper.transport_name],
+            ['mw1', 'outbound', self.app_helper.transport_name],
             ])

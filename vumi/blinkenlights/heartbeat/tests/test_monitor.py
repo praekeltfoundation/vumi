@@ -7,12 +7,11 @@ import json
 
 from twisted.internet.defer import inlineCallbacks
 
-from vumi.tests.utils import get_stubbed_worker
 from vumi.blinkenlights.heartbeat import publisher
 from vumi.blinkenlights.heartbeat import monitor
 from vumi.blinkenlights.heartbeat.storage import issue_key
 from vumi.utils import generate_worker_id
-from vumi.tests.helpers import VumiTestCase
+from vumi.tests.helpers import VumiTestCase, WorkerHelper, PersistenceHelper
 
 
 def expected_wkr_dict():
@@ -121,7 +120,12 @@ class TestSystem(VumiTestCase):
 
 class TestHeartBeatMonitor(VumiTestCase):
 
+    @inlineCallbacks
     def setUp(self):
+        self.persistence_helper = PersistenceHelper()
+        self.add_cleanup(self.persistence_helper.cleanup)
+        self.worker_helper = WorkerHelper()
+        self.add_cleanup(self.worker_helper.cleanup)
         config = {
             'deadline': 30,
             'redis_manager': {
@@ -142,15 +146,8 @@ class TestHeartBeatMonitor(VumiTestCase):
                 }
             }
         }
-        self.worker = get_stubbed_worker(monitor.HeartBeatMonitor, config)
-        self.add_cleanup(self.cleanup_worker)
-
-    @inlineCallbacks
-    def cleanup_worker(self):
-        redis = self.worker._redis
-        yield redis._purge_all()
-        yield redis.close_manager()
-        yield self.worker.stopWorker()
+        self.worker = yield self.worker_helper.get_worker(
+            monitor.HeartBeatMonitor, config, start=False)
 
     def gen_fake_attrs(self, timestamp):
         sys_id = 'system-1'

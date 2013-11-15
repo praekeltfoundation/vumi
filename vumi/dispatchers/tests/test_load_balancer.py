@@ -2,20 +2,19 @@
 
 from twisted.internet.defer import inlineCallbacks
 
-from vumi.tests.utils import VumiWorkerTestCase, LogCatcher
-from vumi.dispatchers.tests.utils import DummyDispatcher
 from vumi.dispatchers.load_balancer import LoadBalancingRouter
-from vumi.tests.helpers import MessageHelper
+from vumi.dispatchers.tests.helpers import DummyDispatcher
+from vumi.tests.helpers import VumiTestCase, MessageHelper
+from vumi.tests.utils import LogCatcher
 
 
-class BaseLoadBalancingTestCase(VumiWorkerTestCase):
+class BaseLoadBalancingTestCase(VumiTestCase):
 
     reply_affinity = None
     rewrite_transport_names = None
 
     @inlineCallbacks
     def setUp(self):
-        yield super(BaseLoadBalancingTestCase, self).setUp()
         config = {
             "transport_names": [
                 "transport_1",
@@ -31,13 +30,9 @@ class BaseLoadBalancingTestCase(VumiWorkerTestCase):
             config['rewrite_transport_names'] = self.rewrite_transport_names
         self.dispatcher = DummyDispatcher(config)
         self.router = LoadBalancingRouter(self.dispatcher, config)
+        self.add_cleanup(self.router.teardown_routing)
         yield self.router.setup_routing()
         self.msg_helper = MessageHelper()
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield super(BaseLoadBalancingTestCase, self).tearDown()
-        yield self.router.teardown_routing()
 
 
 class TestLoadBalancingWithoutReplyAffinity(BaseLoadBalancingTestCase):

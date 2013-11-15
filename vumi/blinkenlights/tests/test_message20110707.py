@@ -25,7 +25,7 @@ def mkmsgobj(message_type, source_name, source_id, payload, timestamp):
                            timestamp)
 
 
-class MessageTestCase(VumiTestCase):
+class TestMessage(VumiTestCase):
 
     def test_decode_valid_message(self):
         """A valid message dict should decode into an appropriate Message
@@ -109,7 +109,7 @@ def mkmetricsmsg(metrics):
                  TIMELIST)
 
 
-class MetricsMessageTestCase(VumiTestCase):
+class TestMetricsMessage(VumiTestCase):
     def test_parse_empty_metrics(self):
         msg_data = mkmetricsmsg([])
         msg = message.MetricsMessage.from_dict(msg_data)

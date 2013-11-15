@@ -2,21 +2,17 @@
 
 from twisted.internet.defer import inlineCallbacks, returnValue
 
-from vumi.application.tests.utils import ApplicationTestCase
-
 from vumi.demos.ircbot import MemoWorker
 from vumi.message import TransportUserMessage
 from vumi.application.tests.helpers import ApplicationHelper
+from vumi.tests.helpers import VumiTestCase
 
 
-class TestMemoWorker(ApplicationTestCase):
-
-    application_class = MemoWorker
+class TestMemoWorker(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        super(TestMemoWorker, self).setUp()
-        self.app_helper = ApplicationHelper(self)
+        self.app_helper = ApplicationHelper(MemoWorker)
         self.add_cleanup(self.app_helper.cleanup)
         self.worker = yield self.app_helper.get_application(
             {'worker_name': 'testmemo'})

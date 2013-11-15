@@ -9,7 +9,7 @@ class TestException(Exception):
     pass
 
 
-class VumiLogTestCase(VumiTestCase):
+class TestVumiLog(VumiTestCase):
 
     def test_normal_log_levels(self):
         levels = [

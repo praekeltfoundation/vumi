@@ -10,7 +10,7 @@ class ToyWorker(Worker):
         return "poke"
 
 
-class UtilsTestCase(VumiTestCase):
+class TestTestUtils(VumiTestCase):
 
     def test_get_stubbed_worker(self):
         worker = get_stubbed_worker(ToyWorker)
@@ -24,7 +24,7 @@ class UtilsTestCase(VumiTestCase):
         self.assertEqual(options, worker.config)
 
 
-class LogCatcherTestCase(VumiTestCase):
+class TestLogCatcher(VumiTestCase):
     def test_simple_catching(self):
         lc = LogCatcher()
         with lc:

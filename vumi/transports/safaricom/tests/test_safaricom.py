@@ -3,30 +3,27 @@ from urllib import urlencode
 
 from twisted.internet.defer import inlineCallbacks
 
-from vumi.transports.tests.utils import TransportTestCase
-from vumi.transports.safaricom import SafaricomTransport
 from vumi.message import TransportUserMessage
-from vumi.utils import http_request
+from vumi.tests.helpers import VumiTestCase
+from vumi.transports.safaricom import SafaricomTransport
 from vumi.transports.tests.helpers import TransportHelper
+from vumi.utils import http_request
 
 
-class TestSafaricomTransportTestCase(TransportTestCase):
-
-    transport_class = SafaricomTransport
+class TestSafaricomTransport(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        yield super(TestSafaricomTransportTestCase, self).setUp()
-        self.config = {
+        config = {
             'web_port': 0,
             'web_path': '/api/v1/safaricom/ussd/',
         }
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(SafaricomTransport)
         self.add_cleanup(self.tx_helper.cleanup)
-        self.transport = yield self.tx_helper.get_transport(self.config)
+        self.transport = yield self.tx_helper.get_transport(config)
         self.session_manager = self.transport.session_manager
         self.transport_url = self.transport.get_transport_url(
-            self.config['web_path'])
+            config['web_path'])
         yield self.session_manager.redis._purge_all()  # just in case
 
     def mk_full_request(self, **params):

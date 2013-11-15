@@ -3,11 +3,11 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from vumi.connectors import (
     BaseConnector, ReceiveInboundConnector, ReceiveOutboundConnector,
     IgnoreMessage)
-from vumi.tests.utils import VumiWorkerTestCase, LogCatcher
+from vumi.tests.utils import LogCatcher
 from vumi.worker import BaseWorker
 from vumi.message import TransportUserMessage
 from vumi.middleware.tests.utils import RecordingMiddleware
-from vumi.tests.helpers import MessageHelper, WorkerHelper
+from vumi.tests.helpers import VumiTestCase, MessageHelper, WorkerHelper
 
 
 class DummyWorker(BaseWorker):
@@ -21,7 +21,7 @@ class DummyWorker(BaseWorker):
         pass
 
 
-class BaseConnectorTestCase(VumiWorkerTestCase):
+class BaseConnectorTestCase(VumiTestCase):
 
     connector_class = None
 
@@ -29,7 +29,6 @@ class BaseConnectorTestCase(VumiWorkerTestCase):
         self.msg_helper = MessageHelper()
         self.worker_helper = WorkerHelper()
         self.add_cleanup(self.worker_helper.cleanup)
-        return super(BaseConnectorTestCase, self).setUp()
 
     @inlineCallbacks
     def mk_connector(self, worker=None, connector_name=None,

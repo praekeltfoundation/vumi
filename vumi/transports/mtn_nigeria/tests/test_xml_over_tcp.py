@@ -63,7 +63,7 @@ class XmlOverTcpClientServerMixin(utils.MockClientServerMixin):
     server_protocol = utils.MockXmlOverTcpServer
 
 
-class XmlOverTcpClientTestCase(VumiTestCase, XmlOverTcpClientServerMixin):
+class TestXmlOverTcpClient(VumiTestCase, XmlOverTcpClientServerMixin):
 
     def setUp(self):
         errors = dict(CodedXmlOverTcpError.ERRORS)

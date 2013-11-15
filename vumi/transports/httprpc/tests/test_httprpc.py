@@ -4,8 +4,8 @@ from twisted.internet.defer import inlineCallbacks
 from twisted.internet.task import Clock
 
 from vumi.utils import http_request, http_request_full
+from vumi.tests.helpers import VumiTestCase
 from vumi.tests.utils import LogCatcher
-from vumi.transports.tests.test_base import TransportTestCase
 from vumi.transports.httprpc import HttpRpcTransport
 from vumi.message import TransportUserMessage
 from vumi.transports.tests.helpers import TransportHelper
@@ -27,13 +27,10 @@ class OkTransport(HttpRpcTransport):
                 )
 
 
-class TestTransport(TransportTestCase):
-
-    transport_class = OkTransport
+class TestTransport(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        yield super(TestTransport, self).setUp()
         self.clock = Clock()
         self.patch(OkTransport, 'get_clock', lambda _: self.clock)
         config = {
@@ -45,7 +42,7 @@ class TestTransport(TransportTestCase):
             'request_timeout_status_code': 418,
             'request_timeout_body': 'I am a teapot',
             }
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(OkTransport)
         self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(config)
         self.transport_url = self.transport.get_transport_url()
@@ -107,20 +104,17 @@ class JSONTransport(HttpRpcTransport):
                 )
 
 
-class TestJSONTransport(TransportTestCase):
-
-    transport_class = JSONTransport
+class TestJSONTransport(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        yield super(TestJSONTransport, self).setUp()
         config = {
             'web_path': "foo",
             'web_port': 0,
             'username': 'testuser',
             'password': 'testpass',
             }
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(JSONTransport)
         self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(config)
         self.transport_url = self.transport.get_transport_url()
@@ -155,19 +149,17 @@ class CustomOutboundTransport(OkTransport):
                 headers=self.RESPONSE_HEADERS)
 
 
-class TestCustomOutboundTransport(TransportTestCase):
-    transport_class = CustomOutboundTransport
+class TestCustomOutboundTransport(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        yield super(TestCustomOutboundTransport, self).setUp()
         config = {
             'web_path': "foo",
             'web_port': 0,
             'username': 'testuser',
             'password': 'testpass',
             }
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(CustomOutboundTransport)
         self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(config)
         self.transport_url = self.transport.get_transport_url()

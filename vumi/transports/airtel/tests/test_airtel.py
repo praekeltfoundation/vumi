@@ -4,24 +4,22 @@ from urllib import urlencode
 from twisted.internet.defer import inlineCallbacks
 from twisted.web import http
 
-from vumi.transports.tests.utils import TransportTestCase
+from vumi.tests.helpers import VumiTestCase
 from vumi.transports.airtel import AirtelUSSDTransport
 from vumi.message import TransportUserMessage
 from vumi.utils import http_request_full
 from vumi.transports.tests.helpers import TransportHelper
 
 
-class TestAirtelUSSDTransportTestCase(TransportTestCase):
+class TestAirtelUSSDTransport(VumiTestCase):
 
-    transport_class = AirtelUSSDTransport
     airtel_username = None
     airtel_password = None
     session_id = 'session-id'
 
     @inlineCallbacks
     def setUp(self):
-        yield super(TestAirtelUSSDTransportTestCase, self).setUp()
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(AirtelUSSDTransport)
         self.add_cleanup(self.tx_helper.cleanup)
         self.config = {
             'web_port': 0,
@@ -32,14 +30,10 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
         }
         self.transport = yield self.tx_helper.get_transport(self.config)
         self.session_manager = self.transport.session_manager
+        self.add_cleanup(self.session_manager.stop)
         self.transport_url = self.transport.get_transport_url(
             self.config['web_path'])
         yield self.session_manager.redis._purge_all()  # just in case
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield super(TestAirtelUSSDTransportTestCase, self).tearDown()
-        yield self.session_manager.stop()
 
     def mk_full_request(self, **params):
         return http_request_full('%s?%s' % (self.transport_url,
@@ -293,7 +287,7 @@ class TestAirtelUSSDTransportTestCase(TransportTestCase):
         })
 
 
-class TestAirtelUSSDTransportTestCaseWithAuth(TestAirtelUSSDTransportTestCase):
+class TestAirtelUSSDTransportWithAuth(TestAirtelUSSDTransport):
 
     transport_class = AirtelUSSDTransport
     airtel_username = 'userid'
@@ -334,19 +328,15 @@ class TestAirtelUSSDTransportTestCaseWithAuth(TestAirtelUSSDTransportTestCase):
         })
 
 
-class LoadBalancedAirtelUSSDTransportTestCase(TransportTestCase):
+class TestLoadBalancedAirtelUSSDTransport(VumiTestCase):
 
-    transport_class = AirtelUSSDTransport
-
-    @inlineCallbacks
     def setUp(self):
-        yield super(LoadBalancedAirtelUSSDTransportTestCase, self).setUp()
         self.default_config = {
             'web_port': 0,
             'web_path': '/api/v1/airtel/ussd/',
             'validation_mode': 'permissive',
         }
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(AirtelUSSDTransport)
         self.add_cleanup(self.tx_helper.cleanup)
 
     @inlineCallbacks

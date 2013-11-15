@@ -16,16 +16,14 @@ from twisted.internet.defer import (
 from twisted.internet.error import ProcessTerminated
 from twisted.trial.unittest import SkipTest
 
-from vumi.application.tests.utils import ApplicationTestCase
 from vumi.application.sandbox import (
     Sandbox, SandboxApi, SandboxCommand, SandboxResources,
     SandboxResource, RedisResource, OutboundResource, JsSandboxResource,
     LoggingResource, HttpClientResource, JsSandbox, JsFileSandbox,
     HttpClientContextFactory)
-from vumi.tests.utils import LogCatcher, PersistenceMixin
-from vumi.tests.helpers import VumiTestCase
-
 from vumi.application.tests.helpers import ApplicationHelper
+from vumi.tests.utils import LogCatcher
+from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 
 
 class MockResource(SandboxResource):
@@ -44,13 +42,12 @@ class ListLoggingResource(LoggingResource):
         self.msgs.append((level, msg))
 
 
-class SandboxTestCaseBase(ApplicationTestCase):
+class SandboxTestCaseBase(VumiTestCase):
 
     application_class = Sandbox
 
     def setUp(self):
-        super(SandboxTestCaseBase, self).setUp()
-        self.app_helper = ApplicationHelper(self)
+        self.app_helper = ApplicationHelper(self.application_class)
         self.add_cleanup(self.app_helper.cleanup)
 
     def setup_app(self, executable=None, args=None, extra_config=None):
@@ -69,10 +66,10 @@ class SandboxTestCaseBase(ApplicationTestCase):
         return self.app_helper.get_application(config)
 
 
-class SandboxTestCase(SandboxTestCaseBase):
+class TestSandbox(SandboxTestCaseBase):
 
     def setup_app(self, python_code, extra_config=None):
-        return super(SandboxTestCase, self).setup_app(
+        return super(TestSandbox, self).setup_app(
             sys.executable, ['-c', python_code],
             extra_config=extra_config)
 
@@ -147,7 +144,7 @@ class SandboxTestCase(SandboxTestCaseBase):
 
     @inlineCallbacks
     def test_resource_setup(self):
-        r_server = yield self.get_redis_manager()
+        r_server = yield self.app_helper.get_redis_manager()
         json_data = SandboxCommand(cmd='db.set', key='foo',
                                    value={'a': 1, 'b': 2}).to_json()
         app = yield self.setup_app(
@@ -381,22 +378,7 @@ class SandboxTestCase(SandboxTestCaseBase):
         return self.event_dispatch_check(ack)
 
 
-class JsSandboxTestCase(SandboxTestCaseBase):
-
-    application_class = JsSandbox
-
-    def setUp(self):
-        super(JsSandboxTestCase, self).setUp()
-        if JsSandbox.find_nodejs() is None:
-            raise SkipTest("No node.js executable found.")
-
-    def setup_app(self, javascript_code, extra_config=None):
-        extra_config = extra_config or {}
-        extra_config.update({
-            'javascript': javascript_code,
-        })
-        return super(JsSandboxTestCase, self).setup_app(
-            extra_config=extra_config)
+class JsSandboxTestMixin(object):
 
     @inlineCallbacks
     def test_js_sandboxer(self):
@@ -446,9 +428,32 @@ class JsSandboxTestCase(SandboxTestCaseBase):
         ])
 
 
-class JsFileSandboxTestCase(JsSandboxTestCase):
+class TestJsSandbox(SandboxTestCaseBase, JsSandboxTestMixin):
+
+    application_class = JsSandbox
+
+    def setUp(self):
+        if JsSandbox.find_nodejs() is None:
+            raise SkipTest("No node.js executable found.")
+        super(TestJsSandbox, self).setUp()
+
+    def setup_app(self, javascript_code, extra_config=None):
+        extra_config = extra_config or {}
+        extra_config.update({
+            'javascript': javascript_code,
+        })
+        return super(TestJsSandbox, self).setup_app(
+            extra_config=extra_config)
+
+
+class TestJsFileSandbox(SandboxTestCaseBase, JsSandboxTestMixin):
 
     application_class = JsFileSandbox
+
+    def setUp(self):
+        if JsSandbox.find_nodejs() is None:
+            raise SkipTest("No node.js executable found.")
+        super(TestJsFileSandbox, self).setUp()
 
     def setup_app(self, javascript, extra_config=None):
         tmp_file_name = self.mktemp()
@@ -461,7 +466,7 @@ class JsFileSandboxTestCase(JsSandboxTestCase):
             'javascript_file': tmp_file_name,
         })
 
-        return super(JsSandboxTestCase, self).setup_app(
+        return super(TestJsFileSandbox, self).setup_app(
             extra_config=extra_config)
 
 
@@ -502,7 +507,7 @@ class DummyAppWorker(object):
         return mock_method
 
 
-class SandboxApiTestCase(VumiTestCase):
+class TestSandboxApi(VumiTestCase):
     def setUp(self):
         self.sent_messages = DeferredQueue()
         self.patch(SandboxApi, 'sandbox_send',
@@ -573,15 +578,16 @@ class ResourceTestCaseBase(VumiTestCase):
         return self.resource.dispatch_request(self.api, msg)
 
 
-class TestRedisResource(ResourceTestCaseBase, PersistenceMixin):
+class TestRedisResource(ResourceTestCaseBase):
 
     resource_cls = RedisResource
 
     @inlineCallbacks
     def setUp(self):
         super(TestRedisResource, self).setUp()
-        yield self._persist_setUp()
-        self.r_server = yield self.get_redis_manager()
+        self.persistence_helper = PersistenceHelper()
+        self.add_cleanup(self.persistence_helper.cleanup)
+        self.r_server = yield self.persistence_helper.get_redis_manager()
         yield self.create_resource({})
 
     def create_resource(self, config):
@@ -590,11 +596,6 @@ class TestRedisResource(ResourceTestCaseBase, PersistenceMixin):
             'key_prefix': self.r_server._key_prefix,
         })
         return super(TestRedisResource, self).create_resource(config)
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield super(TestRedisResource, self).tearDown()
-        yield self._persist_tearDown()
 
     def check_reply(self, reply, success=True, **kw):
         self.assertEqual(reply['success'], success)

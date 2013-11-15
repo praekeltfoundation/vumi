@@ -4,7 +4,7 @@ from twisted.internet.defer import Deferred, inlineCallbacks
 
 from vumi.message import TransportUserMessage
 from vumi.transports.mtn_nigeria.tests import utils
-from vumi.transports.tests.utils import TransportTestCase
+from vumi.tests.helpers import VumiTestCase
 from vumi.transports.mtn_nigeria import MtnNigeriaUssdTransport
 from vumi.transports.mtn_nigeria import mtn_nigeria_ussd
 from vumi.transports.mtn_nigeria.tests.utils import MockXmlOverTcpServerMixin
@@ -13,11 +13,7 @@ from vumi.transports.mtn_nigeria.xml_over_tcp import (
 from vumi.transports.tests.helpers import TransportHelper
 
 
-class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
-                                          MockXmlOverTcpServerMixin):
-
-    transport_class = MtnNigeriaUssdTransport
-    transport_name = 'test_mtn_nigeria_ussd_transport'
+class TestMtnNigeriaUssdTransport(VumiTestCase, MockXmlOverTcpServerMixin):
 
     REQUEST_PARAMS = {
         'request_id': '1291850641',
@@ -71,35 +67,26 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
         "</USSDResponse>"
     )
 
-    EXPECTED_INBOUND_PAYLOAD = {
-        'message_id': '1291850641',
-        'content': '',
-        'from_addr': '27845335367',
-        'to_addr': '*123#',
-        'session_event': TransportUserMessage.SESSION_RESUME,
-        'transport_name': transport_name,
-        'transport_type': 'ussd',
-        'transport_metadata': {
-            'mtn_nigeria_ussd': {
-                'session_id': '0',
-                'clientId': '0123',
-                'phase': '2',
-                'dcs': '15',
-                'starCode': '123',
-            },
+    EXPECTED_TRANSPORT_METADATA = {
+        'mtn_nigeria_ussd': {
+            'session_id': '0',
+            'clientId': '0123',
+            'phase': '2',
+            'dcs': '15',
+            'starCode': '123',
         },
     }
 
     @inlineCallbacks
     def setUp(self):
-        super(TestMtnNigeriaUssdTransportTestCase, self).setUp()
-
+        self.tx_helper = TransportHelper(MtnNigeriaUssdTransport)
+        self.add_cleanup(self.tx_helper.cleanup)
         deferred_login = self.fake_login(
             mtn_nigeria_ussd.MtnNigeriaUssdClientFactory.protocol)
         deferred_server = self.start_server()
+        self.add_cleanup(self.stop_server)
 
-        config = {
-            'transport_name': self.transport_name,
+        self.transport = yield self.tx_helper.get_transport({
             'server_hostname': '127.0.0.1',
             'server_port': self.get_server_port(),
             'username': 'root',
@@ -108,10 +95,9 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
             'enquire_link_interval': 240,
             'timeout_period': 120,
             'user_termination_response': 'Bye',
-        }
-        self.tx_helper = TransportHelper(self)
-        self.add_cleanup(self.tx_helper.cleanup)
-        self.transport = yield self.tx_helper.get_transport(config)
+        })
+        # We need to tear the transport down before stopping the server.
+        self.add_cleanup(self.transport.stopWorker)
         yield deferred_server
 
         self.session_manager = self.transport.session_manager
@@ -119,12 +105,6 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
 
         yield deferred_login
         self.client = self.transport.factory.client
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield self.transport.teardown_transport()
-        yield self.stop_server()
-        yield super(TestMtnNigeriaUssdTransportTestCase, self).tearDown()
 
     def fake_login(self, protocol_cls):
         d = Deferred()
@@ -167,7 +147,16 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
         self.server.send_data(packet)
 
     def assert_inbound_message(self, msg, **field_values):
-        expected_payload = self.EXPECTED_INBOUND_PAYLOAD.copy()
+        expected_payload = {
+            'message_id': '1291850641',
+            'content': '',
+            'from_addr': '27845335367',
+            'to_addr': '*123#',
+            'session_event': TransportUserMessage.SESSION_RESUME,
+            'transport_name': self.tx_helper.transport_name,
+            'transport_type': 'ussd',
+            'transport_metadata': self.EXPECTED_TRANSPORT_METADATA,
+        }
         expected_payload.update(field_values)
 
         for field, expected_value in expected_payload.iteritems():
@@ -301,7 +290,7 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
             'send_data_response',
             stubbed_send_data_response)
 
-        tm = self.EXPECTED_INBOUND_PAYLOAD['transport_metadata'].copy()
+        tm = self.EXPECTED_TRANSPORT_METADATA.copy()
         msg = self.tx_helper.make_inbound("foo", transport_metadata=tm)
         reply = yield self.tx_helper.make_dispatch_reply(msg, "It's a trap!")
 

@@ -5,23 +5,18 @@ import json
 from twisted.internet.defer import inlineCallbacks
 from twisted.web import http
 
-from vumi.application.tests.test_base import ApplicationTestCase
 from vumi.tests.utils import LogCatcher, MockHttpServer
 from vumi.application.rapidsms_relay import RapidSMSRelay, BadRequestError
 from vumi.utils import http_request_full, basic_auth_string, to_kwargs
 from vumi.message import TransportUserMessage, from_json
 from vumi.application.tests.helpers import ApplicationHelper
+from vumi.tests.helpers import VumiTestCase
 
 
-class RapidSMSRelayTestCase(ApplicationTestCase):
+class TestRapidSMSRelay(VumiTestCase):
 
-    application_class = RapidSMSRelay
-    path = '/test/resource/path'
-
-    @inlineCallbacks
     def setUp(self):
-        yield super(RapidSMSRelayTestCase, self).setUp()
-        self.app_helper = ApplicationHelper(self)
+        self.app_helper = ApplicationHelper(RapidSMSRelay)
         self.add_cleanup(self.app_helper.cleanup)
 
     @inlineCallbacks
@@ -31,7 +26,7 @@ class RapidSMSRelayTestCase(ApplicationTestCase):
         self.mock_server = MockHttpServer(callback)
         self.add_cleanup(self.mock_server.stop)
         yield self.mock_server.start()
-        url = '%s%s' % (self.mock_server.url, self.path)
+        url = '%s%s' % (self.mock_server.url, '/test/resource/path')
         self.app = yield self.setup_app(url, auth=auth)
 
     def setup_app(self, url, auth=None):
