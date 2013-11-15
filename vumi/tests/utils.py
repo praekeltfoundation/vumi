@@ -1,14 +1,11 @@
 # -*- test-case-name: vumi.tests.test_testutils -*-
 
 import re
-import json
 from datetime import datetime, timedelta
-from collections import namedtuple
 import warnings
 from functools import wraps
 
 import pytz
-from twisted.trial.unittest import SkipTest
 from twisted.internet import reactor
 from twisted.internet.error import ConnectionRefusedError
 from twisted.web.resource import Resource
@@ -22,18 +19,9 @@ from vumi.message import TransportUserMessage, TransportEvent
 from vumi.tests.fake_amqp import FakeAMQPBroker, FakeAMQClient
 from vumi.tests.helpers import VumiTestCase
 
-
-def import_filter(exc, *expected):
-    msg = exc.args[0]
-    module = msg.split()[-1]
-    if expected and (module not in expected):
-        raise
-    return module
-
-
-def import_skip(exc, *expected):
-    module = import_filter(exc, *expected)
-    raise SkipTest("Failed to import '%s'." % (module,))
+# For backcompat:
+from vumi.tests.helpers import import_filter, import_skip
+import_filter, import_skip  # To keep pyflakes happy.
 
 
 class UTCNearNow(object):
@@ -55,13 +43,6 @@ class RegexMatcher(object):
 
     def __eq__(self, other):
         return self.regex.match(other)
-
-
-def fake_amq_message(dictionary, delivery_tag='delivery_tag'):
-    Content = namedtuple('Content', ['body'])
-    Message = namedtuple('Message', ['content', 'delivery_tag'])
-    return Message(delivery_tag=delivery_tag,
-                   content=Content(body=json.dumps(dictionary)))
 
 
 def get_fake_amq_client(broker=None):
@@ -241,6 +222,9 @@ class PersistenceMixin(object):
     sync_or_async = staticmethod(maybe_async('sync_persistence'))
 
     def _persist_setUp(self):
+        warnings.warn("PersistenceMixin is deprecated. "
+                      "Use PersistenceHelper from vumi.tests.helpers instead.",
+                      category=DeprecationWarning)
         self._persist_patches = []
         self._persist_riak_managers = []
         self._persist_redis_managers = []
@@ -467,6 +451,10 @@ class VumiWorkerTestCase(VumiTestCase):
     MSG_ID_MATCHER = RegexMatcher(r'^[0-9a-fA-F]{32}$')
 
     def setUp(self):
+        warnings.warn("VumiWorkerTestCase and its subclasses are deprecated. "
+                      "Use VumiTestCase and other tools from "
+                      "vumi.tests.helpers instead.",
+                      category=DeprecationWarning)
         self._workers = []
         self._amqp = FakeAMQPBroker()
 

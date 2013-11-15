@@ -2,19 +2,17 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet.task import Clock
 from twisted.words.xish import domish
 
-from vumi.transports.tests.utils import TransportTestCase
+from vumi.tests.helpers import VumiTestCase
 from vumi.transports.xmpp.xmpp import XMPPTransport
 from vumi.transports.xmpp.tests import test_xmpp_stubs
 from vumi.transports.tests.helpers import TransportHelper
 
 
-class XMPPTransportTestCase(TransportTestCase):
-
-    transport_class = XMPPTransport
+class TestXMPPTransport(VumiTestCase):
 
     @inlineCallbacks
     def mk_transport(self):
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(XMPPTransport)
         self.add_cleanup(self.tx_helper.cleanup)
         transport = yield self.tx_helper.get_transport({
             'username': 'user@xmpp.domain.com',
@@ -23,7 +21,6 @@ class XMPPTransportTestCase(TransportTestCase):
             'status_message': 'XMPP Transport',
             'host': 'xmpp.domain.com',
             'port': 5222,
-            'transport_name': self.transport_name,
             'transport_type': 'xmpp',
         }, start=False)
 
@@ -71,7 +68,7 @@ class XMPPTransportTestCase(TransportTestCase):
         [msg] = self.tx_helper.get_dispatched_inbound()
         self.assertEqual(msg['to_addr'], self.jid.userhost())
         self.assertEqual(msg['from_addr'], 'test@case.com')
-        self.assertEqual(msg['transport_name'], self.transport_name)
+        self.assertEqual(msg['transport_name'], self.tx_helper.transport_name)
         self.assertNotEqual(msg['message_id'], message['id'])
         self.assertEqual(msg['transport_metadata']['xmpp_id'], message['id'])
         self.assertEqual(msg['content'], 'hello world')

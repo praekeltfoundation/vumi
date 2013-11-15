@@ -1,13 +1,13 @@
 import time
 
 from twisted.internet import reactor
-from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
+from twisted.internet.defer import inlineCallbacks, Deferred
 
 from vumi.blinkenlights import metrics
-from vumi.tests.utils import get_stubbed_worker, get_stubbed_channel
+from vumi.tests.utils import get_stubbed_channel
 from vumi.message import Message
 from vumi.service import Worker
-from vumi.tests.helpers import VumiTestCase
+from vumi.tests.helpers import VumiTestCase, WorkerHelper
 
 
 class TestMetricManager(VumiTestCase):
@@ -15,6 +15,8 @@ class TestMetricManager(VumiTestCase):
     def setUp(self):
         self._next_publish = Deferred()
         self.add_cleanup(lambda: self._next_publish.callback(None))
+        self.worker_helper = WorkerHelper()
+        self.add_cleanup(self.worker_helper.cleanup)
 
     def on_publish(self, mm):
         d, self._next_publish = self._next_publish, Deferred()
@@ -25,20 +27,18 @@ class TestMetricManager(VumiTestCase):
 
     @inlineCallbacks
     def start_manager(self, manager):
-        channel = yield get_stubbed_channel()
-        broker = channel.broker
-        self.add_cleanup(broker.wait_delivery)
+        channel = yield get_stubbed_channel(self.worker_helper.broker)
         manager.start(channel)
         self.add_cleanup(manager.stop)
-        returnValue(broker)
 
     def _sleep(self, delay):
         d = Deferred()
         reactor.callLater(delay, lambda: d.callback(None))
         return d
 
-    def _check_msg(self, broker, manager, metric, values):
-        msgs = broker.get_dispatched("vumi.metrics", "vumi.metrics")
+    def _check_msg(self, manager, metric, values):
+        msgs = self.worker_helper.broker.get_dispatched(
+            "vumi.metrics", "vumi.metrics")
         if values is None:
             self.assertEqual(msgs, [])
             return
@@ -91,39 +91,39 @@ class TestMetricManager(VumiTestCase):
     def test_publish_metrics_poll(self):
         mm = metrics.MetricManager("vumi.test.", 0.1, self.on_publish)
         cnt = mm.register(metrics.Count("my.count"))
-        broker = yield self.start_manager(mm)
+        yield self.start_manager(mm)
 
         cnt.inc()
         mm._publish_metrics()
-        self._check_msg(broker, mm, cnt, [1])
+        self._check_msg(mm, cnt, [1])
 
     @inlineCallbacks
     def test_publish_metrics_oneshot(self):
         mm = metrics.MetricManager("vumi.test.", 0.1, self.on_publish)
         cnt = metrics.Count("my.count")
-        broker = yield self.start_manager(mm)
+        yield self.start_manager(mm)
 
         mm.oneshot(cnt, 1)
         mm._publish_metrics()
-        self._check_msg(broker, mm, cnt, [1])
+        self._check_msg(mm, cnt, [1])
 
     @inlineCallbacks
     def test_start(self):
         mm = metrics.MetricManager("vumi.test.", 0.1, self.on_publish)
         cnt = mm.register(metrics.Count("my.count"))
-        broker = yield self.start_manager(mm)
+        yield self.start_manager(mm)
 
         self.assertTrue(mm._task is not None)
-        self._check_msg(broker, mm, cnt, None)
+        self._check_msg(mm, cnt, None)
 
         cnt.inc()
         yield self.wait_publish()
-        self._check_msg(broker, mm, cnt, [1])
+        self._check_msg(mm, cnt, [1])
 
         cnt.inc()
         cnt.inc()
         yield self.wait_publish()
-        self._check_msg(broker, mm, cnt, [1, 1])
+        self._check_msg(mm, cnt, [1, 1])
 
     def test_stop_unstarted(self):
         mm = metrics.MetricManager("vumi.test.", 0.1, self.on_publish)
@@ -132,20 +132,18 @@ class TestMetricManager(VumiTestCase):
 
     @inlineCallbacks
     def test_in_worker(self):
-        worker = get_stubbed_worker(Worker)
-        broker = worker._amqp_client.broker
-        self.add_cleanup(broker.wait_delivery)
+        worker = yield self.worker_helper.get_worker(Worker, {}, start=False)
         mm = yield worker.start_publisher(metrics.MetricManager,
                                           "vumi.test.", 0.1, self.on_publish)
         acc = mm.register(metrics.Metric("my.acc"))
         try:
             self.assertTrue(mm._task is not None)
-            self._check_msg(broker, mm, acc, None)
+            self._check_msg(mm, acc, None)
 
             acc.set(1.5)
             acc.set(1.0)
             yield self.wait_publish()
-            self._check_msg(broker, mm, acc, [1.5, 1.0])
+            self._check_msg(mm, acc, [1.5, 1.0])
         finally:
             mm.stop()
 

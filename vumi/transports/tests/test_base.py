@@ -1,13 +1,11 @@
 from twisted.internet.defer import inlineCallbacks
 
-from vumi.transports.tests.utils import TransportTestCase
+from vumi.tests.helpers import VumiTestCase
 from vumi.transports.base import Transport
 from vumi.transports.tests.helpers import TransportHelper
 
 
-class BaseTransportTestCase(TransportTestCase):
-
-    transport_class = Transport
+class TestBaseTransport(VumiTestCase):
 
     TEST_MIDDLEWARE_CONFIG = {
         "middleware": [
@@ -17,14 +15,13 @@ class BaseTransportTestCase(TransportTestCase):
     }
 
     def setUp(self):
-        super(BaseTransportTestCase, self).setUp()
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(Transport)
         self.add_cleanup(self.tx_helper.cleanup)
 
     @inlineCallbacks
     def test_start_transport(self):
         tr = yield self.tx_helper.get_transport({})
-        self.assertEqual(self.transport_name, tr.transport_name)
+        self.assertEqual(self.tx_helper.transport_name, tr.transport_name)
         self.assertTrue(len(tr.connectors) >= 1)
         connector = tr.connectors[tr.transport_name]
         self.assertTrue(connector._consumers.keys(), set(['outbound']))
@@ -41,8 +38,8 @@ class BaseTransportTestCase(TransportTestCase):
         yield transport.publish_message(**orig_msg.payload)
         [msg] = self.tx_helper.get_dispatched_inbound()
         self.assertEqual(msg['record'], [
-            ['mw2', 'inbound', self.transport_name],
-            ['mw1', 'inbound', self.transport_name],
+            ['mw2', 'inbound', self.tx_helper.transport_name],
+            ['mw1', 'inbound', self.tx_helper.transport_name],
             ])
 
     @inlineCallbacks
@@ -53,8 +50,8 @@ class BaseTransportTestCase(TransportTestCase):
         yield transport.publish_event(**orig_msg.payload)
         [msg] = self.tx_helper.get_dispatched_events()
         self.assertEqual(msg['record'], [
-            ['mw2', 'event', self.transport_name],
-            ['mw1', 'event', self.transport_name],
+            ['mw2', 'event', self.tx_helper.transport_name],
+            ['mw1', 'event', self.tx_helper.transport_name],
             ])
 
     @inlineCallbacks
@@ -65,8 +62,8 @@ class BaseTransportTestCase(TransportTestCase):
         yield transport.send_failure(orig_msg, ValueError(), "dummy_traceback")
         [msg] = self.tx_helper.get_dispatched_failures()
         self.assertEqual(msg['record'], [
-            ['mw2', 'failure', self.transport_name],
-            ['mw1', 'failure', self.transport_name],
+            ['mw2', 'failure', self.tx_helper.transport_name],
+            ['mw1', 'failure', self.tx_helper.transport_name],
             ])
 
     @inlineCallbacks
@@ -78,8 +75,8 @@ class BaseTransportTestCase(TransportTestCase):
         yield self.tx_helper.make_dispatch_outbound("outbound")
         [msg] = msgs
         self.assertEqual(msg['record'], [
-            ('mw1', 'outbound', self.transport_name),
-            ('mw2', 'outbound', self.transport_name),
+            ('mw1', 'outbound', self.tx_helper.transport_name),
+            ('mw2', 'outbound', self.tx_helper.transport_name),
             ])
 
     def get_tx_consumers(self, tx):

@@ -7,7 +7,7 @@ from vumi.application import SessionManager
 from vumi.tests.helpers import VumiTestCase
 
 
-class SessionManagerTestCase(VumiTestCase):
+class TestSessionManager(VumiTestCase):
     def setUp(self):
         self.fake_redis = FakeRedis()
         self.add_cleanup(self.fake_redis.teardown)

@@ -3,8 +3,7 @@
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.persist.model import Manager
-from vumi.tests.utils import import_skip
-from vumi.tests.helpers import VumiTestCase
+from vumi.tests.helpers import VumiTestCase, import_skip
 
 
 class DummyModel(object):

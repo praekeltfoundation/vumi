@@ -10,33 +10,30 @@ from twisted.internet.defer import inlineCallbacks
 from twisted.internet.task import Clock
 
 from vumi.utils import http_request
-from vumi.transports.tests.utils import TransportTestCase
+from vumi.tests.helpers import VumiTestCase
 from vumi.transports.smssync import SingleSmsSync, MultiSmsSync
 from vumi.transports.smssync.smssync import SmsSyncMsgInfo
 from vumi.transports.failures import PermanentFailure
 from vumi.transports.tests.helpers import TransportHelper
 
 
-class TestSingleSmsSync(TransportTestCase):
+class TestSingleSmsSync(VumiTestCase):
 
-    transport_name = 'test_smssync_transport'
     transport_class = SingleSmsSync
     account_in_url = False
 
     @inlineCallbacks
     def setUp(self):
-        super(TestSingleSmsSync, self).setUp()
         self.clock = Clock()
         self.reply_delay = 0.5
         self.auto_advance_clock = True
         self.config = {
-            'transport_name': self.transport_name,
             'web_path': "foo",
             'web_port': 0,
             'reply_delay': self.reply_delay,
         }
         self.add_transport_config()
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(self.transport_class)
         self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(self.config)
         self.transport.callLater = self._dummy_call_later
@@ -106,7 +103,7 @@ class TestSingleSmsSync(TransportTestCase):
                                                 "messages": []}})
 
         [msg] = self.tx_helper.get_dispatched_inbound()
-        self.assertEqual(msg['transport_name'], self.transport_name)
+        self.assertEqual(msg['transport_name'], self.tx_helper.transport_name)
         self.assertEqual(msg['to_addr'], "555")
         self.assertEqual(msg['from_addr'], "123")
         self.assertEqual(msg['content'], u"hællo")
@@ -203,7 +200,6 @@ class TestSingleSmsSync(TransportTestCase):
 
 class TestMultiSmsSync(TestSingleSmsSync):
 
-    transport_name = 'test_multismssync_transport'
     transport_class = MultiSmsSync
     account_in_url = True
 

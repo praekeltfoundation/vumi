@@ -6,18 +6,17 @@ from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
 
 from vumi.utils import http_request_full
 from vumi.message import TransportUserMessage
-from vumi.tests.utils import PersistenceMixin, VumiWorkerTestCase, import_skip
-from vumi.tests.helpers import MessageHelper, WorkerHelper
+
+from vumi.tests.helpers import (
+    VumiTestCase, MessageHelper, WorkerHelper, PersistenceHelper, import_skip,
+)
 
 
-class MessageStoreAPITestCase(VumiWorkerTestCase, PersistenceMixin):
-
-    use_riak = True
-
+class TestMessageStoreAPI(VumiTestCase):
     @inlineCallbacks
     def setUp(self):
-        yield super(MessageStoreAPITestCase, self).setUp()
-        self._persist_setUp()
+        self.persistence_helper = PersistenceHelper(use_riak=True)
+        self.add_cleanup(self.persistence_helper.cleanup)
         try:
             from vumi.components.message_store_api import (
                 MatchResource, MessageStoreAPIWorker)
@@ -31,7 +30,7 @@ class MessageStoreAPITestCase(VumiWorkerTestCase, PersistenceMixin):
         self.match_resource = MatchResource
         self.base_path = '/api/v1/'
         self.worker = yield self.worker_helper.get_worker(
-            MessageStoreAPIWorker, self.mk_config({
+            MessageStoreAPIWorker, self.persistence_helper.mk_config({
                 'web_path': self.base_path,
                 'web_port': 0,
                 'health_path': '/health/',
@@ -67,13 +66,6 @@ class MessageStoreAPITestCase(VumiWorkerTestCase, PersistenceMixin):
             yield self.store.add_outbound_message(msg, batch_id=batch_id)
             messages.append(msg)
         returnValue(messages)
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield super(MessageStoreAPITestCase, self).tearDown()
-        yield self._persist_tearDown()
-        redis = self.store.cache.redis  # yoink!
-        yield redis._close()
 
     def do_get(self, path, headers={}):
         url = '%s%s' % (self.url, path)

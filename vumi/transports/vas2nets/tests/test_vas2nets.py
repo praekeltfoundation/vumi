@@ -8,28 +8,24 @@ from twisted.python import log
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.utils import http_request_full
-from vumi.transports.tests.utils import TransportTestCase
 from vumi.message import TransportMessage
 from vumi.transports.failures import TemporaryFailure, PermanentFailure
 from vumi.transports.base import FailureMessage
 from vumi.transports.vas2nets.vas2nets import (
     Vas2NetsTransport, validate_characters, Vas2NetsTransportError,
     Vas2NetsEncodingError, normalize_outbound_msisdn)
+from vumi.tests.helpers import VumiTestCase
 from vumi.tests.utils import MockHttpServer
 from vumi.transports.tests.helpers import TransportHelper
 
 
-class Vas2NetsTransportTestCase(TransportTestCase):
+class TestVas2NetsTransport(VumiTestCase):
 
-    transport_name = 'vas2nets'
     transport_type = 'sms'
-    transport_class = Vas2NetsTransport
 
     @inlineCallbacks
     def setUp(self):
-        yield super(Vas2NetsTransportTestCase, self).setUp()
         self.config = {
-            'transport_name': 'vas2nets',
             'url': None,
             'username': 'username',
             'password': 'password',
@@ -40,7 +36,8 @@ class Vas2NetsTransportTestCase(TransportTestCase):
             'web_receipt_path': '/receipt',
             'web_port': 0,
         }
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(
+            Vas2NetsTransport, transport_name='vas2nets')
         self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url()

@@ -7,7 +7,7 @@ from vumi.message import TransportUserMessage
 from vumi.tests.helpers import VumiTestCase
 
 
-class TaggingMiddlewareTestCase(VumiTestCase):
+class TestTaggingMiddleware(VumiTestCase):
 
     DEFAULT_CONFIG = {
         'incoming': {

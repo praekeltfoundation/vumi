@@ -13,8 +13,7 @@ from vumi.utils import (normalize_msisdn, vumi_resource_path, cleanup_msisdn,
                         get_first_word, redis_from_config, build_web_site,
                         LogFilterSite)
 from vumi.persist.fake_redis import FakeRedis
-from vumi.tests.utils import import_skip
-from vumi.tests.helpers import VumiTestCase
+from vumi.tests.helpers import VumiTestCase, import_skip
 
 
 class DummyRequest(object):
@@ -23,7 +22,7 @@ class DummyRequest(object):
         self.prepath = prepath
 
 
-class UtilsTestCase(VumiTestCase):
+class TestUtils(VumiTestCase):
     def test_normalize_msisdn(self):
         self.assertEqual(normalize_msisdn('0761234567', '27'),
                          '+27761234567')
@@ -113,7 +112,7 @@ class FakeHTTP10(Protocol):
         self.transport.loseConnection()
 
 
-class HttpUtilsTestCase(VumiTestCase):
+class TestHttpUtils(VumiTestCase):
 
     class InterruptHttp(Exception):
         """Indicates that test server should halt http reply"""

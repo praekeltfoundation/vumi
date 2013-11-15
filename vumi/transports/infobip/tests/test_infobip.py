@@ -4,7 +4,7 @@ import json
 
 from twisted.internet.defer import inlineCallbacks, returnValue
 
-from vumi.transports.tests.utils import TransportTestCase
+from vumi.tests.helpers import VumiTestCase
 from vumi.utils import http_request
 from vumi.transports.infobip.infobip import InfobipTransport
 from vumi.message import TransportUserMessage
@@ -12,23 +12,17 @@ from vumi.tests.utils import LogCatcher
 from vumi.transports.tests.helpers import TransportHelper
 
 
-class TestInfobipUssdTransport(TransportTestCase):
-
-    transport_name = 'test_infobip'
-    transport_class = InfobipTransport
+class TestInfobipUssdTransport(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        yield super(TestInfobipUssdTransport, self).setUp()
-        config = {
-            'transport_name': 'test_infobip',
+        self.tx_helper = TransportHelper(InfobipTransport)
+        self.add_cleanup(self.tx_helper.cleanup)
+        self.transport = yield self.tx_helper.get_transport({
             'transport_type': 'ussd',
             'web_path': "/session/",
             'web_port': 0,
-            }
-        self.tx_helper = TransportHelper(self)
-        self.add_cleanup(self.tx_helper.cleanup)
-        self.transport = yield self.tx_helper.get_transport(config)
+        })
         self.transport_url = self.transport.get_transport_url()
         yield self.transport.session_manager.redis._purge_all()  # just in case
 

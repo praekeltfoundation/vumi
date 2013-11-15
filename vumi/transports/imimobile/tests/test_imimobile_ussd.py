@@ -6,14 +6,12 @@ from twisted.internet.defer import inlineCallbacks
 
 from vumi.utils import http_request_full
 from vumi.message import TransportUserMessage
-from vumi.transports.tests.utils import TransportTestCase
+from vumi.tests.helpers import VumiTestCase
 from vumi.transports.imimobile import ImiMobileUssdTransport
 from vumi.transports.tests.helpers import TransportHelper
 
 
-class TestImiMobileUssdTransportTestCase(TransportTestCase):
-
-    transport_class = ImiMobileUssdTransport
+class TestImiMobileUssdTransport(VumiTestCase):
 
     _from_addr = '9221234567'
     _to_addr = '56263'
@@ -27,7 +25,6 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        yield super(TestImiMobileUssdTransportTestCase, self).setUp()
         self.config = {
             'web_port': 0,
             'web_path': '/api/v1/imimobile/ussd/',
@@ -38,7 +35,7 @@ class TestImiMobileUssdTransportTestCase(TransportTestCase):
                 'some-other-suffix': '56264',
             }
         }
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(ImiMobileUssdTransport)
         self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(self.config)
         self.session_manager = self.transport.session_manager

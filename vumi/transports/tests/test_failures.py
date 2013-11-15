@@ -4,9 +4,9 @@ from datetime import datetime, timedelta
 
 from twisted.internet.defer import inlineCallbacks
 
-from vumi.tests.utils import get_stubbed_worker, PersistenceMixin
+from vumi.message import Message
 from vumi.transports.failures import FailureWorker
-from vumi.tests.helpers import VumiTestCase
+from vumi.tests.helpers import VumiTestCase, PersistenceHelper, WorkerHelper
 
 
 def mktimestamp(delta=0):
@@ -14,28 +14,27 @@ def mktimestamp(delta=0):
     return timestamp.isoformat().split('.')[0]
 
 
-class FailureWorkerTestCase(VumiTestCase, PersistenceMixin):
+class TestFailureWorker(VumiTestCase):
 
     def setUp(self):
-        self._persist_setUp()
-        self.add_cleanup(self._persist_tearDown)
+        self.persistence_helper = PersistenceHelper()
+        self.add_cleanup(self.persistence_helper.cleanup)
         return self.make_worker()
 
     @inlineCallbacks
     def make_worker(self, retry_delivery_period=0):
-        self.config = self.mk_config({
-                'transport_name': 'sphex',
-                'retry_routing_key': 'sms.outbound.%(transport_name)s',
-                'failures_routing_key': 'sms.failures.%(transport_name)s',
-                'retry_delivery_period': retry_delivery_period,
-                })
-        self.worker = get_stubbed_worker(FailureWorker, self.config)
-        self.add_cleanup(self.worker.stopWorker)
-        yield self.worker.startWorker()
+        self.worker_helper = WorkerHelper('sphex')
+        self.add_cleanup(self.worker_helper.cleanup)
+        config = self.persistence_helper.mk_config({
+            'transport_name': 'sphex',
+            'retry_routing_key': 'sms.outbound.%(transport_name)s',
+            'failures_routing_key': 'sms.failures.%(transport_name)s',
+            'retry_delivery_period': retry_delivery_period,
+        })
+        self.worker = yield self.worker_helper.get_worker(
+            FailureWorker, config)
         self.redis = self.worker.redis
         yield self.redis._purge_all()  # Just in case
-        self.broker = self.worker._amqp_client.broker
-        self.add_cleanup(self.broker.wait_delivery)
 
     def assert_write_timestamp(self, expected, delta, now):
         self.assertEqual(expected,
@@ -67,8 +66,9 @@ class FailureWorkerTestCase(VumiTestCase, PersistenceMixin):
         self.assertEqual(list(expected), timestamps)
 
     def assert_published_retries(self, expected):
-        msgs = self.broker.get_dispatched('vumi', 'sms.outbound.sphex')
-        self.assertEqual(expected, [json.loads(m.body) for m in msgs])
+        msgs = self.worker_helper.get_dispatched(
+            'sms.outbound', 'sphex', Message)
+        self.assertEqual(expected, [m.payload for m in msgs])
 
     def store_failure(self, reason=None, message=None):
         if not reason:

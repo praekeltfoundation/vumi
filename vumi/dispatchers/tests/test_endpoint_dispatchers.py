@@ -1,16 +1,15 @@
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.dispatchers.endpoint_dispatchers import RoutingTableDispatcher
-from vumi.tests.utils import VumiWorkerTestCase
 from vumi.dispatchers.tests.helpers import DispatcherHelper
+from vumi.tests.helpers import VumiTestCase
 
 
-class TestRoutingTableDispatcher(VumiWorkerTestCase):
+class TestRoutingTableDispatcher(VumiTestCase):
 
     def setUp(self):
-        self.disp_helper = DispatcherHelper(RoutingTableDispatcher, self)
+        self.disp_helper = DispatcherHelper(RoutingTableDispatcher)
         self.add_cleanup(self.disp_helper.cleanup)
-        return super(TestRoutingTableDispatcher, self).setUp()
 
     def get_dispatcher(self, **config_extras):
         config = {

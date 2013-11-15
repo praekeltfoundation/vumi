@@ -40,7 +40,7 @@ class ToyMiddleware(BaseMiddleware):
         return self._handle('failure', message, connector_name)
 
 
-class MiddlewareStackTestCase(VumiTestCase):
+class TestMiddlewareStack(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
@@ -99,7 +99,7 @@ class MiddlewareStackTestCase(VumiTestCase):
             ['mw3', 'mw2', 'mw1'])
 
 
-class UtilityFunctionsTestCase(VumiTestCase):
+class TestUtilityFunctions(VumiTestCase):
 
     TEST_CONFIG_1 = {
         "middleware": [

@@ -5,16 +5,15 @@ import time
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.components.session import SessionManager
-from vumi.tests.utils import PersistenceMixin
-from vumi.tests.helpers import VumiTestCase
+from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 
 
-class SessionManagerTestCase(VumiTestCase, PersistenceMixin):
+class TestSessionManager(VumiTestCase):
     @inlineCallbacks
     def setUp(self):
-        self._persist_setUp()
-        self.add_cleanup(self._persist_tearDown)
-        self.manager = yield self.get_redis_manager()
+        self.persistence_helper = PersistenceHelper()
+        self.add_cleanup(self.persistence_helper.cleanup)
+        self.manager = yield self.persistence_helper.get_redis_manager()
         yield self.manager._purge_all()  # Just in case
         self.sm = SessionManager(self.manager)
         self.add_cleanup(self.sm.stop)

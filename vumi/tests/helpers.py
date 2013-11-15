@@ -1,11 +1,14 @@
 import os
+from functools import wraps
 
 from twisted.internet.defer import succeed, inlineCallbacks
-from twisted.trial.unittest import TestCase
+from twisted.internet.error import ConnectionRefusedError
+from twisted.python.monkey import MonkeyPatcher
+from twisted.trial.unittest import TestCase, SkipTest
 
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.service import get_spec
-from vumi.utils import vumi_resource_path
+from vumi.utils import vumi_resource_path, flatten_generator
 from .fake_amqp import FakeAMQPBroker, FakeAMQClient
 
 
@@ -372,3 +375,273 @@ class MessageDispatchHelper(object):
         msg = self.msg_helper.make_reply(*args, **kw)
         d = self.worker_helper.dispatch_outbound(msg)
         return d.addCallback(lambda r: msg)
+
+
+class RiakDisabledForTest(object):
+    """Placeholder object for a disabled riak config.
+
+    This class exists to throw a meaningful error when trying to use Riak in
+    a test that disallows it. We can't do this from inside the Riak setup
+    infrastructure, because that would be very invasive for something that
+    only really matters for tests.
+    """
+    def __getattr__(self, name):
+        raise RuntimeError(
+            "Use of Riak has been disabled for this test. Please set "
+            "'use_riak = True' on the test class to enable it.")
+
+
+def import_filter(exc, *expected):
+    msg = exc.args[0]
+    module = msg.split()[-1]
+    if expected and (module not in expected):
+        raise
+    return module
+
+
+def import_skip(exc, *expected):
+    module = import_filter(exc, *expected)
+    raise SkipTest("Failed to import '%s'." % (module,))
+
+
+def maybe_async(sync_attr):
+    """Decorate a method that may be sync or async.
+
+    This redecorates with the either @inlineCallbacks or @flatten_generator,
+    depending on the `sync_attr`.
+    """
+    if callable(sync_attr):
+        # If we don't get a sync attribute name, default to 'is_sync'.
+        return maybe_async('is_sync')(sync_attr)
+
+    def redecorate(func):
+        @wraps(func)
+        def wrapper(self, *args, **kw):
+            if getattr(self, sync_attr):
+                return flatten_generator(func)(self, *args, **kw)
+            return inlineCallbacks(func)(self, *args, **kw)
+        return wrapper
+
+    return redecorate
+
+
+class PersistenceHelper(object):
+    def __init__(self, use_riak=False, is_sync=False):
+        self.use_riak = use_riak
+        self.is_sync = is_sync
+        self._patches = []
+        self._riak_managers = []
+        self._redis_managers = []
+        self._config_overrides = {
+            'redis_manager': {
+                'FAKE_REDIS': 'yes',
+                'key_prefix': 'vumitest',
+            },
+            'riak_manager': {
+                'bucket_prefix': 'vumitest',
+            },
+        }
+        if not self.use_riak:
+            self._config_overrides['riak_manager'] = RiakDisabledForTest()
+        self._patch_riak()
+        self._patch_txriak()
+        self._patch_redis()
+        self._patch_txredis()
+
+    @maybe_async
+    def cleanup(self):
+        for purge, manager in self._get_riak_managers_for_cleanup():
+            if purge:
+                try:
+                    yield self._purge_riak(manager)
+                except ConnectionRefusedError:
+                    pass
+
+        # Hackily close all connections left open by the non-tx riak client.
+        # There's no other way to explicitly close these connections and not
+        # doing it means we can hit server-side connection limits in the middle
+        # of large test runs.
+        for manager in self._riak_managers:
+            if hasattr(manager.client, '_cm'):
+                while manager.client._cm.conns:
+                    manager.client._cm.conns.pop().close()
+
+        for purge, manager in self._get_redis_managers_for_cleanup():
+            if purge:
+                yield self._purge_redis(manager)
+            yield manager.close_manager()
+
+        for patch in reversed(self._patches):
+            patch.restore()
+
+    def _get_riak_managers_for_cleanup(self):
+        """Get a list of Riak managers and whether they should be purged.
+
+        The return value is a list of (`bool`, `Manager`) tuples. If the first
+        item is `True`, the manager should be purged. It's safe to purge
+        managers even if the first item is `False`, but it adds extra cleanup
+        time.
+        """
+        # NOTE: Assumes we're only ever connecting to one Riak cluster.
+        seen_bucket_prefixes = set()
+        managers = []
+        for manager in self._riak_managers:
+            if manager.bucket_prefix in seen_bucket_prefixes:
+                managers.append((False, manager))
+            else:
+                seen_bucket_prefixes.add(manager.bucket_prefix)
+                managers.append((True, manager))
+        # Return in reverse order in case something overrides cleanup and
+        # cares about ordering.
+        return reversed(managers)
+
+    def _get_redis_managers_for_cleanup(self):
+        """Get a list of Redis managers and whether they should be purged.
+
+        The return value is a list of (`bool`, `Manager`) tuples. If the first
+        item is `True`, the manager should be purged. It's safe to purge
+        managers even if the first item is `False`, but it adds extra cleanup
+        time.
+        """
+        # NOTE: Assumes we're only ever connecting to one Redis db.
+        seen_key_prefixes = set()
+        managers = []
+        for manager in self._redis_managers:
+            if manager._key_prefix in seen_key_prefixes:
+                managers.append((False, manager))
+            else:
+                seen_key_prefixes.add(manager._key_prefix)
+                managers.append((True, manager))
+        # Return in reverse order in case something overrides teardown and
+        # cares about ordering.
+        return reversed(managers)
+
+    def _patch(self, obj, attribute, value):
+        monkey_patch = MonkeyPatcher((obj, attribute, value))
+        self._patches.append(monkey_patch)
+        monkey_patch.patch()
+        return monkey_patch
+
+    def _patch_riak(self):
+        try:
+            from vumi.persist.riak_manager import RiakManager
+        except ImportError, e:
+            import_filter(e, 'riak')
+            return
+
+        orig_init = RiakManager.__init__
+
+        def wrapper(obj, *args, **kw):
+            orig_init(obj, *args, **kw)
+            self._riak_managers.append(obj)
+
+        self._patch(RiakManager, '__init__', wrapper)
+
+    def _patch_txriak(self):
+        try:
+            from vumi.persist.txriak_manager import TxRiakManager
+        except ImportError, e:
+            import_filter(e, 'riakasaurus', 'riakasaurus.riak')
+            return
+
+        orig_init = TxRiakManager.__init__
+
+        def wrapper(obj, *args, **kw):
+            orig_init(obj, *args, **kw)
+            self._riak_managers.append(obj)
+
+        self._patch(TxRiakManager, '__init__', wrapper)
+
+    def _patch_redis(self):
+        try:
+            from vumi.persist.redis_manager import RedisManager
+        except ImportError, e:
+            import_filter(e, 'redis')
+            return
+
+        orig_init = RedisManager.__init__
+
+        def wrapper(obj, *args, **kw):
+            orig_init(obj, *args, **kw)
+            self._redis_managers.append(obj)
+
+        self._patch(RedisManager, '__init__', wrapper)
+
+    def _patch_txredis(self):
+        from vumi.persist.txredis_manager import TxRedisManager
+
+        orig_init = TxRedisManager.__init__
+
+        def wrapper(obj, *args, **kw):
+            orig_init(obj, *args, **kw)
+            self._redis_managers.append(obj)
+
+        self._patch(TxRedisManager, '__init__', wrapper)
+
+    def _purge_riak(self, manager):
+        "This is a separate method to allow easy overriding."
+        return manager.purge_all()
+
+    @maybe_async
+    def _purge_redis(self, manager):
+        "This is a separate method to allow easy overriding."
+        try:
+            yield manager._purge_all()
+        except RuntimeError, e:
+            # Ignore managers that are already closed.
+            if e.args[0] != 'Not connected':
+                raise
+        yield manager.close_manager()
+
+    @proxyable
+    def get_riak_manager(self, config=None):
+        if config is None:
+            config = self._config_overrides['riak_manager'].copy()
+
+        if self.is_sync:
+            return self._get_sync_riak_manager(config)
+        return self._get_async_riak_manager(config)
+
+    def _get_async_riak_manager(self, config):
+        try:
+            from vumi.persist.txriak_manager import TxRiakManager
+        except ImportError, e:
+            import_skip(e, 'riakasaurus', 'riakasaurus.riak')
+
+        return TxRiakManager.from_config(config)
+
+    def _get_sync_riak_manager(self, config):
+        try:
+            from vumi.persist.riak_manager import RiakManager
+        except ImportError, e:
+            import_skip(e, 'riak')
+
+        return RiakManager.from_config(config)
+
+    @proxyable
+    def get_redis_manager(self, config=None):
+        if config is None:
+            config = self._config_overrides['redis_manager'].copy()
+
+        if self.is_sync:
+            return self._get_sync_redis_manager(config)
+        return self._get_async_redis_manager(config)
+
+    def _get_async_redis_manager(self, config):
+        from vumi.persist.txredis_manager import TxRedisManager
+
+        return TxRedisManager.from_config(config)
+
+    def _get_sync_redis_manager(self, config):
+        try:
+            from vumi.persist.redis_manager import RedisManager
+        except ImportError, e:
+            import_skip(e, 'redis')
+
+        return RedisManager.from_config(config)
+
+    @proxyable
+    def mk_config(self, config):
+        config = config.copy()
+        config.update(self._config_overrides)
+        return config

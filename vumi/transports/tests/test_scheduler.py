@@ -10,7 +10,7 @@ from vumi.utils import to_kwargs
 from vumi.tests.helpers import VumiTestCase, MessageHelper
 
 
-class SchedulerTestCase(VumiTestCase):
+class TestScheduler(VumiTestCase):
 
     def setUp(self):
         self.r_server = FakeRedis()

@@ -9,8 +9,8 @@ from twisted.web import xmlrpc
 from vumi.utils import http_request
 from vumi.transports.failures import PermanentFailure, TemporaryFailure
 from vumi.transports.opera import OperaTransport
-from vumi.transports.tests.utils import TransportTestCase
 from vumi.transports.tests.helpers import TransportHelper
+from vumi.tests.helpers import VumiTestCase
 
 
 class FakeXMLRPCService(object):
@@ -21,15 +21,12 @@ class FakeXMLRPCService(object):
         return maybeDeferred(self.callback, *args, **kwargs)
 
 
-class OperaTransportTestCase(TransportTestCase):
-    transport_class = OperaTransport
+class TestOperaTransport(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        yield super(OperaTransportTestCase, self).setUp()
-        self.tx_helper = TransportHelper(self, msg_helper_args={
-            'mobile_addr': '27761234567',
-        })
+        self.tx_helper = TransportHelper(
+            OperaTransport, mobile_addr='27761234567')
         self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport({
             'url': 'http://testing.domain',
