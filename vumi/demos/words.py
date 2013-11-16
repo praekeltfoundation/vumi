@@ -21,13 +21,14 @@ class SimpleAppWorker(ApplicationWorker):
 
         Then process the user's message.
         """
-        log.msg("User message: %s" % msg['content'])
+        content = msg['content'].encode('utf-8') if msg['content'] else None
+        log.msg("User message: %s" % content)
         text = msg['content']
         if text is None:
             reply = self.get_help()
         else:
             reply = self.process_message(text)
-        self.reply_to(msg, reply)
+        return self.reply_to(msg, reply)
 
     def process_message(self, text):
         raise NotImplementedError("Sub-classes should implement"
