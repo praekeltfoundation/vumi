@@ -1,4 +1,5 @@
 from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.task import Clock
 
 from vumi.middleware.tracing import TracingMiddleware
 from vumi.application.tests.utils import ApplicationTestCase
@@ -10,6 +11,13 @@ class TracingMiddlewareTestCase(ApplicationTestCase):
     use_riak = False
     middleware_class = TracingMiddleware
     application_class = DummyApplicationWorker
+    clock = Clock()
+
+    @inlineCallbacks
+    def setUp(self):
+        yield super(TracingMiddlewareTestCase, self).setUp()
+        self.patch(
+            TracingMiddleware, 'get_clock', lambda *a: self.clock)
 
     @inlineCallbacks
     def mk_mw(self, name):
@@ -24,5 +32,3 @@ class TracingMiddlewareTestCase(ApplicationTestCase):
     @inlineCallbacks
     def test_something(self):
         mw1 = yield self.mk_mw('app1')
-        print mw1.worker.transport_name
-        print mw1

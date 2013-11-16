@@ -1,6 +1,7 @@
 # -*- test-case-name: vumi.middleware.tests.test_tracing -*-
 
 from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet import reactor
 
 from vumi.persist.txredis_manager import TxRedisManager
 from vumi.config import Config, ConfigDict
@@ -28,11 +29,15 @@ class TracingMiddleware(BaseMiddlewareWithConfig):
     a message took when being routed through the system
     """
     CONFIG_CLASS = TracingMiddlewareConfig
+    clock = reactor
 
     @inlineCallbacks
     def setup_middleware(self):
         self.redis = yield TxRedisManager.from_config(
             self.config.redis_manager)
+
+    def get_clock(self):
+        return self.clock
 
     def teardown_middleware(self):
         return self.redis.close()
