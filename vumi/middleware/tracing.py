@@ -35,7 +35,7 @@ class TracingMiddleware(BaseMiddlewareWithConfig):
             self.config.redis_manager)
 
     def teardown_middleware(self):
-        pass
+        return self.redis.close()
 
     def handle_inbound(self, message, connector_name):
         pass
