@@ -258,8 +258,11 @@ class RapidSMSRelay(ApplicationWorker):
 
     def _handle_send_to(self, config, content, to_addrs, endpoint):
         sends = []
-        for to_addr in to_addrs:
-            sends.append(self.send_to(to_addr, content, endpoint=endpoint))
+        try:
+            for to_addr in to_addrs:
+                sends.append(self.send_to(to_addr, content, endpoint=endpoint))
+        except ValueError, e:
+            raise BadRequestError(e)
         d = DeferredList(sends, consumeErrors=True)
         d.addCallback(lambda msgs: [msg[1] for msg in msgs if msg[0]])
         return d

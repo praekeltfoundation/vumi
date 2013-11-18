@@ -243,3 +243,17 @@ class TestRapidSMSRelay(VumiTestCase):
         self.assertEqual(msg['routing_metadata'], {
             'endpoint_name': 'default',
         })
+
+    @inlineCallbacks
+    def test_rapidsms_relay_outbound_on_invalid_endpoint(self):
+        yield self.setup_resource()
+        response = yield self._call_relay({
+            'to_addr': ['+123456'],
+            'content': u'foo',
+            'endpoint': u'bar',
+        })
+        self.assertEqual([], self.app_helper.get_dispatched_outbound())
+        self.assertEqual(response.code, 400)
+        self.assertEqual(response.delivered_body,
+                         "Endpoint u'bar' not defined in ALLOWED_ENDPOINTS")
+        [err] = self.flushLoggedErrors(BadRequestError)
