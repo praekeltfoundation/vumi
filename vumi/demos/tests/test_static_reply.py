@@ -1,26 +1,29 @@
 from twisted.internet.defer import inlineCallbacks
 
-from vumi.application.tests.utils import ApplicationTestCase
+from vumi.application.tests.helpers import ApplicationHelper
 from vumi.demos.static_reply import StaticReplyApplication
+from vumi.tests.helpers import VumiTestCase
 
 
-class TestStaticReplyApplication(ApplicationTestCase):
-    application_class = StaticReplyApplication
-    timeout = 1
+class TestStaticReplyApplication(VumiTestCase):
+    def setUp(self):
+        self.app_helper = ApplicationHelper(StaticReplyApplication)
+        self.add_cleanup(self.app_helper.cleanup)
 
     @inlineCallbacks
     def test_receive_message(self):
-        yield self.get_application(config={
+        yield self.app_helper.get_application({
             'reply_text': 'Your message is important to us.',
         })
-        yield self.dispatch(self.mkmsg_in(from_addr='from_addr'))
-        [reply] = self.get_dispatched_messages()
+        yield self.app_helper.make_dispatch_inbound(
+            "Hello", from_addr='from_addr')
+        [reply] = self.app_helper.get_dispatched_outbound()
         self.assertEqual('Your message is important to us. from_addr',
                          reply['content'])
         self.assertEqual(u'close', reply['session_event'])
 
     @inlineCallbacks
     def test_receive_message_no_reply(self):
-        yield self.get_application(config={})
-        yield self.dispatch(self.mkmsg_in())
-        self.assertEqual([], self.get_dispatched_messages())
+        yield self.app_helper.get_application({})
+        yield self.app_helper.make_dispatch_inbound("Hello")
+        self.assertEqual([], self.app_helper.get_dispatched_outbound())
