@@ -1,5 +1,5 @@
 # -*- test-case-name: vumi.demos.tests.test_static_reply -*-
-from twisted.internet.defer import succeed, inlineCallbacks, returnValue
+from twisted.internet.defer import succeed, inlineCallbacks
 
 from vumi.application import ApplicationWorker
 from vumi.config import ConfigText
@@ -7,7 +7,8 @@ from vumi.config import ConfigText
 
 class StaticReplyConfig(ApplicationWorker.CONFIG_CLASS):
     reply_text = ConfigText(
-        "Reply text to send in response to inbound messages.", static=False)
+        "Reply text to send in response to inbound messages.", static=False,
+        required=True)
 
 
 class StaticReplyApplication(ApplicationWorker):

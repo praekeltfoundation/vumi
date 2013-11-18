@@ -21,9 +21,3 @@ class TestStaticReplyApplication(VumiTestCase):
         self.assertEqual('Your message is important to us. from_addr',
                          reply['content'])
         self.assertEqual(u'close', reply['session_event'])
-
-    @inlineCallbacks
-    def test_receive_message_no_reply(self):
-        yield self.app_helper.get_application({})
-        yield self.app_helper.make_dispatch_inbound("Hello")
-        self.assertEqual([], self.app_helper.get_dispatched_outbound())
