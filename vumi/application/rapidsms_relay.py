@@ -130,7 +130,7 @@ class RapidSMSRelayConfig(ApplicationWorker.CONFIG_CLASS):
         "Number of seconds to keep original messages in redis so that"
         " replies may be sent via `in_reply_to`.", default=10 * 60)
     allowed_endpoints = ConfigList(
-        'List of allowed endpoints to be sending from', static=True,
+        'List of allowed endpoints to send from.', static=True,
         required=True)
 
     rapidsms_url = ConfigUrl("URL of the rapidsms http backend.")
