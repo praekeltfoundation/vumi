@@ -45,7 +45,7 @@ class TestRapidSMSRelay(VumiTestCase):
     def get_response_msgs(self, response):
         payloads = from_json(response.delivered_body)
         return [TransportUserMessage(
-            _process_fields=False, **to_kwargs(payload))
+                _process_fields=False, **to_kwargs(payload))
                 for payload in payloads]
 
     @inlineCallbacks
@@ -228,7 +228,7 @@ class TestRapidSMSRelay(VumiTestCase):
         [msg] = self.app_helper.get_dispatched_outbound()
         self.assertEqual(msg['routing_metadata'], {
             'endpoint_name': '10010',
-            })
+        })
 
     @inlineCallbacks
     def test_rapidsms_relay_outbound_on_default_endpoint(self):
@@ -242,4 +242,4 @@ class TestRapidSMSRelay(VumiTestCase):
         [msg] = self.app_helper.get_dispatched_outbound()
         self.assertEqual(msg['routing_metadata'], {
             'endpoint_name': 'default',
-            })
+        })
