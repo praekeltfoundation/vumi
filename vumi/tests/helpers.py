@@ -198,6 +198,17 @@ class WorkerHelper(object):
         return worker.stopWorker()
 
     @classmethod
+    def get_fake_amqp_client(cls, broker):
+        """Wrap a fake broker in an fake client.
+
+        The broker parameter is mandatory because it's important that cleanup
+        happen. If ``None`` is passed in explicitly, a new broker object will
+        be created.
+        """
+        spec = get_spec(vumi_resource_path("amqp-spec-0-8.xml"))
+        return FakeAMQClient(spec, {}, broker)
+
+    @classmethod
     def get_worker_raw(cls, worker_class, config, broker=None):
         """Create and return an instance of a vumi worker.
 
@@ -211,8 +222,7 @@ class WorkerHelper(object):
             config['worker_name'] = "unnamed"
 
         worker = worker_class({}, config)
-        spec = get_spec(vumi_resource_path("amqp-spec-0-8.xml"))
-        worker._amqp_client = FakeAMQClient(spec, {}, broker)
+        worker._amqp_client = cls.get_fake_amqp_client(broker)
         return worker
 
     @proxyable
