@@ -39,12 +39,13 @@ class TestRapidSMSRelay(VumiTestCase):
             'rapidsms_password': 'password',
             'vumi_username': vumi_username,
             'vumi_password': vumi_password,
+            'allowed_endpoints': ['default', '10010', '10020'],
         })
 
     def get_response_msgs(self, response):
         payloads = from_json(response.delivered_body)
         return [TransportUserMessage(
-            _process_fields=False, **to_kwargs(payload))
+                _process_fields=False, **to_kwargs(payload))
                 for payload in payloads]
 
     @inlineCallbacks
@@ -213,3 +214,46 @@ class TestRapidSMSRelay(VumiTestCase):
         }, auth=bad_auth)
         self.assertEqual(response.code, 401)
         self.assertEqual(response.delivered_body, "Unauthorized")
+
+    @inlineCallbacks
+    def test_rapidsms_relay_outbound_on_specific_endpoint(self):
+        yield self.setup_resource()
+        response = yield self._call_relay({
+            'to_addr': ['+123456'],
+            'content': u'foo',
+            'endpoint': '10010',
+        })
+        self._check_messages(response, [
+            {'to_addr': '+123456', 'content':  u'foo'}])
+        [msg] = self.app_helper.get_dispatched_outbound()
+        self.assertEqual(msg['routing_metadata'], {
+            'endpoint_name': '10010',
+        })
+
+    @inlineCallbacks
+    def test_rapidsms_relay_outbound_on_default_endpoint(self):
+        yield self.setup_resource()
+        response = yield self._call_relay({
+            'to_addr': ['+123456'],
+            'content': u'foo',
+        })
+        self._check_messages(response, [
+            {'to_addr': '+123456', 'content':  u'foo'}])
+        [msg] = self.app_helper.get_dispatched_outbound()
+        self.assertEqual(msg['routing_metadata'], {
+            'endpoint_name': 'default',
+        })
+
+    @inlineCallbacks
+    def test_rapidsms_relay_outbound_on_invalid_endpoint(self):
+        yield self.setup_resource()
+        response = yield self._call_relay({
+            'to_addr': ['+123456'],
+            'content': u'foo',
+            'endpoint': u'bar',
+        })
+        self.assertEqual([], self.app_helper.get_dispatched_outbound())
+        self.assertEqual(response.code, 400)
+        self.assertEqual(response.delivered_body,
+                         "Endpoint u'bar' not defined in ALLOWED_ENDPOINTS")
+        [err] = self.flushLoggedErrors(BadRequestError)

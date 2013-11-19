@@ -14,7 +14,8 @@ from twisted.web.guard import HTTPAuthSessionWrapper, BasicCredentialFactory
 from vumi.application.base import ApplicationWorker
 from vumi.persist.txredis_manager import TxRedisManager
 from vumi.config import (
-    ConfigUrl, ConfigText, ConfigInt, ConfigDict, ConfigBool, ConfigContext)
+    ConfigUrl, ConfigText, ConfigInt, ConfigDict, ConfigBool, ConfigContext,
+    ConfigList)
 from vumi.message import to_json, TransportUserMessage
 from vumi.utils import http_request_full
 from vumi.errors import ConfigError
@@ -128,6 +129,9 @@ class RapidSMSRelayConfig(ApplicationWorker.CONFIG_CLASS):
     vumi_reply_timeout = ConfigInt(
         "Number of seconds to keep original messages in redis so that"
         " replies may be sent via `in_reply_to`.", default=10 * 60)
+    allowed_endpoints = ConfigList(
+        'List of allowed endpoints to send from.', static=True,
+        required=True)
 
     rapidsms_url = ConfigUrl("URL of the rapidsms http backend.")
     rapidsms_username = ConfigText(
@@ -153,6 +157,8 @@ class RapidSMSRelay(ApplicationWorker):
         self.supported_auth_methods = {
             'basic': self.generate_basic_auth_headers,
         }
+        config = self.get_static_config()
+        self.ALLOWED_ENDPOINTS = config.allowed_endpoints
 
     def generate_basic_auth_headers(self, username, password):
         credentials = ':'.join([username, password])
@@ -250,10 +256,13 @@ class RapidSMSRelay(ApplicationWorker):
         reply = yield self.reply_to(orig_msg, content)
         returnValue([reply])
 
-    def _handle_send_to(self, config, content, to_addrs):
+    def _handle_send_to(self, config, content, to_addrs, endpoint):
         sends = []
-        for to_addr in to_addrs:
-            sends.append(self.send_to(to_addr, content))
+        try:
+            for to_addr in to_addrs:
+                sends.append(self.send_to(to_addr, content, endpoint=endpoint))
+        except ValueError, e:
+            raise BadRequestError(e)
         d = DeferredList(sends, consumeErrors=True)
         d.addCallback(lambda msgs: [msg[1] for msg in msgs if msg[0]])
         return d
@@ -266,11 +275,13 @@ class RapidSMSRelay(ApplicationWorker):
         content = data['content']
         to_addrs = data['to_addr']
         in_reply_to = data.get('in_reply_to')
+        endpoint = data.get('endpoint')
         if in_reply_to is not None:
             msgs = yield self._handle_reply_to(config, content, to_addrs,
                                                in_reply_to)
         else:
-            msgs = yield self._handle_send_to(config, content, to_addrs)
+            msgs = yield self._handle_send_to(config, content, to_addrs,
+                                              endpoint)
         returnValue(msgs)
 
     @inlineCallbacks
