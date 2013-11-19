@@ -1,3 +1,5 @@
+from datetime import date
+
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.application.tests.helpers import ApplicationHelper
@@ -11,13 +13,22 @@ class TestStaticReplyApplication(VumiTestCase):
         self.add_cleanup(self.app_helper.cleanup)
 
     @inlineCallbacks
-    def test_receive_message(self):
+    def test_receive_message_custom(self):
         yield self.app_helper.get_application({
-            'reply_text': 'Your message is important to us.',
+            'reply_text': 'Hi {user}',
         })
         yield self.app_helper.make_dispatch_inbound(
             "Hello", from_addr='from_addr')
         [reply] = self.app_helper.get_dispatched_outbound()
-        self.assertEqual('Your message is important to us. from_addr',
+        self.assertEqual('Hi from_addr', reply['content'])
+        self.assertEqual(u'close', reply['session_event'])
+
+    @inlineCallbacks
+    def test_receive_message(self):
+        yield self.app_helper.get_application({})
+        yield self.app_helper.make_dispatch_inbound(
+            "Hello", from_addr='from_addr')
+        [reply] = self.app_helper.get_dispatched_outbound()
+        self.assertEqual('Hello from_addr at %s.' % (date.today(),),
                          reply['content'])
         self.assertEqual(u'close', reply['session_event'])
