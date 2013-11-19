@@ -59,6 +59,13 @@ class TestFakeRedis(VumiTestCase):
         yield self.assert_redis_op("value", 'get', "mykey")
 
     @inlineCallbacks
+    def test_setex(self):
+        yield self.assert_redis_op(False, 'exists', "mykey")
+        yield self.assert_redis_op(True, 'setex', "mykey", 10, "value")
+        yield self.assert_redis_op("value", 'get', "mykey")
+        yield self.assert_redis_op(9, 'ttl', "mykey")
+
+    @inlineCallbacks
     def test_incr_with_by_param(self):
         yield self.redis.set("inc", 1)
         yield self.assert_redis_op('1', 'get', "inc")
