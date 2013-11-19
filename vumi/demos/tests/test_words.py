@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Tests for vumi.demos.words."""
 
 from twisted.internet.defer import inlineCallbacks
@@ -7,6 +8,7 @@ from vumi.demos.words import (SimpleAppWorker, EchoWorker, ReverseWorker,
 from vumi.message import TransportUserMessage
 from vumi.tests.helpers import VumiTestCase
 from vumi.application.tests.helpers import ApplicationHelper
+from vumi.tests.utils import LogCatcher
 
 
 class EchoTestApp(SimpleAppWorker):
@@ -56,6 +58,16 @@ class TestEchoWorker(VumiTestCase):
 
     def test_help(self):
         self.assertEqual(self.worker.get_help(), "Enter text to echo:")
+
+    @inlineCallbacks
+    def test_echo_non_ascii(self):
+        content = u'Zoë destroyer of Ascii'
+        with LogCatcher() as log:
+            yield self.app_helper.make_dispatch_inbound(content)
+            [reply] = self.app_helper.get_dispatched_outbound()
+            self.assertEqual(
+                log.messages(),
+                ['User message: Zo\xc3\xab destroyer of Ascii'])
 
 
 class TestReverseWorker(VumiTestCase):
