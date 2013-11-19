@@ -19,10 +19,6 @@ class StaticReplyApplication(ApplicationWorker):
     """
     CONFIG_CLASS = StaticReplyConfig
 
-    def get_config(self, message, ctxt=None):
-        config = self.config.copy()
-        return succeed(self.CONFIG_CLASS(config))
-
     @inlineCallbacks
     def consume_user_message(self, message):
         config = yield self.get_config(message)
