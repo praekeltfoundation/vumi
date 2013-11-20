@@ -1,8 +1,7 @@
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet.task import Clock
 
-from vumi.middleware.tracing import (TracingMiddleware, msg_key,
-                                     TraceManager)
+from vumi.middleware.tracing import TracingMiddleware, TraceManager
 from vumi.application.tests.utils import ApplicationTestCase
 from vumi.application.tests.test_base import DummyApplicationWorker
 from vumi.tests.helpers import MessageHelper
@@ -135,7 +134,7 @@ class TracingMiddlewareTestCase(ApplicationTestCase):
             'content': 'hi there',
             'connector_name': 'default',
             'time': 0.0,
-            'message_type':'user_message',
+            'message_type': 'user_message',
             'message_id': mt['message_id'],
         })
         self.assertEqual(ack_hop, {
