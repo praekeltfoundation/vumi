@@ -107,6 +107,12 @@ class FakeRedis(object):
         self._data[key] = value
 
     @maybe_async
+    def setex(self, key, time, value):
+        self.set.sync(self, key, value)
+        self.expire.sync(self, key, time)
+        return True
+
+    @maybe_async
     def setnx(self, key, value):
         value = self._encode(value)  # set() sets string value
         if key not in self._data:

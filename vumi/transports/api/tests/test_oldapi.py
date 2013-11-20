@@ -6,26 +6,21 @@ from twisted.internet.defer import inlineCallbacks
 from twisted.web import http
 
 from vumi.utils import http_request, http_request_full
-from vumi.transports.tests.utils import TransportTestCase
+from vumi.tests.helpers import VumiTestCase
 from vumi.transports.api import (
     OldSimpleHttpTransport, OldTemplateHttpTransport)
 from vumi.transports.tests.helpers import TransportHelper
 
 
-class TestOldSimpleHttpTransport(TransportTestCase):
-
-    transport_name = 'test_old_simple_http_transport'
-    transport_class = OldSimpleHttpTransport
+class TestOldSimpleHttpTransport(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        super(TestOldSimpleHttpTransport, self).setUp()
         self.config = {
-            'transport_name': self.transport_name,
             'web_path': "foo",
             'web_port': 0,
         }
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(OldSimpleHttpTransport)
         self.add_cleanup(self.tx_helper.cleanup)
 
         self.transport = yield self.tx_helper.get_transport(self.config)
@@ -52,27 +47,25 @@ class TestOldSimpleHttpTransport(TransportTestCase):
         )
         response = yield http_request(url, '', method='GET')
         [msg1, msg2] = self.tx_helper.get_dispatched_inbound()
-        payload1 = msg1.payload
-        payload2 = msg2.payload
-        self.assertEqual(payload1['transport_name'], self.transport_name)
-        self.assertEqual(payload1['to_addr'], "555")
-        self.assertEqual(payload2['to_addr'], "556")
-        self.assertEqual(payload1['from_addr'], "123")
-        self.assertEqual(payload1['content'], "hello")
+        self.assertEqual(msg1['transport_name'], self.tx_helper.transport_name)
+        self.assertEqual(msg1['to_addr'], "555")
+        self.assertEqual(msg2['to_addr'], "556")
+        self.assertEqual(msg1['from_addr'], "123")
+        self.assertEqual(msg1['content'], "hello")
         self.assertEqual(json.loads(response), [
             {
-                'id': payload1['message_id'],
-                'message': payload1['content'],
-                'from_msisdn': payload1['from_addr'],
-                'to_msisdn': payload1['to_addr'],
+                'id': msg1['message_id'],
+                'message': msg1['content'],
+                'from_msisdn': msg1['from_addr'],
+                'to_msisdn': msg1['to_addr'],
             },
             {
-                'id': payload2['message_id'],
-                'message': payload2['content'],
-                'from_msisdn': payload2['from_addr'],
-                'to_msisdn': payload2['to_addr'],
+                'id': msg2['message_id'],
+                'message': msg2['content'],
+                'from_msisdn': msg2['from_addr'],
+                'to_msisdn': msg2['to_addr'],
             },
-            ])
+        ])
 
     @inlineCallbacks
     def test_http_basic_auth(self):
@@ -107,20 +100,15 @@ class TestOldSimpleHttpTransport(TransportTestCase):
         })
 
 
-class TestOldTemplateHttpTransport(TransportTestCase):
-
-    transport_name = 'test_old_template_http_transport'
-    transport_class = OldTemplateHttpTransport
+class TestOldTemplateHttpTransport(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        super(TestOldTemplateHttpTransport, self).setUp()
         self.config = {
-            'transport_name': self.transport_name,
             'web_path': "foo",
             'web_port': 0,
         }
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(OldTemplateHttpTransport)
         self.add_cleanup(self.tx_helper.cleanup)
 
         self.transport = yield self.tx_helper.get_transport(self.config)
@@ -145,24 +133,22 @@ class TestOldTemplateHttpTransport(TransportTestCase):
 
         response = yield http_request(url, '', method='GET')
         [msg1, msg2] = self.tx_helper.get_dispatched_inbound()
-        payload1 = msg1.payload
-        payload2 = msg2.payload
-        self.assertEqual(payload1['transport_name'], self.transport_name)
-        self.assertEqual(payload1['to_addr'], "555")
-        self.assertEqual(payload1['from_addr'], "123")
-        self.assertEqual(payload1['content'], "hello Joe Smith")
-        self.assertEqual(payload2['content'], "hello Foo Bar")
+        self.assertEqual(msg1['transport_name'], self.tx_helper.transport_name)
+        self.assertEqual(msg1['to_addr'], "555")
+        self.assertEqual(msg1['from_addr'], "123")
+        self.assertEqual(msg1['content'], "hello Joe Smith")
+        self.assertEqual(msg2['content'], "hello Foo Bar")
         self.assertEqual(json.loads(response), [
             {
-                'id': payload1['message_id'],
-                'message': payload1['content'],
-                'from_msisdn': payload1['from_addr'],
-                'to_msisdn': payload1['to_addr'],
+                'id': msg1['message_id'],
+                'message': msg1['content'],
+                'from_msisdn': msg1['from_addr'],
+                'to_msisdn': msg1['to_addr'],
             },
             {
-                'id': payload2['message_id'],
-                'message': payload2['content'],
-                'from_msisdn': payload2['from_addr'],
-                'to_msisdn': payload2['to_addr'],
+                'id': msg2['message_id'],
+                'message': msg2['content'],
+                'from_msisdn': msg2['from_addr'],
+                'to_msisdn': msg2['to_addr'],
             },
         ])

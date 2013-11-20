@@ -464,14 +464,19 @@ class SmppTransport(Transport):
         route = get_operator_number(to_addr, config.COUNTRY_CODE,
                                     config.OPERATOR_PREFIX,
                                     config.OPERATOR_NUMBER)
+        source_addr = route or from_addr
+        session_info = message['transport_metadata'].get('session_info')
         return self.esme_client.submit_sm(
+            # these end up in the PDU
             short_message=text.encode(self.submit_sm_encoding),
             data_coding=self.submit_sm_data_coding,
-            destination_addr=str(to_addr),
-            source_addr=route or from_addr,
+            destination_addr=to_addr.encode('ascii'),
+            source_addr=source_addr.encode('ascii'),
+            session_info=session_info.encode('ascii')
+                if session_info is not None else None,
+            # these don't end up in the PDU
             message_type=message['transport_type'],
             continue_session=continue_session,
-            session_info=message['transport_metadata'].get('session_info'),
         )
 
     def stopWorker(self):

@@ -10,18 +10,17 @@ from twisted.python import log
 
 from vumi.components.tagpool_api import TagpoolApiServer, TagpoolApiWorker
 from vumi.components.tagpool import TagpoolManager
-from vumi.tests.utils import VumiWorkerTestCase, PersistenceMixin
 from vumi.utils import http_request
-from vumi.tests.helpers import VumiTestCase, WorkerHelper
+from vumi.tests.helpers import VumiTestCase, WorkerHelper, PersistenceHelper
 
 
-class TestTagpoolApiServer(VumiTestCase, PersistenceMixin):
+class TestTagpoolApiServer(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self._persist_setUp()
-        self.add_cleanup(self._persist_tearDown)
-        self.redis = yield self.get_redis_manager()
+        self.persistence_helper = PersistenceHelper()
+        self.add_cleanup(self.persistence_helper.cleanup)
+        self.redis = yield self.persistence_helper.get_redis_manager()
         self.tagpool = TagpoolManager(self.redis)
         site = Site(TagpoolApiServer(self.tagpool))
         self.server = yield reactor.listenTCP(0, site)
@@ -180,10 +179,11 @@ class TestTagpoolApiServer(VumiTestCase, PersistenceMixin):
         self.assertEqual(result, [["pool1", "tag1"]])
 
 
-class TestTagpoolApiWorker(VumiWorkerTestCase, PersistenceMixin):
+class TestTagpoolApiWorker(VumiTestCase):
 
     def setUp(self):
-        self._persist_setUp()
+        self.persistence_helper = PersistenceHelper()
+        self.add_cleanup(self.persistence_helper.cleanup)
         self.worker_helper = WorkerHelper()
         self.add_cleanup(self.worker_helper.cleanup)
         super(TestTagpoolApiWorker, self).setUp()
@@ -202,7 +202,7 @@ class TestTagpoolApiWorker(VumiWorkerTestCase, PersistenceMixin):
         config.setdefault('twisted_endpoint', 'tcp:0')
         config.setdefault('web_path', 'api')
         config.setdefault('health_path', 'health')
-        config = self.mk_config(config)
+        config = self.persistence_helper.mk_config(config)
         worker = yield self.worker_helper.get_worker(
             TagpoolApiWorker, config, start)
         self.add_cleanup(self.cleanup_worker, worker)

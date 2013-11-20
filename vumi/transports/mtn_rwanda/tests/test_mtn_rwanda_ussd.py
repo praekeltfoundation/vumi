@@ -9,46 +9,26 @@ from vumi.message import TransportUserMessage
 from vumi.transports.mtn_rwanda.mtn_rwanda_ussd import (
         MTNRwandaUSSDTransport, MTNRwandaXMLRPCResource, RequestTimedOutError,
         InvalidRequest)
-from vumi.transports.tests.utils import TransportTestCase
+from vumi.tests.helpers import VumiTestCase
 from vumi.transports.tests.helpers import TransportHelper
 
 
-class MTNRwandaUSSDTransportTestCase(TransportTestCase):
+class TestMTNRwandaUSSDTransport(VumiTestCase):
 
-    transport_class = MTNRwandaUSSDTransport
-    transport_name = 'test_mtn_rwanda_ussd_transport'
     session_id = 'session_id'
-
-    EXPECTED_INBOUND_PAYLOAD = {
-            'message_id': '',
-            'content': None,
-            'from_addr': '',    # msisdn
-            'to_addr': '',      # service code
-            'session_event': TransportUserMessage.SESSION_RESUME,
-            'transport_name': transport_name,
-            'transport_type': 'ussd',
-            'transport_metadata': {
-                'mtn_rwanda_ussd': {
-                    'transaction_id': '0001',
-                    'transaction_time': '2013-07-05T22:58:47.565596',
-                    },
-                },
-            }
 
     @inlineCallbacks
     def setUp(self):
         """
         Create the server (i.e. vumi transport instance)
         """
-        super(MTNRwandaUSSDTransportTestCase, self).setUp()
         self.clock = Clock()
-        config = self.mk_config({
+        self.tx_helper = TransportHelper(MTNRwandaUSSDTransport)
+        self.add_cleanup(self.tx_helper.cleanup)
+        self.transport = yield self.tx_helper.get_transport({
             'twisted_endpoint': 'tcp:port=0',
             'timeout': '30',
         })
-        self.tx_helper = TransportHelper(self)
-        self.add_cleanup(self.tx_helper.cleanup)
-        self.transport = yield self.tx_helper.get_transport(config)
         self.transport.callLater = self.clock.callLater
         self.session_manager = self.transport.session_manager
 
@@ -84,12 +64,27 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
             'TransactionTime': '2013-07-05T22:58:47.565596'
             })
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        expected_inbound_payload = {
+            'message_id': '',
+            'content': None,
+            'from_addr': '',    # msisdn
+            'to_addr': '',      # service code
+            'session_event': TransportUserMessage.SESSION_RESUME,
+            'transport_name': self.tx_helper.transport_name,
+            'transport_type': 'ussd',
+            'transport_metadata': {
+                'mtn_rwanda_ussd': {
+                    'transaction_id': '0001',
+                    'transaction_time': '2013-07-05T22:58:47.565596',
+                },
+            },
+        }
         yield self.assert_inbound_message(
-                self.EXPECTED_INBOUND_PAYLOAD.copy(),
-                msg,
-                from_addr='275551234',
-                to_addr='543',
-                session_event=TransportUserMessage.SESSION_NEW)
+            expected_inbound_payload,
+            msg,
+            from_addr='275551234',
+            to_addr='543',
+            session_event=TransportUserMessage.SESSION_NEW)
 
         expected_reply = {'MSISDN': '275551234',
                           'TransactionId': '0001',

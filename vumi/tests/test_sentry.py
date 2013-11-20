@@ -11,10 +11,10 @@ from twisted.web import http
 from twisted.python.failure import Failure
 from twisted.python.log import LogPublisher
 
-from vumi.tests.utils import MockHttpServer, LogCatcher, import_skip
+from vumi.tests.utils import MockHttpServer, LogCatcher
 from vumi.sentry import (quiet_get_page, SentryLogObserver, vumi_raven_client,
                          SentryLoggerService)
-from vumi.tests.helpers import VumiTestCase
+from vumi.tests.helpers import VumiTestCase, import_skip
 
 
 class TestQuietGetPage(VumiTestCase):

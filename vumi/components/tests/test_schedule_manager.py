@@ -7,7 +7,7 @@ from vumi.tests.utils import LogCatcher
 from vumi.tests.helpers import VumiTestCase
 
 
-class ScheduleManagerTestCase(VumiTestCase):
+class TestScheduleManager(VumiTestCase):
     def assert_schedule_next(self, config, since_dt, expected_next_dt):
         sm = ScheduleManager(config)
         self.assertEqual(sm.get_next(since_dt), expected_next_dt)

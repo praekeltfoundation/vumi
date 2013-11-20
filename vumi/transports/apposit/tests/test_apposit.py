@@ -9,18 +9,14 @@ from twisted.internet.defer import inlineCallbacks, DeferredQueue
 from vumi.tests.utils import MockHttpServer
 from vumi.utils import http_request_full
 from vumi.transports.apposit import AppositTransport
-from vumi.transports.tests.utils import TransportTestCase
+from vumi.tests.helpers import VumiTestCase
 from vumi.transports.tests.helpers import TransportHelper
 
 
-class TestAppositTransport(TransportTestCase):
-    transport_name = 'test_apposit_transport'
-    transport_class = AppositTransport
+class TestAppositTransport(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        super(TestAppositTransport, self).setUp()
-
         self.mock_server = MockHttpServer(self.handle_inbound_request)
         self.outbound_requests = DeferredQueue()
         self.mock_server_response = ''
@@ -28,7 +24,6 @@ class TestAppositTransport(TransportTestCase):
         yield self.mock_server.start()
 
         config = {
-            'transport_name': self.transport_name,
             'web_path': 'api/v1/apposit/sms',
             'web_port': 0,
             'credentials': {
@@ -45,12 +40,9 @@ class TestAppositTransport(TransportTestCase):
             },
             'outbound_url': self.mock_server.url,
         }
-        self.tx_helper = TransportHelper(self, msg_helper_args={
-            'transport_name': self.transport_name,
-            'transport_type': 'sms',
-            'transport_addr': '8123',
-            'mobile_addr': '251911223344',
-        })
+        self.tx_helper = TransportHelper(
+            AppositTransport, transport_addr='8123',
+            mobile_addr='251911223344')
         self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(config)
         self.transport_url = self.transport.get_transport_url()
@@ -109,7 +101,7 @@ class TestAppositTransport(TransportTestCase):
 
     def assert_message_fields(self, msg, **kwargs):
         fields = {
-            'transport_name': self.transport_name,
+            'transport_name': self.tx_helper.transport_name,
             'transport_type': 'sms',
             'from_addr': '251911223344',
             'to_addr': '8123',
@@ -144,7 +136,7 @@ class TestAppositTransport(TransportTestCase):
 
         [msg] = self.tx_helper.get_dispatched_inbound()
         self.assert_message_fields(msg,
-            transport_name=self.transport_name,
+            transport_name=self.tx_helper.transport_name,
             transport_type='sms',
             from_addr='251911223344',
             to_addr='8123',

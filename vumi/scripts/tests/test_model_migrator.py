@@ -5,19 +5,18 @@ from twisted.python import usage
 from vumi.persist.model import Model
 from vumi.persist.fields import Unicode
 from vumi.scripts.model_migrator import ModelMigrator, Options
-from vumi.tests.utils import PersistenceMixin
-from vumi.tests.helpers import VumiTestCase
+from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 
 
 class SimpleModel(Model):
     a = Unicode()
 
 
-class TestModelMigrator(ModelMigrator):
+class StubbedModelMigrator(ModelMigrator):
     def __init__(self, testcase, *args, **kwargs):
         self.testcase = testcase
         self.output = []
-        super(TestModelMigrator, self).__init__(*args, **kwargs)
+        super(StubbedModelMigrator, self).__init__(*args, **kwargs)
 
     def emit(self, s):
         self.output.append(s)
@@ -26,14 +25,13 @@ class TestModelMigrator(ModelMigrator):
         return self.testcase.get_sub_riak(riak_config)
 
 
-class ModelMigratorTestCase(VumiTestCase, PersistenceMixin):
-    sync_persistence = True
-    use_riak = True
+class TestModelMigrator(VumiTestCase):
 
     def setUp(self):
-        self._persist_setUp()
-        self.add_cleanup(self._persist_tearDown)
-        self.riak_manager = self.get_riak_manager()
+        self.persistence_helper = PersistenceHelper(
+            use_riak=True, is_sync=True)
+        self.add_cleanup(self.persistence_helper.cleanup)
+        self.riak_manager = self.persistence_helper.get_riak_manager()
         self.model = self.riak_manager.proxy(SimpleModel)
         self.model_cls_path = ".".join([
             SimpleModel.__module__, SimpleModel.__name__])
@@ -48,7 +46,7 @@ class ModelMigratorTestCase(VumiTestCase, PersistenceMixin):
             args = self.default_args
         options = Options()
         options.parseOptions(args)
-        return TestModelMigrator(self, options)
+        return StubbedModelMigrator(self, options)
 
     def get_sub_riak(self, config):
         self.assertEqual(config.get('bucket_prefix'),

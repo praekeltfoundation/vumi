@@ -4,7 +4,7 @@ from vumi.middleware.address_translator import AddressTranslationMiddleware
 from vumi.tests.helpers import VumiTestCase
 
 
-class AddressTranslationMiddlewareTestCase(VumiTestCase):
+class TestAddressTranslationMiddleware(VumiTestCase):
 
     def mk_addr_trans(self, outbound_map):
         worker = object()

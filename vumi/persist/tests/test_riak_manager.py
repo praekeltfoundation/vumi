@@ -7,8 +7,7 @@ from twisted.internet.defer import returnValue
 from vumi.persist.tests.test_txriak_manager import (
     CommonRiakManagerTests, DummyModel)
 from vumi.persist.model import Manager
-from vumi.tests.utils import import_skip
-from vumi.tests.helpers import VumiTestCase
+from vumi.tests.helpers import VumiTestCase, import_skip
 
 
 class TestRiakManager(CommonRiakManagerTests, VumiTestCase):

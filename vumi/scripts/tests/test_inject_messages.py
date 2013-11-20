@@ -4,11 +4,10 @@ import json
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.scripts.inject_messages import MessageInjector
-from vumi.tests.utils import VumiWorkerTestCase
-from vumi.tests.helpers import WorkerHelper
+from vumi.tests.helpers import VumiTestCase, WorkerHelper
 
 
-class TestMessageInjector(VumiWorkerTestCase):
+class TestMessageInjector(VumiTestCase):
 
     DEFAULT_DATA = {
         'content': 'CODE2',
@@ -21,7 +20,6 @@ class TestMessageInjector(VumiWorkerTestCase):
     def setUp(self):
         self.worker_helper = WorkerHelper('sphex')
         self.add_cleanup(self.worker_helper.cleanup)
-        super(TestMessageInjector, self).setUp()
 
     def get_worker(self, direction):
         return self.worker_helper.get_worker(MessageInjector, {

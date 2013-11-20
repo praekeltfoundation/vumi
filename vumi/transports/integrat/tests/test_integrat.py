@@ -6,7 +6,6 @@ from twisted.web.server import Site
 
 from vumi.utils import http_request
 from vumi.tests.utils import MockHttpServer
-from vumi.transports.tests.utils import TransportTestCase
 from vumi.message import TransportUserMessage
 from vumi.transports.integrat.integrat import (IntegratHttpResource,
                                                IntegratTransport)
@@ -130,15 +129,13 @@ class TestIntegratHttpResource(VumiTestCase):
         yield self.check_response(xml, [])
 
 
-class TestIntegratTransport(TransportTestCase):
-    transport_class = IntegratTransport
-    transport_name = 'testgrat'
+class TestIntegratTransport(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        yield super(TestIntegratTransport, self).setUp()
         self.integrat_calls = DeferredQueue()
         self.mock_integrat = MockHttpServer(self.handle_request)
+        self.add_cleanup(self.mock_integrat.stop)
         yield self.mock_integrat.start()
         config = {
             'web_path': "foo",
@@ -147,17 +144,12 @@ class TestIntegratTransport(TransportTestCase):
             'username': 'testuser',
             'password': 'testpass',
             }
-        self.tx_helper = TransportHelper(self)
+        self.tx_helper = TransportHelper(IntegratTransport)
         self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(config)
         addr = self.transport.web_resource.getHost()
         self.transport_url = "http://%s:%s/" % (addr.host, addr.port)
         self.higate_response = '<Response status_code="0"/>'
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield super(TestIntegratTransport, self).tearDown()
-        yield self.mock_integrat.stop()
 
     def handle_request(self, request):
         # The content attr will have been set to None by the time we read this.
@@ -221,7 +213,7 @@ class TestIntegratTransport(TransportTestCase):
             }
         yield http_request(self.transport_url + "foo", xml, method='GET')
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
-        self.assertEqual(msg['transport_name'], "testgrat")
+        self.assertEqual(msg['transport_name'], self.tx_helper.transport_name)
         self.assertEqual(msg['transport_type'], "ussd")
         self.assertEqual(msg['transport_metadata'],
                          {"session_id": "sess1234"})

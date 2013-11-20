@@ -13,7 +13,7 @@ class DummyMessage(object):
         return self._json
 
 
-class LoggingMiddlewareTestCase(VumiTestCase):
+class TestLoggingMiddleware(VumiTestCase):
 
     def mklogger(self, config):
         worker = object()

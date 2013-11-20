@@ -7,35 +7,32 @@ from twisted.internet.task import Clock
 from twisted.web.server import NOT_DONE_YET
 from twisted.python.failure import Failure
 
-from vumi.tests.utils import MockHttpServer
-from vumi.transports.tests.utils import TransportTestCase
 from vumi.message import TransportUserMessage
-from vumi.transports.vumi_bridge import GoConversationTransport
+from vumi.tests.helpers import VumiTestCase
+from vumi.tests.utils import MockHttpServer
 from vumi.transports.tests.helpers import TransportHelper
+from vumi.transports.vumi_bridge import GoConversationTransport
 
 
-class GoConversationTransportTestCase(TransportTestCase):
-
-    transport_class = GoConversationTransport
+class TestGoConversationTransport(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        yield super(GoConversationTransportTestCase, self).setUp()
+        self.tx_helper = TransportHelper(GoConversationTransport)
+        self.add_cleanup(self.tx_helper.cleanup)
         self.mock_server = MockHttpServer(self.handle_inbound_request)
+        self.add_cleanup(self.mock_server.stop)
         yield self.mock_server.start()
-        config = self.mk_config({
-            'transport_name': self.transport_name,
+        self.transport = yield self.tx_helper.get_transport({
             'base_url': self.mock_server.url,
             'account_key': 'account-key',
             'conversation_key': 'conversation-key',
             'access_token': 'access-token',
         })
         self.clock = Clock()
-        self.tx_helper = TransportHelper(self)
-        self.add_cleanup(self.tx_helper.cleanup)
-        self.transport = yield self.tx_helper.get_transport(config)
         self.transport.clock = self.clock
         self._pending_reqs = []
+        self.add_cleanup(self.finish_requests)
         # when the transport fires up it starts two new connections,
         # wait for them & name them accordingly
         reqs = []
@@ -52,14 +49,10 @@ class GoConversationTransportTestCase(TransportTestCase):
         self.event_req.write('')
 
     @inlineCallbacks
-    def tearDown(self):
+    def finish_requests(self):
         for req in self._pending_reqs:
             if not req.finished:
                 yield req.finish()
-        yield super(GoConversationTransportTestCase, self).tearDown()
-        yield self.transport.redis._purge_all()
-        yield self.transport.redis.close_manager()
-        yield self.mock_server.stop()
 
     def handle_inbound_request(self, request):
         self.mock_server.queue.put(request)

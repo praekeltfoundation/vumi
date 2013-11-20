@@ -2,8 +2,9 @@
 
 from twisted.internet.defer import inlineCallbacks
 
-from vumi.tests.utils import PersistenceMixin, import_skip
-from vumi.tests.helpers import VumiTestCase, MessageHelper
+from vumi.tests.helpers import (
+    VumiTestCase, MessageHelper, PersistenceHelper, import_skip,
+)
 
 try:
     from vumi.components.tests.message_store_old_models import (
@@ -16,23 +17,20 @@ except ImportError, e:
     riak_import_error = e
 
 
-class TestMigratorBase(VumiTestCase, PersistenceMixin):
-    use_riak = True
-
-    @inlineCallbacks
+class TestMigratorBase(VumiTestCase):
     def setUp(self):
-        yield self._persist_setUp()
-        self.add_cleanup(self._persist_tearDown)
+        self.persistence_helper = PersistenceHelper(use_riak=True)
+        self.add_cleanup(self.persistence_helper.cleanup)
         if riak_import_error is not None:
             import_skip(riak_import_error, 'riakasaurus', 'riakasaurus.riak')
-        self.manager = self.get_riak_manager()
+        self.manager = self.persistence_helper.get_riak_manager()
         self.msg_helper = MessageHelper()
 
 
-class OutboundMessageMigratorTestCase(TestMigratorBase):
+class TestOutboundMessageMigrator(TestMigratorBase):
     @inlineCallbacks
     def setUp(self):
-        yield super(OutboundMessageMigratorTestCase, self).setUp()
+        yield super(TestOutboundMessageMigrator, self).setUp()
         self.outbound_vnone = self.manager.proxy(OutboundMessageVNone)
         self.outbound_v1 = self.manager.proxy(OutboundMessageV1)
         self.batch_vnone = self.manager.proxy(BatchVNone)
@@ -59,11 +57,11 @@ class OutboundMessageMigratorTestCase(TestMigratorBase):
         self.assertEqual(new_record.batches.keys(), [])
 
 
-class InboundMessageMigratorTestCase(TestMigratorBase):
+class TestInboundMessageMigrator(TestMigratorBase):
 
     @inlineCallbacks
     def setUp(self):
-        yield super(InboundMessageMigratorTestCase, self).setUp()
+        yield super(TestInboundMessageMigrator, self).setUp()
         self.inbound_vnone = self.manager.proxy(InboundMessageVNone)
         self.inbound_v1 = self.manager.proxy(InboundMessageV1)
         self.batch_vnone = self.manager.proxy(BatchVNone)

@@ -3,6 +3,7 @@ from functools import partial
 from twisted.internet.defer import inlineCallbacks, succeed, fail
 from twisted.trial.unittest import TestCase
 
+from vumi.tests.helpers import VumiTestCase
 from vumi.transports.failures import PermanentFailure
 from vumi.transports.parlayx import ParlayXTransport
 from vumi.transports.parlayx.parlayx import (
@@ -12,7 +13,7 @@ from vumi.transports.parlayx.server import DeliveryStatus
 from vumi.transports.parlayx.soaputil import perform_soap_request
 from vumi.transports.parlayx.tests.utils import (
     create_sms_reception_element, create_sms_delivery_receipt)
-from vumi.transports.tests.utils import TransportTestCase
+from vumi.transports.tests.helpers import TransportHelper
 
 
 class MockParlayXClient(object):
@@ -54,32 +55,35 @@ class MockParlayXClient(object):
             'send_sms', [to_addr, content, linkid, message_id])
 
 
-class ParlayXTransportTestCase(TransportTestCase):
+class TestParlayXTransport(VumiTestCase):
     """
     Tests for `vumi.transports.parlayx.ParlayXTransport`.
     """
-    transport_class = ParlayXTransport
-    timeout = 1
 
     @inlineCallbacks
     def setUp(self):
-        super(ParlayXTransportTestCase, self).setUp()
+        # TODO: Get rid of this hardcoded port number.
         self.port = 9999
         config = {
-            'transport_name': self.transport_name,
             'web_notification_path': '/hello',
             'web_notification_port': self.port,
             'notification_endpoint_uri': 'endpoint_uri',
             'short_code': '54321',
             'remote_send_uri': 'send_uri',
-            'remote_notification_uri': 'notification_uri'}
+            'remote_notification_uri': 'notification_uri',
+        }
+        self.tx_helper = TransportHelper(ParlayXTransport)
+        self.add_cleanup(self.tx_helper.cleanup)
         self.uri = 'http://localhost:%s%s' % (
             self.port, config['web_notification_path'])
 
         def _create_client(transport, config):
             return MockParlayXClient()
-        self.patch(self.transport_class, '_create_client', _create_client)
-        self.transport = yield self.get_transport(config, start=False)
+        self.patch(
+            self.tx_helper.transport_class, '_create_client',
+            _create_client)
+        self.transport = yield self.tx_helper.get_transport(
+            config, start=False)
 
     @inlineCallbacks
     def test_ack(self):
@@ -87,9 +91,8 @@ class ParlayXTransportTestCase(TransportTestCase):
         Basic message delivery.
         """
         yield self.transport.startWorker()
-        msg = self.mkmsg_out()
-        yield self.dispatch(msg)
-        [event] = yield self.wait_for_dispatched_events(1)
+        msg = yield self.tx_helper.make_dispatch_outbound("hi")
+        [event] = self.tx_helper.get_dispatched_events()
         self.assertEqual(event['event_type'], 'ack')
         self.assertEqual(event['user_message_id'], msg['message_id'])
 
@@ -105,10 +108,9 @@ class ParlayXTransportTestCase(TransportTestCase):
         if available.
         """
         yield self.transport.startWorker()
-        msg = self.mkmsg_out()
-        msg['transport_metadata'] = dict(linkid='linkid')
-        yield self.dispatch(msg)
-        [event] = yield self.wait_for_dispatched_events(1)
+        msg = yield self.tx_helper.make_dispatch_outbound(
+            "hi", transport_metadata={'linkid': 'linkid'})
+        [event] = self.tx_helper.get_dispatched_events()
         self.assertEqual(event['event_type'], 'ack')
         self.assertEqual(event['user_message_id'], msg['message_id'])
 
@@ -126,12 +128,13 @@ class ParlayXTransportTestCase(TransportTestCase):
         def _create_client(transport, config):
             return MockParlayXClient(
                 send_sms=partial(fail, ValueError('failed')))
-        self.patch(self.transport_class, '_create_client', _create_client)
+        self.patch(
+            self.tx_helper.transport_class, '_create_client',
+            _create_client)
 
         yield self.transport.startWorker()
-        msg = self.mkmsg_out()
-        yield self.dispatch(msg)
-        [event] = yield self.wait_for_dispatched_events(1)
+        msg = yield self.tx_helper.make_dispatch_outbound("hi")
+        [event] = self.tx_helper.get_dispatched_events()
         self.assertEqual(event['event_type'], 'nack')
         self.assertEqual(event['user_message_id'], msg['message_id'])
         self.assertEqual(event['nack_reason'], 'failed')
@@ -151,12 +154,13 @@ class ParlayXTransportTestCase(TransportTestCase):
             return MockParlayXClient(
                 send_sms=partial(
                     fail, expected_exception('soapenv:Client', 'failed')))
-        self.patch(self.transport_class, '_create_client', _create_client)
+        self.patch(
+            self.tx_helper.transport_class, '_create_client',
+            _create_client)
 
         yield self.transport.startWorker()
-        msg = self.mkmsg_out()
-        yield self.dispatch(msg)
-        [event] = yield self.wait_for_dispatched_events(1)
+        msg = yield self.tx_helper.make_dispatch_outbound("hi")
+        [event] = self.tx_helper.get_dispatched_events()
         self.assertEqual(event['event_type'], 'nack')
         self.assertEqual(event['user_message_id'], msg['message_id'])
         self.assertEqual(event['nack_reason'], 'failed')
@@ -190,7 +194,7 @@ class ParlayXTransportTestCase(TransportTestCase):
         body = create_sms_reception_element(
             '1234', 'message', '+27117654321', '54321')
         yield perform_soap_request(self.uri, '', body)
-        [msg] = self.get_dispatched_messages()
+        [msg] = self.tx_helper.get_dispatched_inbound()
         self.assertEqual(
             ('1234', 'message', '+27117654321', '54321'),
             (msg['message_id'], msg['content'], msg['from_addr'],
@@ -208,7 +212,7 @@ class ParlayXTransportTestCase(TransportTestCase):
         body = create_sms_delivery_receipt(
             '1234', '+27117654321', DeliveryStatus.DeliveredToNetwork)
         yield perform_soap_request(self.uri, '', body)
-        [event] = self.get_dispatched_events()
+        [event] = self.tx_helper.get_dispatched_events()
         self.assertEqual(
             ('1234', 'delivered'),
             (event['user_message_id'], event['delivery_status']))

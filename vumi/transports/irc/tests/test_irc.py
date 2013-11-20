@@ -10,7 +10,6 @@ from vumi.tests.utils import LogCatcher
 from vumi.transports.failures import FailureMessage, TemporaryFailure
 from vumi.transports.irc.irc import IrcMessage, VumiBotProtocol
 from vumi.transports.irc import IrcTransport
-from vumi.transports.tests.utils import TransportTestCase
 from vumi.transports.tests.helpers import TransportHelper
 from vumi.tests.helpers import VumiTestCase
 
@@ -204,39 +203,29 @@ class StubbyIrcServer(ServerFactory):
                 returnValue(ev)
 
 
-class TestIrcTransport(TransportTestCase):
+class TestIrcTransport(VumiTestCase):
 
-    transport_name = 'test_irc_transport'
-    transport_class = IrcTransport
     nick = 'vumibottest'
 
     @inlineCallbacks
     def setUp(self):
-        super(TestIrcTransport, self).setUp()
-
         self.irc_server = StubbyIrcServer()
+        self.add_cleanup(lambda: self.irc_server.finished_d)
+        self.tx_helper = TransportHelper(IrcTransport)
+        self.add_cleanup(self.tx_helper.cleanup)
         self.irc_connector = yield reactor.listenTCP(0, self.irc_server)
+        self.add_cleanup(self.irc_connector.stopListening)
         addr = self.irc_connector.getHost()
         self.server_addr = "%s:%s" % (addr.host, addr.port)
 
-        self.config = {
-            'transport_name': self.transport_name,
+        self.transport = yield self.tx_helper.get_transport({
             'network': addr.host,
             'port': addr.port,
             'channels': [],
             'nickname': self.nick,
-            }
-        self.tx_helper = TransportHelper(self)
-        self.add_cleanup(self.tx_helper.cleanup)
-        self.transport = yield self.tx_helper.get_transport(self.config)
+        })
         # wait for transport to connect
         yield self.irc_server.filter_events("NICK")
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield self.irc_connector.stopListening()
-        yield super(TestIrcTransport, self).tearDown()
-        yield self.irc_server.finished_d
 
     def dispatch_outbound_irc(self, *args, **kw):
         helper_metadata = kw.setdefault('helper_metadata', {'irc': {}})
@@ -247,7 +236,7 @@ class TestIrcTransport(TransportTestCase):
 
     def assert_inbound_message(self, msg, to_addr, from_addr, channel, content,
                                addressed_to_transport, irc_command):
-        self.assertEqual(msg['transport_name'], self.transport_name)
+        self.assertEqual(msg['transport_name'], self.tx_helper.transport_name)
         self.assertEqual(msg['to_addr'], to_addr)
         self.assertEqual(msg['from_addr'], from_addr)
         self.assertEqual(msg['group'], channel)
@@ -317,7 +306,7 @@ class TestIrcTransport(TransportTestCase):
         sender, recipient, text = "user!ident@host", "#zoo", "Hello gooites"
         self.irc_server.server.notice(sender, recipient, text)
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
-        self.assertEqual(msg['transport_name'], self.transport_name)
+        self.assertEqual(msg['transport_name'], self.tx_helper.transport_name)
         self.assertEqual(msg['to_addr'], None)
         self.assertEqual(msg['from_addr'], "user")
         self.assertEqual(msg['group'], "#zoo")
@@ -340,7 +329,7 @@ class TestIrcTransport(TransportTestCase):
         sender, recipient, text = "user!ident@host", "bot", "Hello gooites"
         self.irc_server.server.notice(sender, recipient, text)
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
-        self.assertEqual(msg['transport_name'], self.transport_name)
+        self.assertEqual(msg['transport_name'], self.tx_helper.transport_name)
         self.assertEqual(msg['to_addr'], "bot")
         self.assertEqual(msg['from_addr'], "user")
         self.assertEqual(msg['group'], None)
