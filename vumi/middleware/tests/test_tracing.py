@@ -34,7 +34,6 @@ class TracingMiddlewareTestCase(ApplicationTestCase):
     @inlineCallbacks
     def test_trace_mo_mt_reply(self):
         mo = self.msg_helper.make_inbound('hello')
-        msisdn = mo['from_addr']
         mt = self.msg_helper.make_reply(mo, 'hi there')
         ack = self.msg_helper.make_ack(mt)
         dr = self.msg_helper.make_delivery_report(mt)
