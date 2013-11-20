@@ -5,13 +5,14 @@ from twisted.internet.defer import inlineCallbacks
 from twisted.web import http
 
 from vumi.tests.helpers import VumiTestCase
+from vumi.tests.utils import LogCatcher
 from vumi.transports.airtel import AirtelUSSDTransport
 from vumi.message import TransportUserMessage
 from vumi.utils import http_request_full
 from vumi.transports.tests.helpers import TransportHelper
 
 
-class TestAirtelUSSDTransport(VumiTestCase):
+class AirtelUSSDTransportTestCase(VumiTestCase):
 
     airtel_username = None
     airtel_password = None
@@ -21,19 +22,22 @@ class TestAirtelUSSDTransport(VumiTestCase):
     def setUp(self):
         self.tx_helper = TransportHelper(AirtelUSSDTransport)
         self.add_cleanup(self.tx_helper.cleanup)
-        self.config = {
-            'web_port': 0,
-            'web_path': '/api/v1/airtel/ussd/',
-            'airtel_username': self.airtel_username,
-            'airtel_password': self.airtel_password,
-            'validation_mode': 'permissive',
-        }
+        self.config = self.mk_config()
         self.transport = yield self.tx_helper.get_transport(self.config)
         self.session_manager = self.transport.session_manager
         self.add_cleanup(self.session_manager.stop)
         self.transport_url = self.transport.get_transport_url(
             self.config['web_path'])
         yield self.session_manager.redis._purge_all()  # just in case
+
+    def mk_config(self):
+        return {
+            'web_port': 0,
+            'web_path': '/api/v1/airtel/ussd/',
+            'airtel_username': self.airtel_username,
+            'airtel_password': self.airtel_password,
+            'validation_mode': 'permissive',
+        }
 
     def mk_full_request(self, **params):
         return http_request_full('%s?%s' % (self.transport_url,
@@ -69,6 +73,9 @@ class TestAirtelUSSDTransport(VumiTestCase):
         }
         defaults.update(kwargs)
         return self.mk_request(**defaults)
+
+
+class TestAirtelUSSDTransport(AirtelUSSDTransportTestCase):
 
     @inlineCallbacks
     def test_inbound_begin(self):
@@ -285,6 +292,57 @@ class TestAirtelUSSDTransport(VumiTestCase):
                 'error': '523',
             }
         })
+
+
+class TestAirtelUSSDTransportWithToAddrValidation(AirtelUSSDTransportTestCase):
+
+    def mk_config(self):
+        config = super(TestAirtelUSSDTransportWithToAddrValidation,
+                       self).mk_config()
+        config['to_addr_pattern'] = '^\*121#$'
+        return config
+
+    @inlineCallbacks
+    def test_inbound_begin_with_valid_to_addr(self):
+        # Second connect is the actual start of the session
+        deferred = self.mk_ussd_request('121')
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        self.assertEqual(msg['content'], '')
+        self.assertEqual(msg['to_addr'], '*121#')
+        self.assertEqual(msg['from_addr'], '27761234567'),
+        self.assertEqual(msg['session_event'],
+                         TransportUserMessage.SESSION_NEW)
+        self.assertEqual(msg['transport_metadata'], {
+            'airtel': {
+                'MSC': 'msc',
+            },
+        })
+
+        yield self.tx_helper.make_dispatch_reply(msg, "ussd message")
+        response = yield deferred
+        self.assertEqual(response.delivered_body, 'ussd message')
+        self.assertEqual(response.headers.getRawHeaders('Freeflow'), ['FC'])
+        self.assertEqual(response.headers.getRawHeaders('charge'), ['N'])
+        self.assertEqual(response.headers.getRawHeaders('amount'), ['0'])
+
+    @inlineCallbacks
+    def test_inbound_begin_with_invalid_to_addr(self):
+        # Second connect is the actual start of the session
+        with LogCatcher(message='Unhappy') as lc:
+            response = yield self.mk_ussd_request('123')
+            [log_msg] = lc.messages()
+        self.assertEqual(response.code, 400)
+        error_msg = json.loads(response.delivered_body)
+        expected_error = {
+            'invalid_session': (
+                "Session id u'session-id' has not been encountered in the"
+                " last 600 seconds and the 'input' request parameter value"
+                " u'*123#' doesn't look like a valid USSD address."
+            )
+        }
+        self.assertEqual(error_msg, expected_error)
+        self.assertEqual(
+            log_msg, "Unhappy incoming message: %s" % (expected_error,))
 
 
 class TestAirtelUSSDTransportWithAuth(TestAirtelUSSDTransport):
