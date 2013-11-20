@@ -31,6 +31,17 @@ def msg_key(message_id):
     return ':'.join(['trace', message_id])
 
 
+class TraceManager(object):
+
+    def __init__(self, redis):
+        self.redis = redis
+
+    def get_trace(self, message_id):
+        d = self.redis.lrange(msg_key(message_id), 0, 10)
+        d.addCallback(lambda hops: [json.loads(hop) for hop in hops])
+        return d
+
+
 class TracingMiddleware(BaseMiddlewareWithConfig):
     """
     Middleware for tracing all the hops and associated timestamps
@@ -109,8 +120,3 @@ class TracingMiddleware(BaseMiddlewareWithConfig):
 
     def handle_event(self, message, connector_name):
         return self.store_event_hop(message, connector_name)
-
-    def get_trace(self, message_id):
-        d = self.redis.lrange(msg_key(message_id), 0, 10)
-        d.addCallback(lambda hops: [json.loads(hop) for hop in hops])
-        return d

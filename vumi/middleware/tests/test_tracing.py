@@ -1,7 +1,8 @@
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet.task import Clock
 
-from vumi.middleware.tracing import TracingMiddleware, msg_key
+from vumi.middleware.tracing import (TracingMiddleware, msg_key,
+                                     TraceManager)
 from vumi.application.tests.utils import ApplicationTestCase
 from vumi.application.tests.test_base import DummyApplicationWorker
 from vumi.tests.helpers import MessageHelper
@@ -47,7 +48,9 @@ class TracingMiddlewareTestCase(ApplicationTestCase):
         self.clock.advance(1)
         mw.handle_event(dr, 'default')
 
-        mo_trace = yield mw.get_trace(mo['message_id'])
+        trace_manager = TraceManager(mw.redis)
+
+        mo_trace = yield trace_manager.get_trace(mo['message_id'])
         ttl = yield mw.redis.ttl(msg_key(mo['message_id']))
         self.assertTrue(0 < ttl <= mw.config.lifetime)
 
@@ -72,7 +75,7 @@ class TracingMiddlewareTestCase(ApplicationTestCase):
             'message_type': 'user_message',
         })
 
-        mt_trace = yield mw.get_trace(mt['message_id'])
+        mt_trace = yield trace_manager.get_trace(mt['message_id'])
         [_mt, _ack, _dr] = mt_trace
         self.assertEqual(_mt, {
             'transport_name': 'app1_transport',
