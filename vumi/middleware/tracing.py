@@ -1,5 +1,4 @@
 # -*- test-case-name: vumi.middleware.tests.test_tracing -*-
-import time
 import json
 
 from twisted.internet.defer import inlineCallbacks
