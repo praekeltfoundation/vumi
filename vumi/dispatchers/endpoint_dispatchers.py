@@ -61,19 +61,19 @@ class Dispatcher(BaseWorker):
         raise NotImplementedError()
 
     def errback_inbound(self, f, msg, connector_name):
-        return self.default_errback(f, msg. connector_name)
+        return self.default_errback(f, msg, connector_name)
 
     def process_outbound(self, f, msg, connector_name):
         raise NotImplementedError()
 
     def errback_outbound(self, f, msg, connector_name):
-        return self.default_errback(f, msg. connector_name)
+        return self.default_errback(f, msg, connector_name)
 
     def process_event(self, config, event, connector_name):
         raise NotImplementedError()
 
-    def errback_event(self, f, msg, connector_name):
-        return self.default_errback(f, msg. connector_name)
+    def errback_event(self, f, event, connector_name):
+        return self.default_errback(f, event, connector_name)
 
     def _mkhandler(self, handler_func, errback_func, connector_name):
         def handler(msg):
