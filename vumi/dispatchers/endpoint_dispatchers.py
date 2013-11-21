@@ -77,7 +77,7 @@ class Dispatcher(BaseWorker):
 
     def _mkhandler(self, handler_func, errback_func, connector_name):
         def handler(msg):
-            d = self.get_config(msg)
+            d = maybeDeferred(self.get_config, msg)
             d.addCallback(handler_func, msg, connector_name)
             d.addErrback(errback_func, msg, connector_name)
             return d
