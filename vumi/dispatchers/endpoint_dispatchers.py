@@ -63,7 +63,7 @@ class Dispatcher(BaseWorker):
     def errback_inbound(self, f, msg, connector_name):
         return self.default_errback(f, msg, connector_name)
 
-    def process_outbound(self, f, msg, connector_name):
+    def process_outbound(self, config, msg, connector_name):
         raise NotImplementedError()
 
     def errback_outbound(self, f, msg, connector_name):
