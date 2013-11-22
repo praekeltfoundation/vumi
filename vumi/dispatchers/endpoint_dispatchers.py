@@ -61,25 +61,26 @@ class Dispatcher(BaseWorker):
         raise NotImplementedError()
 
     def errback_inbound(self, f, msg, connector_name):
-        return self.default_errback(f, msg, connector_name)
+        return f
 
     def process_outbound(self, config, msg, connector_name):
         raise NotImplementedError()
 
     def errback_outbound(self, f, msg, connector_name):
-        return self.default_errback(f, msg, connector_name)
+        return f
 
     def process_event(self, config, event, connector_name):
         raise NotImplementedError()
 
     def errback_event(self, f, event, connector_name):
-        return self.default_errback(f, event, connector_name)
+        return f
 
     def _mkhandler(self, handler_func, errback_func, connector_name):
         def handler(msg):
             d = maybeDeferred(self.get_config, msg)
             d.addCallback(handler_func, msg, connector_name)
             d.addErrback(errback_func, msg, connector_name)
+            d.addErrback(self.default_errback, msg, connector_name)
             return d
         return handler
 
