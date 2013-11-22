@@ -1,8 +1,109 @@
+from twisted.python.failure import Failure
 from twisted.internet.defer import inlineCallbacks
 
-from vumi.dispatchers.endpoint_dispatchers import RoutingTableDispatcher
+from vumi.dispatchers.endpoint_dispatchers import (
+    Dispatcher, RoutingTableDispatcher)
 from vumi.dispatchers.tests.helpers import DispatcherHelper
+from vumi.tests.utils import LogCatcher
 from vumi.tests.helpers import VumiTestCase
+
+
+class DummyError(Exception):
+    """Custom exception to use in test cases."""
+
+
+class TestDispatcher(VumiTestCase):
+
+    def setUp(self):
+        self.disp_helper = DispatcherHelper(Dispatcher)
+        self.add_cleanup(self.disp_helper.cleanup)
+
+    def get_dispatcher(self, **config_extras):
+        config = {
+            "receive_inbound_connectors": ["transport1", "transport2"],
+            "receive_outbound_connectors": ["app1", "app2"],
+            }
+        config.update(config_extras)
+        return self.disp_helper.get_dispatcher(config)
+
+    def ch(self, connector_name):
+        return self.disp_helper.get_connector_helper(connector_name)
+
+    @inlineCallbacks
+    def test_default_errback(self):
+        disp = yield self.get_dispatcher()
+        msg = self.disp_helper.make_inbound('bad')
+        f = Failure(DummyError("worse"))
+        with LogCatcher() as lc:
+            yield disp.default_errback(f, msg, "app1")
+            [err1, err2] = lc.errors
+        self.assertEqual(
+            err1['message'], ("'Error routing message for app1'",))
+        self.assertEqual(
+            err2['failure'], f)
+        self.flushLoggedErrors(DummyError)
+
+    @inlineCallbacks
+    def check_errback_called(self, method_to_raise, errback_method, direction):
+        dummy_error = DummyError("eep")
+
+        def raiser(*args):
+            raise dummy_error
+
+        errors = []
+
+        def record_error(self, f, msg, connector_name):
+            errors.append((f, msg, connector_name))
+
+        raiser_patch = self.patch(Dispatcher, method_to_raise, raiser)
+        recorder_patch = self.patch(Dispatcher, errback_method, record_error)
+        disp = yield self.get_dispatcher()
+
+        if direction == 'inbound':
+            connector_name = 'transport1'
+            msg = yield self.ch('transport1').make_dispatch_inbound("inbound")
+        elif direction == 'outbound':
+            connector_name = 'app1'
+            msg = yield self.ch('app1').make_dispatch_outbound("outbound")
+        elif direction == 'event':
+            connector_name = 'transport1'
+            msg = yield self.ch('transport1').make_dispatch_ack()
+        else:
+            raise ValueError(
+                "Unexcepted value %r for direction" % (direction,))
+
+        [(err_f, err_msg, err_connector)] = errors
+        self.assertEqual(err_f.value, dummy_error)
+        self.assertEqual(err_msg, msg)
+        self.assertEqual(err_connector, connector_name)
+
+        yield self.disp_helper.cleanup_worker(disp)
+        raiser_patch.restore()
+        recorder_patch.restore()
+
+    @inlineCallbacks
+    def test_inbound_errbacks(self):
+        for err_method in ('process_inbound', 'get_config'):
+            yield self.check_errback_called(
+                err_method, 'default_errback', 'inbound')
+            yield self.check_errback_called(
+                err_method, 'errback_inbound', 'inbound')
+
+    @inlineCallbacks
+    def test_outbound_errbacks(self):
+        for err_method in ('process_outbound', 'get_config'):
+            yield self.check_errback_called(
+                err_method, 'default_errback', 'outbound')
+            yield self.check_errback_called(
+                err_method, 'errback_outbound', 'outbound')
+
+    @inlineCallbacks
+    def test_event_errbacks(self):
+        for err_method in ('process_event', 'get_config'):
+            yield self.check_errback_called(
+                err_method, 'default_errback', 'event')
+            yield self.check_errback_called(
+                err_method, 'errback_event', 'event')
 
 
 class TestRoutingTableDispatcher(VumiTestCase):
