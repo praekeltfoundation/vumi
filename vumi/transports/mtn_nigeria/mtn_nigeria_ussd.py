@@ -131,8 +131,8 @@ class MtnNigeriaUssdTransport(Transport):
             to_addr = session['ussd_code']
             content = params.pop('userdata')
 
-        # pop the remaining needed fields (the rest is left as metadata)
-        message_id, from_addr = self.pop_fields(params, 'requestId', 'msisdn')
+        # pop the remaining needed field (the rest is left as metadata)
+        [from_addr] = self.pop_fields(params, 'msisdn')
 
         log.msg('MtnNigeriaUssdTransport receiving inbound message from %s '
                 'to %s: %s' % (from_addr, to_addr, content))
@@ -140,7 +140,7 @@ class MtnNigeriaUssdTransport(Transport):
         if session_event == TransportUserMessage.SESSION_CLOSE:
             self.factory.client.send_data_response(
                 session_id=session_id,
-                request_id=message_id,
+                request_id=params['requestId'],
                 star_code=params['starCode'],
                 client_id=params['clientId'],
                 msisdn=from_addr,
@@ -148,7 +148,6 @@ class MtnNigeriaUssdTransport(Transport):
                 end_session=True)
 
         yield self.publish_message(
-            message_id=message_id,
             content=content,
             to_addr=to_addr,
             from_addr=from_addr,
@@ -198,7 +197,7 @@ class MtnNigeriaUssdTransport(Transport):
         yield self.send_response(
             message_id=message['message_id'],
             session_id=metadata['session_id'],
-            request_id=message['in_reply_to'],
+            request_id=metadata['requestId'],
             star_code=metadata['starCode'],
             client_id=metadata['clientId'],
             msisdn=message['to_addr'],

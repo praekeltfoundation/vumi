@@ -74,6 +74,7 @@ class TestMtnNigeriaUssdTransport(VumiTestCase, MockXmlOverTcpServerMixin):
             'phase': '2',
             'dcs': '15',
             'starCode': '123',
+            'requestId': '1291850641',
         },
     }
 
@@ -148,7 +149,6 @@ class TestMtnNigeriaUssdTransport(VumiTestCase, MockXmlOverTcpServerMixin):
 
     def assert_inbound_message(self, msg, **field_values):
         expected_payload = {
-            'message_id': '1291850641',
             'content': '',
             'from_addr': '27845335367',
             'to_addr': '*123#',
