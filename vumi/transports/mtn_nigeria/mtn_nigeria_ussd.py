@@ -12,7 +12,7 @@ from vumi.transports.mtn_nigeria.xml_over_tcp import (
 
 
 class MtnNigeriaUssdTransportConfig(Transport.CONFIG_CLASS):
-    "MTN Nigeria USSD transport configuration."
+    """MTN Nigeria USSD transport configuration."""
 
     server_hostname = ConfigText(
         "Hostname of the server the transport's client should connect to.",
@@ -51,8 +51,10 @@ class MtnNigeriaUssdTransportConfig(Transport.CONFIG_CLASS):
 
 class MtnNigeriaUssdTransport(Transport):
     """
-    XXX: Integration is still ongoing for this transport, it is currently an
-    early alpha. Use with care and a bit of insanity (you'll need it).
+    USSD transport for MTN Nigeria.
+
+    This transport connects as a TCP client and sends messages using a
+    custom protocol whose packets consist of binary headers plus an XML body.
     """
 
     transport_type = 'ussd'
