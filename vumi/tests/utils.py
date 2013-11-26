@@ -177,6 +177,7 @@ class MockHttpServer(object):
 
     @inlineCallbacks
     def stop(self):
+        yield self._webserver.stopListening()
         yield self._webserver.loseConnection()
 
 
