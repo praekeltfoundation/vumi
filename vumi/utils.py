@@ -23,6 +23,12 @@ from twisted.web.resource import Resource
 from vumi.errors import VumiError
 
 
+# Stop Agent from logging two useless lines for every request.
+# This is hacky, but there's no better way to do it for now.
+from twisted.web import client
+client._HTTP11ClientFactory.noisy = False
+
+
 def import_module(name):
     """
     This is a simpler version of `importlib.import_module` and does
