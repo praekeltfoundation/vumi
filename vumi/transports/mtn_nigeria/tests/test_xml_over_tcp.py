@@ -385,6 +385,29 @@ class TestXmlOverTcpClient(VumiTestCase, XmlOverTcpClientServerMixin):
             self.client.received_data_request_packets,
             [('0', expected_params)])
 
+    @inlineCallbacks
+    def test_data_response_handling(self):
+        body = (
+            "<USSDResponse>"
+            "<requestId>1291850641</requestId>"
+            "<msisdn>27845335367</msisdn>"
+            "<starCode>123</starCode>"
+            "<clientId>123</clientId>"
+            "<phase>2</phase>"
+            "<dcs>15</dcs>"
+            "<userdata>Session closed due to cause 0</userdata>"
+            "<msgtype>1</msgtype>"
+            "<EndofSession>1</EndofSession>"
+            "</USSDResponse>"
+        )
+        packet = utils.mk_packet('0', body)
+        self.client.authenticated = True
+        self.server.send_data(packet)
+
+        yield self.client.wait_for_data()
+        self.assert_in_log(
+            'msg', "Received spurious USSDResponse message, ignoring.")
+
     def test_field_validation_for_valid_cases(self):
         self.client.validate_packet_fields(
             {'a': '1', 'b': '2'},
