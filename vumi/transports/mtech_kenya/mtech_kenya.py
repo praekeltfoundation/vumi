@@ -37,6 +37,12 @@ class MTechKenyaTransport(HttpRpcTransport):
         403: 'Invalid mobile number',
     }
 
+    def make_request(self, params):
+        config = self.get_static_config()
+        url = '%s?%s' % (config.outbound_url, urlencode(params))
+        log.msg("Making HTTP request: %s" % (url,))
+        return http_request_full(url, '', method='POST')
+
     @inlineCallbacks
     def handle_outbound_message(self, message):
         config = self.get_static_config()
@@ -51,9 +57,7 @@ class MTechKenyaTransport(HttpRpcTransport):
         link_id = message['transport_metadata'].get('linkID')
         if link_id is not None:
             params['linkID'] = link_id
-        url = '%s?%s' % (config.outbound_url, urlencode(params))
-        log.msg("Making HTTP request: %s" % (url,))
-        response = yield http_request_full(url, '', method='POST')
+        response = yield self.make_request(params)
         log.msg("Response: (%s) %r" % (response.code, response.delivered_body))
         if response.code == 200:
             yield self.publish_ack(user_message_id=message['message_id'],
@@ -86,3 +90,17 @@ class MTechKenyaTransport(HttpRpcTransport):
         )
         yield self.finish_request(
             message_id, json.dumps({'message_id': message_id}))
+
+
+class MTechKenyaTransportV2(MTechKenyaTransport):
+
+    headers = {
+        'Content-Type': 'application/x-www-form-urlencoded'
+    }
+
+    def make_request(self, params):
+        log.msg("Making HTTP request: %s" % (repr(params)))
+        config = self.get_static_config()
+        return http_request_full(
+            config.outbound_url, urlencode(params), method='POST',
+            headers=self.headers)

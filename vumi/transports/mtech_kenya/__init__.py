@@ -1,3 +1,3 @@
-from .mtech_kenya import MTechKenyaTransport
+from .mtech_kenya import MTechKenyaTransport, MTechKenyaTransportV2
 
-__all__ = ['MTechKenyaTransport']
+__all__ = ['MTechKenyaTransport', 'MTechKenyaTransportV2']
