@@ -8,14 +8,15 @@ from twisted.internet.defer import inlineCallbacks
 from twisted.internet import reactor
 from twisted.web.http_headers import Headers
 from twisted.web import http
+from twisted.web.resource import Resource
+from twisted.web.server import NOT_DONE_YET
 
 from vumi.transports import Transport
 from vumi.transports.vumi_bridge.client import StreamingClient
-from vumi.config import (ConfigText, ConfigDict, ConfigInt, ConfigFloat,
-                         ConfigError, ConfigServerEndpoint)
+from vumi.config import ConfigText, ConfigDict, ConfigInt, ConfigFloat
 from vumi.persist.txredis_manager import TxRedisManager
 from vumi.message import TransportUserMessage, TransportEvent
-from vumi.utils import http_request_full
+from vumi.utils import to_kwargs, http_request_full
 from vumi import log
 
 
@@ -60,10 +61,20 @@ class VumiBridgeClientTransportConfig(Transport.CONFIG_CLASS):
 
 
 class VumiBridgeServerTransportConfig(VumiBridgeClientTransportConfig):
+    # Most of this copied wholesale from vumi.transports.httprpc.
 
-    server_endpoint = ConfigServerEndpoint(
-        'What endpoint to expect MO messages & events to arrive on. ',
-        required=True, static=True)
+    web_port = ConfigInt(
+        "The port to listen for requests on, defaults to `0`.",
+        default=0, static=True)
+    message_path = ConfigText(
+        "The path to listen for message requests on.", required=True,
+        static=True)
+    event_path = ConfigText(
+        "The path to listen for event requests on.", required=True,
+        static=True)
+    health_path = ConfigText(
+        "The path to listen for downstream health checks on"
+        " (useful with HAProxy)", default='health', static=True)
 
 
 class GoConversationTransportBase(Transport):
@@ -93,6 +104,50 @@ class GoConversationTransportBase(Transport):
         event['user_message_id'] = local_message_id
         event['sent_message_id'] = remote_message_id
         yield self.publish_event(**event.payload)
+
+    @inlineCallbacks
+    def handle_outbound_message(self, message):
+        headers = {
+            'Content-Type': 'application/json; charset=utf-8',
+        }
+        headers.update(self.get_auth_headers())
+
+        params = {
+            'to_addr': message['to_addr'],
+            'content': message['content'],
+            'message_id': message['message_id'],
+            'in_reply_to': message['in_reply_to'],
+            'session_event': message['session_event']
+        }
+        if 'helper_metadata' in message:
+            params['helper_metadata'] = message['helper_metadata']
+
+        resp = yield http_request_full(
+            self.get_url('messages.json'),
+            data=json.dumps(params).encode('utf-8'),
+            headers=headers,
+            method='PUT')
+
+        if resp.code != http.OK:
+            log.warning('Unexpected status code: %s, body: %s' % (
+                resp.code, resp.delivered_body))
+            yield self.publish_nack(message['message_id'],
+                                    reason='Unexpected status code: %s' % (
+                                        resp.code,))
+            return
+
+        remote_message = json.loads(resp.delivered_body)
+        yield self.map_message_id(
+            remote_message['message_id'], message['message_id'])
+        yield self.publish_ack(user_message_id=message['message_id'],
+                               sent_message_id=remote_message['message_id'])
+
+    def get_auth_headers(self):
+        config = self.get_static_config()
+        return {
+            'Authorization': ['Basic ' + base64.b64encode('%s:%s' % (
+                config.account_key, config.access_token))],
+        }
 
 
 class GoConversationClientTransport(GoConversationTransportBase):
@@ -124,6 +179,13 @@ class GoConversationClientTransport(GoConversationTransportBase):
         self.reconnect_call = None
         self.client = StreamingClient()
         self.connect_api_clients()
+
+    def teardown_transport(self):
+        if self.reconnect_call:
+            self.reconnect_call.cancel()
+            self.reconnect_call = None
+        self.continue_trying = False
+        self.disconnect_api_clients()
 
     def connect_api_clients(self):
         self.message_client = self.client.stream(
@@ -173,57 +235,6 @@ class GoConversationClientTransport(GoConversationTransportBase):
         self.message_client.disconnect()
         self.event_client.disconnect()
 
-    def get_auth_headers(self):
-        config = self.get_static_config()
-        return {
-            'Authorization': ['Basic ' + base64.b64encode('%s:%s' % (
-                config.account_key, config.access_token))],
-        }
-
-    def teardown_transport(self):
-        if self.reconnect_call:
-            self.reconnect_call.cancel()
-            self.reconnect_call = None
-        self.continue_trying = False
-        self.disconnect_api_clients()
-
-    @inlineCallbacks
-    def handle_outbound_message(self, message):
-        headers = {
-            'Content-Type': 'application/json; charset=utf-8',
-        }
-        headers.update(self.get_auth_headers())
-
-        params = {
-            'to_addr': message['to_addr'],
-            'content': message['content'],
-            'message_id': message['message_id'],
-            'in_reply_to': message['in_reply_to'],
-            'session_event': message['session_event']
-        }
-        if 'helper_metadata' in message:
-            params['helper_metadata'] = message['helper_metadata']
-
-        resp = yield http_request_full(
-            self.get_url('messages.json'),
-            data=json.dumps(params).encode('utf-8'),
-            headers=headers,
-            method='PUT')
-
-        if resp.code != http.OK:
-            log.warning('Unexpected status code: %s, body: %s' % (
-                resp.code, resp.delivered_body))
-            yield self.publish_nack(message['message_id'],
-                                    reason='Unexpected status code: %s' % (
-                                        resp.code,))
-            return
-
-        remote_message = json.loads(resp.delivered_body)
-        yield self.map_message_id(
-            remote_message['message_id'], message['message_id'])
-        yield self.publish_ack(user_message_id=message['message_id'],
-                               sent_message_id=remote_message['message_id'])
-
 
 class GoConversationTransport(GoConversationClientTransport):
 
@@ -235,6 +246,94 @@ class GoConversationTransport(GoConversationClientTransport):
             *args, **kwargs)
 
 
+class GoConversationHealthResource(Resource):
+    # Most of this copied wholesale from vumi.transports.httprpc.
+    isLeaf = True
+
+    def __init__(self, transport):
+        self.transport = transport
+        Resource.__init__(self)
+
+    def render_GET(self, request):
+        request.setResponseCode(http.OK)
+        request.do_not_log = True
+        return self.transport.get_health_response()
+
+
+class GoConversationResource(Resource):
+    # Most of this copied wholesale from vumi.transports.httprpc.
+    isLeaf = True
+
+    def __init__(self, callback):
+        self.callback = callback
+        Resource.__init__(self)
+
+    def render_(self, request, request_id=None):
+        request.setHeader("content-type", 'application/json; charset=utf-8')
+        self.callback(request)
+        return NOT_DONE_YET
+
+    def render_PUT(self, request):
+        return self.render_(request)
+
+    def render_POST(self, request):
+        return self.render_(request)
+
+
 class GoConversationServerTransport(GoConversationTransportBase):
+    # Most of this copied wholesale from vumi.transports.httprpc.
 
     CONFIG_CLASS = VumiBridgeServerTransportConfig
+
+    @inlineCallbacks
+    def setup_transport(self):
+        config = self.get_static_config()
+        self.redis = yield TxRedisManager.from_config(
+            config.redis_manager)
+
+        self.web_resource = yield self.start_web_resources([
+            (GoConversationResource(self.handle_raw_inbound_message),
+             config.message_path),
+            (GoConversationResource(self.handle_raw_inbound_event),
+             config.event_path),
+            (GoConversationHealthResource(self), config.health_path),
+        ], config.web_port)
+
+    def teardown_transport(self):
+        return self.web_resource.loseConnection()
+
+    def get_transport_url(self, suffix=''):
+        """
+        Get the URL for the HTTP resource. Requires the worker to be started.
+
+        This is mostly useful in tests, and probably shouldn't be used
+        in non-test code, because the API might live behind a load
+        balancer or proxy.
+        """
+        addr = self.web_resource.getHost()
+        return "http://%s:%s/%s" % (addr.host, addr.port, suffix.lstrip('/'))
+
+    @inlineCallbacks
+    def handle_raw_inbound_event(self, request):
+        try:
+            data = json.loads(request.content.read())
+            msg = TransportEvent(_process_fields=True, **to_kwargs(data))
+            yield self.handle_inbound_event(msg)
+            request.finish()
+        except Exception as e:
+            log.err(e)
+            request.setResponseCode(400)
+            request.finish()
+
+    @inlineCallbacks
+    def handle_raw_inbound_message(self, request):
+        try:
+            data = json.loads(request.content.read())
+            msg = TransportUserMessage(
+                _process_fields=True, **to_kwargs(data))
+            yield self.handle_inbound_message(msg)
+            request.finish()
+        except Exception as e:
+            log.err(e)
+            request.setResponseCode(400)
+            request.finish()
