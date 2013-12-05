@@ -1,3 +1,9 @@
-from vumi.transports.vumi_bridge.vumi_bridge import GoConversationTransport
+from vumi.transports.vumi_bridge.vumi_bridge import (
+    GoConversationTransport, GoConversationClientTransport,
+    GoConversationServerTransport)
 
-__all__ = ['GoConversationTransport']
+__all__ = [
+    'GoConversationTransport',
+    'GoConversationClientTransport',
+    'GoConversationServerTransport',
+]
