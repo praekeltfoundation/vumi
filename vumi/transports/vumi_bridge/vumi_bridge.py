@@ -66,7 +66,36 @@ class VumiBridgeServerTransportConfig(VumiBridgeClientTransportConfig):
         required=True, static=True)
 
 
-class GoConversationClientTransport(Transport):
+class GoConversationTransportBase(Transport):
+
+    def get_url(self, path):
+        config = self.get_static_config()
+        url = '/'.join([
+            config.base_url.rstrip('/'), config.conversation_key, path])
+        return url
+
+    @inlineCallbacks
+    def map_message_id(self, remote_message_id, local_message_id):
+        config = self.get_static_config()
+        yield self.redis.set(remote_message_id, local_message_id)
+        yield self.redis.expire(remote_message_id, config.message_life_time)
+
+    def get_message_id(self, remote_message_id):
+        return self.redis.get(remote_message_id)
+
+    def handle_inbound_message(self, message):
+        return self.publish_message(**message.payload)
+
+    @inlineCallbacks
+    def handle_inbound_event(self, event):
+        remote_message_id = event['user_message_id']
+        local_message_id = yield self.get_message_id(remote_message_id)
+        event['user_message_id'] = local_message_id
+        event['sent_message_id'] = remote_message_id
+        yield self.publish_event(**event.payload)
+
+
+class GoConversationClientTransport(GoConversationTransportBase):
     """
     This transport essentially connects as a client to Vumi Go's streaming
     HTTP API [1]_.
@@ -151,27 +180,12 @@ class GoConversationClientTransport(Transport):
                 config.account_key, config.access_token))],
         }
 
-    def get_url(self, path):
-        config = self.get_static_config()
-        url = '/'.join([
-            config.base_url.rstrip('/'), config.conversation_key, path])
-        return url
-
     def teardown_transport(self):
         if self.reconnect_call:
             self.reconnect_call.cancel()
             self.reconnect_call = None
         self.continue_trying = False
         self.disconnect_api_clients()
-
-    @inlineCallbacks
-    def map_message_id(self, remote_message_id, local_message_id):
-        config = self.get_static_config()
-        yield self.redis.set(remote_message_id, local_message_id)
-        yield self.redis.expire(remote_message_id, config.message_life_time)
-
-    def get_message_id(self, remote_message_id):
-        return self.redis.get(remote_message_id)
 
     @inlineCallbacks
     def handle_outbound_message(self, message):
@@ -210,20 +224,15 @@ class GoConversationClientTransport(Transport):
         yield self.publish_ack(user_message_id=message['message_id'],
                                sent_message_id=remote_message['message_id'])
 
-    def handle_inbound_message(self, message):
-        return self.publish_message(**message.payload)
-
-    @inlineCallbacks
-    def handle_inbound_event(self, event):
-        remote_message_id = event['user_message_id']
-        local_message_id = yield self.get_message_id(remote_message_id)
-        event['user_message_id'] = local_message_id
-        event['sent_message_id'] = remote_message_id
-        yield self.publish_event(**event.payload)
-
 
 class GoConversationTransport(GoConversationClientTransport):
-    pass
+
+    def setup_transport(self, *args, **kwargs):
+        log.warning(
+            'GoConversationTransport is deprecated, please use '
+            '`GoConversationClientTransport` instead.')
+        return super(GoConversationTransport, self).setup_transport(
+            *args, **kwargs)
 
 
 class GoConversationServerTransport(GoConversationClientTransport):
