@@ -8,11 +8,14 @@ from twisted.internet.defer import inlineCallbacks, DeferredQueue
 from vumi.utils import http_request, http_request_full
 from vumi.tests.utils import MockHttpServer
 from vumi.tests.helpers import VumiTestCase
-from vumi.transports.mtech_kenya import MTechKenyaTransport
+from vumi.transports.mtech_kenya import (
+    MTechKenyaTransport, MTechKenyaTransportV2)
 from vumi.transports.tests.helpers import TransportHelper
 
 
 class TestMTechKenyaTransport(VumiTestCase):
+
+    transport_class = MTechKenyaTransport
 
     @inlineCallbacks
     def setUp(self):
@@ -31,7 +34,7 @@ class TestMTechKenyaTransport(VumiTestCase):
         }
         self.config.update(self.valid_creds)
         self.tx_helper = TransportHelper(
-            MTechKenyaTransport, mobile_addr='2371234567')
+            self.transport_class, mobile_addr='2371234567')
         self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url()
@@ -193,3 +196,7 @@ class TestMTechKenyaTransport(VumiTestCase):
         }, req.args)
         [ack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual('ack', ack['event_type'])
+
+
+class TestMTechKenyaTransportV2(TestMTechKenyaTransport):
+    transport_class = MTechKenyaTransportV2

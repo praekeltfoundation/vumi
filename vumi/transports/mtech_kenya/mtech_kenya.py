@@ -86,3 +86,37 @@ class MTechKenyaTransport(HttpRpcTransport):
         )
         yield self.finish_request(
             message_id, json.dumps({'message_id': message_id}))
+
+
+class MTechKenyaTransportV2(MTechKenyaTransport):
+
+    headers = {
+        'Content-Type': 'application/x-www-form-urlencoded'
+    }
+
+    @inlineCallbacks
+    def handle_outbound_message(self, message):
+        config = self.get_static_config()
+        params = {
+            'user': config.mt_username,
+            'pass': config.mt_password,
+            'messageID': message['message_id'],
+            'shortCode': message['from_addr'],
+            'MSISDN': message['to_addr'],
+            'MESSAGE': message['content'],
+        }
+        link_id = message['transport_metadata'].get('linkID')
+        if link_id is not None:
+            params['linkID'] = link_id
+        log.msg("Making HTTP request: %s" % (repr(params)))
+        response = yield http_request_full(
+            config.outbound_url, urlencode(params), method='POST',
+            headers=self.headers)
+        log.msg("Response: (%s) %r" % (response.code, response.delivered_body))
+        if response.code == 200:
+            yield self.publish_ack(user_message_id=message['message_id'],
+                                   sent_message_id=message['message_id'])
+        else:
+            error = self.KNOWN_ERROR_RESPONSE_CODES.get(
+                response.code, 'Unknown response code: %s' % (response.code,))
+            yield self.publish_nack(message['message_id'], error)
