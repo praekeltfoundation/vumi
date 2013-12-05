@@ -235,7 +235,6 @@ class GoConversationTransport(GoConversationClientTransport):
             *args, **kwargs)
 
 
-class GoConversationServerTransport(GoConversationClientTransport):
+class GoConversationServerTransport(GoConversationTransportBase):
 
     CONFIG_CLASS = VumiBridgeServerTransportConfig
-
