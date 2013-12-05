@@ -68,6 +68,7 @@ class XmlOverTcpClient(Protocol):
 
     PACKET_RECEIVED_HANDLERS = {
         'USSDRequest': 'handle_data_request',
+        'USSDResponse': 'handle_data_response',
         'AUTHResponse': 'handle_login_response',
         'AUTHError': 'handle_login_error_response',
         'ENQRequest': 'handle_enquire_link_request',
@@ -339,6 +340,26 @@ class XmlOverTcpClient(Protocol):
 
     def data_request_received(self, session_id, params):
         raise NotImplementedError("Subclasses should implement.")
+
+    def handle_data_response(self, session_id, params):
+        # We seem to get these if we reply to a session that has already been
+        # closed.
+
+        try:
+            self.validate_packet_fields(
+                params,
+                self.DATA_REQUEST_FIELDS,
+                self.OTHER_DATA_REQUEST_FIELDS)
+        except CodedXmlOverTcpError as e:
+            self.handle_error(session_id, params.get('requestId'), e)
+            return
+
+        # if EndofSession is not in params, assume the end of session
+        params.setdefault('EndofSession', '1')
+        self.data_response_received(session_id, params)
+
+    def data_response_received(self, session_id, params):
+        log.msg("Received spurious USSDResponse message, ignoring.")
 
     @classmethod
     def serialize_header_field(cls, header, header_size):
