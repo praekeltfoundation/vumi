@@ -37,6 +37,12 @@ class MTechKenyaTransport(HttpRpcTransport):
         403: 'Invalid mobile number',
     }
 
+    def make_request(self, params):
+        config = self.get_static_config()
+        url = '%s?%s' % (config.outbound_url, urlencode(params))
+        log.msg("Making HTTP request: %s" % (url,))
+        return http_request_full(url, '', method='POST')
+
     @inlineCallbacks
     def handle_outbound_message(self, message):
         config = self.get_static_config()
@@ -51,9 +57,7 @@ class MTechKenyaTransport(HttpRpcTransport):
         link_id = message['transport_metadata'].get('linkID')
         if link_id is not None:
             params['linkID'] = link_id
-        url = '%s?%s' % (config.outbound_url, urlencode(params))
-        log.msg("Making HTTP request: %s" % (url,))
-        response = yield http_request_full(url, '', method='POST')
+        response = yield self.make_request(params)
         log.msg("Response: (%s) %r" % (response.code, response.delivered_body))
         if response.code == 200:
             yield self.publish_ack(user_message_id=message['message_id'],
@@ -94,29 +98,9 @@ class MTechKenyaTransportV2(MTechKenyaTransport):
         'Content-Type': 'application/x-www-form-urlencoded'
     }
 
-    @inlineCallbacks
-    def handle_outbound_message(self, message):
-        config = self.get_static_config()
-        params = {
-            'user': config.mt_username,
-            'pass': config.mt_password,
-            'messageID': message['message_id'],
-            'shortCode': message['from_addr'],
-            'MSISDN': message['to_addr'],
-            'MESSAGE': message['content'],
-        }
-        link_id = message['transport_metadata'].get('linkID')
-        if link_id is not None:
-            params['linkID'] = link_id
+    def make_request(self, params):
         log.msg("Making HTTP request: %s" % (repr(params)))
-        response = yield http_request_full(
+        config = self.get_static_config()
+        return http_request_full(
             config.outbound_url, urlencode(params), method='POST',
             headers=self.headers)
-        log.msg("Response: (%s) %r" % (response.code, response.delivered_body))
-        if response.code == 200:
-            yield self.publish_ack(user_message_id=message['message_id'],
-                                   sent_message_id=message['message_id'])
-        else:
-            error = self.KNOWN_ERROR_RESPONSE_CODES.get(
-                response.code, 'Unknown response code: %s' % (response.code,))
-            yield self.publish_nack(message['message_id'], error)
