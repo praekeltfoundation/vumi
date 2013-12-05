@@ -11,7 +11,8 @@ from twisted.web import http
 
 from vumi.transports import Transport
 from vumi.transports.vumi_bridge.client import StreamingClient
-from vumi.config import ConfigText, ConfigDict, ConfigInt, ConfigFloat
+from vumi.config import (ConfigText, ConfigDict, ConfigInt, ConfigFloat,
+                         ConfigError, ConfigServerEndpoint)
 from vumi.persist.txredis_manager import TxRedisManager
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.utils import http_request_full
@@ -56,6 +57,23 @@ class VumiBridgeTransportConfig(Transport.CONFIG_CLASS):
         # molar Planck constant times c, joule meter/mole
         default=0.11962656472,
         static=True)
+    mode = ConfigText(
+        'What mode to operate in, client or server. In client mode the '
+        'transport connects to the streaming endpoint, in server mode '
+        'the transport expects MO messages and events to be posted to it',
+        default='client', static=True)
+    server_endpoint = ConfigServerEndpoint(
+        'What endpoint to expect MO messages & events to arrive on. '
+        'Required if `mode` == `server`', required=False, static=True)
+
+    def post_validate(self):
+        if self.mode not in ['client', 'server']:
+            raise ConfigError(
+                'Invalid mode, only `client` and `server` are supported')
+        if self.mode == 'server':
+            if not self.server_endpoint:
+                raise ConfigError(
+                    '`server_endpoint` is required if in `server` mode')
 
 
 class GoConversationTransport(Transport):

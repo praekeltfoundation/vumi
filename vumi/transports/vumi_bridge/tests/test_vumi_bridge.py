@@ -12,9 +12,10 @@ from vumi.tests.helpers import VumiTestCase
 from vumi.tests.utils import MockHttpServer
 from vumi.transports.tests.helpers import TransportHelper
 from vumi.transports.vumi_bridge import GoConversationTransport
+from vumi.config import ConfigError
 
 
-class TestGoConversationTransport(VumiTestCase):
+class TestGoConversationTransportBase(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
@@ -22,17 +23,24 @@ class TestGoConversationTransport(VumiTestCase):
         self.add_cleanup(self.tx_helper.cleanup)
         self.mock_server = MockHttpServer(self.handle_inbound_request)
         self.add_cleanup(self.mock_server.stop)
+        self.clock = Clock()
+
         yield self.mock_server.start()
-        self.transport = yield self.tx_helper.get_transport({
+
+        self._pending_reqs = []
+        self.add_cleanup(self.finish_requests)
+
+    @inlineCallbacks
+    def get_transport(self, **config):
+        defaults = {
             'base_url': self.mock_server.url,
             'account_key': 'account-key',
             'conversation_key': 'conversation-key',
             'access_token': 'access-token',
-        })
-        self.clock = Clock()
-        self.transport.clock = self.clock
-        self._pending_reqs = []
-        self.add_cleanup(self.finish_requests)
+        }
+        defaults.update(config)
+        transport = yield self.tx_helper.get_transport(defaults)
+        transport.clock = self.clock
         # when the transport fires up it starts two new connections,
         # wait for them & name them accordingly
         reqs = []
@@ -47,6 +55,8 @@ class TestGoConversationTransport(VumiTestCase):
         # put some data on the wire to have connectionMade called
         self.message_req.write('')
         self.event_req.write('')
+        returnValue(transport)
+
 
     @inlineCallbacks
     def finish_requests(self):
@@ -64,7 +74,12 @@ class TestGoConversationTransport(VumiTestCase):
         self._pending_reqs.append(req)
         returnValue(req)
 
+
+class TestGoConversationTransport(TestGoConversationTransportBase):
+
+    @inlineCallbacks
     def test_auth_headers(self):
+        yield self.get_transport()
         [msg_auth_header] = self.message_req.requestHeaders.getRawHeaders(
             'Authorization')
         self.assertEqual(msg_auth_header, 'Basic %s' % (
@@ -74,7 +89,9 @@ class TestGoConversationTransport(VumiTestCase):
         self.assertEqual(event_auth_header, 'Basic %s' % (
             base64.b64encode('account-key:access-token')))
 
+    @inlineCallbacks
     def test_req_path(self):
+        yield self.get_transport()
         self.assertEqual(
             self.message_req.path,
             '/conversation-key/messages.json')
@@ -84,6 +101,7 @@ class TestGoConversationTransport(VumiTestCase):
 
     @inlineCallbacks
     def test_receiving_messages(self):
+        yield self.get_transport()
         msg = self.tx_helper.make_inbound("inbound")
         self.message_req.write(msg.to_json().encode('utf-8') + '\n')
         [received_msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
@@ -91,8 +109,9 @@ class TestGoConversationTransport(VumiTestCase):
 
     @inlineCallbacks
     def test_receiving_events(self):
+        transport = yield self.get_transport()
         # prime the mapping
-        yield self.transport.map_message_id('remote', 'local')
+        yield transport.map_message_id('remote', 'local')
         ack = self.tx_helper.make_ack(event_id='event-id')
         ack['user_message_id'] = 'remote'
         self.event_req.write(ack.to_json().encode('utf-8') + '\n')
@@ -103,6 +122,7 @@ class TestGoConversationTransport(VumiTestCase):
 
     @inlineCallbacks
     def test_sending_messages(self):
+        yield self.get_transport()
         msg = self.tx_helper.make_outbound(
             "outbound", session_event=TransportUserMessage.SESSION_CLOSE)
         d = self.tx_helper.dispatch_outbound(msg)
@@ -130,15 +150,16 @@ class TestGoConversationTransport(VumiTestCase):
 
     @inlineCallbacks
     def test_reconnecting(self):
-        message_client = self.transport.message_client
+        transport = yield self.get_transport()
+        message_client = transport.message_client
         message_client.connectionLost(Failure(ConnectionLost('foo')))
 
-        config = self.transport.get_static_config()
+        config = transport.get_static_config()
 
-        self.assertTrue(self.transport.delay > config.initial_delay)
-        self.assertEqual(self.transport.retries, 1)
-        self.assertTrue(self.transport.reconnect_call)
-        self.clock.advance(self.transport.delay + 0.1)
+        self.assertTrue(transport.delay > config.initial_delay)
+        self.assertEqual(transport.retries, 1)
+        self.assertTrue(transport.reconnect_call)
+        self.clock.advance(transport.delay + 0.1)
 
         # write something to ensure connectionMade() is called on
         # the protocol
@@ -148,6 +169,17 @@ class TestGoConversationTransport(VumiTestCase):
         event_req = yield self.get_next_request()
         event_req.write('')
 
-        self.assertEqual(self.transport.delay, config.initial_delay)
-        self.assertEqual(self.transport.retries, 0)
-        self.assertFalse(self.transport.reconnect_call)
+        self.assertEqual(transport.delay, config.initial_delay)
+        self.assertEqual(transport.retries, 0)
+        self.assertFalse(transport.reconnect_call)
+
+
+class TestGoConversationServerTransport(TestGoConversationTransportBase):
+
+    def test_server_settings_without_endpoint(self):
+        return self.assertFailure(
+            self.get_transport(mode='server'), ConfigError)
+
+    def test_server_settings_with_endpoint(self):
+        return self.get_transport(
+            mode='server', server_endpoint='tcp:port=0')
