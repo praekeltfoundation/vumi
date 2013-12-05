@@ -11,15 +11,18 @@ from vumi.message import TransportUserMessage
 from vumi.tests.helpers import VumiTestCase
 from vumi.tests.utils import MockHttpServer
 from vumi.transports.tests.helpers import TransportHelper
-from vumi.transports.vumi_bridge import GoConversationTransport
+from vumi.transports.vumi_bridge import (
+    GoConversationClientTransport, GoConversationServerTransport)
 from vumi.config import ConfigError
 
 
 class TestGoConversationTransportBase(VumiTestCase):
 
+    transport_class = None
+
     @inlineCallbacks
     def setUp(self):
-        self.tx_helper = TransportHelper(GoConversationTransport)
+        self.tx_helper = TransportHelper(self.transport_class)
         self.add_cleanup(self.tx_helper.cleanup)
         self.mock_server = MockHttpServer(self.handle_inbound_request)
         self.add_cleanup(self.mock_server.stop)
@@ -57,7 +60,6 @@ class TestGoConversationTransportBase(VumiTestCase):
         self.event_req.write('')
         returnValue(transport)
 
-
     @inlineCallbacks
     def finish_requests(self):
         for req in self._pending_reqs:
@@ -76,6 +78,8 @@ class TestGoConversationTransportBase(VumiTestCase):
 
 
 class TestGoConversationTransport(TestGoConversationTransportBase):
+
+    transport_class = GoConversationClientTransport
 
     @inlineCallbacks
     def test_auth_headers(self):
@@ -176,10 +180,10 @@ class TestGoConversationTransport(TestGoConversationTransportBase):
 
 class TestGoConversationServerTransport(TestGoConversationTransportBase):
 
+    transport_class = GoConversationServerTransport
+
     def test_server_settings_without_endpoint(self):
-        return self.assertFailure(
-            self.get_transport(mode='server'), ConfigError)
+        return self.assertFailure(self.get_transport(), ConfigError)
 
     def test_server_settings_with_endpoint(self):
-        return self.get_transport(
-            mode='server', server_endpoint='tcp:port=0')
+        return self.get_transport(server_endpoint='tcp:port=0')
