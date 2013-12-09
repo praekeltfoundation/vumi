@@ -77,8 +77,7 @@ class TestSmppTransport(VumiTestCase):
         }
 
         # hack a lot of transport setup
-        self.tx_helper = TransportHelper(SmppTransport)
-        self.add_cleanup(self.tx_helper.cleanup)
+        self.tx_helper = yield self.add_helper(TransportHelper(SmppTransport))
         self.transport = yield self.tx_helper.get_transport(
             config, start=False)
         self.transport.esme_client = None
@@ -362,8 +361,8 @@ class EsmeToSmscTestCase(VumiTestCase):
         client_config = server_config.copy()
         client_config['twisted_endpoint'] = 'tcp:host=%s:port=%s' % (
             host.host, host.port)
-        self.tx_helper = TransportHelper(MockSmppTransport)
-        self.add_cleanup(self.tx_helper.cleanup)
+        self.tx_helper = yield self.add_helper(
+            TransportHelper(MockSmppTransport))
         self.transport = yield self.tx_helper.get_transport(
             client_config, start=False)
         self.expected_delivery_status = 'delivered'
@@ -831,8 +830,8 @@ class TestEsmeToSmscTx(VumiTestCase):
         yield self.service.startWorker()
         self.service.factory.protocol = SmscTestServer
         self.config['port'] = self.service.listening.getHost().port
-        self.tx_helper = TransportHelper(MockSmppTxTransport)
-        self.add_cleanup(self.tx_helper.cleanup)
+        self.tx_helper = yield self.add_helper(
+            TransportHelper(MockSmppTxTransport))
         self.transport = yield self.tx_helper.get_transport(
             self.config, start=False)
         self.expected_delivery_status = 'delivered'
@@ -900,8 +899,8 @@ class TestEsmeToSmscRx(VumiTestCase):
         yield self.service.startWorker()
         self.service.factory.protocol = SmscTestServer
         self.config['port'] = self.service.listening.getHost().port
-        self.tx_helper = TransportHelper(MockSmppRxTransport)
-        self.add_cleanup(self.tx_helper.cleanup)
+        self.tx_helper = yield self.add_helper(
+            TransportHelper(MockSmppRxTransport))
         self.transport = yield self.tx_helper.get_transport(
             self.config, start=False)
         self.expected_delivery_status = 'delivered'

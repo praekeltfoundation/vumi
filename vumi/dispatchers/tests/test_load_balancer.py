@@ -32,7 +32,7 @@ class BaseLoadBalancingTestCase(VumiTestCase):
         self.router = LoadBalancingRouter(self.dispatcher, config)
         self.add_cleanup(self.router.teardown_routing)
         yield self.router.setup_routing()
-        self.msg_helper = MessageHelper()
+        self.msg_helper = yield self.add_helper(MessageHelper())
 
 
 class TestLoadBalancingWithoutReplyAffinity(BaseLoadBalancingTestCase):

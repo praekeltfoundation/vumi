@@ -23,8 +23,8 @@ class TestGoConversationTransportBase(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self.tx_helper = TransportHelper(self.transport_class)
-        self.add_cleanup(self.tx_helper.cleanup)
+        self.tx_helper = yield self.add_helper(
+            TransportHelper(self.transport_class))
         self.mock_server = MockHttpServer(self.handle_inbound_request)
         self.add_cleanup(self.mock_server.stop)
         self.clock = Clock()

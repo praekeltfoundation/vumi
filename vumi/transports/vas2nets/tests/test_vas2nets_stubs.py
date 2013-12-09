@@ -75,8 +75,7 @@ class TestFakeVas2NetsWorker(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self.worker_helper = WorkerHelper()
-        self.add_cleanup(self.worker_helper.cleanup)
+        self.worker_helper = yield self.add_helper(WorkerHelper())
         self.config = {
             'web_port': 9999,
             'web_receive_path': '/t/receive',

@@ -17,8 +17,8 @@ class TestHTTPRelay(VumiTestCase):
     def setUp(self):
         yield super(TestHTTPRelay, self).setUp()
         self.path = '/path'
-        self.app_helper = ApplicationHelper(HTTPRelayApplication)
-        self.add_cleanup(self.app_helper.cleanup)
+        self.app_helper = yield self.add_helper(
+            ApplicationHelper(HTTPRelayApplication))
 
     @inlineCallbacks
     def setup_resource_with_callback(self, callback):

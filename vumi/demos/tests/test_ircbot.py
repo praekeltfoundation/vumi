@@ -12,8 +12,7 @@ class TestMemoWorker(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self.app_helper = ApplicationHelper(MemoWorker)
-        self.add_cleanup(self.app_helper.cleanup)
+        self.app_helper = yield self.add_helper(ApplicationHelper(MemoWorker))
         self.worker = yield self.app_helper.get_application(
             {'worker_name': 'testmemo'})
         yield self.worker.redis._purge_all()  # just in case

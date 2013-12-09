@@ -18,8 +18,8 @@ class TestSafaricomTransport(VumiTestCase):
             'web_port': 0,
             'web_path': '/api/v1/safaricom/ussd/',
         }
-        self.tx_helper = TransportHelper(SafaricomTransport)
-        self.add_cleanup(self.tx_helper.cleanup)
+        self.tx_helper = yield self.add_helper(
+            TransportHelper(SafaricomTransport))
         self.transport = yield self.tx_helper.get_transport(config)
         self.session_manager = self.transport.session_manager
         self.transport_url = self.transport.get_transport_url(

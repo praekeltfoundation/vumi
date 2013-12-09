@@ -40,8 +40,7 @@ class TestMxitTransport(VumiTestCase):
         self.sample_unicode_menu_resp = unicode(
             self.sample_menu_resp.replace('o', slashed_o), 'utf-8')
 
-        self.tx_helper = TransportHelper(MxitTransport)
-        self.add_cleanup(self.tx_helper.cleanup)
+        self.tx_helper = yield self.add_helper(TransportHelper(MxitTransport))
         self.transport = yield self.tx_helper.get_transport(config)
         self.url = self.transport.get_transport_url(config['web_path'])
 

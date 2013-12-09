@@ -33,9 +33,8 @@ class TestMTechKenyaTransport(VumiTestCase):
             'outbound_url': self.mock_mtech_sms.url,
         }
         self.config.update(self.valid_creds)
-        self.tx_helper = TransportHelper(
-            self.transport_class, mobile_addr='2371234567')
-        self.add_cleanup(self.tx_helper.cleanup)
+        self.tx_helper = yield self.add_helper(
+            TransportHelper(self.transport_class, mobile_addr='2371234567'))
         self.transport = yield self.tx_helper.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url()
 

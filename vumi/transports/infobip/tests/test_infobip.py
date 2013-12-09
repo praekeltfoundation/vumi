@@ -16,8 +16,8 @@ class TestInfobipUssdTransport(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self.tx_helper = TransportHelper(InfobipTransport)
-        self.add_cleanup(self.tx_helper.cleanup)
+        self.tx_helper = yield self.add_helper(
+            TransportHelper(InfobipTransport))
         self.transport = yield self.tx_helper.get_transport({
             'transport_type': 'ussd',
             'web_path': "/session/",

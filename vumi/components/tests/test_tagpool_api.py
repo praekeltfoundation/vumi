@@ -18,8 +18,7 @@ class TestTagpoolApiServer(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self.persistence_helper = PersistenceHelper()
-        self.add_cleanup(self.persistence_helper.cleanup)
+        self.persistence_helper = yield self.add_helper(PersistenceHelper())
         self.redis = yield self.persistence_helper.get_redis_manager()
         self.tagpool = TagpoolManager(self.redis)
         site = Site(TagpoolApiServer(self.tagpool))
@@ -182,11 +181,8 @@ class TestTagpoolApiServer(VumiTestCase):
 class TestTagpoolApiWorker(VumiTestCase):
 
     def setUp(self):
-        self.persistence_helper = PersistenceHelper()
-        self.add_cleanup(self.persistence_helper.cleanup)
-        self.worker_helper = WorkerHelper()
-        self.add_cleanup(self.worker_helper.cleanup)
-        super(TestTagpoolApiWorker, self).setUp()
+        self.persistence_helper = self.add_helper_nosetup(PersistenceHelper())
+        self.worker_helper = self.add_helper_nosetup(WorkerHelper())
 
     @inlineCallbacks
     def cleanup_worker(self, worker):

@@ -20,8 +20,8 @@ class TestOldSimpleHttpTransport(VumiTestCase):
             'web_path': "foo",
             'web_port': 0,
         }
-        self.tx_helper = TransportHelper(OldSimpleHttpTransport)
-        self.add_cleanup(self.tx_helper.cleanup)
+        self.tx_helper = yield self.add_helper(
+            TransportHelper(OldSimpleHttpTransport))
 
         self.transport = yield self.tx_helper.get_transport(self.config)
         addr = self.transport.web_resource.getHost()
@@ -108,8 +108,8 @@ class TestOldTemplateHttpTransport(VumiTestCase):
             'web_path': "foo",
             'web_port': 0,
         }
-        self.tx_helper = TransportHelper(OldTemplateHttpTransport)
-        self.add_cleanup(self.tx_helper.cleanup)
+        self.tx_helper = yield self.add_helper(
+            TransportHelper(OldTemplateHttpTransport))
 
         self.transport = yield self.tx_helper.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url()

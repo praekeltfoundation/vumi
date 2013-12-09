@@ -1,10 +1,12 @@
 import os
 from functools import wraps
 
-from twisted.internet.defer import succeed, inlineCallbacks
+from twisted.internet.defer import succeed, inlineCallbacks, returnValue
 from twisted.internet.error import ConnectionRefusedError
 from twisted.python.monkey import MonkeyPatcher
 from twisted.trial.unittest import TestCase, SkipTest
+
+from zope.interface import Interface, implements
 
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.service import get_spec
@@ -15,6 +17,46 @@ from .fake_amqp import FakeAMQPBroker, FakeAMQClient
 # We can't use `None` as a placeholder for default values because we may want
 # to override the default (non-`None`) value with `None`.
 DEFAULT = object()
+
+
+class IHelper(Interface):
+    def setup(*args, **kwargs):
+        """Perform potentially async helper setup.
+
+        This may return a deferred for async setup or block for sync setup. All
+        helpers must implement this even if it does nothing.
+
+        If the setup is optional but commonly used, this method can take flags
+        to perform or suppress all or part of it as required.
+        """
+
+    def cleanup():
+        """Clean up any resources created by this helper.
+
+        This may return a deferred for async cleanup or block for sync cleanup.
+        All helpers must implement this even if it does nothing.
+        """
+
+
+class IHelperEnabledTestCase(Interface):
+    def add_helper(helper_object, *args, **kwargs):
+        """Register cleanup and perform setup for a helper object.
+
+        This should call `helper_object.setup(*args, **kwargs)` and
+        `self.add_cleanup(helper_object.cleanup)` or an equivalent.
+
+        Returns the `helper_object` passed in.
+        """
+
+    def add_helper_nosetup(helper_object):
+        """Register cleanup for a helper object.
+
+        This is identical to `add_helper()`, except it does not perform setup
+        and is therefore guaranteed to be sync. (This is useful in cases where
+        setup is not required and async operations are undesirable.)
+
+        Returns the `helper_object` passed in.
+        """
 
 
 def proxyable(func):
@@ -43,6 +85,8 @@ def get_timeout():
 
 
 class VumiTestCase(TestCase):
+    implements(IHelperEnabledTestCase)
+
     timeout = get_timeout()
 
     _cleanup_funcs = None
@@ -61,8 +105,23 @@ class VumiTestCase(TestCase):
             self._cleanup_funcs = []
         self._cleanup_funcs.append((func, args, kw))
 
+    @inlineCallbacks
+    def add_helper(self, helper_object, *args, **kw):
+        self.add_helper_nosetup(helper_object)
+        yield helper_object.setup(*args, **kw)
+        returnValue(helper_object)
+
+    def add_helper_nosetup(self, helper_object, *args, **kw):
+        if not IHelper.providedBy(helper_object):
+            raise ValueError(
+                "Helper object does not provide the IHelper interface: %s" % (
+                    helper_object,))
+        self.add_cleanup(helper_object.cleanup)
+        return helper_object
+
 
 class MessageHelper(object):
+    implements(IHelper)
 
     def __init__(self, transport_name='sphex', transport_type='sms',
                  mobile_addr='+41791234567', transport_addr='9292'):
@@ -70,6 +129,12 @@ class MessageHelper(object):
         self.transport_type = transport_type
         self.mobile_addr = mobile_addr
         self.transport_addr = transport_addr
+
+    def setup(self):
+        pass
+
+    def cleanup(self):
+        pass
 
     @proxyable
     def make_inbound(self, content, from_addr=DEFAULT, to_addr=DEFAULT, **kw):
@@ -177,10 +242,15 @@ def _start_and_return_worker(worker):
 
 
 class WorkerHelper(object):
+    implements(IHelper)
+
     def __init__(self, connector_name=None, broker=None):
         self._connector_name = connector_name
         self.broker = broker if broker is not None else FakeAMQPBroker()
         self._workers = []
+
+    def setup(self):
+        pass
 
     @inlineCallbacks
     def cleanup(self):
@@ -346,9 +416,18 @@ class MessageDispatchHelper(object):
     or build a second :class:`MessageDispatchHelper` with a second
     :class:`WorkerHelper`.
     """
+
+    implements(IHelper)
+
     def __init__(self, msg_helper, worker_helper):
         self.msg_helper = msg_helper
         self.worker_helper = worker_helper
+
+    def setup(self):
+        pass
+
+    def cleanup(self):
+        pass
 
     @proxyable
     def make_dispatch_inbound(self, *args, **kw):
@@ -436,6 +515,8 @@ def maybe_async(sync_attr):
 
 
 class PersistenceHelper(object):
+    implements(IHelper)
+
     def __init__(self, use_riak=False, is_sync=False):
         self.use_riak = use_riak
         self.is_sync = is_sync
@@ -457,6 +538,9 @@ class PersistenceHelper(object):
         self._patch_txriak()
         self._patch_redis()
         self._patch_txredis()
+
+    def setup(self):
+        pass
 
     @maybe_async
     def cleanup(self):

@@ -18,8 +18,8 @@ class TestCellulantTransport(VumiTestCase):
             'web_path': '/api/v1/ussd/cellulant/',
             'ussd_session_timeout': 60,
         }
-        self.tx_helper = TransportHelper(CellulantTransport)
-        self.add_cleanup(self.tx_helper.cleanup)
+        self.tx_helper = yield self.add_helper(
+            TransportHelper(CellulantTransport))
         self.transport = yield self.tx_helper.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url(
             self.config['web_path'])

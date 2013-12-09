@@ -28,8 +28,8 @@ class TestMediafoneTransport(VumiTestCase):
             'password': 'pass',
             'outbound_url': self.mock_mediafone.url,
         }
-        self.tx_helper = TransportHelper(MediafoneTransport)
-        self.add_cleanup(self.tx_helper.cleanup)
+        self.tx_helper = yield self.add_helper(
+            TransportHelper(MediafoneTransport))
         self.transport = yield self.tx_helper.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url()
         self.mediafonemc_response = ''

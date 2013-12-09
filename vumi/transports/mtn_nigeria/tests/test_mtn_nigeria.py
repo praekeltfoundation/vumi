@@ -80,8 +80,8 @@ class TestMtnNigeriaUssdTransport(VumiTestCase, MockXmlOverTcpServerMixin):
 
     @inlineCallbacks
     def setUp(self):
-        self.tx_helper = TransportHelper(MtnNigeriaUssdTransport)
-        self.add_cleanup(self.tx_helper.cleanup)
+        self.tx_helper = yield self.add_helper(
+            TransportHelper(MtnNigeriaUssdTransport))
         deferred_login = self.fake_login(
             mtn_nigeria_ussd.MtnNigeriaUssdClientFactory.protocol)
         deferred_server = self.start_server()

@@ -47,8 +47,8 @@ class SandboxTestCaseBase(VumiTestCase):
     application_class = Sandbox
 
     def setUp(self):
-        self.app_helper = ApplicationHelper(self.application_class)
-        self.add_cleanup(self.app_helper.cleanup)
+        self.app_helper = self.add_helper_nosetup(
+            ApplicationHelper(self.application_class))
 
     def setup_app(self, executable=None, args=None, extra_config=None):
         tmp_path = self.mktemp()
@@ -585,8 +585,8 @@ class TestRedisResource(ResourceTestCaseBase):
     @inlineCallbacks
     def setUp(self):
         super(TestRedisResource, self).setUp()
-        self.persistence_helper = PersistenceHelper()
-        self.add_cleanup(self.persistence_helper.cleanup)
+        self.persistence_helper = yield self.add_helper_nosetup(
+            PersistenceHelper())
         self.r_server = yield self.persistence_helper.get_redis_manager()
         yield self.create_resource({})
 

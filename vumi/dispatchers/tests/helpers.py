@@ -1,10 +1,12 @@
 from twisted.internet.defer import inlineCallbacks
 
+from zope.interface import implements
+
 from vumi.dispatchers.base import BaseDispatchWorker
 from vumi.middleware import MiddlewareStack
 from vumi.tests.helpers import (
     MessageHelper, PersistenceHelper, WorkerHelper, MessageDispatchHelper,
-    generate_proxies,
+    generate_proxies, IHelper,
 )
 
 
@@ -35,6 +37,8 @@ class DummyDispatcher(BaseDispatchWorker):
 
 
 class DispatcherHelper(object):
+    implements(IHelper)
+
     def __init__(self, dispatcher_class, use_riak=False, **msg_helper_args):
         self.dispatcher_class = dispatcher_class
         self.worker_helper = WorkerHelper()
@@ -47,6 +51,9 @@ class DispatcherHelper(object):
         generate_proxies(self, self.msg_helper)
         generate_proxies(self, self.worker_helper)
         generate_proxies(self, self.dispatch_helper)
+
+    def setup(self):
+        pass
 
     @inlineCallbacks
     def cleanup(self):

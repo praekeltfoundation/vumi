@@ -42,8 +42,7 @@ class TestTransport(VumiTestCase):
             'request_timeout_status_code': 418,
             'request_timeout_body': 'I am a teapot',
             }
-        self.tx_helper = TransportHelper(OkTransport)
-        self.add_cleanup(self.tx_helper.cleanup)
+        self.tx_helper = yield self.add_helper(TransportHelper(OkTransport))
         self.transport = yield self.tx_helper.get_transport(config)
         self.transport_url = self.transport.get_transport_url()
 
@@ -114,8 +113,7 @@ class TestJSONTransport(VumiTestCase):
             'username': 'testuser',
             'password': 'testpass',
             }
-        self.tx_helper = TransportHelper(JSONTransport)
-        self.add_cleanup(self.tx_helper.cleanup)
+        self.tx_helper = yield self.add_helper(TransportHelper(JSONTransport))
         self.transport = yield self.tx_helper.get_transport(config)
         self.transport_url = self.transport.get_transport_url()
 
@@ -159,8 +157,8 @@ class TestCustomOutboundTransport(VumiTestCase):
             'username': 'testuser',
             'password': 'testpass',
             }
-        self.tx_helper = TransportHelper(CustomOutboundTransport)
-        self.add_cleanup(self.tx_helper.cleanup)
+        self.tx_helper = yield self.add_helper(
+            TransportHelper(CustomOutboundTransport))
         self.transport = yield self.tx_helper.get_transport(config)
         self.transport_url = self.transport.get_transport_url()
 

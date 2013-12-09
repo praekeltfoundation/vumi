@@ -19,12 +19,12 @@ except ImportError, e:
 
 class TestMigratorBase(VumiTestCase):
     def setUp(self):
-        self.persistence_helper = PersistenceHelper(use_riak=True)
-        self.add_cleanup(self.persistence_helper.cleanup)
+        self.persistence_helper = self.add_helper_nosetup(
+            PersistenceHelper(use_riak=True))
         if riak_import_error is not None:
             import_skip(riak_import_error, 'riakasaurus', 'riakasaurus.riak')
         self.manager = self.persistence_helper.get_riak_manager()
-        self.msg_helper = MessageHelper()
+        self.msg_helper = self.add_helper_nosetup(MessageHelper())
 
 
 class TestOutboundMessageMigrator(TestMigratorBase):
