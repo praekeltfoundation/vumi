@@ -7,7 +7,8 @@ from vumi.application import ApplicationWorker
 def mk_menu(preamble, options):
     return '\n'.join(
         [preamble] +
-        ['%s. %s' % (idx, item) for idx, item in enumerate(options)])
+        ['%s. %s' % (idx, action)
+         for (idx, (action, op)) in enumerate(options, 1)])
 
 
 class CalculatorApp(ApplicationWorker):
