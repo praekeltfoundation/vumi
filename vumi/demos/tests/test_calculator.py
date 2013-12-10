@@ -10,8 +10,7 @@ class TestCalculatorApp(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self.app_helper = ApplicationHelper(CalculatorApp)
-        self.add_cleanup(self.app_helper.cleanup)
+        self.app_helper = self.add_helper(ApplicationHelper(CalculatorApp))
         self.worker = yield self.app_helper.get_application({})
 
     @inlineCallbacks
