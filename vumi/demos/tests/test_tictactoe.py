@@ -73,8 +73,7 @@ class TestTicTacToeWorker(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self.app_helper = ApplicationHelper(TicTacToeWorker)
-        self.add_cleanup(self.app_helper.cleanup)
+        self.app_helper = self.add_helper(ApplicationHelper(TicTacToeWorker))
         self.worker = yield self.app_helper.get_application({})
 
     def dispatch_start_message(self, from_addr):

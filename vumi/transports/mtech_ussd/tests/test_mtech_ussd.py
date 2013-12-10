@@ -21,8 +21,7 @@ class TestMtechUssdTransport(VumiTestCase):
             'username': 'testuser',
             'password': 'testpass',
         }
-        self.tx_helper = TransportHelper(MtechUssdTransport)
-        self.add_cleanup(self.tx_helper.cleanup)
+        self.tx_helper = self.add_helper(TransportHelper(MtechUssdTransport))
         self.transport = yield self.tx_helper.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url().rstrip('/')
         self.url = "%s%s" % (self.transport_url, self.config['web_path'])

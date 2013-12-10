@@ -11,8 +11,8 @@ class TestStoringMiddleware(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self.persistence_helper = PersistenceHelper(use_riak=True)
-        self.add_cleanup(self.persistence_helper.cleanup)
+        self.persistence_helper = self.add_helper(
+            PersistenceHelper(use_riak=True))
         dummy_worker = object()
         config = self.persistence_helper.mk_config({})
 

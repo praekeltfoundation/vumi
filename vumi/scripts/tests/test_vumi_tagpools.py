@@ -25,8 +25,8 @@ def make_cfg(args):
 
 class TagPoolBaseTestCase(VumiTestCase):
     def setUp(self):
-        self.persistence_helper = PersistenceHelper(is_sync=True)
-        self.add_cleanup(self.persistence_helper.cleanup)
+        self.persistence_helper = self.add_helper(
+            PersistenceHelper(is_sync=True))
         # Make sure we start fresh.
         self.persistence_helper.get_redis_manager()._purge_all()
 

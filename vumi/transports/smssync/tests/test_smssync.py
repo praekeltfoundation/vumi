@@ -33,8 +33,7 @@ class TestSingleSmsSync(VumiTestCase):
             'reply_delay': self.reply_delay,
         }
         self.add_transport_config()
-        self.tx_helper = TransportHelper(self.transport_class)
-        self.add_cleanup(self.tx_helper.cleanup)
+        self.tx_helper = self.add_helper(TransportHelper(self.transport_class))
         self.transport = yield self.tx_helper.get_transport(self.config)
         self.transport.callLater = self._dummy_call_later
         self.transport_url = self.transport.get_transport_url()

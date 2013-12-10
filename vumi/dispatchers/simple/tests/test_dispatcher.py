@@ -9,8 +9,7 @@ class TestDispatcher(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self.worker_helper = WorkerHelper()
-        self.add_cleanup(self.worker_helper.cleanup)
+        self.worker_helper = self.add_helper(WorkerHelper())
         self.worker = yield self.worker_helper.get_worker(SimpleDispatcher, {
             "route_mappings": {
                 "test1.inbound": ["test2.outbound", "test3.outbound"],

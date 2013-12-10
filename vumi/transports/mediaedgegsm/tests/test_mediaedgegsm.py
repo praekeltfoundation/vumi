@@ -38,8 +38,8 @@ class TestMediaEdgeGSMTransport(VumiTestCase):
                 }
             }
         }
-        self.tx_helper = TransportHelper(MediaEdgeGSMTransport)
-        self.add_cleanup(self.tx_helper.cleanup)
+        self.tx_helper = self.add_helper(
+            TransportHelper(MediaEdgeGSMTransport))
         self.transport = yield self.tx_helper.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url()
         self.mediaedgegsm_response = ''

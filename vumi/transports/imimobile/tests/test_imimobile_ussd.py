@@ -35,8 +35,8 @@ class TestImiMobileUssdTransport(VumiTestCase):
                 'some-other-suffix': '56264',
             }
         }
-        self.tx_helper = TransportHelper(ImiMobileUssdTransport)
-        self.add_cleanup(self.tx_helper.cleanup)
+        self.tx_helper = self.add_helper(
+            TransportHelper(ImiMobileUssdTransport))
         self.transport = yield self.tx_helper.get_transport(self.config)
         self.session_manager = self.transport.session_manager
         self.transport_url = self.transport.get_transport_url(

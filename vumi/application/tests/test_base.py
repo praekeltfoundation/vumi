@@ -46,8 +46,8 @@ class TestApplicationWorker(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self.app_helper = ApplicationHelper(DummyApplicationWorker)
-        self.add_cleanup(self.app_helper.cleanup)
+        self.app_helper = self.add_helper(
+            ApplicationHelper(DummyApplicationWorker))
         self.worker = yield self.app_helper.get_application({})
 
     def assert_msgs_match(self, msgs, expected_msgs):
@@ -200,8 +200,8 @@ class TestApplicationWorkerWithSendToConfig(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self.app_helper = ApplicationHelper(DummyApplicationWorker)
-        self.add_cleanup(self.app_helper.cleanup)
+        self.app_helper = self.add_helper(
+            ApplicationHelper(DummyApplicationWorker))
         self.worker = yield self.app_helper.get_application({
             'send_to': {
                 'default': {
@@ -278,8 +278,7 @@ class TestApplicationMiddlewareHooks(VumiTestCase):
     }
 
     def setUp(self):
-        self.app_helper = ApplicationHelper(ApplicationWorker)
-        self.add_cleanup(self.app_helper.cleanup)
+        self.app_helper = self.add_helper(ApplicationHelper(ApplicationWorker))
 
     @inlineCallbacks
     def test_middleware_for_inbound_messages(self):

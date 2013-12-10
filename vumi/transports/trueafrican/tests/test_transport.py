@@ -20,10 +20,10 @@ class TestTrueAfricanUssdTransport(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self.tx_helper = TransportHelper(TrueAfricanUssdTransport)
+        self.tx_helper = self.add_helper(
+            TransportHelper(TrueAfricanUssdTransport))
         self.clock = Clock()
         self.patch(TrueAfricanUssdTransport, 'get_clock', lambda _: self.clock)
-        self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport({
             'interface': '127.0.0.1',
             'port': 0,

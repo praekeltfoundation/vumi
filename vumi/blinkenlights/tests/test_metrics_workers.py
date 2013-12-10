@@ -31,8 +31,7 @@ class BrokerWrapper(object):
 
 class TestMetricTimeBucket(VumiTestCase):
     def setUp(self):
-        self.worker_helper = WorkerHelper()
-        self.add_cleanup(self.worker_helper.cleanup)
+        self.worker_helper = self.add_helper(WorkerHelper())
 
     @inlineCallbacks
     def test_bucketing(self):
@@ -68,8 +67,7 @@ class TestMetricAggregator(VumiTestCase):
 
     def setUp(self):
         self.now = 0
-        self.worker_helper = WorkerHelper()
-        self.add_cleanup(self.worker_helper.cleanup)
+        self.worker_helper = self.add_helper(WorkerHelper())
         self.broker = BrokerWrapper(self.worker_helper.broker)
 
     def fake_time(self):
@@ -202,8 +200,7 @@ class TestAggregationSystem(VumiTestCase):
     def setUp(self):
         self.aggregator_workers = []
         self.now = 0
-        self.worker_helper = WorkerHelper()
-        self.add_cleanup(self.worker_helper.cleanup)
+        self.worker_helper = self.add_helper(WorkerHelper())
         self.broker = BrokerWrapper(self.worker_helper.broker)
 
     def fake_time(self):
@@ -262,8 +259,7 @@ class TestAggregationSystem(VumiTestCase):
 
 class TestGraphitePublisher(VumiTestCase):
     def setUp(self):
-        self.worker_helper = WorkerHelper()
-        self.add_cleanup(self.worker_helper.cleanup)
+        self.worker_helper = self.add_helper(WorkerHelper())
 
     def _check_msg(self, channel, metric, value, timestamp):
         [msg] = self.worker_helper.broker.get_dispatched("graphite", metric)
@@ -282,8 +278,7 @@ class TestGraphitePublisher(VumiTestCase):
 
 class TestGraphiteMetricsCollector(VumiTestCase):
     def setUp(self):
-        self.worker_helper = WorkerHelper()
-        self.add_cleanup(self.worker_helper.cleanup)
+        self.worker_helper = self.add_helper(WorkerHelper())
         self.broker = BrokerWrapper(self.worker_helper.broker)
 
     @inlineCallbacks
@@ -314,8 +309,7 @@ class UDPMetricsCatcher(DatagramProtocol):
 class TestUDPMetricsCollector(VumiTestCase):
     @inlineCallbacks
     def setUp(self):
-        self.worker_helper = WorkerHelper()
-        self.add_cleanup(self.worker_helper.cleanup)
+        self.worker_helper = self.add_helper(WorkerHelper())
         self.broker = BrokerWrapper(self.worker_helper.broker)
         self.udp_protocol = UDPMetricsCatcher()
         self.udp_server = yield reactor.listenUDP(0, self.udp_protocol)
@@ -350,8 +344,7 @@ class TestUDPMetricsCollector(VumiTestCase):
 class TestRandomMetricsGenerator(VumiTestCase):
 
     def setUp(self):
-        self.worker_helper = WorkerHelper()
-        self.add_cleanup(self.worker_helper.cleanup)
+        self.worker_helper = self.add_helper(WorkerHelper())
         self.broker = BrokerWrapper(self.worker_helper.broker)
         self._on_run = Deferred()
         self.add_cleanup(lambda: self._on_run.callback(None))

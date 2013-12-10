@@ -16,8 +16,8 @@ class TestMessageStoreBase(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self.persistence_helper = PersistenceHelper(use_riak=True)
-        self.add_cleanup(self.persistence_helper.cleanup)
+        self.persistence_helper = self.add_helper(
+            PersistenceHelper(use_riak=True))
         try:
             from vumi.components.message_store import MessageStore
         except ImportError, e:
@@ -25,7 +25,7 @@ class TestMessageStoreBase(VumiTestCase):
         self.redis = yield self.persistence_helper.get_redis_manager()
         self.manager = self.persistence_helper.get_riak_manager()
         self.store = MessageStore(self.manager, self.redis)
-        self.msg_helper = MessageHelper()
+        self.msg_helper = self.add_helper(MessageHelper())
 
     @inlineCallbacks
     def _maybe_batch(self, tag, by_batch):

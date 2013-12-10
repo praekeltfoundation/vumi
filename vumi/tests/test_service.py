@@ -17,8 +17,7 @@ def fake_amq_message(dictionary, delivery_tag='delivery_tag'):
 
 class TestService(VumiTestCase):
     def setUp(self):
-        self.worker_helper = WorkerHelper()
-        self.add_cleanup(self.worker_helper.cleanup)
+        self.worker_helper = self.add_helper(WorkerHelper())
 
     @inlineCallbacks
     def test_consume(self):

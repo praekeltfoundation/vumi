@@ -12,8 +12,7 @@ class TestXMPPTransport(VumiTestCase):
 
     @inlineCallbacks
     def mk_transport(self):
-        self.tx_helper = TransportHelper(XMPPTransport)
-        self.add_cleanup(self.tx_helper.cleanup)
+        self.tx_helper = self.add_helper(TransportHelper(XMPPTransport))
         transport = yield self.tx_helper.get_transport({
             'username': 'user@xmpp.domain.com',
             'password': 'testing password',

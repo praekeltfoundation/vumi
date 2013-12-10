@@ -63,7 +63,7 @@ class TestTruteqTransport(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self.tx_helper = TransportHelper(TruteqTransport)
+        self.tx_helper = self.add_helper(TransportHelper(TruteqTransport))
         self.server_factory = FakeSSMIFactory()
         self.fake_server = reactor.listenTCP(
             0, self.server_factory, interface='localhost')
@@ -75,7 +75,6 @@ class TestTruteqTransport(VumiTestCase):
             'host': addr.host,
             'port': addr.port,
             }
-        self.add_cleanup(self.tx_helper.cleanup)
         self.transport = yield self.tx_helper.get_transport(self.config)
 
     def _incoming_ussd(self, msisdn="+12345", ussd_type=SSMI_EXISTING,

@@ -15,17 +15,16 @@ from vumi.tests.helpers import (
 class TestMessageStoreAPI(VumiTestCase):
     @inlineCallbacks
     def setUp(self):
-        self.persistence_helper = PersistenceHelper(use_riak=True)
-        self.add_cleanup(self.persistence_helper.cleanup)
+        self.persistence_helper = self.add_helper(
+            PersistenceHelper(use_riak=True))
         try:
             from vumi.components.message_store_api import (
                 MatchResource, MessageStoreAPIWorker)
         except ImportError, e:
             import_skip(e, 'riakasaurus', 'riakasaurus.riak')
 
-        self.msg_helper = MessageHelper()
-        self.worker_helper = WorkerHelper()
-        self.add_cleanup(self.worker_helper.cleanup)
+        self.msg_helper = self.add_helper(MessageHelper())
+        self.worker_helper = self.add_helper(WorkerHelper())
 
         self.match_resource = MatchResource
         self.base_path = '/api/v1/'
