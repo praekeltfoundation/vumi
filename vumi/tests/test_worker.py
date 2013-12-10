@@ -55,8 +55,8 @@ class TestBaseWorker(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self.msg_helper = yield self.add_helper(MessageHelper())
-        self.worker_helper = yield self.add_helper(WorkerHelper())
+        self.msg_helper = self.add_helper(MessageHelper())
+        self.worker_helper = self.add_helper(WorkerHelper())
         self.worker = yield self.worker_helper.get_worker(
             DummyWorker, {}, False)
 

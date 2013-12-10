@@ -122,8 +122,8 @@ class TestHeartBeatMonitor(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self.persistence_helper = yield self.add_helper(PersistenceHelper())
-        self.worker_helper = yield self.add_helper(WorkerHelper())
+        self.persistence_helper = self.add_helper(PersistenceHelper())
+        self.worker_helper = self.add_helper(WorkerHelper())
         config = {
             'deadline': 30,
             'redis_manager': {

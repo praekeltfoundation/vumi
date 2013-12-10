@@ -151,8 +151,7 @@ class TestHangmanWorker(VumiTestCase):
         addr = self.webserver.getHost()
         random_word_url = "http://%s:%s/word" % (addr.host, addr.port)
 
-        self.app_helper = yield self.add_helper(
-            ApplicationHelper(HangmanWorker))
+        self.app_helper = self.add_helper(ApplicationHelper(HangmanWorker))
 
         self.worker = yield self.app_helper.get_application({
             'worker_name': 'test_hangman',

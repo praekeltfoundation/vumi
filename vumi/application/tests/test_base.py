@@ -46,7 +46,7 @@ class TestApplicationWorker(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self.app_helper = yield self.add_helper(
+        self.app_helper = self.add_helper(
             ApplicationHelper(DummyApplicationWorker))
         self.worker = yield self.app_helper.get_application({})
 
@@ -200,7 +200,7 @@ class TestApplicationWorkerWithSendToConfig(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self.app_helper = yield self.add_helper(
+        self.app_helper = self.add_helper(
             ApplicationHelper(DummyApplicationWorker))
         self.worker = yield self.app_helper.get_application({
             'send_to': {

@@ -585,8 +585,7 @@ class TestRedisResource(ResourceTestCaseBase):
     @inlineCallbacks
     def setUp(self):
         super(TestRedisResource, self).setUp()
-        self.persistence_helper = yield self.add_helper(
-            PersistenceHelper())
+        self.persistence_helper = self.add_helper(PersistenceHelper())
         self.r_server = yield self.persistence_helper.get_redis_manager()
         yield self.create_resource({})
 

@@ -9,7 +9,7 @@ class TestWindowManager(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self.persistence_helper = yield self.add_helper(PersistenceHelper())
+        self.persistence_helper = self.add_helper(PersistenceHelper())
         redis = yield self.persistence_helper.get_redis_manager()
         self.window_id = 'window_id'
 
@@ -213,7 +213,7 @@ class TestConcurrentWindowManager(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self.persistence_helper = yield self.add_helper(PersistenceHelper())
+        self.persistence_helper = self.add_helper(PersistenceHelper())
         redis = yield self.persistence_helper.get_redis_manager()
         self.window_id = 'window_id'
 

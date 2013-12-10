@@ -248,7 +248,7 @@ class TestToAddrRouter(VumiTestCase):
         self.dispatcher = DummyDispatcher(self.config)
         self.router = ToAddrRouter(self.dispatcher, self.config)
         yield self.router.setup_routing()
-        self.msg_helper = yield self.add_helper(MessageHelper())
+        self.msg_helper = self.add_helper(MessageHelper())
 
     def test_dispatch_inbound_message(self):
         msg = self.msg_helper.make_inbound(
@@ -279,7 +279,7 @@ class TestTransportToTransportRouter(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self.disp_helper = yield self.add_helper(
+        self.disp_helper = self.add_helper(
             DispatcherHelper(BaseDispatchWorker))
         self.worker = yield self.disp_helper.get_worker(BaseDispatchWorker, {
             "transport_names": [
@@ -327,7 +327,7 @@ class TestFromAddrMultiplexRouter(VumiTestCase):
         self.router = FromAddrMultiplexRouter(self.dispatcher, config)
         self.add_cleanup(self.router.teardown_routing)
         yield self.router.setup_routing()
-        self.msg_helper = yield self.add_helper(MessageHelper())
+        self.msg_helper = self.add_helper(MessageHelper())
 
     def make_inbound_mux(self, content, from_addr, transport_name):
         return self.msg_helper.make_inbound(
@@ -371,7 +371,7 @@ class TestUserGroupingRouter(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self.disp_helper = yield self.add_helper(
+        self.disp_helper = self.add_helper(
             DispatcherHelper(BaseDispatchWorker))
         self.dispatcher = yield self.disp_helper.get_dispatcher({
             'dispatcher_name': 'user_group_dispatcher',
@@ -460,7 +460,7 @@ class TestContentKeywordRouter(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self.disp_helper = yield self.add_helper(
+        self.disp_helper = self.add_helper(
             DispatcherHelper(BaseDispatchWorker))
         self.dispatcher = yield self.disp_helper.get_dispatcher({
             'dispatcher_name': 'keyword_dispatcher',
@@ -573,7 +573,7 @@ class TestRedirectOutboundRouterForSMPP(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self.disp_helper = yield self.add_helper(
+        self.disp_helper = self.add_helper(
             DispatcherHelper(BaseDispatchWorker))
         self.dispatcher = yield self.disp_helper.get_dispatcher({
             'dispatcher_name': 'redirect_outbound_dispatcher',
@@ -639,7 +639,7 @@ class TestRedirectOutboundRouter(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self.disp_helper = yield self.add_helper(
+        self.disp_helper = self.add_helper(
             DispatcherHelper(BaseDispatchWorker))
         self.dispatcher = yield self.disp_helper.get_dispatcher({
             'dispatcher_name': 'redirect_outbound_dispatcher',

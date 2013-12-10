@@ -18,7 +18,7 @@ class TestTagpoolApiServer(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self.persistence_helper = yield self.add_helper(PersistenceHelper())
+        self.persistence_helper = self.add_helper(PersistenceHelper())
         self.redis = yield self.persistence_helper.get_redis_manager()
         self.tagpool = TagpoolManager(self.redis)
         site = Site(TagpoolApiServer(self.tagpool))

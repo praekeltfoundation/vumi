@@ -20,8 +20,7 @@ class AirtelUSSDTransportTestCase(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self.tx_helper = yield self.add_helper(
-            TransportHelper(AirtelUSSDTransport))
+        self.tx_helper = self.add_helper(TransportHelper(AirtelUSSDTransport))
         self.config = self.mk_config()
         self.transport = yield self.tx_helper.get_transport(self.config)
         self.session_manager = self.transport.session_manager

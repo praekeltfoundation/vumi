@@ -36,7 +36,7 @@ class TestVas2NetsTransport(VumiTestCase):
             'web_receipt_path': '/receipt',
             'web_port': 0,
         }
-        self.tx_helper = yield self.add_helper(
+        self.tx_helper = self.add_helper(
             TransportHelper(Vas2NetsTransport, transport_name='vas2nets'))
         self.transport = yield self.tx_helper.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url()

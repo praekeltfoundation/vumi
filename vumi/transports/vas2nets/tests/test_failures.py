@@ -29,9 +29,9 @@ class TestVas2NetsFailureWorker(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self.persistence_helper = yield self.add_helper(PersistenceHelper())
-        self.msg_helper = yield self.add_helper(MessageHelper())
-        self.worker_helper = yield self.add_helper(
+        self.persistence_helper = self.add_helper(PersistenceHelper())
+        self.msg_helper = self.add_helper(MessageHelper())
+        self.worker_helper = self.add_helper(
             WorkerHelper(self.msg_helper.transport_name))
         self.today = datetime.utcnow().date()
 

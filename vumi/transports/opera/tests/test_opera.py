@@ -25,7 +25,7 @@ class TestOperaTransport(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self.tx_helper = yield self.add_helper(
+        self.tx_helper = self.add_helper(
             TransportHelper(OperaTransport, mobile_addr='27761234567'))
         self.transport = yield self.tx_helper.get_transport({
             'url': 'http://testing.domain',

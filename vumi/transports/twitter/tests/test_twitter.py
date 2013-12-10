@@ -58,8 +58,7 @@ class TestTwitterTransport(VumiTestCase):
             'access_token_secret': 'tokensecret1',
             'terms': ['some', 'trending', 'topic'],
         }
-        self.tx_helper = yield self.add_helper(
-            TransportHelper(TwitterTransport))
+        self.tx_helper = self.add_helper(TransportHelper(TwitterTransport))
         self.transport = yield self.tx_helper.get_transport(
             config, start=False)
         self.transport._twitter_class = FakeTwitter

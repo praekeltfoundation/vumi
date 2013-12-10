@@ -45,17 +45,8 @@ class IHelperEnabledTestCase(Interface):
         This should call `helper_object.setup(*args, **kwargs)` and
         `self.add_cleanup(helper_object.cleanup)` or an equivalent.
 
-        Returns the `helper_object` passed in.
-        """
-
-    def add_helper_nosetup(helper_object):
-        """Register cleanup for a helper object.
-
-        This is identical to `add_helper()`, except it does not perform setup
-        and is therefore guaranteed to be sync. (This is useful in cases where
-        setup is not required and async operations are undesirable.)
-
-        Returns the `helper_object` passed in.
+        Returns the `helper_object` passed in or a `Deferred` if setup is
+        async.
         """
 
 

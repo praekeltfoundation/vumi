@@ -20,7 +20,7 @@ class TestTrueAfricanUssdTransport(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self.tx_helper = yield self.add_helper(
+        self.tx_helper = self.add_helper(
             TransportHelper(TrueAfricanUssdTransport))
         self.clock = Clock()
         self.patch(TrueAfricanUssdTransport, 'get_clock', lambda _: self.clock)

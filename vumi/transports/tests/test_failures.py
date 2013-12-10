@@ -22,7 +22,7 @@ class TestFailureWorker(VumiTestCase):
 
     @inlineCallbacks
     def make_worker(self, retry_delivery_period=0):
-        self.worker_helper = yield self.add_helper(WorkerHelper('sphex'))
+        self.worker_helper = self.add_helper(WorkerHelper('sphex'))
         config = self.persistence_helper.mk_config({
             'transport_name': 'sphex',
             'retry_routing_key': 'sms.outbound.%(transport_name)s',

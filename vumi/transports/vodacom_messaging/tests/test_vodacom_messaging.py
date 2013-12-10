@@ -24,7 +24,7 @@ class TestVodacomMessagingTransport(VumiTestCase):
             'username': 'testuser',
             'password': 'testpass',
         }
-        self.tx_helper = yield self.add_helper(
+        self.tx_helper = self.add_helper(
             TransportHelper(VodacomMessagingTransport))
         self.transport = yield self.tx_helper.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url().rstrip('/')

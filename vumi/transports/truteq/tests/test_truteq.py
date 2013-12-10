@@ -63,8 +63,7 @@ class TestTruteqTransport(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self.tx_helper = yield self.add_helper(
-            TransportHelper(TruteqTransport))
+        self.tx_helper = self.add_helper(TransportHelper(TruteqTransport))
         self.server_factory = FakeSSMIFactory()
         self.fake_server = reactor.listenTCP(
             0, self.server_factory, interface='localhost')

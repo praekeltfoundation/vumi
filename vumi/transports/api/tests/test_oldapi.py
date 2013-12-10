@@ -20,7 +20,7 @@ class TestOldSimpleHttpTransport(VumiTestCase):
             'web_path': "foo",
             'web_port': 0,
         }
-        self.tx_helper = yield self.add_helper(
+        self.tx_helper = self.add_helper(
             TransportHelper(OldSimpleHttpTransport))
 
         self.transport = yield self.tx_helper.get_transport(self.config)
@@ -108,7 +108,7 @@ class TestOldTemplateHttpTransport(VumiTestCase):
             'web_path': "foo",
             'web_port': 0,
         }
-        self.tx_helper = yield self.add_helper(
+        self.tx_helper = self.add_helper(
             TransportHelper(OldTemplateHttpTransport))
 
         self.transport = yield self.tx_helper.get_transport(self.config)

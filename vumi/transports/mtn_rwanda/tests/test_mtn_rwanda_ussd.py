@@ -23,7 +23,7 @@ class TestMTNRwandaUSSDTransport(VumiTestCase):
         Create the server (i.e. vumi transport instance)
         """
         self.clock = Clock()
-        self.tx_helper = yield self.add_helper(
+        self.tx_helper = self.add_helper(
             TransportHelper(MTNRwandaUSSDTransport))
         self.transport = yield self.tx_helper.get_transport({
             'twisted_endpoint': 'tcp:port=0',

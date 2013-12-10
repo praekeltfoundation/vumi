@@ -29,8 +29,7 @@ class TestHttpApiTransport(VumiTestCase):
         test_method = getattr(self, self._testMethodName)
         config_override = getattr(test_method, 'config_override', {})
         self.config.update(config_override)
-        self.tx_helper = yield self.add_helper(
-            TransportHelper(HttpApiTransport))
+        self.tx_helper = self.add_helper(TransportHelper(HttpApiTransport))
 
         self.transport = yield self.tx_helper.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url()
