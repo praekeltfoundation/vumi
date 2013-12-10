@@ -8,8 +8,6 @@ from vumi.message import TransportUserMessage
 
 class TestCalculatorApp(VumiTestCase):
 
-    timeout = 1
-
     @inlineCallbacks
     def setUp(self):
         self.app_helper = ApplicationHelper(CalculatorApp)
