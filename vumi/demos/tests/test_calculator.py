@@ -74,3 +74,10 @@ class TestCalculatorApp(VumiTestCase):
         [resp] = yield self.app_helper.wait_for_dispatched_outbound(1)
         self.assertTrue(
             resp['content'].startswith('Sorry invalid input!'))
+
+    @inlineCallbacks
+    def test_user_cancellation(self):
+        self.worker.save_session('+41791234567', {'foo': 'bar'})
+        yield self.app_helper.make_dispatch_inbound(
+            None, session_event=TransportUserMessage.SESSION_CLOSE)
+        self.assertEqual(self.worker.get_session('+41791234567'), {})

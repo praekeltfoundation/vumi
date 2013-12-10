@@ -31,9 +31,16 @@ class CalculatorApp(ApplicationWorker):
     def get_session(self, user_id):
         return self._sessions.get(user_id, {})
 
+    def clear_session(self, user_id):
+        return self.save_session(user_id, {})
+
     def new_session(self, message):
+        self.clear_session(message.user())
         return self.reply_to(message, mk_menu(
             'What would you like to do?', self.actions))
+
+    def close_session(self, message):
+        self.clear_session(message.user())
 
     def consume_user_message(self, message):
         user_id = message.user()
