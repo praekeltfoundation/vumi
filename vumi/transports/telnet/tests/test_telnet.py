@@ -42,8 +42,7 @@ class BaseTelnetServerTransortTestCase(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self.tx_helper = TransportHelper(self.transport_class)
-        self.add_cleanup(self.tx_helper.cleanup)
+        self.tx_helper = self.add_helper(TransportHelper(self.transport_class))
         self.worker = yield self.tx_helper.get_transport({'telnet_port': 0})
         self.client = yield self.make_client()
         self.add_cleanup(self.wait_for_client_deregistration)

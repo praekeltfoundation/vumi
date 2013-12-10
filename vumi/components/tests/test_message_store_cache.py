@@ -14,8 +14,8 @@ from vumi.tests.helpers import (
 class TestMessageStoreCache(VumiTestCase):
     @inlineCallbacks
     def setUp(self):
-        self.persistence_helper = PersistenceHelper(use_riak=True)
-        self.add_cleanup(self.persistence_helper.cleanup)
+        self.persistence_helper = self.add_helper(
+            PersistenceHelper(use_riak=True))
         try:
             from vumi.components.message_store import MessageStore
         except ImportError, e:
@@ -26,7 +26,7 @@ class TestMessageStoreCache(VumiTestCase):
         self.cache = self.store.cache
         self.batch_id = 'a-batch-id'
         self.cache.batch_start(self.batch_id)
-        self.msg_helper = MessageHelper()
+        self.msg_helper = self.add_helper(MessageHelper())
 
     @inlineCallbacks
     def add_messages(self, batch_id, callback, count=10):

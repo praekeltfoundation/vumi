@@ -20,8 +20,7 @@ class EchoTestApp(SimpleAppWorker):
 class TestSimpleAppWorker(VumiTestCase):
     @inlineCallbacks
     def setUp(self):
-        self.app_helper = ApplicationHelper(self)
-        self.add_cleanup(self.app_helper.cleanup)
+        self.app_helper = self.add_helper(ApplicationHelper(None))
         self.worker = yield self.app_helper.get_application({}, EchoTestApp)
 
     @inlineCallbacks
@@ -49,8 +48,7 @@ class TestSimpleAppWorker(VumiTestCase):
 class TestEchoWorker(VumiTestCase):
     @inlineCallbacks
     def setUp(self):
-        self.app_helper = ApplicationHelper(self)
-        self.add_cleanup(self.app_helper.cleanup)
+        self.app_helper = self.add_helper(ApplicationHelper(None))
         self.worker = yield self.app_helper.get_application({}, EchoWorker)
 
     def test_process_message(self):
@@ -73,8 +71,7 @@ class TestEchoWorker(VumiTestCase):
 class TestReverseWorker(VumiTestCase):
     @inlineCallbacks
     def setUp(self):
-        self.app_helper = ApplicationHelper(self)
-        self.add_cleanup(self.app_helper.cleanup)
+        self.app_helper = self.add_helper(ApplicationHelper(None))
         self.worker = yield self.app_helper.get_application({}, ReverseWorker)
 
     def test_process_message(self):
@@ -87,8 +84,7 @@ class TestReverseWorker(VumiTestCase):
 class TestWordCountWorker(VumiTestCase):
     @inlineCallbacks
     def setUp(self):
-        self.app_helper = ApplicationHelper(self)
-        self.add_cleanup(self.app_helper.cleanup)
+        self.app_helper = self.add_helper(ApplicationHelper(None))
         self.worker = yield self.app_helper.get_application(
             {}, WordCountWorker)
 

@@ -14,8 +14,7 @@ class TestTxTagpoolManager(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self.persistence_helper = PersistenceHelper()
-        self.add_cleanup(self.persistence_helper.cleanup)
+        self.persistence_helper = self.add_helper(PersistenceHelper())
         self.redis = yield self.persistence_helper.get_redis_manager()
         yield self.redis._purge_all()  # Just in case
         self.tpm = TagpoolManager(self.redis)

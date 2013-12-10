@@ -20,8 +20,7 @@ class AirtelUSSDTransportTestCase(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self.tx_helper = TransportHelper(AirtelUSSDTransport)
-        self.add_cleanup(self.tx_helper.cleanup)
+        self.tx_helper = self.add_helper(TransportHelper(AirtelUSSDTransport))
         self.config = self.mk_config()
         self.transport = yield self.tx_helper.get_transport(self.config)
         self.session_manager = self.transport.session_manager
@@ -394,8 +393,7 @@ class TestLoadBalancedAirtelUSSDTransport(VumiTestCase):
             'web_path': '/api/v1/airtel/ussd/',
             'validation_mode': 'permissive',
         }
-        self.tx_helper = TransportHelper(AirtelUSSDTransport)
-        self.add_cleanup(self.tx_helper.cleanup)
+        self.tx_helper = self.add_helper(TransportHelper(AirtelUSSDTransport))
 
     @inlineCallbacks
     def test_session_prefixes(self):

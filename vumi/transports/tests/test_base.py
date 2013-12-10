@@ -15,8 +15,7 @@ class TestBaseTransport(VumiTestCase):
     }
 
     def setUp(self):
-        self.tx_helper = TransportHelper(Transport)
-        self.add_cleanup(self.tx_helper.cleanup)
+        self.tx_helper = self.add_helper(TransportHelper(Transport))
 
     @inlineCallbacks
     def test_start_transport(self):

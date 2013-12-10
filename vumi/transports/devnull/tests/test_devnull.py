@@ -9,8 +9,7 @@ from vumi.transports.tests.helpers import TransportHelper
 class TestDevNullTransport(VumiTestCase):
 
     def setUp(self):
-        self.tx_helper = TransportHelper(DevNullTransport)
-        self.add_cleanup(self.tx_helper.cleanup)
+        self.tx_helper = self.add_helper(TransportHelper(DevNullTransport))
 
     @inlineCallbacks
     def test_outbound_logging(self):

@@ -1,13 +1,17 @@
 from twisted.internet.defer import inlineCallbacks
 
+from zope.interface import implements
+
 from vumi.transports.failures import FailureMessage
 from vumi.tests.helpers import (
     MessageHelper, WorkerHelper, PersistenceHelper, MessageDispatchHelper,
-    generate_proxies,
+    generate_proxies, IHelper,
 )
 
 
 class TransportHelper(object):
+    implements(IHelper)
+
     def __init__(self, transport_class, use_riak=False, **msg_helper_args):
         self.transport_class = transport_class
         self.persistence_helper = PersistenceHelper(use_riak=use_riak)
@@ -22,6 +26,9 @@ class TransportHelper(object):
         generate_proxies(self, self.worker_helper)
         generate_proxies(self, self.dispatch_helper)
         generate_proxies(self, self.persistence_helper)
+
+    def setup(self):
+        pass
 
     @inlineCallbacks
     def cleanup(self):

@@ -17,14 +17,12 @@ def mktimestamp(delta=0):
 class TestFailureWorker(VumiTestCase):
 
     def setUp(self):
-        self.persistence_helper = PersistenceHelper()
-        self.add_cleanup(self.persistence_helper.cleanup)
+        self.persistence_helper = self.add_helper(PersistenceHelper())
         return self.make_worker()
 
     @inlineCallbacks
     def make_worker(self, retry_delivery_period=0):
-        self.worker_helper = WorkerHelper('sphex')
-        self.add_cleanup(self.worker_helper.cleanup)
+        self.worker_helper = self.add_helper(WorkerHelper('sphex'))
         config = self.persistence_helper.mk_config({
             'transport_name': 'sphex',
             'retry_routing_key': 'sms.outbound.%(transport_name)s',

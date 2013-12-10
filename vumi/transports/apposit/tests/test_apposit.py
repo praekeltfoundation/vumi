@@ -40,10 +40,10 @@ class TestAppositTransport(VumiTestCase):
             },
             'outbound_url': self.mock_server.url,
         }
-        self.tx_helper = TransportHelper(
-            AppositTransport, transport_addr='8123',
-            mobile_addr='251911223344')
-        self.add_cleanup(self.tx_helper.cleanup)
+        self.tx_helper = self.add_helper(
+            TransportHelper(
+                AppositTransport, transport_addr='8123',
+                mobile_addr='251911223344'))
         self.transport = yield self.tx_helper.get_transport(config)
         self.transport_url = self.transport.get_transport_url()
         self.web_path = config['web_path']
