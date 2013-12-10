@@ -1,7 +1,7 @@
 import os
 from functools import wraps
 
-from twisted.internet.defer import succeed, inlineCallbacks, returnValue
+from twisted.internet.defer import succeed, inlineCallbacks, returnValue, Deferred
 from twisted.internet.error import ConnectionRefusedError
 from twisted.python.monkey import MonkeyPatcher
 from twisted.trial.unittest import TestCase, SkipTest
@@ -105,18 +105,15 @@ class VumiTestCase(TestCase):
             self._cleanup_funcs = []
         self._cleanup_funcs.append((func, args, kw))
 
-    @inlineCallbacks
     def add_helper(self, helper_object, *args, **kw):
-        self.add_helper_nosetup(helper_object)
-        yield helper_object.setup(*args, **kw)
-        returnValue(helper_object)
-
-    def add_helper_nosetup(self, helper_object, *args, **kw):
         if not IHelper.providedBy(helper_object):
             raise ValueError(
                 "Helper object does not provide the IHelper interface: %s" % (
                     helper_object,))
         self.add_cleanup(helper_object.cleanup)
+        maybe_d = helper_object.setup(*args, **kw)
+        if isinstance(maybe_d, Deferred):
+            return maybe_d.addCallback(lambda r: helper_object)
         return helper_object
 
 

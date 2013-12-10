@@ -278,8 +278,7 @@ class TestApplicationMiddlewareHooks(VumiTestCase):
     }
 
     def setUp(self):
-        self.app_helper = self.add_helper_nosetup(
-            ApplicationHelper(ApplicationWorker))
+        self.app_helper = self.add_helper(ApplicationHelper(ApplicationWorker))
 
     @inlineCallbacks
     def test_middleware_for_inbound_messages(self):

@@ -18,7 +18,7 @@ class TestMessageInjector(VumiTestCase):
     }
 
     def setUp(self):
-        self.worker_helper = self.add_helper_nosetup(WorkerHelper('sphex'))
+        self.worker_helper = self.add_helper(WorkerHelper('sphex'))
 
     def get_worker(self, direction):
         return self.worker_helper.get_worker(MessageInjector, {

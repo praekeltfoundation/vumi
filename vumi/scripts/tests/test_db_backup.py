@@ -29,7 +29,7 @@ class TestConfigHolder(ConfigHolder):
 
 class DbBackupBaseTestCase(VumiTestCase):
     def setUp(self):
-        self.persistence_helper = self.add_helper_nosetup(
+        self.persistence_helper = self.add_helper(
             PersistenceHelper(is_sync=True))
         self.redis = self.persistence_helper.get_redis_manager()
         # Make sure we start fresh.

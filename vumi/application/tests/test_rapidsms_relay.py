@@ -16,8 +16,7 @@ from vumi.tests.helpers import VumiTestCase
 class TestRapidSMSRelay(VumiTestCase):
 
     def setUp(self):
-        self.app_helper = self.add_helper_nosetup(
-            ApplicationHelper(RapidSMSRelay))
+        self.app_helper = self.add_helper(ApplicationHelper(RapidSMSRelay))
 
     @inlineCallbacks
     def setup_resource(self, callback=None, auth=None):

@@ -15,8 +15,7 @@ class DummyError(Exception):
 class TestDispatcher(VumiTestCase):
 
     def setUp(self):
-        self.disp_helper = self.add_helper_nosetup(
-            DispatcherHelper(Dispatcher))
+        self.disp_helper = self.add_helper(DispatcherHelper(Dispatcher))
 
     def get_dispatcher(self, **config_extras):
         config = {
@@ -109,7 +108,7 @@ class TestDispatcher(VumiTestCase):
 class TestRoutingTableDispatcher(VumiTestCase):
 
     def setUp(self):
-        self.disp_helper = self.add_helper_nosetup(
+        self.disp_helper = self.add_helper(
             DispatcherHelper(RoutingTableDispatcher))
 
     def get_dispatcher(self, **config_extras):

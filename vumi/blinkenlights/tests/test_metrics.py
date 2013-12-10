@@ -15,7 +15,7 @@ class TestMetricManager(VumiTestCase):
     def setUp(self):
         self._next_publish = Deferred()
         self.add_cleanup(lambda: self._next_publish.callback(None))
-        self.worker_helper = self.add_helper_nosetup(WorkerHelper())
+        self.worker_helper = self.add_helper(WorkerHelper())
 
     def on_publish(self, mm):
         d, self._next_publish = self._next_publish, Deferred()

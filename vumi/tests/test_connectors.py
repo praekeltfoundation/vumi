@@ -26,8 +26,8 @@ class BaseConnectorTestCase(VumiTestCase):
     connector_class = None
 
     def setUp(self):
-        self.msg_helper = self.add_helper_nosetup(MessageHelper())
-        self.worker_helper = self.add_helper_nosetup(WorkerHelper())
+        self.msg_helper = self.add_helper(MessageHelper())
+        self.worker_helper = self.add_helper(WorkerHelper())
 
     @inlineCallbacks
     def mk_connector(self, worker=None, connector_name=None,

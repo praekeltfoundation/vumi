@@ -181,8 +181,8 @@ class TestTagpoolApiServer(VumiTestCase):
 class TestTagpoolApiWorker(VumiTestCase):
 
     def setUp(self):
-        self.persistence_helper = self.add_helper_nosetup(PersistenceHelper())
-        self.worker_helper = self.add_helper_nosetup(WorkerHelper())
+        self.persistence_helper = self.add_helper(PersistenceHelper())
+        self.worker_helper = self.add_helper(WorkerHelper())
 
     @inlineCallbacks
     def cleanup_worker(self, worker):

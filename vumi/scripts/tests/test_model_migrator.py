@@ -28,7 +28,7 @@ class StubbedModelMigrator(ModelMigrator):
 class TestModelMigrator(VumiTestCase):
 
     def setUp(self):
-        self.persistence_helper = self.add_helper_nosetup(
+        self.persistence_helper = self.add_helper(
             PersistenceHelper(use_riak=True, is_sync=True))
         self.riak_manager = self.persistence_helper.get_riak_manager()
         self.model = self.riak_manager.proxy(SimpleModel)

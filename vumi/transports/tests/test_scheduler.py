@@ -17,7 +17,7 @@ class TestScheduler(VumiTestCase):
         self.scheduler = Scheduler(self.r_server, self._scheduler_callback)
         self.add_cleanup(self.stop_scheduler)
         self._delivery_history = []
-        self.msg_helper = self.add_helper_nosetup(MessageHelper())
+        self.msg_helper = self.add_helper(MessageHelper())
 
     def stop_scheduler(self):
         if self.scheduler.is_running:

@@ -9,7 +9,7 @@ from vumi.tests.helpers import VumiTestCase
 
 class TestStaticReplyApplication(VumiTestCase):
     def setUp(self):
-        self.app_helper = self.add_helper_nosetup(
+        self.app_helper = self.add_helper(
             ApplicationHelper(StaticReplyApplication))
 
     @inlineCallbacks

@@ -9,7 +9,7 @@ from vumi.tests.helpers import VumiTestCase, MessageHelper
 
 class TestBaseDispatchWorker(VumiTestCase):
     def setUp(self):
-        self.disp_helper = self.add_helper_nosetup(
+        self.disp_helper = self.add_helper(
             DispatcherHelper(BaseDispatchWorker))
 
     def get_dispatcher(self, **config_extras):

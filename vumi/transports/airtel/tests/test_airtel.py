@@ -394,8 +394,7 @@ class TestLoadBalancedAirtelUSSDTransport(VumiTestCase):
             'web_path': '/api/v1/airtel/ussd/',
             'validation_mode': 'permissive',
         }
-        self.tx_helper = self.add_helper_nosetup(
-            TransportHelper(AirtelUSSDTransport))
+        self.tx_helper = self.add_helper(TransportHelper(AirtelUSSDTransport))
 
     @inlineCallbacks
     def test_session_prefixes(self):

@@ -55,8 +55,8 @@ class TestMultiWorker(VumiTestCase):
         }
 
     def setUp(self):
-        self.msg_helper = self.add_helper_nosetup(MessageHelper())
-        self.worker_helper = self.add_helper_nosetup(WorkerHelper())
+        self.msg_helper = self.add_helper(MessageHelper())
+        self.worker_helper = self.add_helper(WorkerHelper())
         self.clear_events()
         self.add_cleanup(self.clear_events)
 

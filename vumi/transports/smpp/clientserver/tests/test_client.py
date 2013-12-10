@@ -63,7 +63,7 @@ class EsmeTestCaseBase(VumiTestCase):
     ESME_CLASS = None
 
     def setUp(self):
-        self.persistence_helper = self.add_helper_nosetup(PersistenceHelper())
+        self.persistence_helper = self.add_helper(PersistenceHelper())
         self._expected_callbacks = []
         self.add_cleanup(
             self.assertEqual, self._expected_callbacks, [],

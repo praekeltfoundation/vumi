@@ -17,7 +17,7 @@ def mktimestamp(delta=0):
 class TestFailureWorker(VumiTestCase):
 
     def setUp(self):
-        self.persistence_helper = self.add_helper_nosetup(PersistenceHelper())
+        self.persistence_helper = self.add_helper(PersistenceHelper())
         return self.make_worker()
 
     @inlineCallbacks
