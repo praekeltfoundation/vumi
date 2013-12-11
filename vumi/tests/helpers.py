@@ -1,7 +1,7 @@
 import os
 from functools import wraps
 
-from twisted.internet.defer import succeed, inlineCallbacks, returnValue, Deferred
+from twisted.internet.defer import succeed, inlineCallbacks, Deferred
 from twisted.internet.error import ConnectionRefusedError
 from twisted.python.monkey import MonkeyPatcher
 from twisted.trial.unittest import TestCase, SkipTest
@@ -102,10 +102,8 @@ class VumiTestCase(TestCase):
                 "Helper object does not provide the IHelper interface: %s" % (
                     helper_object,))
         self.add_cleanup(helper_object.cleanup)
-        maybe_d = helper_object.setup(*args, **kw)
-        if isinstance(maybe_d, Deferred):
-            return maybe_d.addCallback(lambda r: helper_object)
-        return helper_object
+        return maybe_async_return(
+            helper_object, helper_object.setup(*args, **kw))
 
 
 class MessageHelper(object):
@@ -500,6 +498,18 @@ def maybe_async(sync_attr):
         return wrapper
 
     return redecorate
+
+
+def maybe_async_return(value, maybe_deferred):
+    """Return `value` or a deferred that fires with it.
+
+    This is useful in cases where we're performing a potentially async
+    operation but don't necessarily have enough information to use
+    `maybe_async`.
+    """
+    if isinstance(maybe_deferred, Deferred):
+        return maybe_deferred.addCallback(lambda r: value)
+    return value
 
 
 class PersistenceHelper(object):
