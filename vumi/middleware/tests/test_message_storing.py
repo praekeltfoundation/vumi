@@ -89,12 +89,12 @@ class TestStoringMiddleware(VumiTestCase):
         mw = yield self.setup_middleware()
         msg1 = self.mk_msg()
         resp1 = yield mw.handle_consume_outbound(msg1, "dummy_connector")
-        self.assertTrue(isinstance(resp1, TransportUserMessage))
+        self.assertEqual(msg1, resp1)
         yield self.assert_outbound_stored(msg1)
 
         msg2 = self.mk_msg()
         resp2 = yield mw.handle_publish_outbound(msg2, "dummy_connector")
-        self.assertTrue(isinstance(resp2, TransportUserMessage))
+        self.assertEqual(msg2, resp2)
         yield self.assert_outbound_stored(msg2)
 
         self.assertNotEqual(msg1['message_id'], msg2['message_id'])
@@ -104,12 +104,12 @@ class TestStoringMiddleware(VumiTestCase):
         mw = yield self.setup_middleware({'store_on_consume': False})
         msg1 = self.mk_msg()
         resp1 = yield mw.handle_consume_outbound(msg1, "dummy_connector")
-        self.assertTrue(isinstance(resp1, TransportUserMessage))
+        self.assertEqual(msg1, resp1)
         yield self.assert_outbound_not_stored(msg1)
 
         msg2 = self.mk_msg()
         resp2 = yield mw.handle_publish_outbound(msg2, "dummy_connector")
-        self.assertTrue(isinstance(resp2, TransportUserMessage))
+        self.assertEqual(msg2, resp2)
         yield self.assert_outbound_stored(msg2)
 
         self.assertNotEqual(msg1['message_id'], msg2['message_id'])
@@ -121,7 +121,7 @@ class TestStoringMiddleware(VumiTestCase):
         msg = self.mk_msg()
         TaggingMiddleware.add_tag_to_msg(msg, ["pool", "tag"])
         response = yield mw.handle_outbound(msg, "dummy_connector")
-        self.assertTrue(isinstance(response, TransportUserMessage))
+        self.assertEqual(response, msg)
         yield self.assert_outbound_stored(msg, batch_id)
 
     @inlineCallbacks
@@ -129,12 +129,12 @@ class TestStoringMiddleware(VumiTestCase):
         mw = yield self.setup_middleware()
         msg1 = self.mk_msg()
         resp1 = yield mw.handle_consume_inbound(msg1, "dummy_connector")
-        self.assertTrue(isinstance(resp1, TransportUserMessage))
+        self.assertEqual(resp1, msg1)
         yield self.assert_inbound_stored(msg1)
 
         msg2 = self.mk_msg()
         resp2 = yield mw.handle_publish_inbound(msg2, "dummy_connector")
-        self.assertTrue(isinstance(resp2, TransportUserMessage))
+        self.assertEqual(resp2, msg2)
         yield self.assert_inbound_stored(msg2)
 
         self.assertNotEqual(msg1['message_id'], msg2['message_id'])
@@ -144,12 +144,12 @@ class TestStoringMiddleware(VumiTestCase):
         mw = yield self.setup_middleware({'store_on_consume': False})
         msg1 = self.mk_msg()
         resp1 = yield mw.handle_consume_inbound(msg1, "dummy_connector")
-        self.assertTrue(isinstance(resp1, TransportUserMessage))
+        self.assertEqual(resp1, msg1)
         yield self.assert_inbound_not_stored(msg1)
 
         msg2 = self.mk_msg()
         resp2 = yield mw.handle_publish_inbound(msg2, "dummy_connector")
-        self.assertTrue(isinstance(resp2, TransportUserMessage))
+        self.assertEqual(resp2, msg2)
         yield self.assert_inbound_stored(msg2)
 
         self.assertNotEqual(msg1['message_id'], msg2['message_id'])
@@ -161,7 +161,7 @@ class TestStoringMiddleware(VumiTestCase):
         msg = self.mk_msg()
         TaggingMiddleware.add_tag_to_msg(msg, ["pool", "tag"])
         response = yield mw.handle_inbound(msg, "dummy_connector")
-        self.assertTrue(isinstance(response, TransportUserMessage))
+        self.assertEqual(response, msg)
         yield self.assert_inbound_stored(msg, batch_id)
 
     @inlineCallbacks
@@ -174,13 +174,13 @@ class TestStoringMiddleware(VumiTestCase):
         ack1 = self.mk_ack(user_message_id=msg_id)
         event_id1 = ack1['event_id']
         resp1 = yield mw.handle_consume_event(ack1, "dummy_connector")
-        self.assertTrue(isinstance(resp1, TransportEvent))
+        self.assertEqual(ack1, resp1)
         yield self.assert_outbound_stored(msg, events=[event_id1])
 
         ack2 = self.mk_ack(user_message_id=msg_id)
         event_id2 = ack2['event_id']
         resp2 = yield mw.handle_publish_event(ack2, "dummy_connector")
-        self.assertTrue(isinstance(resp2, TransportEvent))
+        self.assertEqual(ack2, resp2)
         yield self.assert_outbound_stored(msg, events=[event_id1, event_id2])
 
     @inlineCallbacks
@@ -192,11 +192,11 @@ class TestStoringMiddleware(VumiTestCase):
 
         ack1 = self.mk_ack(user_message_id=msg_id)
         resp1 = yield mw.handle_consume_event(ack1, "dummy_connector")
-        self.assertTrue(isinstance(resp1, TransportEvent))
+        self.assertEqual(resp1, ack1)
         yield self.assert_outbound_stored(msg, events=[])
 
         ack2 = self.mk_ack(user_message_id=msg_id)
         event_id2 = ack2['event_id']
         resp2 = yield mw.handle_publish_event(ack2, "dummy_connector")
-        self.assertTrue(isinstance(resp2, TransportEvent))
+        self.assertEqual(resp2, ack2)
         yield self.assert_outbound_stored(msg, events=[event_id2])
