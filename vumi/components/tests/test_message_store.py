@@ -414,6 +414,74 @@ class TestMessageStore(TestMessageStoreBase):
                 'flags': 'i',
             }])))
 
+    @inlineCallbacks
+    def test_add_inbound_message_with_batch_ids(self):
+        batch_id1 = yield self.store.batch_start([])
+        batch_id2 = yield self.store.batch_start([])
+        msg = self.msg_helper.make_inbound("hi")
+
+        yield self.store.add_inbound_message(
+            msg, batch_ids=[batch_id1, batch_id2])
+
+        stored_msg = yield self.store.get_inbound_message(msg['message_id'])
+        inbound_keys1 = yield self.store.batch_inbound_keys(batch_id1)
+        inbound_keys2 = yield self.store.batch_inbound_keys(batch_id2)
+
+        self.assertEqual(stored_msg, msg)
+        self.assertEqual(inbound_keys1, [msg['message_id']])
+        self.assertEqual(inbound_keys2, [msg['message_id']])
+
+    @inlineCallbacks
+    def test_add_inbound_message_with_batch_id_and_batch_ids(self):
+        batch_id1 = yield self.store.batch_start([])
+        batch_id2 = yield self.store.batch_start([])
+        msg = self.msg_helper.make_inbound("hi")
+
+        yield self.store.add_inbound_message(
+            msg, batch_id=batch_id1, batch_ids=[batch_id2])
+
+        stored_msg = yield self.store.get_inbound_message(msg['message_id'])
+        inbound_keys1 = yield self.store.batch_inbound_keys(batch_id1)
+        inbound_keys2 = yield self.store.batch_inbound_keys(batch_id2)
+
+        self.assertEqual(stored_msg, msg)
+        self.assertEqual(inbound_keys1, [msg['message_id']])
+        self.assertEqual(inbound_keys2, [msg['message_id']])
+
+    @inlineCallbacks
+    def test_add_outbound_message_with_batch_ids(self):
+        batch_id1 = yield self.store.batch_start([])
+        batch_id2 = yield self.store.batch_start([])
+        msg = self.msg_helper.make_outbound("hi")
+
+        yield self.store.add_outbound_message(
+            msg, batch_ids=[batch_id1, batch_id2])
+
+        stored_msg = yield self.store.get_outbound_message(msg['message_id'])
+        outbound_keys1 = yield self.store.batch_outbound_keys(batch_id1)
+        outbound_keys2 = yield self.store.batch_outbound_keys(batch_id2)
+
+        self.assertEqual(stored_msg, msg)
+        self.assertEqual(outbound_keys1, [msg['message_id']])
+        self.assertEqual(outbound_keys2, [msg['message_id']])
+
+    @inlineCallbacks
+    def test_add_outbound_message_with_batch_id_and_batch_ids(self):
+        batch_id1 = yield self.store.batch_start([])
+        batch_id2 = yield self.store.batch_start([])
+        msg = self.msg_helper.make_outbound("hi")
+
+        yield self.store.add_outbound_message(
+            msg, batch_id=batch_id1, batch_ids=[batch_id2])
+
+        stored_msg = yield self.store.get_outbound_message(msg['message_id'])
+        outbound_keys1 = yield self.store.batch_outbound_keys(batch_id1)
+        outbound_keys2 = yield self.store.batch_outbound_keys(batch_id2)
+
+        self.assertEqual(stored_msg, msg)
+        self.assertEqual(outbound_keys1, [msg['message_id']])
+        self.assertEqual(outbound_keys2, [msg['message_id']])
+
 
 class TestMessageStoreCache(TestMessageStoreBase):
 
