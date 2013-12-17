@@ -7,6 +7,7 @@ Includes a publisher, a consumer and a set of simple metrics.
 
 import time
 import contextlib
+import warnings
 
 from twisted.internet.task import LoopingCall
 from twisted.python import log
@@ -302,6 +303,9 @@ class Timer(Metric):
         self.set(end_time - start_time)
 
     def start(self):
+        warnings.warn(
+            "Use of Timer.start() either directly or via a context manager is"
+            " deprecated. Please use Timer.timeit() instead.")
         if self._start_time is not None:
             raise TimerAlreadyStartedError("Attempt to start timer %s that "
                                            "was already started" %
