@@ -141,14 +141,14 @@ A shell script to start-up such a setup might be::
 
   GRAPHITE_OPTS="--worker_class=vumi.blinkenlights.GraphiteMetricsCollector"
 
-  twistd -n start_worker $BUCKET_OPTS &
-  twistd -n start_worker $BUCKET_OPTS &
+  twistd -n vumi_worker $BUCKET_OPTS &
+  twistd -n vumi_worker $BUCKET_OPTS &
 
-  twistd -n start_worker $AGGREGATOR_OPTS --set-option=bucket:0 &
-  twistd -n start_worker $AGGREGATOR_OPTS --set-option=bucket:1 &
-  twistd -n start_worker $AGGREGATOR_OPTS --set-option=bucket:2 &
+  twistd -n vumi_worker $AGGREGATOR_OPTS --set-option=bucket:0 &
+  twistd -n vumi_worker $AGGREGATOR_OPTS --set-option=bucket:1 &
+  twistd -n vumi_worker $AGGREGATOR_OPTS --set-option=bucket:2 &
 
-  twistd -n start_worker $GRAPHITE_OPTS &
+  twistd -n vumi_worker $GRAPHITE_OPTS &
 
 
 Publishing to Graphite
