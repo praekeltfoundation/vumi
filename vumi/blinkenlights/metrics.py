@@ -280,6 +280,13 @@ class Timer(Metric):
     >>> with my_timer.timeit():
     >>>     process_data()
 
+    Using the timer without a context manager:
+
+    >>> event_timer = my_timer.timeit():
+    >>> event_timer.start()
+    >>> d = process_other_data()
+    >>> d.addCallback(lambda r: event_timer.stop())
+
     .. note::
 
        Using ``.start()`` or ``.stop()`` directly or via using the
@@ -320,9 +327,6 @@ class Timer(Metric):
         return self._event_timer.__enter__()
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        warnings.warn(
-            "Use of Timer directly as a context manager is deprecated."
-            " Please use Timer.timeit() instead.")
         return self._event_timer.__exit__(exc_type, exc_val, exc_tb)
 
     def timeit(self):
@@ -335,9 +339,6 @@ class Timer(Metric):
         return self._event_timer.start()
 
     def stop(self):
-        warnings.warn(
-            "Use of Timer.stop() is deprecated."
-            " Please use Timer.timeit() instead.")
         return self._event_timer.stop()
 
 

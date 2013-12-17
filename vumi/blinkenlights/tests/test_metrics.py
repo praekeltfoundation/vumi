@@ -324,6 +324,16 @@ class TestTimer(VumiTestCase, CheckValuesMixin):
         self.check_poll_func(timer, 1, lambda x: 0.09 < x < 0.11)
         self.check_poll(timer, [])
 
+    def test_timeit_start_and_stop(self):
+        timer = metrics.Timer("foo")
+        self.patch_time(12345.0)
+        event_timer = timer.timeit()
+        event_timer.start()
+        self.incr_fake_time(0.1)
+        event_timer.stop()
+        self.check_poll_func(timer, 1, lambda x: 0.09 < x < 0.11)
+        self.check_poll(timer, [])
+
 
 class TestMetricsConsumer(VumiTestCase):
     def test_consume_message(self):
