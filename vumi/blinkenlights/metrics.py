@@ -241,6 +241,32 @@ class TimerAlreadyStartedError(Exception):
     pass
 
 
+class EventTimer(object):
+    def __init__(self, timer):
+        self._timer = timer
+        self._start_time = None
+
+    def __enter__(self):
+        self.start()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.stop()
+        return False
+
+    def start(self):
+        if self._start_time is not None:
+            raise TimerAlreadyStartedError("Attempt to start timer %s that "
+                                           "was already started" %
+                                           (self._timer.name,))
+        self._start_time = time.time()
+
+    def stop(self):
+        duration = time.time() - self._start_time
+        self._start_time = None
+        self._timer.set(duration)
+
+
 class Timer(Metric):
     """A metric that records time spent on operations.
 
@@ -285,37 +311,34 @@ class Timer(Metric):
 
     def __init__(self, *args, **kws):
         super(Timer, self).__init__(*args, **kws)
-        self._start_time = None
+        self._event_timer = EventTimer(self)
 
     def __enter__(self):
-        self.start()
-        return self
+        warnings.warn(
+            "Use of Timer directly as a context manager is deprecated."
+            " Please use Timer.timeit() instead.")
+        return self._event_timer.__enter__()
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.stop()
-        return False
+        warnings.warn(
+            "Use of Timer directly as a context manager is deprecated."
+            " Please use Timer.timeit() instead.")
+        return self._event_timer.__exit__(exc_type, exc_val, exc_tb)
 
-    @contextlib.contextmanager
     def timeit(self):
-        start_time = time.time()
-        yield
-        end_time = time.time()
-        self.set(end_time - start_time)
+        return EventTimer(self)
 
     def start(self):
         warnings.warn(
-            "Use of Timer.start() either directly or via a context manager is"
-            " deprecated. Please use Timer.timeit() instead.")
-        if self._start_time is not None:
-            raise TimerAlreadyStartedError("Attempt to start timer %s that "
-                                           "was already started" %
-                                           (self.name,))
-        self._start_time = time.time()
+            "Use of Timer.start() is deprecated."
+            " Please use Timer.timeit() instead.")
+        return self._event_timer.start()
 
     def stop(self):
-        duration = time.time() - self._start_time
-        self._start_time = None
-        self.set(duration)
+        warnings.warn(
+            "Use of Timer.stop() is deprecated."
+            " Please use Timer.timeit() instead.")
+        return self._event_timer.stop()
 
 
 class MetricsConsumer(Consumer):
