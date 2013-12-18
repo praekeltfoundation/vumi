@@ -237,8 +237,18 @@ class Count(Metric):
         self.set(1.0)
 
 
-class TimerAlreadyStartedError(Exception):
-    pass
+class TimerError(Exception):
+    """Raised when an error occurs in a call to an EventTimer method."""
+
+
+class TimerAlreadyStartedError(TimerError):
+    """Raised when attempting to start an EventTimer that is already started.
+    """
+
+
+class TimerNotStartedError(TimerError):
+    """Raised when attempting to stop an EventTimer that was not started.
+    """
 
 
 class EventTimer(object):
@@ -262,6 +272,10 @@ class EventTimer(object):
         self._start_time = time.time()
 
     def stop(self):
+        if self._start_time is None:
+            raise TimerNotStartedError("Attempt to stop timer %s that "
+                                       "has not been started" %
+                                       (self._timer.name,))
         duration = time.time() - self._start_time
         self._start_time = None
         self._timer.set(duration)

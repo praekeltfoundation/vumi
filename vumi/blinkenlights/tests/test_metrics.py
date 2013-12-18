@@ -334,6 +334,15 @@ class TestTimer(VumiTestCase, CheckValuesMixin):
         self.check_poll_func(timer, 1, lambda x: 0.09 < x < 0.11)
         self.check_poll(timer, [])
 
+    def test_timeit_start_and_start(self):
+        timer = metrics.Timer("foo")
+        timer.start()
+        self.assertRaises(metrics.TimerAlreadyStartedError, timer.start)
+
+    def test_timeit_stop_without_start(self):
+        timer = metrics.Timer("foo")
+        self.assertRaises(metrics.TimerNotStartedError, timer.stop)
+
 
 class TestMetricsConsumer(VumiTestCase):
     def test_consume_message(self):
