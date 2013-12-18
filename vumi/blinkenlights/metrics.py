@@ -304,7 +304,7 @@ class Timer(Metric):
     .. note::
 
        Using ``.start()`` or ``.stop()`` directly or via using the
-       :class:`Timer` instance itself as a context manager directly is
+       :class:`Timer` instance itself as a context manager is
        deprecated because they are not re-entrant and it's easy to
        accidentally overlap multiple calls to ``.start()`` and ``.stop()`` on
        the same :class:`Timer` instance (e.g. by letting the reactor run in
