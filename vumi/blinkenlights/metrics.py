@@ -296,7 +296,7 @@ class Timer(Metric):
 
     Using the timer without a context manager:
 
-    >>> event_timer = my_timer.timeit():
+    >>> event_timer = my_timer.timeit()
     >>> event_timer.start()
     >>> d = process_other_data()
     >>> d.addCallback(lambda r: event_timer.stop())
