@@ -28,6 +28,7 @@ class TestMTNRwandaUSSDTransport(VumiTestCase):
         self.transport = yield self.tx_helper.get_transport({
             'twisted_endpoint': 'tcp:port=0',
             'timeout': '30',
+            'web_path': '/foo/',
         })
         self.transport.callLater = self.clock.callLater
         self.session_manager = self.transport.session_manager
@@ -37,7 +38,6 @@ class TestMTNRwandaUSSDTransport(VumiTestCase):
         self.assertIsInstance(self.transport.endpoint,
                 endpoints.TCP4ServerEndpoint)
         self.assertIsInstance(self.transport.xmlrpc_server, tcp.Port)
-        self.assertIsInstance(self.transport.r, MTNRwandaXMLRPCResource)
 
     def test_transport_teardown(self):
         d = self.transport.teardown_transport()
@@ -53,7 +53,7 @@ class TestMTNRwandaUSSDTransport(VumiTestCase):
     @inlineCallbacks
     def test_inbound_request_and_reply(self):
         address = self.transport.xmlrpc_server.getHost()
-        url = 'http://' + address.host + ':' + str(address.port) + '/'
+        url = 'http://' + address.host + ':' + str(address.port) + '/foo/'
         proxy = Proxy(url)
         x = proxy.callRemote('handleUSSD', {
             'TransactionId': '0001',
@@ -116,7 +116,7 @@ class TestMTNRwandaUSSDTransport(VumiTestCase):
     @inlineCallbacks
     def test_inbound_faulty_request(self):
         address = self.transport.xmlrpc_server.getHost()
-        url = 'http://' + address.host + ':' + str(address.port) + '/'
+        url = 'http://' + address.host + ':' + str(address.port) + '/foo/'
         proxy = Proxy(url)
         try:
             yield proxy.callRemote('handleUSSD', {
@@ -139,7 +139,7 @@ class TestMTNRwandaUSSDTransport(VumiTestCase):
     @inlineCallbacks
     def test_timeout(self):
         address = self.transport.xmlrpc_server.getHost()
-        url = 'http://' + address.host + ':' + str(address.port) + '/'
+        url = 'http://' + address.host + ':' + str(address.port) + '/foo/'
         proxy = Proxy(url)
         x = proxy.callRemote('handleUSSD', {
             'TransactionId': '0001',
