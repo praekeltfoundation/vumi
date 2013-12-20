@@ -364,8 +364,10 @@ class EsmeReceiverMixin(EsmeGenericMixin):
     def test_deliver_sm_data_coding_override(self):
         """A simple message should be delivered."""
         esme = yield self.get_esme(config={
-            'data_coding_overrides': {
-                0: 'utf-16be'
+            'short_message_processor_config': {
+                'data_coding_overrides': {
+                    0: 'utf-16be'
+                }
             }
         }, deliver_sm=self.assertion_cb(u'hello', 'short_message'))
 
@@ -373,8 +375,10 @@ class EsmeReceiverMixin(EsmeGenericMixin):
             self.get_sm('\x00h\x00e\x00l\x00l\x00o', 0))
 
         esme = yield self.get_esme(config={
-            'data_coding_overrides': {
-                0: 'ascii'
+            'short_message_processor_config': {
+                'data_coding_overrides': {
+                    0: 'ascii'
+                }
             }
         }, deliver_sm=self.assertion_cb(u'hello', 'short_message'))
         yield esme.handle_deliver_sm(
@@ -494,8 +498,10 @@ class EsmeReceiverMixin(EsmeGenericMixin):
                 ('\xd8\xa7\xd9\x84\xd9\x84\xd9\x87 '
                  '\xd9\x85\xd8\xb9\xd9\x83').decode('utf-8'), 'short_message'),
             config={
-                'data_coding_overrides': {
-                    8: 'utf-8'
+                'short_message_processor_config': {
+                    'data_coding_overrides': {
+                        8: 'utf-8'
+                    }
                 }
             })
         yield esme.handle_deliver_sm(self.get_sm(

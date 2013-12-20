@@ -37,7 +37,7 @@ class IDeliveryReportProcessor(Interface):
 
 class IDeliverShortMessageProcessor(Interface):
 
-    def on_short_message(pdu):
+    def handle_short_message_pdu(pdu):
         """Handle a short message PDU from the networks.
 
         This should always return a Deferred.

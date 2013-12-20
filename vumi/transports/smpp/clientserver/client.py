@@ -20,7 +20,7 @@ from smpp.pdu_inspector import (
 from vumi import log
 from vumi.transports.smpp.helpers import (IDeliveryReportProcessor,
                                           IDeliverShortMessageProcessor)
-from vumi.transports.smpp.utils import unpacked_pdu_opts
+from vumi.transports.smpp.utils import unpacked_pdu_opts, detect_ussd
 
 
 GSM_MAX_SMS_BYTES = 140
@@ -32,10 +32,6 @@ class UnbindResp(PDU):
         super(UnbindResp, self).__init__(
             'unbind_resp', 'ESME_ROK', sequence_number, **kwargs)
 
-
-def detect_ussd(pdu_opts):
-    # TODO: Push this back to python-smpp?
-    return ('ussd_service_op' in pdu_opts)
 
 
 def update_ussd_pdu(sm_pdu, continue_session, session_info=None):
@@ -267,51 +263,6 @@ class EsmeTransceiver(Protocol):
                 command_id=pdu['header']['command_id'],
                 message_id=message_id)
 
-    def _decode_message(self, message, data_coding):
-        """
-        Messages can arrive with one of a number of specified
-        encodings. We only handle a subset of these.
-
-        From the SMPP spec:
-
-        00000000 (0) SMSC Default Alphabet
-        00000001 (1) IA5(CCITTT.50)/ASCII(ANSIX3.4)
-        00000010 (2) Octet unspecified (8-bit binary)
-        00000011 (3) Latin1(ISO-8859-1)
-        00000100 (4) Octet unspecified (8-bit binary)
-        00000101 (5) JIS(X0208-1990)
-        00000110 (6) Cyrllic(ISO-8859-5)
-        00000111 (7) Latin/Hebrew (ISO-8859-8)
-        00001000 (8) UCS2(ISO/IEC-10646)
-        00001001 (9) PictogramEncoding
-        00001010 (10) ISO-2022-JP(MusicCodes)
-        00001011 (11) reserved
-        00001100 (12) reserved
-        00001101 (13) Extended Kanji JIS(X 0212-1990)
-        00001110 (14) KSC5601
-        00001111 (15) reserved
-
-        Particularly problematic are the "Octet unspecified" encodings.
-        """
-        codecs = {
-            1: 'ascii',
-            3: 'latin1',
-            8: 'utf-16be',  # Actually UCS-2, but close enough.
-            }
-        codecs.update(self.config.data_coding_overrides)
-        codec = codecs.get(data_coding, None)
-        if codec is None or message is None:
-            log.msg("WARNING: Not decoding message with data_coding=%s" % (
-                    data_coding,))
-        else:
-            try:
-                return message.decode(codec)
-            except Exception, e:
-                log.msg("Error decoding message with data_coding=%s" % (
-                        data_coding,))
-                log.err(e)
-        return message
-
     @inlineCallbacks
     def handle_deliver_sm(self, pdu):
         if self.state not in ['BOUND_RX', 'BOUND_TRX']:
@@ -327,28 +278,12 @@ class EsmeTransceiver(Protocol):
         pdu_resp = DeliverSMResp(sequence_number, **self.bind_params)
         yield self.send_pdu(pdu_resp)
 
-        pdu_params = pdu['body']['mandatory_parameters']
-        pdu_opts = unpacked_pdu_opts(pdu)
-
         pdu_dr_data = self.dr_processor.inspect_delivery_report_pdu(pdu)
         if pdu_dr_data is not None:
             yield self.dr_processor.handle_delivery_report_pdu(pdu_dr_data)
             return
 
-        # We might have a `message_payload` optional field to worry about.
-        message_payload = pdu_opts.get('message_payload', None)
-        if message_payload is not None:
-            pdu_params['short_message'] = message_payload.decode('hex')
-
-        if detect_ussd(pdu_opts):
-            # We have a USSD message.
-            yield self._handle_deliver_sm_ussd(pdu, pdu_params, pdu_opts)
-        elif detect_multipart(pdu):
-            # We have a multipart SMS.
-            yield self._handle_deliver_sm_multipart(pdu, pdu_params)
-        else:
-            # We have a standard SMS.
-            yield self._handle_deliver_sm_sms(pdu_params)
+        yield self.sm_processor.handle_short_message_pdu(pdu)
 
     def _deliver_sm(self, source_addr, destination_addr, short_message, **kw):
 
@@ -358,105 +293,8 @@ class EsmeTransceiver(Protocol):
         if dr_data is not None:
             return self.dr_processor.handle_delivery_report_content(dr_data)
         else:
-            return self.esme_callbacks.deliver_sm(
-                source_addr=source_addr,
-                destination_addr=destination_addr,
-                short_message=short_message,
-                message_id=uuid.uuid4().hex,
-                **kw)
-
-    def _handle_deliver_sm_ussd(self, pdu, pdu_params, pdu_opts):
-        # Some of this stuff might be specific to Tata's setup.
-
-        service_op = pdu_opts['ussd_service_op']
-
-        session_event = 'close'
-        if service_op == '01':
-            # PSSR request. Let's assume it means a new session.
-            session_event = 'new'
-        elif service_op == '11':
-            # PSSR response. This means session end.
-            session_event = 'close'
-        elif service_op in ('02', '12'):
-            # USSR request or response. I *think* we only get the latter.
-            session_event = 'continue'
-
-        # According to the spec, the first octet is the session id and the
-        # second is the client dialog id (first 7 bits) and end session flag
-        # (last bit).
-
-        # Since we don't use the client dialog id and the spec says it's
-        # ESME-defined, treat the whole thing as opaque "session info" that
-        # gets passed back in reply messages.
-
-        its_session_number = int(pdu_opts['its_session_info'], 16)
-        end_session = bool(its_session_number % 2)
-        session_info = "%04x" % (its_session_number & 0xfffe)
-
-        if end_session:
-            # We have an explicit "end session" flag.
-            session_event = 'close'
-
-        decoded_msg = self._decode_message(pdu_params['short_message'],
-                                           pdu_params['data_coding'])
-        return self._deliver_sm(
-            source_addr=pdu_params['source_addr'],
-            destination_addr=pdu_params['destination_addr'],
-            short_message=decoded_msg,
-            message_type='ussd',
-            session_event=session_event,
-            session_info=session_info)
-
-    def _handle_deliver_sm_sms(self, pdu_params):
-        decoded_msg = self._decode_message(pdu_params['short_message'],
-                                           pdu_params['data_coding'])
-        return self._deliver_sm(
-            source_addr=pdu_params['source_addr'],
-            destination_addr=pdu_params['destination_addr'],
-            short_message=decoded_msg)
-
-    @inlineCallbacks
-    def load_multipart_message(self, redis_key):
-        value = yield self.redis.get(redis_key)
-        value = json.loads(value) if value else {}
-        log.debug("Retrieved value: %s" % (repr(value)))
-        returnValue(MultipartMessage(self._unhex_from_redis(value)))
-
-    def save_multipart_message(self, redis_key, multipart_message):
-        data_dict = self._hex_for_redis(multipart_message.get_array())
-        return self.redis.set(redis_key, json.dumps(data_dict))
-
-    def _hex_for_redis(self, data_dict):
-        for index, part in data_dict.items():
-            part['part_message'] = part['part_message'].encode('hex')
-        return data_dict
-
-    def _unhex_from_redis(self, data_dict):
-        for index, part in data_dict.items():
-            part['part_message'] = part['part_message'].decode('hex')
-        return data_dict
-
-    @inlineCallbacks
-    def _handle_deliver_sm_multipart(self, pdu, pdu_params):
-        redis_key = "multi_%s" % (multipart_key(detect_multipart(pdu)),)
-        log.debug("Redis multipart key: %s" % (redis_key))
-        multi = yield self.load_multipart_message(redis_key)
-        multi.add_pdu(pdu)
-        completed = multi.get_completed()
-        if completed:
-            yield self.redis.delete(redis_key)
-            log.msg("Reassembled Message: %s" % (completed['message']))
-            # We assume that all parts have the same data_coding here, because
-            # otherwise there's nothing sensible we can do.
-            decoded_msg = self._decode_message(completed['message'],
-                                               pdu_params['data_coding'])
-            # and we can finally pass the whole message on
-            yield self._deliver_sm(
-                source_addr=completed['from_msisdn'],
-                destination_addr=completed['to_msisdn'],
-                short_message=decoded_msg)
-        else:
-            yield self.save_multipart_message(redis_key, multi)
+            return self.sm_processor.handle_short_message_content(
+                source_addr, destination_addr, short_message, **kw)
 
     def handle_enquire_link(self, pdu):
         if pdu['header']['command_status'] == 'ESME_ROK':

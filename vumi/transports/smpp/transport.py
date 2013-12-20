@@ -69,13 +69,6 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
     submit_sm_data_coding = ConfigInt(
         'What data_coding value to tell the SMSC we\'re using when putting'
         'an SMS on the wire', static=True, default=0)
-    data_coding_overrides = ConfigDict(
-        "Overrides for data_coding character set mapping. This is useful for "
-        "setting the default encoding (0), adding additional undefined "
-        "encodings (such as 4 or 8) or overriding encodings in cases where "
-        "the SMSC is violating the spec (which happens a lot). Keys should "
-        "be integers, values should be strings containing valid Python "
-        "character encoding names.", default={}, static=True)
     send_long_messages = ConfigBool(
         "If `True`, messages longer than 254 characters will be sent in the "
         "`message_payload` optional field instead of the `short_message` "
