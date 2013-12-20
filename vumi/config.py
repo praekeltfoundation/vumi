@@ -9,6 +9,7 @@ from zope.interface import Interface
 from twisted.python.components import Adapter, registerAdapter
 
 from vumi.errors import ConfigError
+from vumi.utils import load_class_by_string
 
 
 class IConfigData(Interface):
@@ -188,6 +189,17 @@ class ConfigRegex(ConfigText):
     def clean(self, value):
         value = super(ConfigRegex, self).clean(value)
         return re.compile(value)
+
+
+class ConfigClassName(ConfigText):
+    field_type = 'Class'
+
+    def clean(self, value):
+        try:
+            return load_class_by_string(value)
+        except (ValueError, ImportError), e:
+            # ValueError for empty module name
+            self.raise_config_error(str(e))
 
 
 class ConfigServerEndpoint(ConfigText):
