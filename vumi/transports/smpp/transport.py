@@ -164,8 +164,8 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
         static=True)
     short_message_processor = ConfigClassName(
         'Which short message processor to use. '
-        'Should implement `IShortMessageProcessor`.',
-        default='vumi.transports.smpp.processors.ShortMessageProcessor',
+        'Should implement `IDeliverShortMessageProcessor`.',
+        default='vumi.transports.smpp.processors.DeliverShortMessageProcessor',
         static=True)
 
     def post_validate(self):

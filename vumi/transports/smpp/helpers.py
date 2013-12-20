@@ -18,7 +18,7 @@ class IDeliveryReportProcessor(Interface):
         """
 
 
-class IShortMessageProcessor(Interface):
+class IDeliverShortMessageProcessor(Interface):
 
     def on_short_message(pdu):
         """Handle a short message PDU from the networks.

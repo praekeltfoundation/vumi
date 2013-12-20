@@ -1,7 +1,7 @@
 from zope.interface import implements
 
 from vumi.transports.smpp.helpers import (IDeliveryReportProcessor,
-                                          IShortMessageProcessor)
+                                          IDeliverShortMessageProcessor)
 
 
 class DeliveryReportProcessor(object):
@@ -11,8 +11,8 @@ class DeliveryReportProcessor(object):
         self.redis = redis
 
 
-class ShortMessageProcessor(object):
-    implements(IShortMessageProcessor)
+class DeliverShortMessageProcessor(object):
+    implements(IDeliverShortMessageProcessor)
 
     def __init__(self, redis):
         self.redis = redis
