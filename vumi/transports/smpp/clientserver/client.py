@@ -350,16 +350,15 @@ class EsmeTransceiver(Protocol):
             # We have a standard SMS.
             yield self._handle_deliver_sm_sms(pdu_params)
 
-    @inlineCallbacks
     def _deliver_sm(self, source_addr, destination_addr, short_message, **kw):
 
         dr_data = self.dr_processor.inspect_delivery_report_content(
             short_message)
 
         if dr_data is not None:
-            yield self.dr_processor.handle_delivery_report_content(dr_data)
+            return self.dr_processor.handle_delivery_report_content(dr_data)
         else:
-            yield self.esme_callbacks.deliver_sm(
+            return self.esme_callbacks.deliver_sm(
                 source_addr=source_addr,
                 destination_addr=destination_addr,
                 short_message=short_message,
