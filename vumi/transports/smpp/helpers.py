@@ -3,11 +3,28 @@ from zope.interface import Interface
 
 class IDeliveryReportProcessor(Interface):
 
-    def on_delivery_report_pdu(pdu):
+    def inspect_delivery_report_pdu(pdu):
+        """Inspect a PDU and return a Deferred that'll either fire with:
+
+        - ``True`` for when it was a DR and was handled succefully
+        - ``False`` when it wasn't a DR and something else needs to
+          deal with it
+        """
+
+    def on_delivery_report_pdu(receipted_message_id, message_state):
         """Handle a delivery report PDU from the networks.
 
         This should always return a Deferred.
         All helpers should implement this even if it does nothing.
+        """
+
+    def inspect_delivery_report_content(content):
+        """Inspect content received in a short message and return a
+        Deferred that'll either fire with:
+
+        - ``True`` for when it was a DR and was handled succefully
+        - ``False`` when it wasn't a DR and something else needs to
+          deal with it
         """
 
     def on_delivery_report_content(receipted_message_id, message_state):

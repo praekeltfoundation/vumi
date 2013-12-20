@@ -20,6 +20,7 @@ from smpp.pdu_inspector import (
 from vumi import log
 from vumi.transports.smpp.helpers import (IDeliveryReportProcessor,
                                           IDeliverShortMessageProcessor)
+from vumi.transports.smpp.utils import unpacked_pdu_opts
 
 
 GSM_MAX_SMS_BYTES = 140
@@ -30,13 +31,6 @@ class UnbindResp(PDU):
     def __init__(self, sequence_number, **kwargs):
         super(UnbindResp, self).__init__(
             'unbind_resp', 'ESME_ROK', sequence_number, **kwargs)
-
-
-def unpacked_pdu_opts(unpacked_pdu):
-    pdu_opts = {}
-    for opt in unpacked_pdu['body'].get('optional_parameters', []):
-        pdu_opts[opt['tag']] = opt['value']
-    return pdu_opts
 
 
 def detect_ussd(pdu_opts):
@@ -334,14 +328,8 @@ class EsmeTransceiver(Protocol):
         pdu_params = pdu['body']['mandatory_parameters']
         pdu_opts = unpacked_pdu_opts(pdu)
 
-        # This might be a delivery receipt with PDU parameters. If we get a
-        # delivery receipt without these parameters we'll try a regex match
-        # later once we've decoded the message properly.
-        receipted_message_id = pdu_opts.get('receipted_message_id', None)
-        message_state = pdu_opts.get('message_state', None)
-        if receipted_message_id is not None and message_state is not None:
-            yield self.dr_processor.on_delivery_report_pdu(
-                receipted_message_id, message_state)
+        if (yield self.dr_processor.inspect_delivery_report_pdu(pdu)):
+            return
 
         # We might have a `message_payload` optional field to worry about.
         message_payload = pdu_opts.get('message_payload', None)
@@ -358,22 +346,20 @@ class EsmeTransceiver(Protocol):
             # We have a standard SMS.
             yield self._handle_deliver_sm_sms(pdu_params)
 
+    @inlineCallbacks
     def _deliver_sm(self, source_addr, destination_addr, short_message, **kw):
-        delivery_report = self.config.delivery_report_regex.search(
-            short_message or '')
-        if delivery_report:
-            # We have a delivery report.
-            fields = delivery_report.groupdict()
-            return self.dr_processor.on_delivery_report_content(
-                fields['id'], fields['stat'])
 
-        message_id = str(uuid.uuid4())
-        return self.esme_callbacks.deliver_sm(
-            source_addr=source_addr,
-            destination_addr=destination_addr,
-            short_message=short_message,
-            message_id=message_id,
-            **kw)
+        is_dr = yield self.dr_processor.inspect_delivery_report_content(
+            short_message)
+
+        if not is_dr:
+            message_id = str(uuid.uuid4())
+            yield self.esme_callbacks.deliver_sm(
+                source_addr=source_addr,
+                destination_addr=destination_addr,
+                short_message=short_message,
+                message_id=message_id,
+                **kw)
 
     def _handle_deliver_sm_ussd(self, pdu, pdu_params, pdu_opts):
         # Some of this stuff might be specific to Tata's setup.

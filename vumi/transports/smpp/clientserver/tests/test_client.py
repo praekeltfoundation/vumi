@@ -1,5 +1,5 @@
 from twisted.internet.task import Clock
-from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.defer import inlineCallbacks, returnValue, succeed
 from smpp.pdu_builder import DeliverSM, BindTransceiverResp, Unbind
 from smpp.pdu import unpack_pdu
 
@@ -124,6 +124,7 @@ class EsmeTestCaseBase(VumiTestCase):
             for k in message_path:
                 value = value[k]
             self.assertEqual(expected, value)
+            return succeed(True)
 
         return self.make_cb(fun)
 
