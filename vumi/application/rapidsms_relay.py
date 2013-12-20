@@ -130,8 +130,8 @@ class RapidSMSRelayConfig(ApplicationWorker.CONFIG_CLASS):
         "Number of seconds to keep original messages in redis so that"
         " replies may be sent via `in_reply_to`.", default=10 * 60)
     allowed_endpoints = ConfigList(
-        'List of allowed endpoints to send from.', static=True,
-        required=True)
+        'List of allowed endpoints to send from.',
+        required=True, default=("default",))
 
     rapidsms_url = ConfigUrl("URL of the rapidsms http backend.")
     rapidsms_username = ConfigText(
@@ -141,7 +141,7 @@ class RapidSMSRelayConfig(ApplicationWorker.CONFIG_CLASS):
         "Password to use for the `rapidsms_url`", default=None)
     rapidsms_auth_method = ConfigText(
         "Authentication method to use with `rapidsms_url`."
-        "The 'basic' method is currently the only available method.",
+        " The 'basic' method is currently the only available method.",
         default='basic')
     rapidsms_http_method = ConfigText(
         "HTTP request method to use for the `rapidsms_url`",
@@ -153,12 +153,12 @@ class RapidSMSRelay(ApplicationWorker):
 
     CONFIG_CLASS = RapidSMSRelayConfig
 
+    ALLOWED_ENDPOINTS = None
+
     def validate_config(self):
         self.supported_auth_methods = {
             'basic': self.generate_basic_auth_headers,
         }
-        config = self.get_static_config()
-        self.ALLOWED_ENDPOINTS = config.allowed_endpoints
 
     def generate_basic_auth_headers(self, username, password):
         credentials = ':'.join([username, password])
@@ -256,9 +256,20 @@ class RapidSMSRelay(ApplicationWorker):
         reply = yield self.reply_to(orig_msg, content)
         returnValue([reply])
 
+    def _check_endpoint(self, allowed_endpoints, endpoint):
+        if allowed_endpoints is None:
+            return
+        if endpoint is None:
+            endpoint = "default"
+        if endpoint not in allowed_endpoints:
+            raise ValueError(
+                "Endpoint %r not defined in allowed_endpoints %r"
+                % (endpoint, allowed_endpoints))
+
     def _handle_send_to(self, config, content, to_addrs, endpoint):
         sends = []
         try:
+            self._check_endpoint(config.allowed_endpoints, endpoint)
             for to_addr in to_addrs:
                 sends.append(self.send_to(to_addr, content, endpoint=endpoint))
         except ValueError, e:
