@@ -18,6 +18,8 @@ from smpp.pdu_inspector import (
     MultipartMessage, detect_multipart, multipart_key)
 
 from vumi import log
+from vumi.transports.smpp.helpers import (IDeliveryReportProcessor,
+                                          IShortMessageProcessor)
 
 
 GSM_MAX_SMS_BYTES = 140
@@ -61,7 +63,19 @@ class EsmeTransceiver(Protocol):
         self.config = config
 
         self.dr_processor = config.delivery_report_processor(redis)
+        if not IDeliveryReportProcessor.providedBy(self.dr_processor):
+            raise ValueError(
+                "delivery_report_processor does not provide the "
+                "IDeliveryReportProcessor interface: %s" % (
+                    self.dr_processor,))
+
         self.sm_processor = config.short_message_processor(redis)
+        if not IShortMessageProcessor.providedBy(self.sm_processor):
+            raise ValueError(
+                "short_message_processor does not provide the "
+                "IShortMessageProcessor interface: %s" % (
+                    self.sm_processor,))
+
 
         self.bind_params = bind_params
         self.esme_callbacks = esme_callbacks
