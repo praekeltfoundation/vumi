@@ -22,11 +22,11 @@ class EsmeCallbacksDeliveryReportProcessor(object):
             8: 'REJECTED',
         }.get(message_state, 'UNKNOWN')
         return self.protocol.esme_callbacks.delivery_report(
-            receipted_message_id, status)
+            message_id=receipted_message_id, message_state=status)
 
     def on_delivery_report_content(self, receipted_message_id, message_state):
         return self.protocol.esme_callbacks.delivery_report(
-            receipted_message_id, message_state)
+            message_id=receipted_message_id, message_state=message_state)
 
 
 class EsmeCallbacksDeliverShortMessageProcessor(object):
