@@ -192,7 +192,7 @@ class ConfigRegex(ConfigText):
 
 
 class ConfigClassName(ConfigText):
-    field_type = 'ClassName'
+    field_type = 'Class'
 
     def clean(self, value):
         try:
