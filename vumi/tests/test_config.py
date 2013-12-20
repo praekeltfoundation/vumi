@@ -4,7 +4,7 @@ from vumi.errors import ConfigError
 from vumi.config import (
     Config, ConfigField, ConfigText, ConfigInt, ConfigFloat, ConfigBool,
     ConfigList, ConfigDict, ConfigUrl, ConfigRegex, ConfigServerEndpoint,
-    ConfigClientEndpoint)
+    ConfigClientEndpoint, ConfigClassName)
 from vumi.tests.helpers import VumiTestCase
 
 
@@ -214,6 +214,16 @@ class ConfigFieldTest(VumiTestCase):
         self.assertTrue(value.match('vumi'))
         self.assertFalse(value.match('notvumi'))
         self.assertEqual(None, self.field_value(field, None))
+
+    def test_classname_field(self):
+        field = self.make_field(ConfigClassName)
+        klass = self.field_value(field, 'vumi.tests.test_config.ConfigTest')
+        self.assertEqual(klass, ConfigTest)
+
+    def test_invalid_classname_field(self):
+        field = self.make_field(ConfigClassName)
+        self.assert_field_invalid(field, '0000')
+        self.assert_field_invalid(field, '0000.bar')
 
     def test_int_field(self):
         field = self.make_field(ConfigInt)

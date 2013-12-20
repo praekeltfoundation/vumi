@@ -82,13 +82,13 @@ class SoapWrapperTests(TestCase):
             tostring(soap_fault('soapenv:Client', 'Oops.')))
 
 
-class TestFaultDetail(namedtuple('TestFaultDetail', ['foo', 'bar'])):
+class ToyFaultDetail(namedtuple('ToyFaultDetail', ['foo', 'bar'])):
     """
     A SOAP fault detail used for tests.
     """
     @classmethod
     def from_element(cls, elem):
-        if elem.tag != L.TestFaultDetail.text:
+        if elem.tag != L.ToyFaultDetail.text:
             return None
         return cls(gettext(elem, 'foo'), gettext(elem, 'bar'))
 
@@ -97,7 +97,7 @@ class TestFault(SoapFault):
     """
     A SOAP fault used for tests.
     """
-    detail_type = TestFaultDetail
+    detail_type = ToyFaultDetail
 
 
 def _make_fault(*a, **kw):
@@ -124,7 +124,7 @@ class SoapFaultTests(TestCase):
         `SoapFault.from_element` creates a `SoapFault` instance from an
         ElementTree element and parses known SOAP fault details.
         """
-        detail = L.TestFaultDetail(
+        detail = L.ToyFaultDetail(
                 L.foo('a'),
                 L.bar('b'))
 
@@ -140,7 +140,7 @@ class SoapFaultTests(TestCase):
         `SoapFault.to_element` serializes the fault to a SOAP ``Fault``
         ElementTree element.
         """
-        detail = L.TestFaultDetail(
+        detail = L.ToyFaultDetail(
                 L.foo('a'),
                 L.bar('b'))
 
@@ -152,7 +152,7 @@ class SoapFaultTests(TestCase):
                 'faultstring': fault.string,
                 'faultactor': fault.actor,
                 'detail': {
-                    'TestFaultDetail': {'foo': 'a',
+                    'ToyFaultDetail': {'foo': 'a',
                                         'bar': 'b'}}}},
             element_to_dict(fault.to_element()))
 
@@ -180,7 +180,7 @@ class SoapFaultTests(TestCase):
             L.WhatIsThis(
                 L.foo('a'),
                 L.bar('b')),
-            L.TestFaultDetail(
+            L.ToyFaultDetail(
                 L.foo('c'),
                 L.bar('d'))]
 
@@ -281,7 +281,7 @@ class PerformSoapRequestTests(_FailureResultOfMixin, TestCase):
         `perform_soap_request` raises a `SoapFault` subclass when a SOAP fault
         detail matches one of the expected fault types.
         """
-        detail = L.TestFaultDetail(
+        detail = L.ToyFaultDetail(
                 L.foo('a'),
                 L.bar('b'))
         response = MockResponse.build(

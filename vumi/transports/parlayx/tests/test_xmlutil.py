@@ -134,6 +134,12 @@ class ElementMakerTests(TestCase):
     """
     Tests for `vumi.transports.parlayx.xmlutil.ElementMaker`.
     """
+    def setUp(self):
+        # ElementTree has a global namespace prefix map. We need to patch it
+        # out here to make the tests independent of each other.
+        import xml.etree.ElementTree
+        self.patch(xml.etree.ElementTree, '_namespace_map', {})
+
     def test_unknown_child_type(self):
         """
         `ElementMaker` instances raise `TypeError` when called with children of
