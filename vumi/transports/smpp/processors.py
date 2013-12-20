@@ -21,12 +21,10 @@ class EsmeCallbacksDeliveryReportProcessor(object):
         receipted_message_id = pdu_opts.get('receipted_message_id', None)
         message_state = pdu_opts.get('message_state', None)
         if receipted_message_id is not None and message_state is not None:
-            return {
-                'receipted_message_id': receipted_message_id,
-                'message_state': message_state,
-            }
+            return (receipted_message_id, message_state)
 
-    def handle_delivery_report_pdu(self, receipted_message_id, message_state):
+    def handle_delivery_report_pdu(self, pdu_data):
+        receipted_message_id, message_state = pdu_data
         status = {
             1: 'ENROUTE',
             2: 'DELIVERED',
@@ -47,13 +45,10 @@ class EsmeCallbacksDeliveryReportProcessor(object):
         if delivery_report:
             # We have a delivery report.
             fields = delivery_report.groupdict()
-            return {
-                'receipted_message_id': fields['id'],
-                'message_state': fields['stat'],
-            }
+            return (fields['id'], fields['stat'])
 
-    def handle_delivery_report_content(self, receipted_message_id,
-                                       message_state):
+    def handle_delivery_report_content(self, pdu_data):
+        receipted_message_id, message_state = pdu_data
         return self.protocol.esme_callbacks.delivery_report(
             message_id=receipted_message_id, message_state=message_state)
 
