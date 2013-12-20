@@ -20,39 +20,6 @@ from vumi.config import (ConfigText, ConfigInt, ConfigBool, ConfigDict,
 
 class SmppTransportConfig(Transport.CONFIG_CLASS):
 
-    DELIVERY_REPORT_REGEX = (
-        'id:(?P<id>\S{,65})'
-        ' +sub:(?P<sub>...)'
-        ' +dlvrd:(?P<dlvrd>...)'
-        ' +submit date:(?P<submit_date>\d*)'
-        ' +done date:(?P<done_date>\d*)'
-        ' +stat:(?P<stat>[A-Z]{7})'
-        ' +err:(?P<err>...)'
-        ' +[Tt]ext:(?P<text>.{,20})'
-        '.*'
-    )
-
-    DELIVERY_REPORT_STATUS_MAPPING = {
-        # Output values should map to themselves:
-        'delivered': 'delivered',
-        'failed': 'failed',
-        'pending': 'pending',
-        # SMPP `message_state` values:
-        'ENROUTE': 'pending',
-        'DELIVERED': 'delivered',
-        'EXPIRED': 'failed',
-        'DELETED': 'failed',
-        'UNDELIVERABLE': 'failed',
-        'ACCEPTED': 'delivered',
-        'UNKNOWN': 'pending',
-        'REJECTED': 'failed',
-        # From the most common regex-extracted format:
-        'DELIVRD': 'delivered',
-        'REJECTD': 'failed',
-        # Currently we will accept this for Yo! TODO: investigate
-        '0': 'delivered',
-    }
-
     twisted_endpoint = ConfigClientEndpoint(
         'The SMPP endpoint to connect to.',
         required=True, static=True)
@@ -96,13 +63,6 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
         'matching submit_sm_resp and delivery report messages. Defaults to '
         '1 week',
         default=(60 * 60 * 24 * 7), static=True)
-    delivery_report_regex = ConfigRegex(
-        'What regex to use for matching delivery reports',
-        default=DELIVERY_REPORT_REGEX, static=True)
-    delivery_report_status_mapping = ConfigDict(
-        "Mapping from delivery report message state to "
-        "(`delivered`, `failed`, `pending`)",
-        static=True, default=DELIVERY_REPORT_STATUS_MAPPING)
     submit_sm_encoding = ConfigText(
         'How to encode the SMS before putting on the wire', static=True,
         default='utf-8')
@@ -163,12 +123,18 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
         default=('vumi.transports.smpp.processors.'
                  'EsmeCallbacksDeliveryReportProcessor'),
         static=True)
+    delivery_report_processor_config = ConfigDict(
+        'The configuration for the ``delivery_report_processor``',
+        default={}, static=True)
     short_message_processor = ConfigClassName(
         'Which short message processor to use. '
         'Should implement `IDeliverShortMessageProcessor`.',
         default=('vumi.transports.smpp.processors.'
                  'EsmeCallbacksDeliverShortMessageProcessor'),
         static=True)
+    short_message_processor_config = ConfigDict(
+        'The configuration for the ``short_message_processor``',
+        default={}, static=True)
 
     def post_validate(self):
         long_message_params = (
@@ -415,13 +381,8 @@ class SmppTransport(Transport):
             self.callLater(config.throttle_delay,
                            self._submit_outbound_message, message)
 
-    def delivery_status(self, state):
-        config = self.get_static_config()
-        return config.delivery_report_status_mapping.get(state, 'pending')
-
     @inlineCallbacks
-    def delivery_report(self, message_id, message_state):
-        delivery_status = self.delivery_status(message_state)
+    def delivery_report(self, message_id, delivery_status):
         message_id = yield self.r_get_id_for_third_party_id(message_id)
         if message_id is None:
             log.warning("Failed to retrieve message id for delivery report."

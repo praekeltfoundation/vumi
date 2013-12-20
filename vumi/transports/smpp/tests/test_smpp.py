@@ -785,7 +785,9 @@ class TestDeliveryYo(EsmeToSmscTestCase):
         " +[Tt]ext:(?P<text>.{,20}).*")
 
     CONFIG_OVERRIDE = {
-        "delivery_report_regex": DELIVERY_REPORT_REGEX,
+        "delivery_report_processor_config": {
+            "delivery_report_regex": DELIVERY_REPORT_REGEX,
+        },
         "smsc_delivery_report_string": (
             'id:%s sub:1 dlvrd:1 submit date:%s done date:%s '
             'stat:0 err:0 text:If a general electio'),
@@ -796,8 +798,10 @@ class TestDeliveryOverrideMapping(EsmeToSmscTestCase):
     # This tests a non-standard delivery report status mapping.
 
     CONFIG_OVERRIDE = {
-        "delivery_report_regex": "id:(?P<id>\S+) stat:(?P<stat>\S+) .*",
-        "delivery_report_status_mapping": {"foo": "delivered"},
+        "delivery_report_processor_config": {
+            "delivery_report_regex": "id:(?P<id>\S+) stat:(?P<stat>\S+) .*",
+            "delivery_report_status_mapping": {"foo": "delivered"},
+        },
         "smsc_delivery_report_string": (
             'id:%s stat:foo submit date:%s done date:%s'),
     }

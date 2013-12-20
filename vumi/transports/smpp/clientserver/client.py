@@ -66,14 +66,16 @@ class EsmeTransceiver(Protocol):
         self.redis = redis
         self._lose_conn = None
 
-        self.dr_processor = config.delivery_report_processor(self)
+        self.dr_processor = config.delivery_report_processor(
+            self, self.config.delivery_report_processor_config)
         if not IDeliveryReportProcessor.providedBy(self.dr_processor):
             raise ValueError(
                 "delivery_report_processor does not provide the "
                 "IDeliveryReportProcessor interface: %s" % (
                     self.dr_processor,))
 
-        self.sm_processor = config.short_message_processor(self)
+        self.sm_processor = config.short_message_processor(
+            self, self.config.short_message_processor_config)
         if not IDeliverShortMessageProcessor.providedBy(self.sm_processor):
             raise ValueError(
                 "short_message_processor does not provide the "
