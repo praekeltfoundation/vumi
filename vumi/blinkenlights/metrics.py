@@ -256,10 +256,12 @@ class TimerAlreadyStoppedError(TimerError):
 
 
 class EventTimer(object):
-    def __init__(self, timer):
+    def __init__(self, timer, start=False):
         self._timer = timer
         self._start_time = None
         self._stop_time = None
+        if start:
+            self.start()
 
     def __enter__(self):
         self.start()
@@ -356,8 +358,8 @@ class Timer(Metric):
         self._event_timer = EventTimer(self)
         return result
 
-    def timeit(self):
-        return EventTimer(self)
+    def timeit(self, start=False):
+        return EventTimer(self, start=start)
 
     def start(self):
         warnings.warn(

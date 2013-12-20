@@ -318,6 +318,7 @@ class TestTimer(VumiTestCase, CheckValuesMixin):
         self.incr_fake_time(0.1)
         timer.stop()
         self.check_poll_func(timer, 2, lambda x: 0.09 < x < 0.11)
+        self.check_poll(timer, [])
 
     def test_context_manager(self):
         timer = metrics.Timer("foo")
@@ -356,19 +357,28 @@ class TestTimer(VumiTestCase, CheckValuesMixin):
         self.check_poll(timer, [])
 
     def test_timeit_start_and_start(self):
-        timer = metrics.Timer("foo").timeit()
-        timer.start()
-        self.assertRaises(metrics.TimerAlreadyStartedError, timer.start)
+        event_timer = metrics.Timer("foo").timeit()
+        event_timer.start()
+        self.assertRaises(metrics.TimerAlreadyStartedError, event_timer.start)
 
     def test_timeit_stop_without_start(self):
-        timer = metrics.Timer("foo").timeit()
-        self.assertRaises(metrics.TimerNotStartedError, timer.stop)
+        event_timer = metrics.Timer("foo").timeit()
+        self.assertRaises(metrics.TimerNotStartedError, event_timer.stop)
 
     def test_timeit_stop_and_stop(self):
-        timer = metrics.Timer("foo").timeit()
-        timer.start()
-        timer.stop()
-        self.assertRaises(metrics.TimerAlreadyStoppedError, timer.stop)
+        event_timer = metrics.Timer("foo").timeit()
+        event_timer.start()
+        event_timer.stop()
+        self.assertRaises(metrics.TimerAlreadyStoppedError, event_timer.stop)
+
+    def test_timeit_autostart(self):
+        timer = metrics.Timer("foo")
+        self.patch_time(12345.0)
+        event_timer = timer.timeit(start=True)
+        self.incr_fake_time(0.1)
+        event_timer.stop()
+        self.check_poll_func(timer, 1, lambda x: 0.09 < x < 0.11)
+        self.check_poll(timer, [])
 
 
 class TestMetricsConsumer(VumiTestCase):
