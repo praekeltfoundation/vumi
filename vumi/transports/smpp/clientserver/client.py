@@ -61,21 +61,6 @@ class EsmeTransceiver(Protocol):
 
     def __init__(self, config, bind_params, redis, esme_callbacks):
         self.config = config
-
-        self.dr_processor = config.delivery_report_processor(redis)
-        if not IDeliveryReportProcessor.providedBy(self.dr_processor):
-            raise ValueError(
-                "delivery_report_processor does not provide the "
-                "IDeliveryReportProcessor interface: %s" % (
-                    self.dr_processor,))
-
-        self.sm_processor = config.short_message_processor(redis)
-        if not IDeliverShortMessageProcessor.providedBy(self.sm_processor):
-            raise ValueError(
-                "short_message_processor does not provide the "
-                "IDeliverShortMessageProcessor interface: %s" % (
-                    self.sm_processor,))
-
         self.bind_params = bind_params
         self.esme_callbacks = esme_callbacks
         self.state = 'CLOSED'
@@ -86,6 +71,21 @@ class EsmeTransceiver(Protocol):
         self.datastream = ''
         self.redis = redis
         self._lose_conn = None
+
+        self.dr_processor = config.delivery_report_processor(self)
+        if not IDeliveryReportProcessor.providedBy(self.dr_processor):
+            raise ValueError(
+                "delivery_report_processor does not provide the "
+                "IDeliveryReportProcessor interface: %s" % (
+                    self.dr_processor,))
+
+        self.sm_processor = config.short_message_processor(self)
+        if not IDeliverShortMessageProcessor.providedBy(self.sm_processor):
+            raise ValueError(
+                "short_message_processor does not provide the "
+                "IDeliverShortMessageProcessor interface: %s" % (
+                    self.sm_processor,))
+
         # The PDU queue ensures that PDUs are processed in the order
         # they arrive. `self._process_pdu_queue()` loops forever
         # pulling PDUs off the queue and handling each before grabbing
@@ -340,19 +340,8 @@ class EsmeTransceiver(Protocol):
         receipted_message_id = pdu_opts.get('receipted_message_id', None)
         message_state = pdu_opts.get('message_state', None)
         if receipted_message_id is not None and message_state is not None:
-            yield self.esme_callbacks.delivery_report(
-                message_id=receipted_message_id,
-                message_state={
-                    1: 'ENROUTE',
-                    2: 'DELIVERED',
-                    3: 'EXPIRED',
-                    4: 'DELETED',
-                    5: 'UNDELIVERABLE',
-                    6: 'ACCEPTED',
-                    7: 'UNKNOWN',
-                    8: 'REJECTED',
-                }.get(message_state, 'UNKNOWN'),
-            )
+            yield self.dr_processor.on_delivery_report_pdu(
+                receipted_message_id, message_state)
 
         # We might have a `message_payload` optional field to worry about.
         message_payload = pdu_opts.get('message_payload', None)
@@ -375,9 +364,8 @@ class EsmeTransceiver(Protocol):
         if delivery_report:
             # We have a delivery report.
             fields = delivery_report.groupdict()
-            return self.esme_callbacks.delivery_report(
-                message_id=fields['id'],
-                message_state=fields['stat'])
+            return self.dr_processor.on_delivery_report_content(
+                fields['id'], fields['stat'])
 
         message_id = str(uuid.uuid4())
         return self.esme_callbacks.deliver_sm(

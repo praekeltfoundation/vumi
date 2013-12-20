@@ -160,12 +160,14 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
     delivery_report_processor = ConfigClassName(
         'Which delivery report processor to use. '
         'Should implement `IDeliveryReportProcessor`.',
-        default='vumi.transports.smpp.processors.DeliveryReportProcessor',
+        default=('vumi.transports.smpp.processors.'
+                 'EsmeCallbacksDeliveryReportProcessor'),
         static=True)
     short_message_processor = ConfigClassName(
         'Which short message processor to use. '
         'Should implement `IDeliverShortMessageProcessor`.',
-        default='vumi.transports.smpp.processors.DeliverShortMessageProcessor',
+        default=('vumi.transports.smpp.processors.'
+                 'EsmeCallbacksDeliverShortMessageProcessor'),
         static=True)
 
     def post_validate(self):
