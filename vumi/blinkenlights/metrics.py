@@ -6,7 +6,6 @@ Includes a publisher, a consumer and a set of simple metrics.
 """
 
 import time
-import contextlib
 import warnings
 
 from twisted.internet.task import LoopingCall
@@ -251,10 +250,16 @@ class TimerNotStartedError(TimerError):
     """
 
 
+class TimerAlreadyStoppedError(TimerError):
+    """Raised when attempting to stop an EventTimer that is already stopped.
+    """
+
+
 class EventTimer(object):
     def __init__(self, timer):
         self._timer = timer
         self._start_time = None
+        self._stop_time = None
 
     def __enter__(self):
         self.start()
@@ -266,19 +271,22 @@ class EventTimer(object):
 
     def start(self):
         if self._start_time is not None:
-            raise TimerAlreadyStartedError("Attempt to start timer %s that "
-                                           "was already started" %
+            raise TimerAlreadyStartedError("Attempt to start timer %r that"
+                                           " was already started" %
                                            (self._timer.name,))
         self._start_time = time.time()
 
     def stop(self):
         if self._start_time is None:
-            raise TimerNotStartedError("Attempt to stop timer %s that "
-                                       "has not been started" %
+            raise TimerNotStartedError("Attempt to stop timer %r that"
+                                       " has not been started" %
                                        (self._timer.name,))
-        duration = time.time() - self._start_time
-        self._start_time = None
-        self._timer.set(duration)
+        if self._stop_time is not None:
+            raise TimerAlreadyStoppedError("Attempt to stop timer %r that"
+                                           " has already been stopped" %
+                                           (self._timer.name,))
+        self._stop_time = time.time()
+        self._timer.set(self._stop_time - self._start_time)
 
 
 class Timer(Metric):
@@ -300,6 +308,9 @@ class Timer(Metric):
     >>> event_timer.start()
     >>> d = process_other_data()
     >>> d.addCallback(lambda r: event_timer.stop())
+
+    Note that timers returned by `timeit` may only have `start` and `stop`
+    called on them once (and only in that order).
 
     .. note::
 
@@ -341,7 +352,9 @@ class Timer(Metric):
         return self._event_timer.__enter__()
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        return self._event_timer.__exit__(exc_type, exc_val, exc_tb)
+        result = self._event_timer.__exit__(exc_type, exc_val, exc_tb)
+        self._event_timer = EventTimer(self)
+        return result
 
     def timeit(self):
         return EventTimer(self)
@@ -353,7 +366,9 @@ class Timer(Metric):
         return self._event_timer.start()
 
     def stop(self):
-        return self._event_timer.stop()
+        result = self._event_timer.stop()
+        self._event_timer = EventTimer(self)
+        return result
 
 
 class MetricsConsumer(Consumer):
