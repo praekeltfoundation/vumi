@@ -11,15 +11,30 @@ from zope.interface import Interface, implements
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.service import get_spec
 from vumi.utils import vumi_resource_path, flatten_generator
-from .fake_amqp import FakeAMQPBroker, FakeAMQClient
+from vumi.tests.fake_amqp import FakeAMQPBroker, FakeAMQClient
 
 
 # We can't use `None` as a placeholder for default values because we may want
 # to override the default (non-`None`) value with `None`.
-DEFAULT = object()
+
+# This is its own class (rather than an instance of `object`) so we can make
+# pretty docs.
+class _Default(object):
+    def __repr__(self):
+        return 'DEFAULT'
+
+DEFAULT = _Default()
 
 
 class IHelper(Interface):
+    """Interface for test helpers.
+
+    This specifies a standard setup and cleanup mechanism used by test cases
+    that implement the :class:`IHelperEnabledTestCase` interface.
+
+    There are no interface restrictions on the constructor of a helper.
+    """
+
     def setup(*args, **kwargs):
         """Perform potentially async helper setup.
 
@@ -39,24 +54,66 @@ class IHelper(Interface):
 
 
 class IHelperEnabledTestCase(Interface):
+    """Interface for test cases that use helpers.
+
+    This specifies a standard mechanism for managing setup and cleanup of
+    helper classes that implement the :class:`IHelper` interface.
+    """
+
     def add_helper(helper_object, *args, **kwargs):
         """Register cleanup and perform setup for a helper object.
 
-        This should call `helper_object.setup(*args, **kwargs)` and
-        `self.add_cleanup(helper_object.cleanup)` or an equivalent.
+        This should call ``helper_object.setup(*args, **kwargs)`` and
+        ``self.add_cleanup(helper_object.cleanup)`` or an equivalent.
 
-        Returns the `helper_object` passed in or a `Deferred` if setup is
-        async.
+        Returns the ``helper_object`` passed in or a :class:`Deferred` if
+        setup is async.
         """
 
 
 def proxyable(func):
-    """Mark a method as being suitable for automatic proxy generation."""
+    """Mark a method as being suitable for automatic proxy generation.
+
+    See :func:`generate_proxies` for usage.
+    """
     func.proxyable = True
     return func
 
 
 def generate_proxies(target, source):
+    """Generate proxies on ``target`` for proxyable methods on ``source``.
+
+    This is useful for wrapping helper objects in higher-level helpers or
+    extending a helper to provide extra functionality without having to resort
+    to subclassing.
+
+    The "proxying" is actually just copying the proxyable attribute onto the
+    target.
+
+    >>> class AddHelper(object):
+    ...     def __init__(self, number):
+    ...         self._number = number
+    ...
+    ...     @proxyable
+    ...     def add_number(self, number):
+    ...         return self._number + number
+
+    >>> class OtherHelper(object):
+    ...     def __init__(self, number):
+    ...         self._adder = AddHelper(number)
+    ...         generate_proxies(self, self._adder)
+    ...
+    ...     @proxyable
+    ...     def say_hello(self):
+    ...         return "hello"
+
+    >>> other_helper = OtherHelper(3)
+    >>> other_helper.say_hello()
+    'hello'
+    >>> other_helper.add_number(2)
+    5
+    """
+
     for name in dir(source):
         attribute = getattr(source, name)
         if not getattr(attribute, 'proxyable', False):
@@ -76,6 +133,31 @@ def get_timeout():
 
 
 class VumiTestCase(TestCase):
+    """Base test case class for all things vumi-related.
+
+    This is a subclass of :class:`twisted.trial.unittest.TestCase` with a small
+    number of additional features:
+
+    * It implements :class:`IHelperEnabledTestCase` to make using helpers
+      easier. (See :meth:`add_helper`.)
+
+    * :attr:`timeout` is set to a default value of ``5`` and can be overridden
+      by setting the ``VUMI_TEST_TIMEOUT`` environment variable. (Longer
+      timeouts are more reliable for continuous integration builds, shorter
+      ones are less painful for local development.)
+
+    * :meth:`add_cleanup` provides an alternative mechanism for specifying
+      cleanup in the same place as the creation of thing that needs to be
+      cleaned up.
+
+    .. note::
+
+       While this class does not have a :meth:`setUp` method (thus avoiding the
+       need for subclasses to call it), it *does* have a :meth:`tearDown`
+       method. :meth:`add_cleanup` should be used in subclasses instead of
+       overriding :meth:`tearDown`.
+    """
+
     implements(IHelperEnabledTestCase)
 
     timeout = get_timeout()
@@ -84,6 +166,8 @@ class VumiTestCase(TestCase):
 
     @inlineCallbacks
     def tearDown(self):
+        """Run any cleanup functions registered with :meth:`add_cleanup`.
+        """
         # Run any cleanup code we've registered with .add_cleanup().
         # We do this ourselves instead of using trial's .addCleanup() because
         # that doesn't have timeouts applied to it.
@@ -92,11 +176,54 @@ class VumiTestCase(TestCase):
                 yield cleanup(*args, **kw)
 
     def add_cleanup(self, func, *args, **kw):
+        """Register a cleanup function to be called at teardown time.
+
+        :param callable func:
+            The callable object to call at cleanup time. This callable may
+            return a :class:`Deferred`, in which case cleanup will continue
+            after it fires.
+        :param \*args: Passed to ``func`` when it is called.
+        :param \**kw: Passed to ``func`` when it is called.
+
+        .. note::
+           This method should be use in place of the inherited
+           :meth:`addCleanup` method, because the latter doesn't apply timeouts
+           to cleanup functions.
+        """
         if self._cleanup_funcs is None:
             self._cleanup_funcs = []
         self._cleanup_funcs.append((func, args, kw))
 
     def add_helper(self, helper_object, *args, **kw):
+        """Perform setup and register cleanup for the given helper object.
+
+        :param helper_object:
+            Helper object to add. ``helper_object`` must provide the
+            :class:`IHelper` interface.
+        :param \*args: Passed to :meth:`helper_object.setup` when it is called.
+        :param \**kw: Passed to :meth:`helper_object.setup` when it is called.
+
+        :returns:
+            Either ``helper_object`` or a :class:`Deferred` that fires with it.
+
+        If :meth:`helper_object.setup` returns a :class:`Deferred`, this method
+        also returns a :class:`Deferred`.
+
+        Example usage assuming ``@inlineCallbacks``:
+
+        >>> @inlineCallbacks
+        ... def test_foo(self):
+        ...     msg_helper = yield self.add_helper(MessageHelper())
+        ...     msg_helper.make_inbound("foo")
+
+        Example usage assuming non-async setup:
+
+        >>> def test_bar(self):
+        ...     msg_helper = self.add_helper(MessageHelper())
+        ...     msg_helper.make_inbound("bar")
+
+        """
+
         if not IHelper.providedBy(helper_object):
             raise ValueError(
                 "Helper object does not provide the IHelper interface: %s" % (
@@ -107,6 +234,26 @@ class VumiTestCase(TestCase):
 
 
 class MessageHelper(object):
+    """Test helper for constructing various messages.
+
+    This helper does no setup or cleanup. It takes the following parameters,
+    which are used as defaults for message fields:
+
+    :param str transport_name:
+        Default value for ``transport_name`` on all messages.
+
+    :param str transport_type:
+        Default value for ``transport_type`` on all messages.
+
+    :param str mobile_addr:
+        Default value for ``from_addr`` on inbound messages and ``to_addr`` on
+        outbound messages.
+
+    :param str mobile_addr:
+        Default value for ``to_addr`` on inbound messages and ``from_addr`` on
+        outbound messages.
+    """
+
     implements(IHelper)
 
     def __init__(self, transport_name='sphex', transport_type='sms',
@@ -124,6 +271,27 @@ class MessageHelper(object):
 
     @proxyable
     def make_inbound(self, content, from_addr=DEFAULT, to_addr=DEFAULT, **kw):
+        """Constructs an inbound :class:`TransportUserMessage` instance.
+
+        This is a convenience wrapper around :meth:`make_user_message` and just
+        sets ``to_addr`` and ``from_addr`` appropriately for an inbound
+        message.
+
+        :param str content:
+            Message content. (May be ``None``.)
+
+        :param str from_addr:
+            Defaults to :attr:`mobile_addr` if not provided.
+
+        :param str to_addr:
+            Defaults to :attr:`transport_addr` if not provided.
+
+        :param **kw:
+            All other keyword args are passed to :meth:`make_user_message`. See
+            the documentation there.
+
+        :returns: Populated :class:`TransportUserMessage` instance.
+        """
         if from_addr is DEFAULT:
             from_addr = self.mobile_addr
         if to_addr is DEFAULT:
@@ -132,6 +300,27 @@ class MessageHelper(object):
 
     @proxyable
     def make_outbound(self, content, from_addr=DEFAULT, to_addr=DEFAULT, **kw):
+        """Constructs an outbound :class:`TransportUserMessage` instance.
+
+        This is a convenience wrapper around :meth:`make_user_message` and just
+        sets ``to_addr`` and ``from_addr`` appropriately for an outbound
+        message.
+
+        :param str content:
+            Message content. (May be ``None``.)
+
+        :param str from_addr:
+            Defaults to :attr:`transport_addr` if not provided.
+
+        :param str to_addr:
+            Defaults to :attr:`mobile_addr` if not provided.
+
+        :param **kw:
+            All other keyword args are passed to :meth:`make_user_message`. See
+            the documentation there.
+
+        :returns: Populated :class:`TransportUserMessage` instance.
+        """
         if from_addr is DEFAULT:
             from_addr = self.transport_addr
         if to_addr is DEFAULT:
@@ -143,6 +332,44 @@ class MessageHelper(object):
                           session_event=None, transport_type=DEFAULT,
                           transport_name=DEFAULT, transport_metadata=DEFAULT,
                           helper_metadata=DEFAULT, endpoint=DEFAULT, **kw):
+        """Constructs a :class:`TransportUserMessage` instance.
+
+        This method is the underlying implementation for :meth:`make_inbound`
+        and :meth:`make_outbound` and those should generally be used instead.
+
+        The only real difference between using this method and constructing a
+        :class:`TransportUserMessage` directly is that this method provides
+        sensible defaults for most fields and sets the routing endpoint (if
+        provided) in a more convenient way.
+
+        Three parameters are mandatory:
+
+        :param str content: Message ``content`` field.
+        :param str from_addr: Message ``from_addr`` field.
+        :param str to_addr: Message ``to_addr`` field.
+
+        The following parameters override default values for the message fields
+        of the same name:
+
+        :param str group: Default ``None``.
+        :param str session_event: Default ``None``.
+        :param str transport_type: Default :attr:`transport_type`.
+        :param str transport_name: Default :attr:`transport_name`.
+        :param dict transport_metadata: Default ``{}``.
+        :param dict helper_metadata: Default ``{}``.
+
+        The following parameter is special:
+
+        :param str endpoint:
+            If specified, the routing endpoint on the message is set by calling
+            :meth:`TransportUserMessage.set_routing_endpoint`.
+
+        :param **kw:
+            All other keyword args are passed to the
+            :class:`TransportUserMessage` constructor.
+
+        :returns: Populated :class:`TransportUserMessage` instance.
+        """
         if transport_type is DEFAULT:
             transport_type = self.transport_type
         if helper_metadata is DEFAULT:
