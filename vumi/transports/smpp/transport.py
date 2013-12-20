@@ -14,7 +14,8 @@ from vumi.transports.failures import FailureMessage
 from vumi.message import Message, TransportUserMessage
 from vumi.persist.txredis_manager import TxRedisManager
 from vumi.config import (ConfigText, ConfigInt, ConfigBool, ConfigDict,
-                         ConfigFloat, ConfigRegex, ConfigClientEndpoint)
+                         ConfigFloat, ConfigRegex, ConfigClientEndpoint,
+                         ConfigClassName)
 
 
 class SmppTransportConfig(Transport.CONFIG_CLASS):
@@ -156,6 +157,16 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
         "E.g. { 'NETWORK1': '27761234567'}", default={}, static=True)
     redis_manager = ConfigDict(
         'How to connect to Redis', default={}, static=True)
+    delivery_report_processor = ConfigClassName(
+        'Which delivery report processor to use. '
+        'Should implement `IDeliveryReportProcessor`.',
+        default='vumi.transports.smpp.processors.DeliveryReportProcessor',
+        static=True)
+    short_message_processor = ConfigClassName(
+        'Which short message processor to use. '
+        'Should implement `IShortMessageProcessor`.',
+        default='vumi.transports.smpp.processors.ShortMessageProcessor',
+        static=True)
 
     def post_validate(self):
         long_message_params = (

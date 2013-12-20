@@ -59,6 +59,10 @@ class EsmeTransceiver(Protocol):
 
     def __init__(self, config, bind_params, redis, esme_callbacks):
         self.config = config
+
+        self.dr_processor = config.delivery_report_processor(self)
+        self.sm_processor = config.short_message_processor(self)
+
         self.bind_params = bind_params
         self.esme_callbacks = esme_callbacks
         self.state = 'CLOSED'
