@@ -4,11 +4,10 @@ from zope.interface import Interface
 class IDeliveryReportProcessor(Interface):
 
     def inspect_delivery_report_pdu(pdu):
-        """Inspect a PDU and return a Deferred that'll either fire with:
+        """Inspect a PDU and return a dict with ``receipted_message_id``
+        and ``message_state`` keys if the PDU contains a delivery report.
 
-        - ``True`` for when it was a DR and was handled succefully
-        - ``False`` when it wasn't a DR and something else needs to
-          deal with it
+        Returns ``None`` if no delivery report was found.
         """
 
     def handle_delivery_report_pdu(receipted_message_id, message_state):
@@ -19,12 +18,11 @@ class IDeliveryReportProcessor(Interface):
         """
 
     def inspect_delivery_report_content(content):
-        """Inspect content received in a short message and return a
-        Deferred that'll either fire with:
+        """Inspect content received in a short message and return dict with
+        ``receipted_message_id`` and ``message_state`` keys if the content
+        contains a delivery report.
 
-        - ``True`` for when it was a DR and was handled succefully
-        - ``False`` when it wasn't a DR and something else needs to
-          deal with it
+        Returns ``None`` if no delivery report was found.
         """
 
     def handle_delivery_report_content(receipted_message_id, message_state):
