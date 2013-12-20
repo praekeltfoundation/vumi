@@ -11,7 +11,7 @@ class IDeliveryReportProcessor(Interface):
           deal with it
         """
 
-    def on_delivery_report_pdu(receipted_message_id, message_state):
+    def handle_delivery_report_pdu(receipted_message_id, message_state):
         """Handle a delivery report PDU from the networks.
 
         This should always return a Deferred.
@@ -27,7 +27,7 @@ class IDeliveryReportProcessor(Interface):
           deal with it
         """
 
-    def on_delivery_report_content(receipted_message_id, message_state):
+    def handle_delivery_report_content(receipted_message_id, message_state):
         """Handle an unpacked delivery report from the networks.
         This can happen with certain SMSCs that don't set the necessary
         delivery report flags on a PDU. As a result we only detect the

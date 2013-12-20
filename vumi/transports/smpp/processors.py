@@ -1,7 +1,5 @@
 from zope.interface import implements
 
-from twisted.internet.defer import succeed
-
 from vumi.transports.smpp.helpers import (IDeliveryReportProcessor,
                                           IDeliverShortMessageProcessor)
 from vumi.transports.smpp.utils import unpacked_pdu_opts
@@ -23,28 +21,12 @@ class EsmeCallbacksDeliveryReportProcessor(object):
         receipted_message_id = pdu_opts.get('receipted_message_id', None)
         message_state = pdu_opts.get('message_state', None)
         if receipted_message_id is not None and message_state is not None:
-            d = self.on_delivery_report_pdu(
-                receipted_message_id, message_state)
-            d.addCallback(lambda _: True)
-            return d
+            return {
+                'receipted_message_id': receipted_message_id,
+                'message_state': message_state,
+            }
 
-        return succeed(False)
-
-    def inspect_delivery_report_content(self, content):
-        delivery_report = self.config.delivery_report_regex.search(
-            content or '')
-
-        if delivery_report:
-            # We have a delivery report.
-            fields = delivery_report.groupdict()
-            d = self.on_delivery_report_content(
-                fields['id'], fields['stat'])
-            d.addCallback(lambda _: True)
-            return d
-
-        return succeed(False)
-
-    def on_delivery_report_pdu(self, receipted_message_id, message_state):
+    def handle_delivery_report_pdu(self, receipted_message_id, message_state):
         status = {
             1: 'ENROUTE',
             2: 'DELIVERED',
@@ -58,7 +40,20 @@ class EsmeCallbacksDeliveryReportProcessor(object):
         return self.protocol.esme_callbacks.delivery_report(
             message_id=receipted_message_id, message_state=status)
 
-    def on_delivery_report_content(self, receipted_message_id, message_state):
+    def inspect_delivery_report_content(self, content):
+        delivery_report = self.config.delivery_report_regex.search(
+            content or '')
+
+        if delivery_report:
+            # We have a delivery report.
+            fields = delivery_report.groupdict()
+            return {
+                'receipted_message_id': fields['id'],
+                'message_state': fields['stat'],
+            }
+
+    def handle_delivery_report_content(self, receipted_message_id,
+                                       message_state):
         return self.protocol.esme_callbacks.delivery_report(
             message_id=receipted_message_id, message_state=message_state)
 

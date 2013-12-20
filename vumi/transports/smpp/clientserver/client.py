@@ -328,7 +328,11 @@ class EsmeTransceiver(Protocol):
         pdu_params = pdu['body']['mandatory_parameters']
         pdu_opts = unpacked_pdu_opts(pdu)
 
-        if (yield self.dr_processor.inspect_delivery_report_pdu(pdu)):
+        pdu_dr_info = yield self.dr_processor.inspect_delivery_report_pdu(pdu)
+        if pdu_dr_info is not None:
+            yield self.dr_processor.handle_delivery_report_pdu(
+                receipted_message_id=pdu_dr_info['receipted_message_id'],
+                message_state=pdu_dr_info['message_state'])
             return
 
         # We might have a `message_payload` optional field to worry about.
@@ -349,16 +353,19 @@ class EsmeTransceiver(Protocol):
     @inlineCallbacks
     def _deliver_sm(self, source_addr, destination_addr, short_message, **kw):
 
-        is_dr = yield self.dr_processor.inspect_delivery_report_content(
+        dr_info = yield self.dr_processor.inspect_delivery_report_content(
             short_message)
 
-        if not is_dr:
-            message_id = str(uuid.uuid4())
+        if dr_info is not None:
+            yield self.dr_processor.handle_delivery_report_content(
+                receipted_message_id=dr_info['receipted_message_id'],
+                message_state=dr_info['message_state'])
+        else:
             yield self.esme_callbacks.deliver_sm(
                 source_addr=source_addr,
                 destination_addr=destination_addr,
                 short_message=short_message,
-                message_id=message_id,
+                message_id=uuid.uuid4().hex,
                 **kw)
 
     def _handle_deliver_sm_ussd(self, pdu, pdu_params, pdu_opts):
