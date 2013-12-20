@@ -249,7 +249,7 @@ class MessageHelper(object):
         Default value for ``from_addr`` on inbound messages and ``to_addr`` on
         outbound messages.
 
-    :param str mobile_addr:
+    :param str transport_addr:
         Default value for ``to_addr`` on inbound messages and ``from_addr`` on
         outbound messages.
     """
@@ -271,26 +271,11 @@ class MessageHelper(object):
 
     @proxyable
     def make_inbound(self, content, from_addr=DEFAULT, to_addr=DEFAULT, **kw):
-        """Constructs an inbound :class:`TransportUserMessage` instance.
+        """Construct an inbound :class:`~vumi.message.TransportUserMessage`.
 
         This is a convenience wrapper around :meth:`make_user_message` and just
         sets ``to_addr`` and ``from_addr`` appropriately for an inbound
         message.
-
-        :param str content:
-            Message content. (May be ``None``.)
-
-        :param str from_addr:
-            Defaults to :attr:`mobile_addr` if not provided.
-
-        :param str to_addr:
-            Defaults to :attr:`transport_addr` if not provided.
-
-        :param **kw:
-            All other keyword args are passed to :meth:`make_user_message`. See
-            the documentation there.
-
-        :returns: Populated :class:`TransportUserMessage` instance.
         """
         if from_addr is DEFAULT:
             from_addr = self.mobile_addr
@@ -300,26 +285,11 @@ class MessageHelper(object):
 
     @proxyable
     def make_outbound(self, content, from_addr=DEFAULT, to_addr=DEFAULT, **kw):
-        """Constructs an outbound :class:`TransportUserMessage` instance.
+        """Construct an outbound :class:`~vumi.message.TransportUserMessage`.
 
         This is a convenience wrapper around :meth:`make_user_message` and just
         sets ``to_addr`` and ``from_addr`` appropriately for an outbound
         message.
-
-        :param str content:
-            Message content. (May be ``None``.)
-
-        :param str from_addr:
-            Defaults to :attr:`transport_addr` if not provided.
-
-        :param str to_addr:
-            Defaults to :attr:`mobile_addr` if not provided.
-
-        :param **kw:
-            All other keyword args are passed to :meth:`make_user_message`. See
-            the documentation there.
-
-        :returns: Populated :class:`TransportUserMessage` instance.
         """
         if from_addr is DEFAULT:
             from_addr = self.transport_addr
@@ -332,17 +302,17 @@ class MessageHelper(object):
                           session_event=None, transport_type=DEFAULT,
                           transport_name=DEFAULT, transport_metadata=DEFAULT,
                           helper_metadata=DEFAULT, endpoint=DEFAULT, **kw):
-        """Constructs a :class:`TransportUserMessage` instance.
+        """Construct a :class:`~vumi.message.TransportUserMessage`.
 
         This method is the underlying implementation for :meth:`make_inbound`
         and :meth:`make_outbound` and those should generally be used instead.
 
         The only real difference between using this method and constructing a
-        :class:`TransportUserMessage` directly is that this method provides
-        sensible defaults for most fields and sets the routing endpoint (if
-        provided) in a more convenient way.
+        message object directly is that this method provides sensible defaults
+        for most fields and sets the routing endpoint (if provided) in a more
+        convenient way.
 
-        Three parameters are mandatory:
+        The following parameters are mandatory:
 
         :param str content: Message ``content`` field.
         :param str from_addr: Message ``from_addr`` field.
@@ -364,11 +334,8 @@ class MessageHelper(object):
             If specified, the routing endpoint on the message is set by calling
             :meth:`TransportUserMessage.set_routing_endpoint`.
 
-        :param **kw:
-            All other keyword args are passed to the
-            :class:`TransportUserMessage` constructor.
-
-        :returns: Populated :class:`TransportUserMessage` instance.
+        All other keyword args are passed to the
+        :class:`~vumi.message.TransportUserMessage` constructor.
         """
         if transport_type is DEFAULT:
             transport_type = self.transport_type
@@ -397,6 +364,38 @@ class MessageHelper(object):
     def make_event(self, event_type, user_message_id, transport_type=DEFAULT,
                    transport_name=DEFAULT, transport_metadata=DEFAULT,
                    endpoint=DEFAULT, **kw):
+        """Construct a :class:`~vumi.message.TransportEvent`.
+
+        This method is the underlying implementation for :meth:`make_ack`,
+        :meth:`make_nack` and :meth:`make_delivery_report`. Those should
+        generally be used instead.
+
+        The only real difference between using this method and constructing an
+        event object directly is that this method provides sensible defaults
+        for most fields and sets the routing endpoint (if provided) in a more
+        convenient way.
+
+        The following parameters are mandatory:
+
+        :param str event_type: Event ``event_type`` field.
+        :param str user_message_id: Event ``user_message_id`` field.
+
+        The following parameters override default values for the event fields
+        of the same name:
+
+        :param str transport_type: Default :attr:`transport_type`.
+        :param str transport_name: Default :attr:`transport_name`.
+        :param dict transport_metadata: Default ``{}``.
+
+        The following parameter is special:
+
+        :param str endpoint:
+            If specified, the routing endpoint on the event is set by calling
+            :meth:`TransportUserMessage.set_routing_endpoint`.
+
+        All other keyword args are passed to the
+        :class:`~vumi.message.TransportEvent` constructor.
+        """
         if transport_type is DEFAULT:
             transport_type = self.transport_type
         if transport_name is DEFAULT:
@@ -416,6 +415,17 @@ class MessageHelper(object):
 
     @proxyable
     def make_ack(self, msg=None, sent_message_id=DEFAULT, **kw):
+        """Construct an 'ack' :class:`~vumi.message.TransportEvent`.
+
+        :param msg:
+            :class:`~vumi.message.TransportUserMessage` instance the event is
+            for. If ``None``, this method will call :meth:`make_outbound` to
+            get one.
+        :param str sent_message_id:
+            If this isn't provided, ``msg['message_id']`` will be used.
+
+        All remaining keyword params are passed to :meth:`make_event`.
+        """
         if msg is None:
             msg = self.make_outbound("for ack")
         user_message_id = msg['message_id']
@@ -426,6 +436,17 @@ class MessageHelper(object):
 
     @proxyable
     def make_nack(self, msg=None, nack_reason=DEFAULT, **kw):
+        """Construct a 'nack' :class:`~vumi.message.TransportEvent`.
+
+        :param msg:
+            :class:`~vumi.message.TransportUserMessage` instance the event is
+            for. If ``None``, this method will call :meth:`make_outbound` to
+            get one.
+        :param str nack_reason:
+            If this isn't provided, a suitable excuse will be used.
+
+        All remaining keyword params are passed to :meth:`make_event`.
+        """
         if msg is None:
             msg = self.make_outbound("for nack")
         user_message_id = msg['message_id']
@@ -436,6 +457,17 @@ class MessageHelper(object):
 
     @proxyable
     def make_delivery_report(self, msg=None, delivery_status=DEFAULT, **kw):
+        """Construct a 'delivery_report' :class:`~vumi.message.TransportEvent`.
+
+        :param msg:
+            :class:`~vumi.message.TransportUserMessage` instance the event is
+            for. If ``None``, this method will call :meth:`make_outbound` to
+            get one.
+        :param str delivery_status:
+            If this isn't provided, ``"delivered"`` will be used.
+
+        All remaining keyword params are passed to :meth:`make_event`.
+        """
         if msg is None:
             msg = self.make_outbound("for delivery_report")
         user_message_id = msg['message_id']
@@ -447,6 +479,12 @@ class MessageHelper(object):
 
     @proxyable
     def make_reply(self, msg, content, **kw):
+        """Construct a reply :class:`~vumi.message.TransportUserMessage`.
+
+        This literally just calls ``msg.reply(content, **kw)``. It is included
+        for completeness and symmetry with
+        :meth:`MessageDispatchHelper.make_dispatch_reply`.
+        """
         return msg.reply(content, **kw)
 
 

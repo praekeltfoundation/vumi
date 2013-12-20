@@ -3,7 +3,7 @@ Test helper API reference
 
 .. automodule:: vumi.tests.helpers
    :members:
-   :show-inheritance:
+   :no-show-inheritance:
    :member-order: bysource
    :exclude-members: VumiTestCase, DEFAULT
 
