@@ -330,7 +330,7 @@ class EsmeTransceiver(Protocol):
         pdu_params = pdu['body']['mandatory_parameters']
         pdu_opts = unpacked_pdu_opts(pdu)
 
-        pdu_dr_data = yield self.dr_processor.inspect_delivery_report_pdu(pdu)
+        pdu_dr_data = self.dr_processor.inspect_delivery_report_pdu(pdu)
         if pdu_dr_data is not None:
             yield self.dr_processor.handle_delivery_report_pdu(pdu_dr_data)
             return
@@ -353,7 +353,7 @@ class EsmeTransceiver(Protocol):
     @inlineCallbacks
     def _deliver_sm(self, source_addr, destination_addr, short_message, **kw):
 
-        dr_data = yield self.dr_processor.inspect_delivery_report_content(
+        dr_data = self.dr_processor.inspect_delivery_report_content(
             short_message)
 
         if dr_data is not None:
