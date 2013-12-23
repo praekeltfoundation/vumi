@@ -289,11 +289,10 @@ class EsmeCallbacksDeliverShortMessageProcessor(object):
             decoded_msg = self.decode_message(completed['message'],
                                               pdu_params['data_coding'])
             # and we can finally pass the whole message on
-            yield self.protocol.esme_callbacks.deliver_sm(
+            yield self.handle_short_message_content(
                 source_addr=completed['from_msisdn'],
                 destination_addr=completed['to_msisdn'],
-                short_message=decoded_msg,
-                message_id=uuid4().hex)
+                short_message=decoded_msg)
         else:
             yield self.save_multipart_message(redis_key, multi)
 
