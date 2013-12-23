@@ -14,7 +14,7 @@ from vumi.transports.failures import FailureMessage
 from vumi.message import Message, TransportUserMessage
 from vumi.persist.txredis_manager import TxRedisManager
 from vumi.config import (ConfigText, ConfigInt, ConfigBool, ConfigDict,
-                         ConfigFloat, ConfigRegex, ConfigClientEndpoint,
+                         ConfigFloat, ConfigClientEndpoint,
                          ConfigClassName)
 
 
