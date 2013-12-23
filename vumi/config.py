@@ -194,12 +194,22 @@ class ConfigRegex(ConfigText):
 class ConfigClassName(ConfigText):
     field_type = 'Class'
 
+    def __init__(self, doc, required=False, default=None, static=False,
+                 implements=None):
+        super(ConfigClassName, self).__init__(doc, required, default, static)
+        self.interface = implements
+
     def clean(self, value):
         try:
-            return load_class_by_string(value)
+            cls = load_class_by_string(value)
         except (ValueError, ImportError), e:
             # ValueError for empty module name
             self.raise_config_error(str(e))
+
+        if self.interface and not self.interface.implementedBy(cls):
+            self.raise_config_error('does not implement %r.' % (
+                self.interface,))
+        return cls
 
 
 class ConfigServerEndpoint(ConfigText):
