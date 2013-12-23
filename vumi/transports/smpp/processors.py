@@ -265,14 +265,13 @@ class EsmeCallbacksDeliverShortMessageProcessor(object):
 
         decoded_msg = self.decode_message(pdu_params['short_message'],
                                           pdu_params['data_coding'])
-        return self.protocol.esme_callbacks.deliver_sm(
+        return self.handle_short_message_content(
             source_addr=pdu_params['source_addr'],
             destination_addr=pdu_params['destination_addr'],
             short_message=decoded_msg,
             message_type='ussd',
             session_event=session_event,
-            session_info=session_info,
-            message_id=uuid4().hex)
+            session_info=session_info)
 
     @inlineCallbacks
     def handle_deliver_sm_multipart(self, pdu, pdu_params):
