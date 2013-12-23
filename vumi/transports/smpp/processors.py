@@ -216,8 +216,12 @@ class EsmeCallbacksDeliverShortMessageProcessor(object):
             # We have a multipart SMS.
             yield self.handle_deliver_sm_multipart(pdu, pdu_params)
         else:
-            # We have a standard SMS.
-            yield self.handle_deliver_sm_sms(pdu_params)
+            decoded_msg = self.decode_message(pdu_params['short_message'],
+                                              pdu_params['data_coding'])
+            yield self.handle_short_message_content(
+                source_addr=pdu_params['source_addr'],
+                destination_addr=pdu_params['destination_addr'],
+                short_message=decoded_msg)
 
     def handle_short_message_content(self, source_addr, destination_addr,
                                      short_message, **kw):
@@ -315,11 +319,3 @@ class EsmeCallbacksDeliverShortMessageProcessor(object):
     def save_multipart_message(self, redis_key, multipart_message):
         data_dict = self._hex_for_redis(multipart_message.get_array())
         return self.protocol.redis.set(redis_key, json.dumps(data_dict))
-
-    def handle_deliver_sm_sms(self, pdu_params):
-        decoded_msg = self.decode_message(pdu_params['short_message'],
-                                          pdu_params['data_coding'])
-        return self.handle_short_message_content(
-            source_addr=pdu_params['source_addr'],
-            destination_addr=pdu_params['destination_addr'],
-            short_message=decoded_msg)
