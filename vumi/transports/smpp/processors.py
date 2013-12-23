@@ -85,6 +85,8 @@ class EsmeCallbacksDeliveryReportProcessor(object):
         if receipted_message_id is not None and message_state is not None:
             return (receipted_message_id, message_state)
 
+        return None
+
     def handle_delivery_report_pdu(self, pdu_data):
         receipted_message_id, message_state = pdu_data
         status = {
@@ -110,6 +112,8 @@ class EsmeCallbacksDeliveryReportProcessor(object):
             # We have a delivery report.
             fields = delivery_report.groupdict()
             return (fields['id'], fields['stat'])
+
+        return None
 
     def handle_delivery_report_content(self, pdu_data):
         receipted_message_id, message_state = pdu_data
