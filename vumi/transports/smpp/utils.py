@@ -8,4 +8,3 @@ def unpacked_pdu_opts(unpacked_pdu):
 def detect_ussd(pdu_opts):
     # TODO: Push this back to python-smpp?
     return ('ussd_service_op' in pdu_opts)
-
