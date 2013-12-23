@@ -7,7 +7,7 @@ from zope.interface import implements
 
 from vumi.transports.smpp.helpers import (IDeliveryReportProcessor,
                                           IDeliverShortMessageProcessor)
-from vumi.transports.smpp.utils import unpacked_pdu_opts, detect_ussd
+from vumi.transports.smpp.smpp_utils import unpacked_pdu_opts, detect_ussd
 from vumi.config import Config, ConfigDict, ConfigRegex
 from vumi import log
 
