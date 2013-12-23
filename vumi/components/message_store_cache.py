@@ -4,7 +4,7 @@ import time
 import hashlib
 import json
 
-from twisted.internet.defer import returnValue
+from twisted.internet.defer import returnValue, inlineCallbacks
 
 from vumi.persist.redis_base import Manager
 from vumi.message import TransportEvent
@@ -13,6 +13,51 @@ from vumi.errors import VumiError
 
 class MessageStoreCacheException(VumiError):
     pass
+
+
+class MessageStoreCacheMigration(object):
+
+    def __init__(self, cache):
+        self.cache = cache
+
+    def migrate_from_unversioned(self, batch_id):
+        return self.cache.set_cache_version(batch_id, 0)
+
+
+class MessageStoreCacheMigrator(object):
+    """on the fly migrations for vumi#685"""
+
+    MIGRATION_CLASS = MessageStoreCacheMigration
+
+    @inlineCallbacks
+    def migrate(self, cache, batch_id):
+        """
+        When given a batch_id, find what cache version it is on.
+        If it doesn't equal `cache.MIGRATION_VERSION` then start the
+        migration class and migrate until the latest version is reached.
+        """
+        while True:
+            current_version = yield cache.get_cache_version(batch_id)
+            if current_version is None:
+                migrate_function = 'migrate_from_unversioned'
+            elif int(current_version) != cache.MIGRATION_VERSION:
+                migrate_function = 'migrate_from_%s' % (current_version,)
+            else:
+                returnValue(cache)
+
+            migration = self.MIGRATION_CLASS(cache)
+            handler = getattr(migration, migrate_function, None)
+            if handler is None:
+                raise MessageStoreCacheException(
+                    'Needing to migration from %s but %s is not defined' % (
+                        current_version, migrate_function))
+            yield handler(batch_id)
+            next_version = yield cache.get_cache_version(batch_id)
+            if current_version == next_version:
+                raise MessageStoreCacheException(
+                    'Migration %s did not increment the version counter '
+                    'raising exception to prevent infinite loop.' % (
+                        migrate_function))
 
 
 class MessageStoreCache(object):
@@ -29,9 +74,14 @@ class MessageStoreCache(object):
     STATUS_KEY = 'status'
     SEARCH_TOKEN_KEY = 'search_token'
     SEARCH_RESULT_KEY = 'search_result'
+    CACHE_VERSION_KEY = 'cache_version'
 
     # Cache search results for 24 hrs
     DEFAULT_SEARCH_RESULT_TTL = 60 * 60 * 24
+
+    # Migration counter
+    MIGRATOR = MessageStoreCacheMigrator
+    MIGRATION_VERSION = 0
 
     def __init__(self, redis):
         # Store redis as `manager` as well since @Manager.calls_manager
@@ -67,6 +117,9 @@ class MessageStoreCache(object):
 
     def search_result_key(self, batch_id, token):
         return self.batch_key(self.SEARCH_RESULT_KEY, batch_id, token)
+
+    def cache_version_key(self, batch_id):
+        return self.batch_key(self.CACHE_VERSION_KEY, batch_id)
 
     @Manager.calls_manager
     def batch_start(self, batch_id):
@@ -418,3 +471,11 @@ class MessageStoreCache(object):
         """
         result_key = self.search_result_key(batch_id, token)
         return self.redis.zcard(result_key)
+
+    def get_cache_version(self, batch_id):
+        return self.redis.get(self.cache_version_key(batch_id))
+
+    def set_cache_version(self, batch_id, version):
+        d = self.redis.set(self.cache_version_key(batch_id), version)
+        d.addCallback(lambda _: version)
+        return d

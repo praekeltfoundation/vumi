@@ -98,6 +98,8 @@ class MessageStore(object):
     reports received) is stored in Redis.
     """
 
+    MESSAGE_STORE_CACHE_CLASS = MessageStoreCache
+
     def __init__(self, manager, redis):
         self.manager = manager
         self.batches = manager.proxy(Batch)
