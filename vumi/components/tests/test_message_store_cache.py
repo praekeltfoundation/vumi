@@ -354,12 +354,18 @@ class IncrementingMigration(object):
 
 class TestMessageStoreCacheMigration(MessageStoreCacheTestCase):
 
+    @inlineCallbacks
     def run_migrations(self, cls, cache, batch_id, to_version):
+        original_version = MessageStoreCache.MIGRATION_VERSION
         MessageStoreCache.MIGRATION_VERSION = to_version
         migrator = MessageStoreCache.MIGRATOR
+        original_class = migrator.MIGRATION_CLASS
         migrator.MIGRATION_CLASS = cls
         migrator = MessageStoreCache.MIGRATOR()
-        return migrator.migrate(cache, batch_id)
+        migration = yield migrator.migrate(cache, batch_id)
+        MessageStoreCache.MIGRATION_VERSION = original_version
+        migrator.MIGRATION_CLASS = original_class
+        returnValue(migration)
 
     @inlineCallbacks
     def test_migration_from_unversioned(self):
