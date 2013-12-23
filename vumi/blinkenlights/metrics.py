@@ -350,7 +350,8 @@ class Timer(Metric):
     def __enter__(self):
         warnings.warn(
             "Use of Timer directly as a context manager is deprecated."
-            " Please use Timer.timeit() instead.")
+            " Please use Timer.timeit() instead.",
+            DeprecationWarning)
         return self._event_timer.__enter__()
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -364,7 +365,8 @@ class Timer(Metric):
     def start(self):
         warnings.warn(
             "Use of Timer.start() is deprecated."
-            " Please use Timer.timeit() instead.")
+            " Please use Timer.timeit() instead.",
+            DeprecationWarning)
         return self._event_timer.start()
 
     def stop(self):
