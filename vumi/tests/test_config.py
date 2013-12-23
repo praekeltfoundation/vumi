@@ -7,6 +7,21 @@ from vumi.config import (
     ConfigClientEndpoint, ConfigClassName)
 from vumi.tests.helpers import VumiTestCase
 
+from zope.interface import Interface, implements
+
+
+class ITestConfigInterface(Interface):
+
+    def implements_this(foo):
+        """This should be implemented"""
+
+
+class TestConfigClassName(object):
+    implements(ITestConfigInterface)
+
+    def implements_this(self, foo):
+        pass
+
 
 class ConfigTest(VumiTestCase):
     def test_simple_config(self):
@@ -217,13 +232,27 @@ class ConfigFieldTest(VumiTestCase):
 
     def test_classname_field(self):
         field = self.make_field(ConfigClassName)
-        klass = self.field_value(field, 'vumi.tests.test_config.ConfigTest')
-        self.assertEqual(klass, ConfigTest)
+        klass = self.field_value(field,
+                                 'vumi.tests.test_config.TestConfigClassName')
+        self.assertEqual(klass, TestConfigClassName)
 
     def test_invalid_classname_field(self):
         field = self.make_field(ConfigClassName)
         self.assert_field_invalid(field, '0000')
         self.assert_field_invalid(field, '0000.bar')
+
+    def test_classname_implements_field(self):
+        field = self.make_field(ConfigClassName,
+                                implements=ITestConfigInterface)
+        klass = self.field_value(
+            field, 'vumi.tests.test_config.TestConfigClassName')
+        self.assertEqual(klass, TestConfigClassName)
+
+    def test_invalid_classname_implements_field(self):
+        field = self.make_field(ConfigClassName,
+                                implements=ITestConfigInterface)
+        self.assert_field_invalid(
+            field, 'vumi.tests.test_config.ConfigTest')
 
     def test_int_field(self):
         field = self.make_field(ConfigInt)
