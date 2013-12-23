@@ -189,7 +189,8 @@ class ApplicationWorker(BaseWorker):
         publisher = self.connectors[self.transport_name]
         return publisher.publish_outbound(message, endpoint_name=endpoint_name)
 
-    def check_endpoint(self, allowed_endpoints, endpoint):
+    @staticmethod
+    def check_endpoint(allowed_endpoints, endpoint):
         """Check that endpoint is in the list of allowed endpoints.
 
         :param list allowed_endpoints:
