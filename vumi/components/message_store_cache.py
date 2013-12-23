@@ -23,6 +23,25 @@ class MessageStoreCacheMigration(object):
     def migrate_from_unversioned(self, batch_id):
         return self.cache.set_cache_version(batch_id, 0)
 
+    @inlineCallbacks
+    def migrate_from_0(self, batch_id):
+        """
+        Migrates the counter for messages from sorted sets to counters.
+        We're doing this because storing all keys for all messages in
+        Redis is becoming too expensive on Ram.
+
+        There's no reason we need to do this other than that at one point
+        this was convenient to do. At the moment it doing us more harm
+        than good.
+        """
+        inbound_count = yield self.redis.zcard(self.inbound_key(batch_id))
+        yield self.redis.set(self.cache.inbound_count_key(batch_id),
+                             inbound_count)
+        outbound_count = yield self.redis.zcard(self.outbound_key(batch_id))
+        yield self.redis.set(self.cache.outbound_count_key(batch_id),
+                             outbound_count)
+        yield self.cache.set_cache_version(batch_id, 1)
+
 
 class MessageStoreCacheMigrator(object):
     """on the fly migrations for vumi#685"""
@@ -60,6 +79,14 @@ class MessageStoreCacheMigrator(object):
                         migrate_function))
 
 
+def migrate(func):
+    def wrapped(self, batch_id, *args, **kwargs):
+        d = self.migrator.migrate(self, batch_id)
+        d.addCallback(lambda _: func(batch_id, *args, **kwargs))
+        return d
+    return wrapped
+
+
 class MessageStoreCache(object):
     """
     A helper class to provide a view on information in the message store
@@ -67,7 +94,9 @@ class MessageStoreCache(object):
     """
     BATCH_KEY = 'batches'
     OUTBOUND_KEY = 'outbound'
+    OUTBOUND_COUNT_KEY = 'outbound_count'
     INBOUND_KEY = 'inbound'
+    INBOUND_COUNT_KEY = 'inbound_count'
     TO_ADDR_KEY = 'to_addr'
     FROM_ADDR_KEY = 'from_addr'
     EVENT_KEY = 'event'
@@ -81,12 +110,13 @@ class MessageStoreCache(object):
 
     # Migration counter
     MIGRATOR = MessageStoreCacheMigrator
-    MIGRATION_VERSION = 0
+    MIGRATION_VERSION = 1
 
     def __init__(self, redis):
         # Store redis as `manager` as well since @Manager.calls_manager
         # requires it to be named as such.
         self.redis = self.manager = redis
+        self.migrator = self.MIGRATOR()
 
     def key(self, *args):
         return ':'.join([unicode(a) for a in args])
@@ -97,8 +127,14 @@ class MessageStoreCache(object):
     def outbound_key(self, batch_id):
         return self.batch_key(self.OUTBOUND_KEY, batch_id)
 
+    def outbound_count_key(self, batch_id):
+        return self.batch_key(self.OUTBOUND_COUNT_KEY, batch_id)
+
     def inbound_key(self, batch_id):
         return self.batch_key(self.INBOUND_KEY, batch_id)
+
+    def inbound_count_key(self, batch_id):
+        return self.batch_key(self.INBOUND_COUNT_KEY, batch_id)
 
     def to_addr_key(self, batch_id):
         return self.batch_key(self.TO_ADDR_KEY, batch_id)
@@ -170,7 +206,9 @@ class MessageStoreCache(object):
                 reconciliation is taking place.
         """
         yield self.redis.delete(self.inbound_key(batch_id))
+        yield self.redis.delete(self.inbound_count_key(batch_id))
         yield self.redis.delete(self.outbound_key(batch_id))
+        yield self.redis.delete(self.outbound_count_key(batch_id))
         yield self.redis.delete(self.event_key(batch_id))
         yield self.redis.delete(self.status_key(batch_id))
         yield self.redis.delete(self.to_addr_key(batch_id))
@@ -193,6 +231,9 @@ class MessageStoreCache(object):
             timestamp)
         yield self.add_to_addr(batch_id, msg['to_addr'], timestamp)
 
+    def increment_outbound_message_count(self, batch_id):
+        return self.redis.incr(self.outbound_count_key(batch_id))
+
     @Manager.calls_manager
     def add_outbound_message_key(self, batch_id, message_key, timestamp):
         """
@@ -203,6 +244,7 @@ class MessageStoreCache(object):
             })
         if new_entry:
             yield self.increment_event_status(batch_id, 'sent')
+            yield self.increment_outbound_message_count(batch_id)
 
     @Manager.calls_manager
     def add_event(self, batch_id, event):
@@ -252,13 +294,18 @@ class MessageStoreCache(object):
             timestamp)
         yield self.add_from_addr(batch_id, msg['from_addr'], timestamp)
 
+    def increment_inbound_message_count(self, batch_id):
+        return self.redis.incr(self.inbound_count_key(batch_id))
+
+    @Manager.calls_manager
     def add_inbound_message_key(self, batch_id, message_key, timestamp):
         """
         Add a message key, weighted with the timestamp to the batch_id
         """
-        return self.redis.zadd(self.inbound_key(batch_id), **{
+        yield self.redis.zadd(self.inbound_key(batch_id), **{
             message_key.encode('utf-8'): timestamp,
             })
+        yield self.increment_inbound_message_count(batch_id)
 
     def add_from_addr(self, batch_id, from_addr, timestamp):
         """
@@ -314,11 +361,15 @@ class MessageStoreCache(object):
                                     start, stop, desc=not asc,
                                     withscores=with_timestamp)
 
+    @Manager.calls_manager
     def count_inbound_message_keys(self, batch_id):
         """
         Return the count of the unique inbound message keys for this batch_id
         """
-        return self.redis.zcard(self.inbound_key(batch_id))
+        value = yield self.redis.get(self.inbound_count_key(batch_id))
+        if value is None:
+            returnValue(0)
+        returnValue(int(value))
 
     def get_outbound_message_keys(self, batch_id, start=0, stop=-1, asc=False,
                                     with_timestamp=False):
@@ -329,11 +380,15 @@ class MessageStoreCache(object):
                                         start, stop, desc=not asc,
                                         withscores=with_timestamp)
 
+    @Manager.calls_manager
     def count_outbound_message_keys(self, batch_id):
         """
         Return the count of the unique outbound message keys for this batch_id
         """
-        return self.redis.zcard(self.outbound_key(batch_id))
+        value = yield self.redis.get(self.outbound_count_key(batch_id))
+        if value is None:
+            returnValue(0)
+        returnValue(int(value))
 
     @Manager.calls_manager
     def count_inbound_throughput(self, batch_id, sample_time=300):
