@@ -14,8 +14,6 @@ from smpp.pdu_builder import (
     EnquireLink, EnquireLinkResp, QuerySM, PDU)
 
 from vumi import log
-from vumi.transports.smpp.iprocessors import (IDeliveryReportProcessor,
-                                              IDeliverShortMessageProcessor)
 
 
 GSM_MAX_SMS_BYTES = 140
@@ -58,19 +56,8 @@ class EsmeTransceiver(Protocol):
 
         self.dr_processor = config.delivery_report_processor(
             self, self.config.delivery_report_processor_config)
-        if not IDeliveryReportProcessor.providedBy(self.dr_processor):
-            raise ValueError(
-                "delivery_report_processor does not provide the "
-                "IDeliveryReportProcessor interface: %s" % (
-                    self.dr_processor,))
-
         self.sm_processor = config.short_message_processor(
             self, self.config.short_message_processor_config)
-        if not IDeliverShortMessageProcessor.providedBy(self.sm_processor):
-            raise ValueError(
-                "short_message_processor does not provide the "
-                "IDeliverShortMessageProcessor interface: %s" % (
-                    self.sm_processor,))
 
         # The PDU queue ensures that PDUs are processed in the order
         # they arrive. `self._process_pdu_queue()` loops forever

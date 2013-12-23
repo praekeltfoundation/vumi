@@ -16,6 +16,8 @@ from vumi.persist.txredis_manager import TxRedisManager
 from vumi.config import (ConfigText, ConfigInt, ConfigBool, ConfigDict,
                          ConfigFloat, ConfigClientEndpoint,
                          ConfigClassName)
+from vumi.transports.smpp.iprocessors import (IDeliveryReportProcessor,
+                                              IDeliverShortMessageProcessor)
 
 
 class SmppTransportConfig(Transport.CONFIG_CLASS):
@@ -115,7 +117,7 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
         'Should implement `IDeliveryReportProcessor`.',
         default=('vumi.transports.smpp.processors.'
                  'EsmeCallbacksDeliveryReportProcessor'),
-        static=True)
+        static=True, implements=IDeliveryReportProcessor)
     delivery_report_processor_config = ConfigDict(
         'The configuration for the ``delivery_report_processor``',
         default={}, static=True)
@@ -124,7 +126,7 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
         'Should implement `IDeliverShortMessageProcessor`.',
         default=('vumi.transports.smpp.processors.'
                  'EsmeCallbacksDeliverShortMessageProcessor'),
-        static=True)
+        static=True, implements=IDeliverShortMessageProcessor)
     short_message_processor_config = ConfigDict(
         'The configuration for the ``short_message_processor``',
         default={}, static=True)
