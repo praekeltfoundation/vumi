@@ -195,6 +195,12 @@ class EsmeCallbacksDeliverShortMessageProcessor(object):
 
     @inlineCallbacks
     def handle_short_message_pdu(self, pdu):
+        # TODO: There's the possibility that we'd need to split this
+        #       processor into separate `inspect_*` and `handle_*`
+        #       functions. That work is currently left for when we have
+        #       an implementation that could benefit from that as it
+        #       would help us figure out how that functionality should
+        #       actually be split up.
         pdu_params = pdu['body']['mandatory_parameters']
         pdu_opts = unpacked_pdu_opts(pdu)
 
