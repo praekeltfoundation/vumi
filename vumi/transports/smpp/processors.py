@@ -71,11 +71,15 @@ class EsmeCallbacksDeliveryReportProcessor(object):
         return self._static_config
 
     def inspect_delivery_report_pdu(self, pdu):
-        pdu_opts = unpacked_pdu_opts(pdu)
+        """
+        Check if this might be a delivery receipt with PDU parameters.
+        There's a chance we'll get a delivery receipt without these
+        parameters, if that happens we'll try a regex match in
+        ``inspect_delivery_report_content`` once we've decoded the
+        message properly.
+        """
 
-        # This might be a delivery receipt with PDU parameters. If we get a
-        # delivery receipt without these parameters we'll try a regex match
-        # later once we've decoded the message properly.
+        pdu_opts = unpacked_pdu_opts(pdu)
         receipted_message_id = pdu_opts.get('receipted_message_id', None)
         message_state = pdu_opts.get('message_state', None)
         if receipted_message_id is not None and message_state is not None:
