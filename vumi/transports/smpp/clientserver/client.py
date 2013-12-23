@@ -18,8 +18,8 @@ from smpp.pdu_inspector import (
     MultipartMessage, detect_multipart, multipart_key)
 
 from vumi import log
-from vumi.transports.smpp.helpers import (IDeliveryReportProcessor,
-                                          IDeliverShortMessageProcessor)
+from vumi.transports.smpp.iprocessors import (IDeliveryReportProcessor,
+                                              IDeliverShortMessageProcessor)
 from vumi.transports.smpp.smpp_utils import unpacked_pdu_opts, detect_ussd
 
 
