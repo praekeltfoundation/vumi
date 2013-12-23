@@ -36,6 +36,7 @@ class MessageStoreCacheMigrator(object):
         If it doesn't equal `cache.MIGRATION_VERSION` then start the
         migration class and migrate until the latest version is reached.
         """
+        migration = self.MIGRATION_CLASS(cache)
         while True:
             current_version = yield cache.get_cache_version(batch_id)
             if current_version is None:
@@ -43,9 +44,8 @@ class MessageStoreCacheMigrator(object):
             elif int(current_version) != cache.MIGRATION_VERSION:
                 migrate_function = 'migrate_from_%s' % (current_version,)
             else:
-                returnValue(cache)
+                returnValue(migration)
 
-            migration = self.MIGRATION_CLASS(cache)
             handler = getattr(migration, migrate_function, None)
             if handler is None:
                 raise MessageStoreCacheException(
@@ -81,7 +81,7 @@ class MessageStoreCache(object):
 
     # Migration counter
     MIGRATOR = MessageStoreCacheMigrator
-    MIGRATION_VERSION = 0
+    MIGRATION_VERSION = 1
 
     def __init__(self, redis):
         # Store redis as `manager` as well since @Manager.calls_manager

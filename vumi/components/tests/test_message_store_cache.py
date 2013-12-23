@@ -340,7 +340,26 @@ class TestMessageStoreCache(MessageStoreCacheTestCase):
             10)
 
 
+class IncrementingMigration(object):
+
+    def __init__(self, cache):
+        self.cache = cache
+        self.call_history = []
+
+    def migrate_from_unversioned(self, batch_id):
+        d = self.cache.set_cache_version(batch_id, 0)
+        d.addCallback(self.call_history.append)
+        return d
+
+
 class TestMessageStoreCacheMigration(MessageStoreCacheTestCase):
+
+    def run_migrations(self, cls, cache, batch_id, to_version):
+        MessageStoreCache.MIGRATION_VERSION = to_version
+        migrator = MessageStoreCache.MIGRATOR
+        migrator.MIGRATION_CLASS = cls
+        migrator = MessageStoreCache.MIGRATOR()
+        return migrator.migrate(cache, batch_id)
 
     @inlineCallbacks
     def test_migration_from_unversioned(self):
@@ -350,30 +369,12 @@ class TestMessageStoreCacheMigration(MessageStoreCacheTestCase):
         self.assertEqual(
             None, (yield self.cache.get_cache_version(batch_id)))
 
-        migrator = MessageStoreCache.MIGRATOR()
-        yield migrator.migrate(cache, batch_id)
+        yield self.run_migrations(IncrementingMigration, cache, batch_id, 0)
         self.assertEqual('0', (yield cache.get_cache_version(batch_id)))
 
     @inlineCallbacks
     def test_migrator_runs_migrations_only_once(self):
-
-        call_history = []
-        batch_id = 'the-batch-id'
-
-        class IncrementingMigration(object):
-
-            def __init__(self, cache):
-                self.cache = cache
-
-            def migrate_from_unversioned(self, batch_id):
-                d = self.cache.set_cache_version(batch_id, 0)
-                d.addCallback(call_history.append)
-                return d
-
-        migrator = MessageStoreCache.MIGRATOR
-        migrator.MIGRATION_CLASS = IncrementingMigration
-
         cache = MessageStoreCache(self.redis)
-        migrator = MessageStoreCache.MIGRATOR()
-        yield migrator.migrate(cache, batch_id)
-        self.assertEqual(call_history, [0])
+        migration = yield self.run_migrations(IncrementingMigration, cache,
+                                              'the-batch-id', 0)
+        self.assertEqual(migration.call_history, [0])
