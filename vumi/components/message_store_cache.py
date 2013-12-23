@@ -81,7 +81,7 @@ class MessageStoreCache(object):
 
     # Migration counter
     MIGRATOR = MessageStoreCacheMigrator
-    MIGRATION_VERSION = 1
+    MIGRATION_VERSION = 0
 
     def __init__(self, redis):
         # Store redis as `manager` as well since @Manager.calls_manager
