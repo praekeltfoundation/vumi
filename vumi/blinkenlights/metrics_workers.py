@@ -392,7 +392,7 @@ class RandomMetricsGenerator(Worker):
         if random.choice([True, False]):
             self.counter.inc()
         self.value.set(random.normalvariate(2.0, 0.1))
-        with self.timer:
+        with self.timer.timeit():
             d = Deferred()
             wait = random.uniform(0.0, 0.1)
             reactor.callLater(wait, lambda: d.callback(None))
