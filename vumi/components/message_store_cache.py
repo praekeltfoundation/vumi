@@ -23,6 +23,9 @@ class MessageStoreCacheMigration(object):
     def migrate_from_unversioned(self, batch_id):
         return self.cache.set_cache_version(batch_id, 0)
 
+    def migrate_from_0(self, batch_id):
+        return self.cache.set_cache_version(batch_id, 1)
+
 
 class MessageStoreCacheMigrator(object):
     """on the fly migrations for vumi#685"""
