@@ -124,6 +124,10 @@ class TestSmppTransport(VumiTestCase):
                     message1['message_id'])), None)
         self.assertEqual((yield self.transport.r_get_message(
                     message1['message_id'])), None)
+        message_key = self.transport.r_message_key(message1['message_id'])
+        config = self.transport.get_static_config()
+        ttl = yield self.transport.redis.ttl(message_key)
+        self.assertTrue(0 < ttl < config.submit_sm_expiry)
 
     @inlineCallbacks
     def test_redis_third_party_id_persistence(self):
