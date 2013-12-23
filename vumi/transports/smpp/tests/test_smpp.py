@@ -13,7 +13,7 @@ from vumi.transports.smpp.transport import (SmppTransport,
                                             SmppTxTransport,
                                             SmppRxTransport)
 from vumi.transports.smpp.service import SmppService
-from vumi.transports.smpp.clientserver.client import unpacked_pdu_opts
+from vumi.transports.smpp.smpp_utils import unpacked_pdu_opts
 from vumi.transports.smpp.clientserver.tests.utils import SmscTestServer
 from vumi.tests.utils import LogCatcher
 from vumi.transports.tests.helpers import TransportHelper

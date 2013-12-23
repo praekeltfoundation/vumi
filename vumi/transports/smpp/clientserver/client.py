@@ -1,7 +1,5 @@
 # -*- test-case-name: vumi.transports.smpp.clientserver.tests.test_client -*-
 
-import json
-import uuid
 from random import randint
 
 from twisted.internet import reactor
@@ -14,13 +12,10 @@ from smpp.pdu import unpack_pdu
 from smpp.pdu_builder import (
     BindTransceiver, BindTransmitter, BindReceiver, DeliverSMResp, SubmitSM,
     EnquireLink, EnquireLinkResp, QuerySM, PDU)
-from smpp.pdu_inspector import (
-    MultipartMessage, detect_multipart, multipart_key)
 
 from vumi import log
 from vumi.transports.smpp.iprocessors import (IDeliveryReportProcessor,
                                               IDeliverShortMessageProcessor)
-from vumi.transports.smpp.smpp_utils import unpacked_pdu_opts, detect_ussd
 
 
 GSM_MAX_SMS_BYTES = 140
@@ -31,7 +26,6 @@ class UnbindResp(PDU):
     def __init__(self, sequence_number, **kwargs):
         super(UnbindResp, self).__init__(
             'unbind_resp', 'ESME_ROK', sequence_number, **kwargs)
-
 
 
 def update_ussd_pdu(sm_pdu, continue_session, session_info=None):

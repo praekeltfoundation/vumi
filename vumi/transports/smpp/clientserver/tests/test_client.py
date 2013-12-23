@@ -5,8 +5,8 @@ from smpp.pdu import unpack_pdu
 
 from vumi.tests.utils import LogCatcher
 from vumi.transports.smpp.clientserver.client import (
-    EsmeTransceiver, EsmeReceiver, EsmeTransmitter, EsmeCallbacks, ESME,
-    unpacked_pdu_opts)
+    EsmeTransceiver, EsmeReceiver, EsmeTransmitter, EsmeCallbacks, ESME)
+from vumi.transports.smpp.smpp_utils import unpacked_pdu_opts
 from vumi.transports.smpp.transport import SmppTransportConfig
 from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 
