@@ -279,17 +279,6 @@ class EsmeTransceiver(Protocol):
 
         yield self.sm_processor.handle_short_message_pdu(pdu)
 
-    def _deliver_sm(self, source_addr, destination_addr, short_message, **kw):
-
-        dr_data = self.dr_processor.inspect_delivery_report_content(
-            short_message)
-
-        if dr_data is not None:
-            return self.dr_processor.handle_delivery_report_content(dr_data)
-        else:
-            return self.sm_processor.handle_short_message_content(
-                source_addr, destination_addr, short_message, **kw)
-
     def handle_enquire_link(self, pdu):
         if pdu['header']['command_status'] == 'ESME_ROK':
             log.msg("enquire_link OK")

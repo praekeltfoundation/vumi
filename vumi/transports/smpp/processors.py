@@ -221,6 +221,11 @@ class EsmeCallbacksDeliverShortMessageProcessor(object):
 
     def handle_short_message_content(self, source_addr, destination_addr,
                                      short_message, **kw):
+        dr_processor = self.protocol.dr_processor
+        dr_data = dr_processor.inspect_delivery_report_content(short_message)
+        if dr_data is not None:
+            return dr_processor.handle_delivery_report_content(dr_data)
+
         return self.protocol.esme_callbacks.deliver_sm(
             source_addr=source_addr, destination_addr=destination_addr,
             short_message=short_message, message_id=uuid4().hex,
@@ -260,13 +265,14 @@ class EsmeCallbacksDeliverShortMessageProcessor(object):
 
         decoded_msg = self.decode_message(pdu_params['short_message'],
                                           pdu_params['data_coding'])
-        return self.protocol._deliver_sm(
+        return self.protocol.esme_callbacks.deliver_sm(
             source_addr=pdu_params['source_addr'],
             destination_addr=pdu_params['destination_addr'],
             short_message=decoded_msg,
             message_type='ussd',
             session_event=session_event,
-            session_info=session_info)
+            session_info=session_info,
+            message_id=uuid4().hex)
 
     @inlineCallbacks
     def handle_deliver_sm_multipart(self, pdu, pdu_params):
@@ -283,10 +289,11 @@ class EsmeCallbacksDeliverShortMessageProcessor(object):
             decoded_msg = self.decode_message(completed['message'],
                                               pdu_params['data_coding'])
             # and we can finally pass the whole message on
-            yield self.protocol._deliver_sm(
+            yield self.protocol.esme_callbacks.deliver_sm(
                 source_addr=completed['from_msisdn'],
                 destination_addr=completed['to_msisdn'],
-                short_message=decoded_msg)
+                short_message=decoded_msg,
+                message_id=uuid4().hex)
         else:
             yield self.save_multipart_message(redis_key, multi)
 
@@ -314,7 +321,7 @@ class EsmeCallbacksDeliverShortMessageProcessor(object):
     def handle_deliver_sm_sms(self, pdu_params):
         decoded_msg = self.decode_message(pdu_params['short_message'],
                                           pdu_params['data_coding'])
-        return self.protocol._deliver_sm(
+        return self.handle_short_message_content(
             source_addr=pdu_params['source_addr'],
             destination_addr=pdu_params['destination_addr'],
             short_message=decoded_msg)
