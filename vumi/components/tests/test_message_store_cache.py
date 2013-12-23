@@ -4,14 +4,17 @@
 
 from datetime import datetime, timedelta
 
-from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.defer import inlineCallbacks, returnValue, succeed
 
 from vumi.tests.helpers import (
     VumiTestCase, MessageHelper, PersistenceHelper, import_skip,
 )
+from vumi.components.message_store_cache import (
+    MessageStoreCache, MessageStoreCacheException)
 
 
-class TestMessageStoreCache(VumiTestCase):
+class MessageStoreCacheTestCase(VumiTestCase):
+
     @inlineCallbacks
     def setUp(self):
         self.persistence_helper = self.add_helper(
@@ -41,6 +44,9 @@ class TestMessageStoreCache(VumiTestCase):
             yield callback(batch_id, msg)
             messages.append(msg)
         returnValue(messages)
+
+
+class TestMessageStoreCache(MessageStoreCacheTestCase):
 
     @inlineCallbacks
     def test_add_outbound_message(self):
@@ -332,3 +338,42 @@ class TestMessageStoreCache(VumiTestCase):
         self.assertEqual(
             (yield self.cache.count_query_results(self.batch_id, token)),
             10)
+
+
+class TestMessageStoreCacheMigration(MessageStoreCacheTestCase):
+
+    @inlineCallbacks
+    def test_migration_from_unversioned(self):
+        cache = MessageStoreCache(self.redis)
+        batch_id = 'the-batch-id'
+
+        self.assertEqual(
+            None, (yield self.cache.get_cache_version(batch_id)))
+
+        migrator = MessageStoreCache.MIGRATOR()
+        yield migrator.migrate(cache, batch_id)
+        self.assertEqual('0', (yield cache.get_cache_version(batch_id)))
+
+    @inlineCallbacks
+    def test_migrator_runs_migrations_only_once(self):
+
+        call_history = []
+        batch_id = 'the-batch-id'
+
+        class IncrementingMigration(object):
+
+            def __init__(self, cache):
+                self.cache = cache
+
+            def migrate_from_unversioned(self, batch_id):
+                d = self.cache.set_cache_version(batch_id, 0)
+                d.addCallback(call_history.append)
+                return d
+
+        migrator = MessageStoreCache.MIGRATOR
+        migrator.MIGRATION_CLASS = IncrementingMigration
+
+        cache = MessageStoreCache(self.redis)
+        migrator = MessageStoreCache.MIGRATOR()
+        yield migrator.migrate(cache, batch_id)
+        self.assertEqual(call_history, [0])

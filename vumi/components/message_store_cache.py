@@ -52,6 +52,12 @@ class MessageStoreCacheMigrator(object):
                     'Needing to migration from %s but %s is not defined' % (
                         current_version, migrate_function))
             yield handler(batch_id)
+            next_version = yield cache.get_cache_version(batch_id)
+            if current_version == next_version:
+                raise MessageStoreCacheException(
+                    'Migration %s did not increment the version counter '
+                    'raising exception to prevent infinite loop.' % (
+                        migrate_function))
 
 
 class MessageStoreCache(object):
@@ -74,6 +80,7 @@ class MessageStoreCache(object):
     DEFAULT_SEARCH_RESULT_TTL = 60 * 60 * 24
 
     # Migration counter
+    MIGRATOR = MessageStoreCacheMigrator
     MIGRATION_VERSION = 0
 
     def __init__(self, redis):
@@ -469,4 +476,6 @@ class MessageStoreCache(object):
         return self.redis.get(self.cache_version_key(batch_id))
 
     def set_cache_version(self, batch_id, version):
-        return self.redis.set(self.cache_version_key(batch_id), version)
+        d = self.redis.set(self.cache_version_key(batch_id), version)
+        d.addCallback(lambda _: version)
+        return d
