@@ -51,7 +51,7 @@ class DeliveryReportProcessorConfig(Config):
     }
 
     delivery_report_regex = ConfigRegex(
-        'What regex to use for matching delivery reports',
+        'Regex to use for matching delivery reports',
         default=DELIVERY_REPORT_REGEX, static=True)
     delivery_report_status_mapping = ConfigDict(
         "Mapping from delivery report message state to "
