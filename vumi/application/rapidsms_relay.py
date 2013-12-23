@@ -18,7 +18,7 @@ from vumi.config import (
     ConfigList)
 from vumi.message import to_json, TransportUserMessage
 from vumi.utils import http_request_full
-from vumi.errors import ConfigError
+from vumi.errors import ConfigError, InvalidEndpoint
 from vumi import log
 
 
@@ -256,23 +256,13 @@ class RapidSMSRelay(ApplicationWorker):
         reply = yield self.reply_to(orig_msg, content)
         returnValue([reply])
 
-    def _check_endpoint(self, allowed_endpoints, endpoint):
-        if allowed_endpoints is None:
-            return
-        if endpoint is None:
-            endpoint = "default"
-        if endpoint not in allowed_endpoints:
-            raise ValueError(
-                "Endpoint %r not defined in allowed_endpoints %r"
-                % (endpoint, allowed_endpoints))
-
     def _handle_send_to(self, config, content, to_addrs, endpoint):
         sends = []
         try:
-            self._check_endpoint(config.allowed_endpoints, endpoint)
+            self.check_endpoint(config.allowed_endpoints, endpoint)
             for to_addr in to_addrs:
                 sends.append(self.send_to(to_addr, content, endpoint=endpoint))
-        except ValueError, e:
+        except InvalidEndpoint, e:
             raise BadRequestError(e)
         d = DeferredList(sends, consumeErrors=True)
         d.addCallback(lambda msgs: [msg[1] for msg in msgs if msg[0]])

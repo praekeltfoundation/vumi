@@ -5,6 +5,7 @@ from vumi.message import TransportUserMessage
 
 from vumi.application.tests.helpers import ApplicationHelper
 from vumi.tests.helpers import VumiTestCase, WorkerHelper
+from vumi.errors import InvalidEndpoint
 
 
 class DummyApplicationWorker(ApplicationWorker):
@@ -265,7 +266,7 @@ class TestApplicationWorkerWithSendToConfig(VumiTestCase):
     @inlineCallbacks
     def test_send_to_with_bad_endpoint(self):
         yield self.assertFailure(
-            self.send_to('+12345', "Hi!", "outbound_unknown"), ValueError)
+            self.send_to('+12345', "Hi!", "outbound_unknown"), InvalidEndpoint)
 
 
 class TestApplicationMiddlewareHooks(VumiTestCase):
