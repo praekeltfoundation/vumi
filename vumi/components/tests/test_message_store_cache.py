@@ -51,8 +51,8 @@ class TestMessageStoreCache(VumiTestCase):
 
     @inlineCallbacks
     def test_get_outbound_message_keys(self):
-        messages = yield self.add_messages(self.batch_id,
-            self.cache.add_outbound_message)
+        messages = yield self.add_messages(
+            self.batch_id, self.cache.add_outbound_message)
         # make sure we get keys back ordered according to timestamp, which
         # means the reverse of how we put them in.
         keys = yield self.cache.get_outbound_message_keys(self.batch_id)
@@ -61,15 +61,15 @@ class TestMessageStoreCache(VumiTestCase):
 
     @inlineCallbacks
     def test_count_outbound_message_keys(self):
-        yield self.add_messages(self.batch_id,
-            self.cache.add_outbound_message)
+        yield self.add_messages(
+            self.batch_id, self.cache.add_outbound_message)
         count = yield self.cache.count_outbound_message_keys(self.batch_id)
         self.assertEqual(count, 10)
 
     @inlineCallbacks
     def test_paged_get_outbound_message_keys(self):
-        messages = yield self.add_messages(self.batch_id,
-            self.cache.add_outbound_message)
+        messages = yield self.add_messages(
+            self.batch_id, self.cache.add_outbound_message)
         # make sure we get keys back ordered according to timestamp, which
         # means the reverse of how we put them in.
         keys = yield self.cache.get_outbound_message_keys(self.batch_id, 0, 4)
@@ -96,52 +96,52 @@ class TestMessageStoreCache(VumiTestCase):
 
     @inlineCallbacks
     def test_get_inbound_message_keys(self):
-        messages = yield self.add_messages(self.batch_id,
-            self.cache.add_inbound_message)
+        messages = yield self.add_messages(
+            self.batch_id, self.cache.add_inbound_message)
         keys = yield self.cache.get_inbound_message_keys(self.batch_id)
         self.assertEqual(len(keys), 10)
         self.assertEqual(keys, list([m['message_id'] for m in messages]))
 
     @inlineCallbacks
     def test_count_inbound_message_keys(self):
-        yield self.add_messages(self.batch_id,
-            self.cache.add_inbound_message)
+        yield self.add_messages(
+            self.batch_id, self.cache.add_inbound_message)
         count = yield self.cache.count_inbound_message_keys(self.batch_id)
         self.assertEqual(count, 10)
 
     @inlineCallbacks
     def test_paged_get_inbound_message_keys(self):
-        messages = yield self.add_messages(self.batch_id,
-            self.cache.add_inbound_message)
+        messages = yield self.add_messages(
+            self.batch_id, self.cache.add_inbound_message)
         keys = yield self.cache.get_inbound_message_keys(self.batch_id, 0, 4)
         self.assertEqual(len(keys), 5)
         self.assertEqual(keys, list([m['message_id'] for m in messages])[:5])
 
     @inlineCallbacks
     def test_get_from_addrs(self):
-        yield self.add_messages(self.batch_id,
-            self.cache.add_inbound_message)
+        yield self.add_messages(
+            self.batch_id, self.cache.add_inbound_message)
         from_addrs = yield self.cache.get_from_addrs(self.batch_id)
         self.assertEqual(from_addrs, ['from-%s' % i for i in range(10)])
 
     @inlineCallbacks
     def test_count_from_addrs(self):
-        yield self.add_messages(self.batch_id,
-            self.cache.add_inbound_message)
+        yield self.add_messages(
+            self.batch_id, self.cache.add_inbound_message)
         count = yield self.cache.count_from_addrs(self.batch_id)
         self.assertEqual(count, 10)
 
     @inlineCallbacks
     def test_get_to_addrs(self):
-        yield self.add_messages(self.batch_id,
-            self.cache.add_outbound_message)
+        yield self.add_messages(
+            self.batch_id, self.cache.add_outbound_message)
         to_addrs = yield self.cache.get_to_addrs(self.batch_id)
         self.assertEqual(to_addrs, ['to-%s' % i for i in range(10)])
 
     @inlineCallbacks
     def test_count_to_addrs(self):
-        yield self.add_messages(self.batch_id,
-            self.cache.add_outbound_message)
+        yield self.add_messages(
+            self.batch_id, self.cache.add_outbound_message)
         count = yield self.cache.count_to_addrs(self.batch_id)
         self.assertEqual(count, 10)
 
@@ -162,7 +162,7 @@ class TestMessageStoreCache(VumiTestCase):
             'ack': 1,
             'nack': 0,
             'sent': 1,
-            })
+        })
 
     @inlineCallbacks
     def test_add_event_idempotence(self):
@@ -182,7 +182,7 @@ class TestMessageStoreCache(VumiTestCase):
             'ack': 1,
             'nack': 0,
             'sent': 1,
-            })
+        })
 
     @inlineCallbacks
     def test_add_outbound_message_idempotence(self):
@@ -266,11 +266,11 @@ class TestMessageStoreCache(VumiTestCase):
         self.assertEqual(
             (yield self.cache.count_inbound_throughput(self.batch_id)), 10)
         self.assertEqual(
-            (yield self.cache.count_inbound_throughput(self.batch_id,
-                sample_time=1)), 1)
+            (yield self.cache.count_inbound_throughput(
+                self.batch_id, sample_time=1)), 1)
         self.assertEqual(
-            (yield self.cache.count_inbound_throughput(self.batch_id,
-                sample_time=10)), 2)
+            (yield self.cache.count_inbound_throughput(
+                self.batch_id, sample_time=10)), 2)
 
     @inlineCallbacks
     def test_count_outbound_throughput(self):
@@ -287,11 +287,11 @@ class TestMessageStoreCache(VumiTestCase):
         self.assertEqual(
             (yield self.cache.count_outbound_throughput(self.batch_id)), 10)
         self.assertEqual(
-            (yield self.cache.count_outbound_throughput(self.batch_id,
-                sample_time=1)), 1)
+            (yield self.cache.count_outbound_throughput(
+                self.batch_id, sample_time=1)), 1)
         self.assertEqual(
-            (yield self.cache.count_outbound_throughput(self.batch_id,
-                sample_time=10)), 2)
+            (yield self.cache.count_outbound_throughput(
+                self.batch_id, sample_time=10)), 2)
 
     def test_get_query_token(self):
         cache = self.store.cache
@@ -322,8 +322,8 @@ class TestMessageStoreCache(VumiTestCase):
 
         token = yield self.cache.start_query(self.batch_id, 'inbound', [
             {'key': 'msg.content', 'pattern': 'hello', 'flags': ''}])
-        yield self.cache.store_query_results(self.batch_id, token, message_ids,
-            'inbound', 120)
+        yield self.cache.store_query_results(
+            self.batch_id, token, message_ids, 'inbound', 120)
         self.assertFalse(
             (yield self.cache.is_query_in_progress(self.batch_id, token)))
         self.assertEqual(
