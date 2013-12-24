@@ -171,6 +171,10 @@ class MessageStoreCache(object):
         if new_entry:
             yield self.increment_event_status(batch_id, 'sent')
 
+        uses_counters = yield self.uses_counters(batch_id)
+        if uses_counters:
+            yield self.redis.incr(self.outbound_count_key(batch_id))
+
     @Manager.calls_manager
     def add_event(self, batch_id, event):
         """
@@ -219,13 +223,18 @@ class MessageStoreCache(object):
             batch_id, msg['message_id'], timestamp)
         yield self.add_from_addr(batch_id, msg['from_addr'], timestamp)
 
+    @Manager.calls_manager
     def add_inbound_message_key(self, batch_id, message_key, timestamp):
         """
         Add a message key, weighted with the timestamp to the batch_id
         """
-        return self.redis.zadd(self.inbound_key(batch_id), **{
+        yield self.redis.zadd(self.inbound_key(batch_id), **{
             message_key.encode('utf-8'): timestamp,
         })
+
+        uses_counters = yield self.uses_counters(batch_id)
+        if uses_counters:
+            yield self.redis.incr(self.inbound_count_key(batch_id))
 
     def add_from_addr(self, batch_id, from_addr, timestamp):
         """
