@@ -350,45 +350,33 @@ class TestMessageStoreCache(VumiTestCase):
             10)
 
     @inlineCallbacks
-    def test_truncate_inbound_message_keys(self):
-
-        yield self.cache.switch_to_counters(self.batch_id)
-
-        for i in range(10):
-            msg = self.msg_helper.make_inbound("inbound")
-            yield self.cache.add_inbound_message(self.batch_id, msg)
-
-        self.assertEqual(
-            len((yield self.cache.get_inbound_message_keys(self.batch_id))),
-            10)
-        keys_removed = yield self.cache.truncate_inbound_message_keys(
-            self.batch_id, 5)
-        self.assertEqual(keys_removed, 5)
-        self.assertEqual(
-            len((yield self.cache.get_inbound_message_keys(self.batch_id))),
-            5)
-        self.assertEqual(
-            (yield self.cache.count_inbound_message_keys(self.batch_id)),
-            10)
+    def test_inbound_truncate_at_within_limits(self):
+        yield self.add_messages(
+            self.batch_id, self.cache.add_inbound_message, count=10)
+        count = yield self.cache.truncate_inbound_message_keys(
+            self.batch_id, truncate_at=11)
+        self.assertEqual(count, 0)
 
     @inlineCallbacks
-    def test_truncate_outbound_message_keys(self):
+    def test_inbound_truncate_at_over_limits(self):
+        yield self.add_messages(
+            self.batch_id, self.cache.add_inbound_message, count=10)
+        count = yield self.cache.truncate_inbound_message_keys(
+            self.batch_id, truncate_at=5)
+        self.assertEqual(count, 5)
 
-        yield self.cache.switch_to_counters(self.batch_id)
+    @inlineCallbacks
+    def test_outbound_truncate_at_within_limits(self):
+        yield self.add_messages(
+            self.batch_id, self.cache.add_outbound_message, count=10)
+        count = yield self.cache.truncate_outbound_message_keys(
+            self.batch_id, truncate_at=11)
+        self.assertEqual(count, 0)
 
-        for i in range(10):
-            msg = self.msg_helper.make_outbound("outbound")
-            yield self.cache.add_outbound_message(self.batch_id, msg)
-
-        self.assertEqual(
-            len((yield self.cache.get_outbound_message_keys(self.batch_id))),
-            10)
-        keys_removed = yield self.cache.truncate_outbound_message_keys(
-            self.batch_id, 5)
-        self.assertEqual(keys_removed, 5)
-        self.assertEqual(
-            len((yield self.cache.get_outbound_message_keys(self.batch_id))),
-            5)
-        self.assertEqual(
-            (yield self.cache.count_outbound_message_keys(self.batch_id)),
-            10)
+    @inlineCallbacks
+    def test_outbound_truncate_at_over_limits(self):
+        yield self.add_messages(
+            self.batch_id, self.cache.add_outbound_message, count=10)
+        count = yield self.cache.truncate_outbound_message_keys(
+            self.batch_id, truncate_at=5)
+        self.assertEqual(count, 5)

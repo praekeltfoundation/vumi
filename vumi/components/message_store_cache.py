@@ -111,17 +111,28 @@ class MessageStoreCache(object):
         yield self.redis.set(self.inbound_count_key(batch_id), inbound_count)
         yield self.redis.set(self.outbound_count_key(batch_id), outbound_count)
 
-    def truncate_inbound_message_keys(self, batch_id, size=None):
-        size = size or self.TRUNCATE_MESSAGE_KEY_COUNT_AT
+    @Manager.calls_manager
+    def truncate_inbound_message_keys(self, batch_id, truncate_at=None):
         # indexes are zero based
-        return self.redis.zremrangebyrank(
-            self.inbound_key(batch_id), 0, size - 1)
+        truncate_at = (truncate_at or self.TRUNCATE_MESSAGE_KEY_COUNT_AT) - 1
+        if (yield self.inbound_message_keys_size(batch_id)) > truncate_at:
+            keys_removed = yield self.redis.zremrangebyrank(
+                self.inbound_key(batch_id), 0, truncate_at)
+            returnValue(keys_removed)
 
-    def truncate_outbound_message_keys(self, batch_id, size=None):
-        size = size or self.TRUNCATE_MESSAGE_KEY_COUNT_AT
+        returnValue(0)
+
+    @Manager.calls_manager
+    def truncate_outbound_message_keys(self, batch_id, truncate_at=None):
         # indexes are zero based
-        return self.redis.zremrangebyrank(
-            self.outbound_key(batch_id), 0, size - 1)
+        truncate_at = (truncate_at or self.TRUNCATE_MESSAGE_KEY_COUNT_AT) - 1
+
+        if (yield self.outbound_message_keys_size(batch_id)) > truncate_at:
+            keys_removed = yield self.redis.zremrangebyrank(
+                self.outbound_key(batch_id), 0, truncate_at)
+            returnValue(keys_removed)
+
+        returnValue(0)
 
     @Manager.calls_manager
     def batch_start(self, batch_id):
@@ -209,6 +220,7 @@ class MessageStoreCache(object):
         uses_counters = yield self.uses_counters(batch_id)
         if uses_counters:
             yield self.redis.incr(self.outbound_count_key(batch_id))
+            yield self.truncate_outbound_message_keys(batch_id)
 
     @Manager.calls_manager
     def add_event(self, batch_id, event):
@@ -270,6 +282,7 @@ class MessageStoreCache(object):
         uses_counters = yield self.uses_counters(batch_id)
         if uses_counters:
             yield self.redis.incr(self.inbound_count_key(batch_id))
+            yield self.truncate_inbound_message_keys(batch_id)
 
     def add_from_addr(self, batch_id, from_addr, timestamp):
         """
@@ -330,14 +343,16 @@ class MessageStoreCache(object):
         count = yield self.redis.get(self.inbound_count_key(batch_id))
         returnValue(0 if count is None else int(count))
 
+    def inbound_message_keys_size(self, batch_id):
+        return self.redis.zcard(self.inbound_key(batch_id))
+
     @Manager.calls_manager
     def count_inbound_message_keys(self, batch_id):
         """
         Return the count of the unique inbound message keys for this batch_id
         """
         if not (yield self.uses_counters(batch_id)):
-            count = yield self.redis.zcard(self.inbound_key(batch_id))
-            returnValue(count)
+            returnValue((yield self.inbound_message_keys_size(batch_id)))
 
         count = yield self.inbound_message_count(batch_id)
         returnValue(count)
@@ -356,14 +371,16 @@ class MessageStoreCache(object):
         count = yield self.redis.get(self.outbound_count_key(batch_id))
         returnValue(0 if count is None else int(count))
 
+    def outbound_message_keys_size(self, batch_id):
+        return self.redis.zcard(self.outbound_key(batch_id))
+
     @Manager.calls_manager
     def count_outbound_message_keys(self, batch_id):
         """
         Return the count of the unique outbound message keys for this batch_id
         """
         if not (yield self.uses_counters(batch_id)):
-            count = yield self.redis.zcard(self.outbound_key(batch_id))
-            returnValue(count)
+            returnValue((yield self.outbound_message_keys_size(batch_id)))
 
         count = yield self.outbound_message_count(batch_id)
         returnValue(count)
