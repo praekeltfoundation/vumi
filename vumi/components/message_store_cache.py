@@ -22,7 +22,9 @@ class MessageStoreCache(object):
     """
     BATCH_KEY = 'batches'
     OUTBOUND_KEY = 'outbound'
+    OUTBOUND_COUNT_KEY = 'outbound_count'
     INBOUND_KEY = 'inbound'
+    INBOUND_COUNT_KEY = 'inbound_count'
     TO_ADDR_KEY = 'to_addr'
     FROM_ADDR_KEY = 'from_addr'
     EVENT_KEY = 'event'
@@ -47,8 +49,14 @@ class MessageStoreCache(object):
     def outbound_key(self, batch_id):
         return self.batch_key(self.OUTBOUND_KEY, batch_id)
 
+    def outbound_count_key(self, batch_id):
+        return self.batch_key(self.OUTBOUND_COUNT_KEY, batch_id)
+
     def inbound_key(self, batch_id):
         return self.batch_key(self.INBOUND_KEY, batch_id)
+
+    def inbound_count_key(self, batch_id):
+        return self.batch_key(self.INBOUND_COUNT_KEY, batch_id)
 
     def to_addr_key(self, batch_id):
         return self.batch_key(self.TO_ADDR_KEY, batch_id)
@@ -67,6 +75,18 @@ class MessageStoreCache(object):
 
     def search_result_key(self, batch_id, token):
         return self.batch_key(self.SEARCH_RESULT_KEY, batch_id, token)
+
+    def uses_counters(self, batch_id):
+        """
+        Returns ``True`` if ``batch_id`` has moved to the new system
+        of using counters instead of assuming all keys are in Redis
+        and doing a `zcard` on that.
+
+        The test for this is to see if `inbound_count_key(batch_id)`
+        exists. If it is then we've moved to the new system and are
+        using counters.
+        """
+        return self.redis.exists(self.inbound_count_key(batch_id))
 
     @Manager.calls_manager
     def batch_start(self, batch_id):
@@ -261,11 +281,17 @@ class MessageStoreCache(object):
                                     start, stop, desc=not asc,
                                     withscores=with_timestamp)
 
+    @Manager.calls_manager
     def count_inbound_message_keys(self, batch_id):
         """
         Return the count of the unique inbound message keys for this batch_id
         """
-        return self.redis.zcard(self.inbound_key(batch_id))
+        if not (yield self.uses_counters(batch_id)):
+            count = yield self.redis.zcard(self.inbound_key(batch_id))
+            returnValue(count)
+
+        count = yield self.redis.get(self.inbound_count_key(batch_id))
+        returnValue(count)
 
     def get_outbound_message_keys(self, batch_id, start=0, stop=-1, asc=False,
                                     with_timestamp=False):
@@ -276,11 +302,17 @@ class MessageStoreCache(object):
                                         start, stop, desc=not asc,
                                         withscores=with_timestamp)
 
+    @Manager.calls_manager
     def count_outbound_message_keys(self, batch_id):
         """
         Return the count of the unique outbound message keys for this batch_id
         """
-        return self.redis.zcard(self.outbound_key(batch_id))
+        if not (yield self.uses_counters(batch_id)):
+            count = yield self.redis.zcard(self.outbound_key(batch_id))
+            returnValue(count)
+
+        count = yield self.redis.get(self.outbound_count_key(batch_id))
+        returnValue(count)
 
     @Manager.calls_manager
     def count_inbound_throughput(self, batch_id, sample_time=300):
