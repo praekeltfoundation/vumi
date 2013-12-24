@@ -309,6 +309,11 @@ class FakeRedis(object):
         zval = self._data.get(key, Zset())
         return zval.zscore(value)
 
+    @maybe_async
+    def zremrangebyrank(self, key, start, stop):
+        zval = self._data.setdefault(key, Zset())
+        return zval.zremrangebyrank(start, stop)
+
     # List operations
     @maybe_async
     def llen(self, key):
@@ -477,3 +482,10 @@ class Zset(object):
         for score, value in self._zval:
             if value == val:
                 return score
+
+    def zremrangebyrank(self, start, stop):
+        clone = self._zval[:]
+        deleted_keys = clone[start:stop]  # grab values to be removed
+        clone[start:stop] = []  # clear the values in the range
+        self._zval = clone
+        return len(deleted_keys)
