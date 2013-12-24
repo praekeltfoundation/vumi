@@ -156,8 +156,8 @@ class MessageStoreCache(object):
         Add an outbound message to the cache for the given batch_id
         """
         timestamp = self.get_timestamp(msg['timestamp'])
-        yield self.add_outbound_message_key(batch_id, msg['message_id'],
-            timestamp)
+        yield self.add_outbound_message_key(
+            batch_id, msg['message_id'], timestamp)
         yield self.add_to_addr(batch_id, msg['to_addr'], timestamp)
 
     @Manager.calls_manager
@@ -167,7 +167,7 @@ class MessageStoreCache(object):
         """
         new_entry = yield self.redis.zadd(self.outbound_key(batch_id), **{
             message_key.encode('utf-8'): timestamp,
-            })
+        })
         if new_entry:
             yield self.increment_event_status(batch_id, 'sent')
 
@@ -183,8 +183,8 @@ class MessageStoreCache(object):
             event_type = event['event_type']
             yield self.increment_event_status(batch_id, event_type)
             if event_type == 'delivery_report':
-                yield self.increment_event_status(batch_id,
-                    '%s.%s' % (event_type, event['delivery_status']))
+                yield self.increment_event_status(
+                    batch_id, '%s.%s' % (event_type, event['delivery_status']))
 
     def add_event_key(self, batch_id, event_key):
         """
@@ -215,8 +215,8 @@ class MessageStoreCache(object):
         Add an inbound message to the cache for the given batch_id
         """
         timestamp = self.get_timestamp(msg['timestamp'])
-        yield self.add_inbound_message_key(batch_id, msg['message_id'],
-            timestamp)
+        yield self.add_inbound_message_key(
+            batch_id, msg['message_id'], timestamp)
         yield self.add_from_addr(batch_id, msg['from_addr'], timestamp)
 
     def add_inbound_message_key(self, batch_id, message_key, timestamp):
@@ -225,7 +225,7 @@ class MessageStoreCache(object):
         """
         return self.redis.zadd(self.inbound_key(batch_id), **{
             message_key.encode('utf-8'): timestamp,
-            })
+        })
 
     def add_from_addr(self, batch_id, from_addr, timestamp):
         """
@@ -234,14 +234,14 @@ class MessageStoreCache(object):
         """
         return self.redis.zadd(self.from_addr_key(batch_id), **{
             from_addr.encode('utf-8'): timestamp,
-            })
+        })
 
     def get_from_addrs(self, batch_id, asc=False):
         """
         Return a set of all known from_addrs sorted by timestamp.
         """
         return self.redis.zrange(self.from_addr_key(batch_id), 0, -1,
-            desc=not asc)
+                                 desc=not asc)
 
     def count_from_addrs(self, batch_id):
         """
@@ -256,7 +256,7 @@ class MessageStoreCache(object):
         """
         return self.redis.zadd(self.to_addr_key(batch_id), **{
             to_addr.encode('utf-8'): timestamp,
-            })
+        })
 
     def get_to_addrs(self, batch_id, asc=False):
         """
@@ -264,7 +264,7 @@ class MessageStoreCache(object):
         by the most recent timestamp.
         """
         return self.redis.zrange(self.to_addr_key(batch_id), 0, -1,
-            desc=not asc)
+                                 desc=not asc)
 
     def count_to_addrs(self, batch_id):
         """
@@ -273,13 +273,13 @@ class MessageStoreCache(object):
         return self.redis.zcard(self.to_addr_key(batch_id))
 
     def get_inbound_message_keys(self, batch_id, start=0, stop=-1, asc=False,
-                                    with_timestamp=False):
+                                 with_timestamp=False):
         """
         Return a list of keys ordered according to their timestamps
         """
         return self.redis.zrange(self.inbound_key(batch_id),
-                                    start, stop, desc=not asc,
-                                    withscores=with_timestamp)
+                                 start, stop, desc=not asc,
+                                 withscores=with_timestamp)
 
     @Manager.calls_manager
     def count_inbound_message_keys(self, batch_id):
@@ -294,13 +294,13 @@ class MessageStoreCache(object):
         returnValue(count)
 
     def get_outbound_message_keys(self, batch_id, start=0, stop=-1, asc=False,
-                                    with_timestamp=False):
+                                  with_timestamp=False):
         """
         Return a list of keys ordered according to their timestamps.
         """
         return self.redis.zrange(self.outbound_key(batch_id),
-                                        start, stop, desc=not asc,
-                                        withscores=with_timestamp)
+                                 start, stop, desc=not asc,
+                                 withscores=with_timestamp)
 
     @Manager.calls_manager
     def count_outbound_message_keys(self, batch_id):
@@ -325,14 +325,14 @@ class MessageStoreCache(object):
             Defaults to 300 seconds (5 minutes)
         """
         last_seen = yield self.redis.zrange(
-                            self.inbound_key(batch_id), 0, 0, desc=True,
-                            withscores=True)
+            self.inbound_key(batch_id), 0, 0, desc=True,
+            withscores=True)
         if not last_seen:
             returnValue(0)
 
         [(latest, timestamp)] = last_seen
-        count = yield self.redis.zcount(self.inbound_key(batch_id),
-            timestamp - sample_time, timestamp)
+        count = yield self.redis.zcount(
+            self.inbound_key(batch_id), timestamp - sample_time, timestamp)
         returnValue(int(count))
 
     @Manager.calls_manager
@@ -346,14 +346,13 @@ class MessageStoreCache(object):
             Defaults to 300 seconds (5 minutes)
         """
         last_seen = yield self.redis.zrange(
-                            self.outbound_key(batch_id), 0, 0, desc=True,
-                            withscores=True)
+            self.outbound_key(batch_id), 0, 0, desc=True, withscores=True)
         if not last_seen:
             returnValue(0)
 
         [(latest, timestamp)] = last_seen
-        count = yield self.redis.zcount(self.outbound_key(batch_id),
-            timestamp - sample_time, timestamp)
+        count = yield self.redis.zcount(
+            self.outbound_key(batch_id), timestamp - sample_time, timestamp)
         returnValue(int(count))
 
     def get_query_token(self, direction, query):
@@ -374,8 +373,8 @@ class MessageStoreCache(object):
         ordered_query = sorted([sorted(part.items()) for part in query])
         # TODO: figure out if JSON is necessary here or if something like str()
         #       will work just as well.
-        return '%s-%s' % (direction,
-            hashlib.md5(json.dumps(ordered_query)).hexdigest())
+        return '%s-%s' % (
+            direction, hashlib.md5(json.dumps(ordered_query)).hexdigest())
 
     @Manager.calls_manager
     def start_query(self, batch_id, direction, query):
@@ -422,7 +421,7 @@ class MessageStoreCache(object):
             timestamp = yield self.redis.zscore(score_set_key, key)
             yield self.redis.zadd(result_key, **{
                 key.encode('utf-8'): timestamp,
-                })
+            })
 
         # Auto expire after TTL
         yield self.redis.expire(result_key, ttl)
@@ -436,7 +435,7 @@ class MessageStoreCache(object):
         return self.redis.sismember(self.search_token_key(batch_id), token)
 
     def get_query_results(self, batch_id, token, start=0, stop=-1,
-                                    asc=False):
+                          asc=False):
         """
         Return the results for the query token. Will return an empty list
         of no results are available.
