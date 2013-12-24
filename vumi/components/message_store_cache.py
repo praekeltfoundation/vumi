@@ -32,6 +32,7 @@ class MessageStoreCache(object):
     STATUS_KEY = 'status'
     SEARCH_TOKEN_KEY = 'search_token'
     SEARCH_RESULT_KEY = 'search_result'
+    TRUNCATE_MESSAGE_KEY_COUNT_AT = 2000
 
     # Cache search results for 24 hrs
     DEFAULT_SEARCH_RESULT_TTL = 60 * 60 * 24
@@ -101,11 +102,26 @@ class MessageStoreCache(object):
                 batch_id,))
             return
 
+        # NOTE:     Under high load this may result in the counter being off
+        #           by a few. Considering this is a cache that is to be
+        #           reconciled we're happy for that to be the case.
         inbound_count = yield self.count_inbound_message_keys(batch_id)
         outbound_count = yield self.count_outbound_message_keys(batch_id)
 
         yield self.redis.set(self.inbound_count_key(batch_id), inbound_count)
         yield self.redis.set(self.outbound_count_key(batch_id), outbound_count)
+
+    def truncate_inbound_message_keys(self, batch_id, size=None):
+        size = size or self.TRUNCATE_MESSAGE_KEY_COUNT_AT
+        # indexes are zero based
+        return self.redis.zremrangebyrank(
+            self.inbound_key(batch_id), 0, size - 1)
+
+    def truncate_outbound_message_keys(self, batch_id, size=None):
+        size = size or self.TRUNCATE_MESSAGE_KEY_COUNT_AT
+        # indexes are zero based
+        return self.redis.zremrangebyrank(
+            self.outbound_key(batch_id), 0, size - 1)
 
     @Manager.calls_manager
     def batch_start(self, batch_id):
@@ -310,6 +326,11 @@ class MessageStoreCache(object):
                                  withscores=with_timestamp)
 
     @Manager.calls_manager
+    def inbound_message_count(self, batch_id):
+        count = yield self.redis.get(self.inbound_count_key(batch_id))
+        returnValue(0 if count is None else int(count))
+
+    @Manager.calls_manager
     def count_inbound_message_keys(self, batch_id):
         """
         Return the count of the unique inbound message keys for this batch_id
@@ -318,8 +339,8 @@ class MessageStoreCache(object):
             count = yield self.redis.zcard(self.inbound_key(batch_id))
             returnValue(count)
 
-        count = yield self.redis.get(self.inbound_count_key(batch_id))
-        returnValue(0 if count is None else int(count))
+        count = yield self.inbound_message_count(batch_id)
+        returnValue(count)
 
     def get_outbound_message_keys(self, batch_id, start=0, stop=-1, asc=False,
                                   with_timestamp=False):
@@ -331,6 +352,11 @@ class MessageStoreCache(object):
                                  withscores=with_timestamp)
 
     @Manager.calls_manager
+    def outbound_message_count(self, batch_id):
+        count = yield self.redis.get(self.outbound_count_key(batch_id))
+        returnValue(0 if count is None else int(count))
+
+    @Manager.calls_manager
     def count_outbound_message_keys(self, batch_id):
         """
         Return the count of the unique outbound message keys for this batch_id
@@ -339,8 +365,8 @@ class MessageStoreCache(object):
             count = yield self.redis.zcard(self.outbound_key(batch_id))
             returnValue(count)
 
-        count = yield self.redis.get(self.outbound_count_key(batch_id))
-        returnValue(0 if count is None else int(count))
+        count = yield self.outbound_message_count(batch_id)
+        returnValue(count)
 
     @Manager.calls_manager
     def count_inbound_throughput(self, batch_id, sample_time=300):

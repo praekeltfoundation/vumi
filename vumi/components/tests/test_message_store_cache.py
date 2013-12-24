@@ -348,3 +348,47 @@ class TestMessageStoreCache(VumiTestCase):
         self.assertEqual(
             (yield self.cache.count_outbound_message_keys(self.batch_id)),
             10)
+
+    @inlineCallbacks
+    def test_truncate_inbound_message_keys(self):
+
+        yield self.cache.switch_to_counters(self.batch_id)
+
+        for i in range(10):
+            msg = self.msg_helper.make_inbound("inbound")
+            yield self.cache.add_inbound_message(self.batch_id, msg)
+
+        self.assertEqual(
+            len((yield self.cache.get_inbound_message_keys(self.batch_id))),
+            10)
+        keys_removed = yield self.cache.truncate_inbound_message_keys(
+            self.batch_id, 5)
+        self.assertEqual(keys_removed, 5)
+        self.assertEqual(
+            len((yield self.cache.get_inbound_message_keys(self.batch_id))),
+            5)
+        self.assertEqual(
+            (yield self.cache.count_inbound_message_keys(self.batch_id)),
+            10)
+
+    @inlineCallbacks
+    def test_truncate_outbound_message_keys(self):
+
+        yield self.cache.switch_to_counters(self.batch_id)
+
+        for i in range(10):
+            msg = self.msg_helper.make_outbound("outbound")
+            yield self.cache.add_outbound_message(self.batch_id, msg)
+
+        self.assertEqual(
+            len((yield self.cache.get_outbound_message_keys(self.batch_id))),
+            10)
+        keys_removed = yield self.cache.truncate_outbound_message_keys(
+            self.batch_id, 5)
+        self.assertEqual(keys_removed, 5)
+        self.assertEqual(
+            len((yield self.cache.get_outbound_message_keys(self.batch_id))),
+            5)
+        self.assertEqual(
+            (yield self.cache.count_outbound_message_keys(self.batch_id)),
+            10)
