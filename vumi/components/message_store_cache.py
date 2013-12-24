@@ -9,6 +9,7 @@ from twisted.internet.defer import returnValue
 from vumi.persist.redis_base import Manager
 from vumi.message import TransportEvent
 from vumi.errors import VumiError
+from vumi import log
 
 
 class MessageStoreCacheException(VumiError):
@@ -87,6 +88,24 @@ class MessageStoreCache(object):
         using counters.
         """
         return self.redis.exists(self.inbound_count_key(batch_id))
+
+    @Manager.calls_manager
+    def switch_to_counters(self, batch_id):
+        """
+        Actively switch a batch from the old ``zcard()`` based approach
+        to the new ``redis.incr()`` counter based approach.
+        """
+        uses_counters = yield self.uses_counters(batch_id)
+        if uses_counters:
+            log.msg('Batch %r has already switched to counters.' % (
+                batch_id,))
+            return
+
+        inbound_count = yield self.count_inbound_message_keys(batch_id)
+        outbound_count = yield self.count_outbound_message_keys(batch_id)
+
+        yield self.redis.set(self.inbound_count_key(batch_id), inbound_count)
+        yield self.redis.set(self.outbound_count_key(batch_id), outbound_count)
 
     @Manager.calls_manager
     def batch_start(self, batch_id):
@@ -300,7 +319,7 @@ class MessageStoreCache(object):
             returnValue(count)
 
         count = yield self.redis.get(self.inbound_count_key(batch_id))
-        returnValue(count)
+        returnValue(0 if count is None else int(count))
 
     def get_outbound_message_keys(self, batch_id, start=0, stop=-1, asc=False,
                                   with_timestamp=False):
@@ -321,7 +340,7 @@ class MessageStoreCache(object):
             returnValue(count)
 
         count = yield self.redis.get(self.outbound_count_key(batch_id))
-        returnValue(count)
+        returnValue(0 if count is None else int(count))
 
     @Manager.calls_manager
     def count_inbound_throughput(self, batch_id, sample_time=300):
