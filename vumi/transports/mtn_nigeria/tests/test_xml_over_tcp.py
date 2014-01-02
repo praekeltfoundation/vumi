@@ -64,6 +64,7 @@ class XmlOverTcpClientServerMixin(utils.MockClientServerMixin):
 
 
 class TestXmlOverTcpClient(VumiTestCase, XmlOverTcpClientServerMixin):
+    timeout = 1
 
     def setUp(self):
         errors = dict(CodedXmlOverTcpError.ERRORS)
@@ -128,28 +129,17 @@ class TestXmlOverTcpClient(VumiTestCase, XmlOverTcpClientServerMixin):
             "</DummyPacket>")
         self.assertEqual(body, expected_body)
 
-    def test_packet_body_serializing_for_non_ascii_chars(self):
+    def test_packet_body_serializing_for_non_latin1_chars(self):
         body = XmlOverTcpClient.serialize_body(
             'DummyPacket',
             [('requestId', '123456789abcdefg'),
-             ('userdata', u'Zoë')])
+             ('userdata', u'Erdős')])
         expected_body = (
             "<DummyPacket>"
             "<requestId>123456789abcdefg</requestId>"
-            "<userdata>Zo&#235;</userdata>"
+            "<userdata>Erd&#337;s</userdata>"
             "</DummyPacket>")
         self.assertEqual(body, expected_body)
-
-    def test_packet_body_deserializing_for_nullbytes(self):
-        body = (
-            "<DummyPacket>"
-            "<requestId>123456789abcdefg\0\0\0</requestId>"
-            "</DummyPacket>"
-        )
-        packet_type, params = XmlOverTcpClient.deserialize_body(body)
-
-        self.assertEqual(packet_type, 'DummyPacket')
-        self.assertEqual(params, {'requestId': u'123456789abcdefg'})
 
     def test_packet_body_deserializing(self):
         body = '\n'.join([

@@ -1,18 +1,13 @@
 import uuid
 import struct
 from random import randint
-from xml.etree import ElementTree as ET
-
-try:
-    from xml.etree.ElementTree import ParseError
-except ImportError:
-    from xml.parsers.expat import ExpatError as ParseError
 
 from twisted.internet import reactor
 from twisted.internet.task import LoopingCall
 from twisted.internet.protocol import Protocol
 
 from vumi import log
+from vumi.transports.mtn_nigeria import utils
 
 
 class XmlOverTcpError(Exception):
@@ -193,7 +188,7 @@ class XmlOverTcpClient(Protocol):
 
             try:
                 packet_type, params = self.deserialize_body(body)
-            except ParseError as e:
+            except Exception, e:
                 log.err("Error parsing packet (%s): %s" % (e, packet))
                 self.disconnect()
                 return
@@ -229,21 +224,9 @@ class XmlOverTcpClient(Protocol):
 
     @classmethod
     def deserialize_body(cls, body):
-        # The 'requestId' field often has nullbytes in it. We suspect this
-        # happens when the requestId length is shorter than 16 bytes, so they
-        # just pad it with trailing nullbytes. We need to remove the nullbytes
-        # before parsing the xml to prevent parse errors
-        body = cls.remove_nullbytes(body.decode(cls.ENCODING))
-
-        # We transcode from the configured encoding to UTF-8, since ElementTree
-        # needs bytes, and all XML parsers need to accept UTF-8.
-        # http://www.w3.org/TR/xml/#charsets
-        root = ET.fromstring(body.encode('utf-8'))
-
-        packet_type = root.tag
-        params = dict((el.tag.strip(), el.text.strip()) for el in root)
-
-        return packet_type, params
+        body = body.decode(cls.ENCODING)
+        packet_type, params = utils.xml_string_to_collection(body)
+        return packet_type, dict(params)
 
     def packet_received(self, session_id, packet_type, params):
         log.debug("Packet of type '%s' with session id '%s' received: %s"
@@ -375,10 +358,8 @@ class XmlOverTcpClient(Protocol):
 
     @classmethod
     def serialize_body(cls, packet_type, params):
-        root = ET.Element(packet_type)
-        for param_name, param_value in params:
-            ET.SubElement(root, param_name).text = param_value
-        return ET.tostring(root).encode(cls.ENCODING)
+        data = utils.collection_to_xml_string(packet_type, params)
+        return data.decode('utf8').encode(cls.ENCODING, 'xmlcharrefreplace')
 
     @classmethod
     def serialize_packet(cls, session_id, packet_type, params):
