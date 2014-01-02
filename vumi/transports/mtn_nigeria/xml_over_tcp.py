@@ -229,11 +229,7 @@ class XmlOverTcpClient(Protocol):
 
         params = {}
         for el in root.childNodes:
-            if len(el.childNodes) == 0:
-                value = ''
-            else:
-                value = ''.join(t.value for t in el.childNodes).strip()
-
+            value = ''.join(t.value for t in el.childNodes).strip()
             params[el.nodeName] = value
 
         return root.nodeName, params
