@@ -157,12 +157,10 @@ class TestFakeRedis(VumiTestCase):
 
     @inlineCallbacks
     def test_zremrangebyrank(self):
-        yield self.redis.zadd('set', one=0.1, two=0.2, three=0.3)
-        yield self.assert_redis_op(0, 'zremrangebyrank', 'set', 0, 0)
-        yield self.assert_redis_op(2, 'zremrangebyrank', 'set', 0, 2)
-        yield self.assert_redis_op(0, 'zremrangebyrank', 'set', 4, 5)
+        yield self.redis.zadd('set', one=1, two=2, three=3)
+        yield self.assert_redis_op(2, 'zremrangebyrank', 'set', 0, 1)
         yield self.assert_redis_op(
-            [('three', 0.3)], 'zrange', 'set', 0, -1, withscores=True)
+            [('three', 3)], 'zrange', 'set', 0, -1, withscores=True)
 
     @inlineCallbacks
     def test_zscore(self):
