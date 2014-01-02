@@ -224,7 +224,11 @@ class XmlOverTcpClient(Protocol):
 
     @classmethod
     def deserialize_body(cls, body):
-        document = microdom.parseXMLString(body.decode(cls.ENCODING))
+        body = microdom.unescape(
+            body.decode(cls.ENCODING),
+            chars=microdom.XML_ESCAPE_CHARS)
+
+        document = microdom.parseXMLString(body)
         root = document.firstChild()
 
         params = {}

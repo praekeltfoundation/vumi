@@ -233,6 +233,52 @@ class TestXmlOverTcpClient(VumiTestCase, XmlOverTcpClientServerMixin):
             'userdata': u'\x18',
         })
 
+    def test_packet_body_deserializing_for_entity_references(self):
+        body = '\n'.join([
+            '<USSDRequest>',
+            '\t<requestId>',
+            '\t\t1446274718',
+            '\t</requestId>',
+            '\t<msisdn>',
+            '\t\t2341234567890',
+            '\t</msisdn>',
+            '\t<starCode>',
+            '\t\t759',
+            '\t</starCode>',
+            '\t<clientId>',
+            '\t\t441',
+            '\t</clientId>',
+            '\t<phase>',
+            '\t\t2',
+            '\t</phase>',
+            '\t<dcs>',
+            '\t\t15',
+            '\t</dcs>',
+            '\t<userdata>',
+            '\t\tTeam&apos;s rank',
+            '\t</userdata>',
+            '\t<msgtype>\n\t\t4',
+            '\t</msgtype>',
+            '\t<EndofSession>',
+            '\t\t0',
+            '\t</EndofSession>',
+            '</USSDRequest>',
+        ])
+        packet_type, params = XmlOverTcpClient.deserialize_body(body)
+
+        self.assertEqual(packet_type, 'USSDRequest')
+        self.assertEqual(params, {
+            'EndofSession': u'0',
+            'clientId': u'441',
+            'dcs': u'15',
+            'msgtype': u'4',
+            'msisdn': u'2341234567890',
+            'phase': u'2',
+            'requestId': u'1446274718',
+            'starCode': u'759',
+            'userdata': u"Team's rank"
+        })
+
     @inlineCallbacks
     def test_contiguous_packets_received(self):
         body_a = "<DummyPacket><someParam>123</someParam></DummyPacket>"
