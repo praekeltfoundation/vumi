@@ -188,6 +188,53 @@ class TestXmlOverTcpClient(VumiTestCase, XmlOverTcpClientServerMixin):
             'EndofSession': '0',
         })
 
+    def test_packet_body_deserializing_for_invalid_xml_chars(self):
+        body = '\n'.join([
+            '<USSDRequest>'
+            '\t<requestId>'
+            '\t\t568813012'
+            '\t</requestId>'
+            '\t<msisdn>'
+            '\t\t2347036419272',
+            '\t</msisdn>',
+            '\t<starCode>',
+            '\t\t759',
+            '\t</starCode>',
+            '\t<clientId>',
+            '\t\t441',
+            '\t</clientId>',
+            '\t<phase>',
+            '\t\t2',
+            '\t</phase>',
+            '\t<dcs>',
+            '\t\t229',
+            '\t</dcs>',
+            '\t<userdata>',
+            '\t\t\x18',
+            '\t</userdata>',
+            '\t<msgtype>',
+            '\t\t4',
+            '\t</msgtype>',
+            '\t<EndofSession>',
+            '\t\t0',
+            '\t</EndofSession>',
+            '</USSDRequest>',
+        ])
+        packet_type, params = XmlOverTcpClient.deserialize_body(body)
+
+        self.assertEqual(packet_type, 'USSDRequest')
+        self.assertEqual(params, {
+            'EndofSession': '0',
+            'clientId': '441',
+            'dcs': '229',
+            'msgtype': '4',
+            'msisdn': '2347036419272',
+            'phase': '2',
+            'requestId': '568813012',
+            'starCode': '759',
+            'userdata': u'\x18',
+        })
+
     @inlineCallbacks
     def test_contiguous_packets_received(self):
         body_a = "<DummyPacket><someParam>123</someParam></DummyPacket>"
