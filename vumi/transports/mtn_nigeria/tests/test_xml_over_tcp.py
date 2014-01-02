@@ -193,7 +193,7 @@ class TestXmlOverTcpClient(VumiTestCase, XmlOverTcpClientServerMixin):
             '\t\t568813012'
             '\t</requestId>'
             '\t<msisdn>'
-            '\t\t2347036419272',
+            '\t\t2341234567890',
             '\t</msisdn>',
             '\t<starCode>',
             '\t\t759',
@@ -226,7 +226,7 @@ class TestXmlOverTcpClient(VumiTestCase, XmlOverTcpClientServerMixin):
             'clientId': '441',
             'dcs': '229',
             'msgtype': '4',
-            'msisdn': '2347036419272',
+            'msisdn': '2341234567890',
             'phase': '2',
             'requestId': '568813012',
             'starCode': '759',
