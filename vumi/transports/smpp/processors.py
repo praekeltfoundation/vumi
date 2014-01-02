@@ -65,10 +65,7 @@ class EsmeCallbacksDeliveryReportProcessor(object):
 
     def __init__(self, protocol, config):
         self.protocol = protocol
-        self._static_config = self.CONFIG_CLASS(config, static=True)
-
-    def get_static_config(self):
-        return self._static_config
+        self.config = self.CONFIG_CLASS(config, static=True)
 
     def inspect_delivery_report_pdu(self, pdu):
         """
@@ -104,8 +101,7 @@ class EsmeCallbacksDeliveryReportProcessor(object):
             delivery_status=self.delivery_status(status))
 
     def inspect_delivery_report_content(self, content):
-        config = self.get_static_config()
-        delivery_report = config.delivery_report_regex.search(
+        delivery_report = self.config.delivery_report_regex.search(
             content or '')
 
         if delivery_report:
@@ -122,8 +118,7 @@ class EsmeCallbacksDeliveryReportProcessor(object):
             delivery_status=self.delivery_status(message_state))
 
     def delivery_status(self, state):
-        config = self.get_static_config()
-        return config.delivery_report_status_mapping.get(state, 'pending')
+        return self.config.delivery_report_status_mapping.get(state, 'pending')
 
 
 class DeliverShortMessageProcessorConfig(Config):
@@ -142,10 +137,7 @@ class EsmeCallbacksDeliverShortMessageProcessor(object):
 
     def __init__(self, protocol, config):
         self.protocol = protocol
-        self._static_config = self.CONFIG_CLASS(config, static=True)
-
-    def get_static_config(self):
-        return self._static_config
+        self.config = self.CONFIG_CLASS(config, static=True)
 
     def decode_message(self, message, data_coding):
         """
@@ -178,8 +170,7 @@ class EsmeCallbacksDeliverShortMessageProcessor(object):
             3: 'latin1',
             8: 'utf-16be',  # Actually UCS-2, but close enough.
         }
-        config = self.get_static_config()
-        codecs.update(config.data_coding_overrides)
+        codecs.update(self.config.data_coding_overrides)
         codec = codecs.get(data_coding, None)
         if codec is None or message is None:
             log.msg("WARNING: Not decoding message with data_coding=%s" % (
