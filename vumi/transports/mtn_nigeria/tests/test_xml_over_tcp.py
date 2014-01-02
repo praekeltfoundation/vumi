@@ -143,7 +143,7 @@ class TestXmlOverTcpClient(VumiTestCase, XmlOverTcpClientServerMixin):
         body = '\n'.join([
             "<USSDRequest>",
             "\t<requestId>",
-            "\t\t554537967",
+            "\t\t123456789abcdefg",
             "\t</requestId>",
             "\t<msisdn>",
             "\t\t2347067123456",
@@ -175,7 +175,7 @@ class TestXmlOverTcpClient(VumiTestCase, XmlOverTcpClientServerMixin):
 
         self.assertEqual(packet_type, 'USSDRequest')
         self.assertEqual(params, {
-            'requestId': '554537967',
+            'requestId': '123456789abcdefg',
             'msisdn': '2347067123456',
             'userdata': u'\xa4',
             'clientId': '441',
@@ -190,7 +190,7 @@ class TestXmlOverTcpClient(VumiTestCase, XmlOverTcpClientServerMixin):
         body = '\n'.join([
             '<USSDRequest>'
             '\t<requestId>'
-            '\t\t568813012'
+            '\t\t123456789abcdefg'
             '\t</requestId>'
             '\t<msisdn>'
             '\t\t2341234567890',
@@ -228,7 +228,7 @@ class TestXmlOverTcpClient(VumiTestCase, XmlOverTcpClientServerMixin):
             'msgtype': '4',
             'msisdn': '2341234567890',
             'phase': '2',
-            'requestId': '568813012',
+            'requestId': '123456789abcdefg',
             'starCode': '759',
             'userdata': u'\x18',
         })
@@ -237,7 +237,7 @@ class TestXmlOverTcpClient(VumiTestCase, XmlOverTcpClientServerMixin):
         body = '\n'.join([
             '<USSDRequest>',
             '\t<requestId>',
-            '\t\t1446274718',
+            '\t\t123456789abcdefg',
             '\t</requestId>',
             '\t<msisdn>',
             '\t\t2341234567890',
@@ -274,7 +274,7 @@ class TestXmlOverTcpClient(VumiTestCase, XmlOverTcpClientServerMixin):
             'msgtype': u'4',
             'msisdn': u'2341234567890',
             'phase': u'2',
-            'requestId': u'1446274718',
+            'requestId': u'123456789abcdefg',
             'starCode': u'759',
             'userdata': u"Team's rank"
         })
