@@ -2,12 +2,12 @@ import uuid
 import struct
 from random import randint
 
+from twisted.web import microdom
 from twisted.internet import reactor
 from twisted.internet.task import LoopingCall
 from twisted.internet.protocol import Protocol
 
 from vumi import log
-from vumi.transports.mtn_nigeria import utils
 
 
 class XmlOverTcpError(Exception):
@@ -224,9 +224,20 @@ class XmlOverTcpClient(Protocol):
 
     @classmethod
     def deserialize_body(cls, body):
-        body = body.decode(cls.ENCODING)
-        packet_type, params = utils.xml_string_to_collection(body)
-        return packet_type, dict(params)
+        document = microdom.parseXMLString(body.decode(cls.ENCODING))
+        root = document.firstChild()
+
+        params = {}
+        for el in root.childNodes:
+            if len(el.childNodes) == 0:
+                value = ''
+            else:
+                text = el.firstChild()
+                value = text.value.strip()
+
+            params[el.nodeName] = value
+
+        return root.nodeName, params
 
     def packet_received(self, session_id, packet_type, params):
         log.debug("Packet of type '%s' with session id '%s' received: %s"
@@ -358,7 +369,14 @@ class XmlOverTcpClient(Protocol):
 
     @classmethod
     def serialize_body(cls, packet_type, params):
-        data = utils.collection_to_xml_string(packet_type, params)
+        root = microdom.Element(packet_type.encode('utf8'), preserveCase=True)
+
+        for name, value in params:
+            el = microdom.Element(name.encode('utf8'), preserveCase=True)
+            el.appendChild(microdom.Text(value.encode('utf8')))
+            root.appendChild(el)
+
+        data = root.toxml()
         return data.decode('utf8').encode(cls.ENCODING, 'xmlcharrefreplace')
 
     @classmethod
