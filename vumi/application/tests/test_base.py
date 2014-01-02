@@ -5,6 +5,7 @@ from vumi.message import TransportUserMessage
 
 from vumi.application.tests.helpers import ApplicationHelper
 from vumi.tests.helpers import VumiTestCase, WorkerHelper
+from vumi.errors import InvalidEndpoint
 
 
 class DummyApplicationWorker(ApplicationWorker):
@@ -195,6 +196,16 @@ class TestApplicationWorker(VumiTestCase):
         for consumer in self.get_app_consumers(app):
             self.assertFalse(consumer.channel.qos_prefetch_count)
 
+    def test_check_endpoints(self):
+        app = yield self.app_helper.get_application({})
+        check = app.check_endpoint
+        self.assertNotRaises(InvalidEndpoint, check, None, None)
+        self.assertNotRaises(InvalidEndpoint, check, None, 'foo')
+        self.assertNotRaises(InvalidEndpoint, check, ['default'], None)
+        self.assertNotRaises(InvalidEndpoint, check, ['foo'], 'foo')
+        self.assertRaises(InvalidEndpoint, check, [], None)
+        self.assertRaises(InvalidEndpoint, check, ['foo'], 'bar')
+
 
 class TestApplicationWorkerWithSendToConfig(VumiTestCase):
 
@@ -265,7 +276,7 @@ class TestApplicationWorkerWithSendToConfig(VumiTestCase):
     @inlineCallbacks
     def test_send_to_with_bad_endpoint(self):
         yield self.assertFailure(
-            self.send_to('+12345', "Hi!", "outbound_unknown"), ValueError)
+            self.send_to('+12345', "Hi!", "outbound_unknown"), InvalidEndpoint)
 
 
 class TestApplicationMiddlewareHooks(VumiTestCase):

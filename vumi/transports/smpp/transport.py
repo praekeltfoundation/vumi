@@ -65,6 +65,10 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
         'matching submit_sm_resp and delivery report messages. Defaults to '
         '1 week',
         default=(60 * 60 * 24 * 7), static=True)
+    submit_sm_expiry = ConfigInt(
+        'How long (seconds) to wait for the SMSC to return with a '
+        '`submit_sm_resp`. Defaults to 24 hours',
+        default=(60 * 60 * 24), static=True)
     submit_sm_encoding = ConfigText(
         'How to encode the SMS before putting on the wire', static=True,
         default='utf-8')
@@ -252,9 +256,13 @@ class SmppTransport(Transport):
         return "%s#%s" % (self.r_message_prefix, message_id)
 
     def r_set_message(self, message):
+        config = self.get_static_config()
         message_id = message.payload['message_id']
-        return self.redis.set(
-            self.r_message_key(message_id), message.to_json())
+        message_key = self.r_message_key(message_id)
+        d = self.redis.set(message_key, message.to_json())
+        d.addCallback(lambda _: self.redis.expire(message_key,
+                                                  config.submit_sm_expiry))
+        return d
 
     def r_get_message_json(self, message_id):
         return self.redis.get(self.r_message_key(message_id))

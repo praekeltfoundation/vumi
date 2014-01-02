@@ -254,5 +254,6 @@ class TestRapidSMSRelay(VumiTestCase):
         self.assertEqual([], self.app_helper.get_dispatched_outbound())
         self.assertEqual(response.code, 400)
         self.assertEqual(response.delivered_body,
-                         "Endpoint u'bar' not defined in ALLOWED_ENDPOINTS")
+                         "Endpoint u'bar' not defined in list of allowed"
+                         " endpoints ['default', '10010', '10020']")
         [err] = self.flushLoggedErrors(BadRequestError)

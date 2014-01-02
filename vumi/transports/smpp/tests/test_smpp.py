@@ -126,6 +126,17 @@ class TestSmppTransport(VumiTestCase):
                     message1['message_id'])), None)
 
     @inlineCallbacks
+    def test_message_persistence_expiry(self):
+        message = self.tx_helper.make_outbound("hello world")
+        yield self.transport.r_set_message(message)
+
+        # check that the expiry is set
+        message_key = self.transport.r_message_key(message['message_id'])
+        config = self.transport.get_static_config()
+        ttl = yield self.transport.redis.ttl(message_key)
+        self.assertTrue(0 < ttl <= config.submit_sm_expiry)
+
+    @inlineCallbacks
     def test_redis_third_party_id_persistence(self):
         # Testing: set -> get -> delete, for redis third party id mapping
         self.assertEqual(
