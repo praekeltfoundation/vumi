@@ -484,6 +484,6 @@ class Zset(object):
                 return score
 
     def zremrangebyrank(self, start, stop):
-        deleted_keys = self._zval[start:stop+1]
-        del self._zval[start:stop+1]
+        deleted_keys = self._zval[start:stop + 1]
+        del self._zval[start:stop + 1]
         return len(deleted_keys)
