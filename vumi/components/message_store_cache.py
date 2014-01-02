@@ -108,8 +108,12 @@ class MessageStoreCache(object):
         inbound_count = yield self.count_inbound_message_keys(batch_id)
         outbound_count = yield self.count_outbound_message_keys(batch_id)
 
-        yield self.redis.set(self.inbound_count_key(batch_id), inbound_count)
-        yield self.redis.set(self.outbound_count_key(batch_id), outbound_count)
+        # We do `*_count or None` because there's a chance of getting back
+        # a None if this is a new batch that's not received any traffic yet.
+        yield self.redis.set(self.inbound_count_key(batch_id),
+                             inbound_count or 0)
+        yield self.redis.set(self.outbound_count_key(batch_id),
+                             outbound_count or 0)
 
     @Manager.calls_manager
     def truncate_inbound_message_keys(self, batch_id, truncate_at=None):
@@ -135,17 +139,26 @@ class MessageStoreCache(object):
         returnValue(0)
 
     @Manager.calls_manager
-    def batch_start(self, batch_id):
+    def batch_start(self, batch_id, use_counters=True):
         """
         Does various setup work in order to be able to accurately
         store cached data for a batch_id.
 
         A call to this isn't necessary but good for general house keeping.
 
+        :param bool use_counters:
+            If ``True`` this batch is started and will use counters
+            rather than Redis zsets() to keep track of message counts.
+
+            Defaults to ``True``.
+
+
         This operation idempotent.
         """
         yield self.redis.sadd(self.batch_key(), batch_id)
         yield self.init_status(batch_id)
+        if use_counters:
+            yield self.switch_to_counters(batch_id)
 
     @Manager.calls_manager
     def init_status(self, batch_id):
@@ -183,7 +196,9 @@ class MessageStoreCache(object):
                 reconciliation is taking place.
         """
         yield self.redis.delete(self.inbound_key(batch_id))
+        yield self.redis.delete(self.inbound_count_key(batch_id))
         yield self.redis.delete(self.outbound_key(batch_id))
+        yield self.redis.delete(self.outbound_count_key(batch_id))
         yield self.redis.delete(self.event_key(batch_id))
         yield self.redis.delete(self.status_key(batch_id))
         yield self.redis.delete(self.to_addr_key(batch_id))

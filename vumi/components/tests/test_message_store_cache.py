@@ -11,7 +11,10 @@ from vumi.tests.helpers import (
 )
 
 
-class TestMessageStoreCache(VumiTestCase):
+class MessageStoreCacheTestCase(VumiTestCase):
+
+    start_batch = True
+
     @inlineCallbacks
     def setUp(self):
         self.persistence_helper = self.add_helper(
@@ -25,7 +28,8 @@ class TestMessageStoreCache(VumiTestCase):
         self.store = yield MessageStore(self.manager, self.redis)
         self.cache = self.store.cache
         self.batch_id = 'a-batch-id'
-        self.cache.batch_start(self.batch_id)
+        if self.start_batch:
+            self.cache.batch_start(self.batch_id)
         self.msg_helper = self.add_helper(MessageHelper())
 
     @inlineCallbacks
@@ -41,6 +45,9 @@ class TestMessageStoreCache(VumiTestCase):
             yield callback(batch_id, msg)
             messages.append(msg)
         returnValue(messages)
+
+
+class TestMessageStoreCache(MessageStoreCacheTestCase):
 
     @inlineCallbacks
     def test_add_outbound_message(self):
@@ -332,6 +339,11 @@ class TestMessageStoreCache(VumiTestCase):
         self.assertEqual(
             (yield self.cache.count_query_results(self.batch_id, token)),
             10)
+
+
+class TestMessageStoreCacheWithCounters(MessageStoreCacheTestCase):
+
+    start_batch = False
 
     @inlineCallbacks
     def test_switching_to_counters(self):
