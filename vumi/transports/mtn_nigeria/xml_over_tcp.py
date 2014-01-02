@@ -222,15 +222,27 @@ class XmlOverTcpClient(Protocol):
         return (cls.remove_nullbytes(session_id),
                 int(cls.remove_nullbytes(length)))
 
+    @staticmethod
+    def _xml_node_text(node):
+        result = ''
+
+        for child in node.childNodes:
+            if isinstance(child, microdom.CharacterData):
+                result += child.value
+            elif isinstance(child, microdom.EntityReference):
+                result += microdom.unescape(
+                    child.toxml(), chars=microdom.XML_ESCAPE_CHARS)
+
+        return result.strip()
+
     @classmethod
     def deserialize_body(cls, body):
         document = microdom.parseXMLString(body.decode(cls.ENCODING))
         root = document.firstChild()
 
-        params = {}
-        for el in root.childNodes:
-            value = ''.join(t.value for t in el.childNodes).strip()
-            params[el.nodeName] = value
+        params = dict(
+            (node.nodeName, cls._xml_node_text(node))
+            for node in root.childNodes)
 
         return root.nodeName, params
 

@@ -143,7 +143,7 @@ class TestXmlOverTcpClient(VumiTestCase, XmlOverTcpClientServerMixin):
         body = '\n'.join([
             "<USSDRequest>",
             "\t<requestId>",
-            "\t\t554537967",
+            "\t\t123456789abcdefg",
             "\t</requestId>",
             "\t<msisdn>",
             "\t\t2347067123456",
@@ -175,7 +175,7 @@ class TestXmlOverTcpClient(VumiTestCase, XmlOverTcpClientServerMixin):
 
         self.assertEqual(packet_type, 'USSDRequest')
         self.assertEqual(params, {
-            'requestId': '554537967',
+            'requestId': '123456789abcdefg',
             'msisdn': '2347067123456',
             'userdata': u'\xa4',
             'clientId': '441',
@@ -190,7 +190,7 @@ class TestXmlOverTcpClient(VumiTestCase, XmlOverTcpClientServerMixin):
         body = '\n'.join([
             '<USSDRequest>'
             '\t<requestId>'
-            '\t\t568813012'
+            '\t\t123456789abcdefg'
             '\t</requestId>'
             '\t<msisdn>'
             '\t\t2341234567890',
@@ -228,9 +228,55 @@ class TestXmlOverTcpClient(VumiTestCase, XmlOverTcpClientServerMixin):
             'msgtype': '4',
             'msisdn': '2341234567890',
             'phase': '2',
-            'requestId': '568813012',
+            'requestId': '123456789abcdefg',
             'starCode': '759',
             'userdata': u'\x18',
+        })
+
+    def test_packet_body_deserializing_for_entity_references(self):
+        body = '\n'.join([
+            '<USSDRequest>',
+            '\t<requestId>',
+            '\t\t123456789abcdefg',
+            '\t</requestId>',
+            '\t<msisdn>',
+            '\t\t2341234567890',
+            '\t</msisdn>',
+            '\t<starCode>',
+            '\t\t759',
+            '\t</starCode>',
+            '\t<clientId>',
+            '\t\t441',
+            '\t</clientId>',
+            '\t<phase>',
+            '\t\t2',
+            '\t</phase>',
+            '\t<dcs>',
+            '\t\t15',
+            '\t</dcs>',
+            '\t<userdata>',
+            '\t\tTeam&apos;s rank',
+            '\t</userdata>',
+            '\t<msgtype>\n\t\t4',
+            '\t</msgtype>',
+            '\t<EndofSession>',
+            '\t\t0',
+            '\t</EndofSession>',
+            '</USSDRequest>',
+        ])
+        packet_type, params = XmlOverTcpClient.deserialize_body(body)
+
+        self.assertEqual(packet_type, 'USSDRequest')
+        self.assertEqual(params, {
+            'EndofSession': u'0',
+            'clientId': u'441',
+            'dcs': u'15',
+            'msgtype': u'4',
+            'msisdn': u'2341234567890',
+            'phase': u'2',
+            'requestId': u'123456789abcdefg',
+            'starCode': u'759',
+            'userdata': u"Team's rank"
         })
 
     @inlineCallbacks
