@@ -231,17 +231,13 @@ class XmlOverTcpClient(Protocol):
                 result += child.value
             elif isinstance(child, microdom.EntityReference):
                 result += microdom.unescape(
-                    child, chars=microdom.XML_ESCAPE_CHARS)
+                    child.toxml(), chars=microdom.XML_ESCAPE_CHARS)
 
         return result.strip()
 
     @classmethod
     def deserialize_body(cls, body):
-        body = microdom.unescape(
-            body.decode(cls.ENCODING),
-            chars=microdom.XML_ESCAPE_CHARS)
-
-        document = microdom.parseXMLString(body)
+        document = microdom.parseXMLString(body.decode(cls.ENCODING))
         root = document.firstChild()
 
         params = dict(
