@@ -38,7 +38,15 @@ class IDeliveryReportProcessor(Interface):
 class IDeliverShortMessageProcessor(Interface):
 
     def handle_short_message_pdu(pdu):
-        """Handle a short message PDU from the networks.
+        """Handle a short message PDU from the networks after it has been
+        re-assembled and decoded.
+
+        Certain SMSCs submit delivery reports like normal SMSs, if
+        that's the case then this ``IDeliverShortMessageProcessor``
+        would need to call
+        ``IDeliveryReportProcessor.inspect_delivery_report_content` to
+        see if that is the case and handle appropriately if that is the
+        case.
 
         This should always return a Deferred.
         All helpers should implement this even if it does nothing.
