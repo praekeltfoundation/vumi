@@ -42,7 +42,7 @@ class TestMetricManager(VumiTestCase):
             self.assertEqual(msgs, [])
             return
         content = msgs[-1]
-        self.assertEqual(content.properties, {"delivery mode": 2})
+        self.assertEqual(content.properties, {"delivery-mode": 2})
         msg = Message.from_json(content.body)
         [datapoint] = msg.payload["datapoints"]
         self.assertEqual(datapoint[0], manager.prefix + metric.name)
