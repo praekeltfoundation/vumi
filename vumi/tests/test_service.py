@@ -51,7 +51,7 @@ class TestService(VumiTestCase):
             'vumi', 'test.routing.key')
 
         self.assertEquals(published_msg.body, '{"key": "value"}')
-        self.assertEquals(published_msg.properties, {'delivery mode': 2})
+        self.assertEquals(published_msg.properties, {'delivery-mode': 2})
 
 
 class LoadableTestWorker(Worker):

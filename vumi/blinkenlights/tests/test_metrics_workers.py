@@ -263,7 +263,7 @@ class TestGraphitePublisher(VumiTestCase):
 
     def _check_msg(self, channel, metric, value, timestamp):
         [msg] = self.worker_helper.broker.get_dispatched("graphite", metric)
-        self.assertEqual(msg.properties, {"delivery mode": 2})
+        self.assertEqual(msg.properties, {"delivery-mode": 2})
         self.assertEqual(msg.body, "%f %d" % (value, timestamp))
 
     @inlineCallbacks
