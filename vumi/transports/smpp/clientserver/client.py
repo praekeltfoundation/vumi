@@ -254,8 +254,6 @@ class EsmeTransceiver(Protocol):
         pdu_resp = DeliverSMResp(sequence_number, **self.bind_params)
         yield self.send_pdu(pdu_resp)
 
-        # NOTE: We are assuming that delivery reports will never be
-        #       multipart messages.
         was_dr = yield self.dr_processor.handle_delivery_report_pdu(pdu)
         if was_dr:
             return
