@@ -1,7 +1,7 @@
 import json
 from uuid import uuid4
 
-from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.defer import inlineCallbacks, returnValue, succeed
 
 from zope.interface import implements
 
@@ -67,25 +67,21 @@ class EsmeCallbacksDeliveryReportProcessor(object):
         self.protocol = protocol
         self.config = self.CONFIG_CLASS(config, static=True)
 
-    def inspect_delivery_report_pdu(self, pdu):
+    def handle_delivery_report_pdu(self, pdu):
         """
         Check if this might be a delivery receipt with PDU parameters.
+
         There's a chance we'll get a delivery receipt without these
         parameters, if that happens we'll try a regex match in
-        ``inspect_delivery_report_content`` once we've decoded the
-        message properly.
+        ``inspect_delivery_report_content`` once the message
+        has (potentially) been reassembled and decoded.
         """
-
         pdu_opts = unpacked_pdu_opts(pdu)
         receipted_message_id = pdu_opts.get('receipted_message_id', None)
         message_state = pdu_opts.get('message_state', None)
-        if receipted_message_id is not None and message_state is not None:
-            return (receipted_message_id, message_state)
+        if receipted_message_id is None or message_state is None:
+            return succeed(False)
 
-        return None
-
-    def handle_delivery_report_pdu(self, pdu_data):
-        receipted_message_id, message_state = pdu_data
         status = {
             1: 'ENROUTE',
             2: 'DELIVERED',
@@ -96,9 +92,12 @@ class EsmeCallbacksDeliveryReportProcessor(object):
             7: 'UNKNOWN',
             8: 'REJECTED',
         }.get(message_state, 'UNKNOWN')
-        return self.protocol.esme_callbacks.delivery_report(
+
+        d = self.protocol.esme_callbacks.delivery_report(
             message_id=receipted_message_id,
             delivery_status=self.delivery_status(status))
+        d.addCallback(lambda _: True)
+        return d
 
     def inspect_delivery_report_content(self, content):
         delivery_report = self.config.delivery_report_regex.search(

@@ -259,9 +259,8 @@ class EsmeTransceiver(Protocol):
         pdu_resp = DeliverSMResp(sequence_number, **self.bind_params)
         yield self.send_pdu(pdu_resp)
 
-        pdu_dr_data = self.dr_processor.inspect_delivery_report_pdu(pdu)
-        if pdu_dr_data is not None:
-            yield self.dr_processor.handle_delivery_report_pdu(pdu_dr_data)
+        handled = yield self.dr_processor.handle_delivery_report_pdu(pdu)
+        if handled:
             return
 
         yield self.sm_processor.handle_short_message_pdu(pdu)

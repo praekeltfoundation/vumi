@@ -3,18 +3,13 @@ from zope.interface import Interface
 
 class IDeliveryReportProcessor(Interface):
 
-    def inspect_delivery_report_pdu(pdu):
-        """Inspect a PDU and return an object that can be passed straight
-        through to ``handle_delivery_report_pdu`` if a delivery report
-        was found.
-
-        Returns ``None`` if no delivery report was found.
-        """
-
     def handle_delivery_report_pdu(pdu_data):
         """Handle a delivery report PDU from the networks.
 
-        This should always return a Deferred.
+        This should always return a Deferred that fires with a ``True``
+        if a delivery report was found and handled and ``False`` if that
+        was not the case.
+
         All helpers should implement this even if it does nothing.
         """
 
