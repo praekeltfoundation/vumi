@@ -14,5 +14,5 @@ python-smpp
 pytz==2013b
 riakasaurus>=1.1.1
 riak==1.5.2
-https://github.com/dustin/twitty-twister/tarball/master#egg=twittytwister-0.1.1
 txJSON-RPC==0.3.1
+https://github.com/jerith/txTwitter/tarball/develop#egg=txtwitter
