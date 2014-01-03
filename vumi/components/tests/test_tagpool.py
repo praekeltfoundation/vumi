@@ -4,24 +4,20 @@
 
 import json
 
-from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.components.tagpool import TagpoolManager, TagpoolError
-from vumi.tests.utils import PersistenceMixin
+from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 
 
-class TestTxTagpoolManager(TestCase, PersistenceMixin):
+class TestTxTagpoolManager(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self._persist_setUp()
-        self.redis = yield self.get_redis_manager()
+        self.persistence_helper = self.add_helper(PersistenceHelper())
+        self.redis = yield self.persistence_helper.get_redis_manager()
         yield self.redis._purge_all()  # Just in case
         self.tpm = TagpoolManager(self.redis)
-
-    def tearDown(self):
-        return self._persist_tearDown()
 
     def pool_key_generator(self, pool):
         def tkey(x):

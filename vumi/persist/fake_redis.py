@@ -107,6 +107,12 @@ class FakeRedis(object):
         self._data[key] = value
 
     @maybe_async
+    def setex(self, key, time, value):
+        self.set.sync(self, key, value)
+        self.expire.sync(self, key, time)
+        return True
+
+    @maybe_async
     def setnx(self, key, value):
         value = self._encode(value)  # set() sets string value
         if key not in self._data:
@@ -303,6 +309,11 @@ class FakeRedis(object):
         zval = self._data.get(key, Zset())
         return zval.zscore(value)
 
+    @maybe_async
+    def zremrangebyrank(self, key, start, stop):
+        zval = self._data.setdefault(key, Zset())
+        return zval.zremrangebyrank(start, stop)
+
     # List operations
     @maybe_async
     def llen(self, key):
@@ -366,8 +377,12 @@ class FakeRedis(object):
     @maybe_async
     def ltrim(self, key, start, stop):
         lval = self._data.get(key, [])
+        if stop != -1:
+            # -1 means "end of list", so we skip the deletion. Otherwise we
+            # increment the "stop" value to avoid deleting the last value we
+            # want to keep.
+            del lval[stop + 1:]
         del lval[:start]
-        del lval[stop:]
 
     # Expiry operations
 
@@ -467,3 +482,8 @@ class Zset(object):
         for score, value in self._zval:
             if value == val:
                 return score
+
+    def zremrangebyrank(self, start, stop):
+        deleted_keys = self._zval[start:stop + 1]
+        del self._zval[start:stop + 1]
+        return len(deleted_keys)

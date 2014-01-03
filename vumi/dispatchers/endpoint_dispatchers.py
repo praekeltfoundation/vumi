@@ -29,8 +29,9 @@ class Dispatcher(BaseWorker):
         return d
 
     def teardown_worker(self):
-        self.pause_connectors()
-        return self.teardown_dispatcher()
+        d = self.pause_connectors()
+        d.addCallback(lambda r: self.teardown_dispatcher())
+        return d
 
     def setup_dispatcher(self):
         """
@@ -52,38 +53,53 @@ class Dispatcher(BaseWorker):
     def get_configured_ro_connectors(self):
         return self.get_static_config().receive_outbound_connectors
 
+    def default_errback(self, f, msg, connector_name):
+        log.error("Error routing message for %s" % (connector_name,))
+        log.error(f)
+
     def process_inbound(self, config, msg, connector_name):
         raise NotImplementedError()
+
+    def errback_inbound(self, f, msg, connector_name):
+        return f
 
     def process_outbound(self, config, msg, connector_name):
         raise NotImplementedError()
 
+    def errback_outbound(self, f, msg, connector_name):
+        return f
+
     def process_event(self, config, event, connector_name):
         raise NotImplementedError()
 
-    def _mkhandler(self, handler_func, connector_name):
-        def errback(f):
-            log.error("Error routing message for %s" % (connector_name,))
-            log.error(f)
+    def errback_event(self, f, event, connector_name):
+        return f
 
+    def _mkhandler(self, handler_func, errback_func, connector_name):
         def handler(msg):
-            d = self.get_config(msg)
+            d = maybeDeferred(self.get_config, msg)
             d.addCallback(handler_func, msg, connector_name)
-            d.addErrback(errback)
+            d.addErrback(errback_func, msg, connector_name)
+            d.addErrback(self.default_errback, msg, connector_name)
             return d
         return handler
 
     def setup_connectors(self):
         def add_ri_handlers(connector, connector_name):
             connector.set_default_inbound_handler(
-                self._mkhandler(self.process_inbound, connector_name))
+                self._mkhandler(
+                    self.process_inbound, self.errback_inbound,
+                    connector_name))
             connector.set_default_event_handler(
-                self._mkhandler(self.process_event, connector_name))
+                self._mkhandler(
+                    self.process_event, self.errback_event, connector_name))
             return connector
 
         def add_ro_handlers(connector, connector_name):
             connector.set_default_outbound_handler(
-                self._mkhandler(self.process_outbound, connector_name))
+                self._mkhandler(
+                    self.process_outbound, self.errback_outbound,
+                    connector_name))
             return connector
 
         deferreds = []

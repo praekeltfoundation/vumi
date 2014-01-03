@@ -1,7 +1,6 @@
 
 from twisted.python import log
-from twisted.internet import reactor, defer
-from twisted.internet.endpoints import serverFromString
+from twisted.internet import defer
 
 from vumi.worker import BaseWorker
 from vumi.transports.smpp.clientserver.server import SmscServerFactory

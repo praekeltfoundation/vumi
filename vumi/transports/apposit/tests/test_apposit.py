@@ -9,17 +9,14 @@ from twisted.internet.defer import inlineCallbacks, DeferredQueue
 from vumi.tests.utils import MockHttpServer
 from vumi.utils import http_request_full
 from vumi.transports.apposit import AppositTransport
-from vumi.transports.tests.utils import TransportTestCase
+from vumi.tests.helpers import VumiTestCase
+from vumi.transports.tests.helpers import TransportHelper
 
 
-class TestAppositTransport(TransportTestCase):
-    transport_name = 'test_apposit_transport'
-    transport_class = AppositTransport
+class TestAppositTransport(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        super(TestAppositTransport, self).setUp()
-
         self.mock_server = MockHttpServer(self.handle_inbound_request)
         self.outbound_requests = DeferredQueue()
         self.mock_server_response = ''
@@ -27,7 +24,6 @@ class TestAppositTransport(TransportTestCase):
         yield self.mock_server.start()
 
         config = {
-            'transport_name': self.transport_name,
             'web_path': 'api/v1/apposit/sms',
             'web_port': 0,
             'credentials': {
@@ -44,7 +40,11 @@ class TestAppositTransport(TransportTestCase):
             },
             'outbound_url': self.mock_server.url,
         }
-        self.transport = yield self.get_transport(config)
+        self.tx_helper = self.add_helper(
+            TransportHelper(
+                AppositTransport, transport_addr='8123',
+                mobile_addr='251911223344'))
+        self.transport = yield self.tx_helper.get_transport(config)
         self.transport_url = self.transport.get_transport_url()
         self.web_path = config['web_path']
 
@@ -80,16 +80,6 @@ class TestAppositTransport(TransportTestCase):
         self.mock_server_response_code = code
         self.mock_server_response = body
 
-    def mk_outbound_message(self, **kwargs):
-        args = {
-            'from_addr': '8123',
-            'to_addr': '251911223344',
-            'content': 'so many dynamos',
-            'transport_type': 'sms',
-        }
-        args.update(kwargs)
-        return self.mkmsg_out(**args)
-
     def assert_outbound_request(self, request, **kwargs):
         expected_args = {
             'username': 'root',
@@ -111,7 +101,7 @@ class TestAppositTransport(TransportTestCase):
 
     def assert_message_fields(self, msg, **kwargs):
         fields = {
-            'transport_name': self.transport_name,
+            'transport_name': self.tx_helper.transport_name,
             'transport_type': 'sms',
             'from_addr': '251911223344',
             'to_addr': '8123',
@@ -144,9 +134,9 @@ class TestAppositTransport(TransportTestCase):
             'isTest': 'true',
         })
 
-        [msg] = self.get_dispatched_messages()
+        [msg] = self.tx_helper.get_dispatched_inbound()
         self.assert_message_fields(msg,
-            transport_name=self.transport_name,
+            transport_name=self.tx_helper.transport_name,
             transport_type='sms',
             from_addr='251911223344',
             to_addr='8123',
@@ -160,11 +150,7 @@ class TestAppositTransport(TransportTestCase):
 
     @inlineCallbacks
     def test_outbound(self):
-        msg = self.mk_outbound_message(
-            from_addr='8123',
-            to_addr='251911223344',
-            content='racecar')
-        yield self.dispatch(msg)
+        msg = yield self.tx_helper.make_dispatch_outbound('racecar')
 
         request = yield self.outbound_requests.get()
         self.assert_outbound_request(request, **{
@@ -177,14 +163,14 @@ class TestAppositTransport(TransportTestCase):
             'channel': 'SMS'
         })
 
-        [ack] = yield self.wait_for_dispatched_events(1)
+        [ack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assert_ack(ack, msg)
 
     @inlineCallbacks
     def test_inbound_requests_for_non_ascii_content(self):
         response = yield self.send_inbound_request(
             content=u'Hliðskjálf'.encode('UTF-8'))
-        [msg] = self.get_dispatched_messages()
+        [msg] = self.tx_helper.get_dispatched_inbound()
         self.assert_message_fields(msg, content=u'Hliðskjálf')
 
         self.assertEqual(response.code, http.OK)
@@ -235,8 +221,8 @@ class TestAppositTransport(TransportTestCase):
 
     @inlineCallbacks
     def test_outbound_request_credential_selection(self):
-        msg1 = self.mk_outbound_message(from_addr='8123')
-        yield self.dispatch(msg1)
+        msg1 = yield self.tx_helper.make_dispatch_outbound(
+            'so many dynamos', from_addr='8123')
         request1 = yield self.outbound_requests.get()
         self.assert_outbound_request(request1,
             fromAddress='8123',
@@ -244,8 +230,8 @@ class TestAppositTransport(TransportTestCase):
             password='toor',
             serviceId='service-id-1')
 
-        msg2 = self.mk_outbound_message(from_addr='8124')
-        yield self.dispatch(msg2)
+        msg2 = yield self.tx_helper.make_dispatch_outbound(
+            'so many dynamos', from_addr='8124')
         request2 = yield self.outbound_requests.get()
         self.assert_outbound_request(request2,
             fromAddress='8124',
@@ -253,18 +239,17 @@ class TestAppositTransport(TransportTestCase):
             password='nimda',
             serviceId='service-id-2')
 
-        [ack1, ack2] = yield self.wait_for_dispatched_events(2)
+        [ack1, ack2] = yield self.tx_helper.wait_for_dispatched_events(2)
         self.assert_ack(ack1, msg1)
         self.assert_ack(ack2, msg2)
 
     @inlineCallbacks
     def test_outbound_requests_for_non_ascii_content(self):
-        msg = self.mk_outbound_message(content=u'Hliðskjálf')
-        yield self.dispatch(msg)
+        msg = yield self.tx_helper.make_dispatch_outbound(u'Hliðskjálf')
         request = yield self.outbound_requests.get()
         self.assert_outbound_request(request, content='Hliðskjálf')
 
-        [ack] = yield self.wait_for_dispatched_events(1)
+        [ack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assert_ack(ack, msg)
 
     @inlineCallbacks
@@ -272,14 +257,9 @@ class TestAppositTransport(TransportTestCase):
         code = '102999'
         self.set_mock_server_response(http.BAD_REQUEST, code)
 
-        msg = self.mkmsg_out(
-            from_addr='8123',
-            to_addr='251911223344',
-            content='racecar',
-            transport_type='sms')
-        yield self.dispatch(msg)
+        msg = yield self.tx_helper.make_dispatch_outbound('racecar')
 
-        [nack] = yield self.wait_for_dispatched_events(1)
+        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assert_nack(nack, msg, "(%s) %s" % (
             code, self.transport.KNOWN_ERROR_RESPONSE_CODES[code]))
 
@@ -288,19 +268,18 @@ class TestAppositTransport(TransportTestCase):
         code = '103000'
         self.set_mock_server_response(http.BAD_REQUEST, code)
 
-        msg = self.mk_outbound_message()
-        yield self.dispatch(msg)
+        msg = yield self.tx_helper.make_dispatch_outbound("so many dynamos")
 
-        [nack] = yield self.wait_for_dispatched_events(1)
+        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assert_nack(
             nack, msg, self.transport.UNKNOWN_RESPONSE_CODE_ERROR % code)
 
     @inlineCallbacks
     def test_outbound_requests_for_unsupported_transport_types(self):
         transport_type = 'steven'
-        msg = self.mk_outbound_message(transport_type=transport_type)
-        yield self.dispatch(msg)
+        msg = yield self.tx_helper.make_dispatch_outbound(
+            "so many dynamos", transport_type=transport_type)
 
-        [nack] = yield self.wait_for_dispatched_events(1)
+        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assert_nack(nack, msg,
             self.transport.UNSUPPORTED_TRANSPORT_TYPE_ERROR % transport_type)

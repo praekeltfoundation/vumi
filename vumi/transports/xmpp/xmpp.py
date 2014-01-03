@@ -210,3 +210,6 @@ class XMPPTransport(Transport):
             return False
         else:
             self.xmpp_protocol.reply(jid, text)
+            return self.publish_ack(
+                user_message_id=message['message_id'],
+                sent_message_id=message['message_id'])

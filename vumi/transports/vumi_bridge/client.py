@@ -6,10 +6,20 @@ from twisted.internet import reactor
 from twisted.web.client import Agent, ResponseDone, ResponseFailed
 from twisted.web import http
 from twisted.protocols import basic
+from twisted.python.failure import Failure
 
 from vumi.message import Message
 from vumi.utils import to_kwargs
 from vumi import log
+from vumi.errors import VumiError
+
+
+class VumiBridgeError(VumiError):
+    """Raised by errors encountered by VumiBridge."""
+
+
+class VumiBridgeInvalidJsonError(VumiError):
+    """Raised when invalid JSON is received."""
 
 
 class VumiMessageReceiver(basic.LineReceiver):
@@ -17,12 +27,14 @@ class VumiMessageReceiver(basic.LineReceiver):
     delimiter = '\n'
     message_class = Message
 
-    def __init__(self, message_class, callback, errback, on_disconnect=None):
+    def __init__(self, message_class, callback, errback, on_connect=None,
+                 on_disconnect=None):
         self.message_class = message_class
         self.callback = callback
         self.errback = errback
         self._response = None
         self._wait_for_response = Deferred()
+        self._on_connect = on_connect or (lambda *a: None)
         self._on_disconnect = on_disconnect or (lambda *a: None)
         self.disconnecting = False
 
@@ -46,10 +58,15 @@ class VumiMessageReceiver(basic.LineReceiver):
             d.callback(self.message_class(
                 _process_fields=True, **to_kwargs(data)))
         except ValueError, e:
-            d.errback(e)
+            f = Failure(VumiBridgeInvalidJsonError(line))
+            d.errback(f)
         except Exception, e:
             log.err()
-            d.errback(e)
+            f = Failure(e)
+            d.errback(f)
+
+    def connectionMade(self):
+        self._on_connect()
 
     def connectionLost(self, reason):
         # the PotentialDataLoss here is because Twisted didn't receive a
@@ -74,9 +91,11 @@ class StreamingClient(object):
         self.agent = Agent(reactor)
 
     def stream(self, message_class, callback, errback, url,
-               headers=None, on_disconnect=None):
+               headers=None, on_connect=None, on_disconnect=None):
         receiver = VumiMessageReceiver(
-            message_class, callback, errback, on_disconnect=on_disconnect)
+            message_class, callback, errback,
+            on_connect=on_connect,
+            on_disconnect=on_disconnect)
         d = self.agent.request('GET', url, headers)
         d.addCallback(lambda response: receiver.handle_response(response))
         d.addErrback(log.err)

@@ -4,19 +4,16 @@ from twisted.internet.defer import Deferred, inlineCallbacks
 
 from vumi.message import TransportUserMessage
 from vumi.transports.mtn_nigeria.tests import utils
-from vumi.transports.tests.utils import TransportTestCase
+from vumi.tests.helpers import VumiTestCase
 from vumi.transports.mtn_nigeria import MtnNigeriaUssdTransport
 from vumi.transports.mtn_nigeria import mtn_nigeria_ussd
 from vumi.transports.mtn_nigeria.tests.utils import MockXmlOverTcpServerMixin
 from vumi.transports.mtn_nigeria.xml_over_tcp import (
     XmlOverTcpError, CodedXmlOverTcpError)
+from vumi.transports.tests.helpers import TransportHelper
 
 
-class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
-                                          MockXmlOverTcpServerMixin):
-
-    transport_class = MtnNigeriaUssdTransport
-    transport_name = 'test_mtn_nigeria_ussd_transport'
+class TestMtnNigeriaUssdTransport(VumiTestCase, MockXmlOverTcpServerMixin):
 
     REQUEST_PARAMS = {
         'request_id': '1291850641',
@@ -70,54 +67,27 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
         "</USSDResponse>"
     )
 
-    EXPECTED_INBOUND_PAYLOAD = {
-        'message_id': '1291850641',
-        'content': '',
-        'from_addr': '27845335367',
-        'to_addr': '*123#',
-        'session_event': TransportUserMessage.SESSION_RESUME,
-        'transport_name': transport_name,
-        'transport_type': 'ussd',
-        'transport_metadata': {
-            'mtn_nigeria_ussd': {
-                'session_id': '0',
-                'clientId': '0123',
-                'phase': '2',
-                'dcs': '15',
-                'starCode': '123',
-            },
-        },
-    }
-
-    OUTBOUND_PAYLOAD = {
-        'message_id': '1291850641',
-        'content': '',
-        'from_addr': '*123#',
-        'to_addr': '27845335367',
-        'session_event': TransportUserMessage.SESSION_RESUME,
-        'transport_name': transport_name,
-        'transport_type': 'ussd',
-        'transport_metadata': {
-            'mtn_nigeria_ussd': {
-                'session_id': '0',
-                'clientId': '0123',
-                'phase': '2',
-                'dcs': '15',
-                'starCode': '123',
-            },
+    EXPECTED_TRANSPORT_METADATA = {
+        'mtn_nigeria_ussd': {
+            'session_id': '0',
+            'clientId': '0123',
+            'phase': '2',
+            'dcs': '15',
+            'starCode': '123',
+            'requestId': '1291850641',
         },
     }
 
     @inlineCallbacks
     def setUp(self):
-        super(TestMtnNigeriaUssdTransportTestCase, self).setUp()
-
+        self.tx_helper = self.add_helper(
+            TransportHelper(MtnNigeriaUssdTransport))
         deferred_login = self.fake_login(
             mtn_nigeria_ussd.MtnNigeriaUssdClientFactory.protocol)
         deferred_server = self.start_server()
+        self.add_cleanup(self.stop_server)
 
-        config = {
-            'transport_name': self.transport_name,
+        self.transport = yield self.tx_helper.get_transport({
             'server_hostname': '127.0.0.1',
             'server_port': self.get_server_port(),
             'username': 'root',
@@ -126,8 +96,9 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
             'enquire_link_interval': 240,
             'timeout_period': 120,
             'user_termination_response': 'Bye',
-        }
-        self.transport = yield self.get_transport(config)
+        })
+        # We need to tear the transport down before stopping the server.
+        self.add_cleanup(self.transport.stopWorker)
         yield deferred_server
 
         self.session_manager = self.transport.session_manager
@@ -135,12 +106,6 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
 
         yield deferred_login
         self.client = self.transport.factory.client
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield self.transport.teardown_transport()
-        yield self.stop_server()
-        yield super(TestMtnNigeriaUssdTransportTestCase, self).tearDown()
 
     def fake_login(self, protocol_cls):
         d = Deferred()
@@ -182,17 +147,16 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
         packet = self.mk_data_request(session_id, **params)
         self.server.send_data(packet)
 
-    def mk_msg(self, **fields):
-        payload = self.OUTBOUND_PAYLOAD.copy()
-        payload.update(fields)
-        return TransportUserMessage(**payload)
-
-    def mk_reply(self, request_msg, reply_content, continue_session=True):
-        request_msg = TransportUserMessage(**request_msg.payload)
-        return request_msg.reply(reply_content, continue_session)
-
     def assert_inbound_message(self, msg, **field_values):
-        expected_payload = self.EXPECTED_INBOUND_PAYLOAD.copy()
+        expected_payload = {
+            'content': '',
+            'from_addr': '27845335367',
+            'to_addr': '*123#',
+            'session_event': TransportUserMessage.SESSION_RESUME,
+            'transport_name': self.tx_helper.transport_name,
+            'transport_type': 'ussd',
+            'transport_metadata': self.EXPECTED_TRANSPORT_METADATA,
+        }
         expected_payload.update(field_values)
 
         for field, expected_value in expected_payload.iteritems():
@@ -211,7 +175,7 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
     @inlineCallbacks
     def test_inbound_begin(self):
         self.send_request('0', user_data='*123#')
-        [msg] = yield self.wait_for_dispatched_messages(1)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assert_inbound_message(
             msg,
             session_event=TransportUserMessage.SESSION_NEW,
@@ -219,8 +183,8 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
             to_addr='*123#',
             content=None)
 
-        reply = self.mk_reply(msg, "We are the Knights Who Say ... Ni!")
-        self.dispatch(reply)
+        reply_d = self.tx_helper.make_dispatch_reply(
+            msg, "We are the Knights Who Say ... Ni!")
 
         response = yield self.server.wait_for_data()
         expected_response = self.mk_data_response(
@@ -228,7 +192,8 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
             user_data="We are the Knights Who Say ... Ni!")
         self.assertEqual(response, expected_response)
 
-        [ack] = yield self.wait_for_dispatched_events(1)
+        [ack] = yield self.tx_helper.wait_for_dispatched_events(1)
+        reply = yield reply_d
         self.assert_ack(ack, reply)
 
     @inlineCallbacks
@@ -240,15 +205,14 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
             user_data="Well, what is it you want?",
             msg_type=4,
             end_of_session=0)
-        [msg] = yield self.wait_for_dispatched_messages(1)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assert_inbound_message(
             msg,
             session_event=TransportUserMessage.SESSION_RESUME,
             content="Well, what is it you want?")
 
-        reply = self.mk_reply(
+        reply_d = self.tx_helper.make_dispatch_reply(
             msg, "We want ... a shrubbery!", continue_session=False)
-        self.dispatch(reply)
 
         response_packet = yield self.server.wait_for_data()
         expected_response_packet = self.mk_data_response(
@@ -258,7 +222,8 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
             end_of_session=1)
         self.assertEqual(response_packet, expected_response_packet)
 
-        [ack] = yield self.wait_for_dispatched_events(1)
+        [ack] = yield self.tx_helper.wait_for_dispatched_events(1)
+        reply = yield reply_d
         self.assert_ack(ack, reply)
 
     @inlineCallbacks
@@ -270,15 +235,14 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
             user_data="Well, what is it you want?",
             msg_type=4,
             end_of_session=0)
-        [msg] = yield self.wait_for_dispatched_messages(1)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assert_inbound_message(
             msg,
             session_event=TransportUserMessage.SESSION_RESUME,
             content="Well, what is it you want?")
 
-        reply = self.mk_reply(
+        reply_d = self.tx_helper.make_dispatch_reply(
             msg, "We want ... a shrubbery!", continue_session=True)
-        self.dispatch(reply)
 
         response_packet = yield self.server.wait_for_data()
         expected_response_packet = self.mk_data_response(
@@ -288,7 +252,8 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
             end_of_session=0)
         self.assertEqual(response_packet, expected_response_packet)
 
-        [ack] = yield self.wait_for_dispatched_events(1)
+        [ack] = yield self.tx_helper.wait_for_dispatched_events(1)
+        reply = yield reply_d
         self.assert_ack(ack, reply)
 
     @inlineCallbacks
@@ -300,7 +265,7 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
             user_data="I'm leaving now",
             msg_type=4,
             end_of_session=1)
-        [msg] = yield self.wait_for_dispatched_messages(1)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assert_inbound_message(
             msg,
             session_event=TransportUserMessage.SESSION_CLOSE,
@@ -325,21 +290,23 @@ class TestMtnNigeriaUssdTransportTestCase(TransportTestCase,
             'send_data_response',
             stubbed_send_data_response)
 
-        reply = self.mk_reply(self.mk_msg(), "It's a trap!")
-        self.dispatch(reply)
+        tm = self.EXPECTED_TRANSPORT_METADATA.copy()
+        msg = self.tx_helper.make_inbound("foo", transport_metadata=tm)
+        reply = yield self.tx_helper.make_dispatch_reply(msg, "It's a trap!")
 
-        [nack] = yield self.wait_for_dispatched_events(1)
+        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assert_nack(
             nack, reply, "Response failed: Something bad happened")
 
     @inlineCallbacks
     def test_outbound_metadata_fields_missing(self):
-        reply = self.mk_reply(self.mk_msg(), "It's a trap!").copy()
-        reply_metadata = reply['transport_metadata']['mtn_nigeria_ussd']
-        del reply_metadata['clientId']
-        self.dispatch(reply)
+        msg = self.tx_helper.make_inbound(
+            "foo", transport_metadata={
+                'mtn_nigeria_ussd': {'session_id': '123'},
+            })
+        reply = yield self.tx_helper.make_dispatch_reply(msg, "It's a trap!")
 
-        [nack] = yield self.wait_for_dispatched_events(1)
+        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
         reason = "%s" % CodedXmlOverTcpError(
             '208',
             "Required message transport metadata fields missing in "

@@ -1,17 +1,15 @@
 # -*- coding: utf-8 -*-
-from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.persist.fake_redis import FakeRedis
+from vumi.tests.helpers import VumiTestCase
 
 
-class FakeRedisTestCase(TestCase):
+class TestFakeRedis(VumiTestCase):
 
     def setUp(self):
         self.redis = FakeRedis()
-
-    def tearDown(self):
-        self.redis.teardown()
+        self.add_cleanup(self.redis.teardown)
 
     def assert_redis_op(self, expected, op, *args, **kw):
         self.assertEqual(expected, getattr(self.redis, op)(*args, **kw))
@@ -59,6 +57,13 @@ class FakeRedisTestCase(TestCase):
         yield self.assert_redis_op("value", 'get', "mykey")
         yield self.assert_redis_op(False, 'setnx', "mykey", "other")
         yield self.assert_redis_op("value", 'get', "mykey")
+
+    @inlineCallbacks
+    def test_setex(self):
+        yield self.assert_redis_op(False, 'exists', "mykey")
+        yield self.assert_redis_op(True, 'setex', "mykey", 10, "value")
+        yield self.assert_redis_op("value", 'get', "mykey")
+        yield self.assert_redis_op(9, 'ttl', "mykey")
 
     @inlineCallbacks
     def test_incr_with_by_param(self):
@@ -149,6 +154,13 @@ class FakeRedisTestCase(TestCase):
         yield self.assert_redis_op(False, 'zrem', 'set', 'one')
         yield self.assert_redis_op(
             [('two', 0.2)], 'zrange', 'set', 0, -1, withscores=True)
+
+    @inlineCallbacks
+    def test_zremrangebyrank(self):
+        yield self.redis.zadd('set', one=1, two=2, three=3)
+        yield self.assert_redis_op(2, 'zremrangebyrank', 'set', 0, 1)
+        yield self.assert_redis_op(
+            [('three', 3)], 'zrange', 'set', 0, -1, withscores=True)
 
     @inlineCallbacks
     def test_zscore(self):
@@ -263,11 +275,29 @@ class FakeRedisTestCase(TestCase):
 
     @inlineCallbacks
     def test_ltrim(self):
+        for i in range(1, 5):
+            yield self.assert_redis_op(i - 1, 'rpush', 'list', str(i))
+        yield self.assert_redis_op(
+            ['1', '2', '3', '4'], 'lrange', 'list', 0, -1)
+        yield self.assert_redis_op(None, 'ltrim', 'list', 1, 2)
+        yield self.assert_redis_op(['2', '3'], 'lrange', 'list', 0, -1)
+
+    @inlineCallbacks
+    def test_ltrim_mid_range(self):
+        for i in range(1, 6):
+            yield self.assert_redis_op(i - 1, 'rpush', 'list', str(i))
+        yield self.assert_redis_op(
+            ['1', '2', '3', '4', '5'], 'lrange', 'list', 0, -1)
+        yield self.assert_redis_op(None, 'ltrim', 'list', 2, 3)
+        yield self.assert_redis_op(['3', '4'], 'lrange', 'list', 0, -1)
+
+    @inlineCallbacks
+    def test_ltrim_keep_all(self):
         for i in range(1, 4):
             yield self.assert_redis_op(i - 1, 'rpush', 'list', str(i))
         yield self.assert_redis_op(['1', '2', '3'], 'lrange', 'list', 0, -1)
-        yield self.assert_redis_op(None, 'ltrim', 'list', 1, 2)
-        yield self.assert_redis_op(['2', '3'], 'lrange', 'list', 0, -1)
+        yield self.assert_redis_op(None, 'ltrim', 'list', 0, -1)
+        yield self.assert_redis_op(['1', '2', '3'], 'lrange', 'list', 0, -1)
 
     @inlineCallbacks
     def test_lrem_negative_num(self):
@@ -315,18 +345,11 @@ class FakeRedisTestCase(TestCase):
         yield self.assert_redis_op('hash', 'type', 'hash_key')
 
 
-class FakeRedisCharsetHandlingTestCase(TestCase):
-
-    def setUp(self):
-        self._redises = []
-
-    def tearDown(self):
-        for redis in self._redises:
-            redis.teardown()
+class TestFakeRedisCharsetHandling(VumiTestCase):
 
     def get_redis(self, *args, **kwargs):
         redis = FakeRedis(*args, **kwargs)
-        self._redises.append(redis)
+        self.add_cleanup(redis.teardown)
         return redis
 
     def assert_redis_op(self, redis, expected, op, *args, **kw):
@@ -355,7 +378,7 @@ class FakeRedisCharsetHandlingTestCase(TestCase):
             'get', 'name')
 
 
-class FakeTxRedisTestCase(FakeRedisTestCase):
+class TestFakeRedisAsync(TestFakeRedis):
     def setUp(self):
         self.redis = FakeRedis(async=True)
 

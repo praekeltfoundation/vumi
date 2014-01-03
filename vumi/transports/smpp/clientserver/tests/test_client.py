@@ -1,27 +1,29 @@
-from twisted.trial import unittest
 from twisted.internet.task import Clock
 from twisted.internet.defer import inlineCallbacks, returnValue
-from smpp.pdu_builder import DeliverSM, BindTransceiverResp
+from smpp.pdu_builder import DeliverSM, BindTransceiverResp, Unbind
 from smpp.pdu import unpack_pdu
 
-from vumi.tests.utils import LogCatcher, PersistenceMixin
+from vumi.tests.utils import LogCatcher
 from vumi.transports.smpp.clientserver.client import (
     EsmeTransceiver, EsmeReceiver, EsmeTransmitter, EsmeCallbacks, ESME,
     unpacked_pdu_opts)
 from vumi.transports.smpp.transport import SmppTransportConfig
+from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 
 
 class FakeTransport(object):
-    def __init__(self):
+    def __init__(self, protocol):
         self.connected = True
+        self.protocol = protocol
 
     def loseConnection(self):
         self.connected = False
+        self.protocol.connectionLost()
 
 
 class FakeEsmeMixin(object):
     def setup_fake(self):
-        self.transport = FakeTransport()
+        self.transport = FakeTransport(self)
         self.clock = Clock()
         self.callLater = self.clock.callLater
         self.fake_sent_pdus = []
@@ -57,17 +59,15 @@ class FakeEsmeTransmitter(EsmeTransmitter, FakeEsmeMixin):
         return self.fake_send_pdu(pdu)
 
 
-class EsmeTestCaseBase(unittest.TestCase, PersistenceMixin):
-    timeout = 5
+class EsmeTestCaseBase(VumiTestCase):
     ESME_CLASS = None
 
     def setUp(self):
-        self._persist_setUp()
+        self.persistence_helper = self.add_helper(PersistenceHelper())
         self._expected_callbacks = []
-
-    def tearDown(self):
-        self.assertEqual(self._expected_callbacks, [], "Uncalled callbacks.")
-        return self._persist_tearDown()
+        self.add_cleanup(
+            self.assertEqual, self._expected_callbacks, [],
+            "Uncalled callbacks.")
 
     def get_unbound_esme(self, host="127.0.0.1", port="0",
                          system_id="1234", password="password",
@@ -88,7 +88,7 @@ class EsmeTestCaseBase(unittest.TestCase, PersistenceMixin):
             d.addCallback(lambda result: redis_manager)
             return d
 
-        redis_d = self.get_redis_manager()
+        redis_d = self.persistence_helper.get_redis_manager()
         redis_d.addCallback(purge_manager)
         return redis_d.addCallback(
             lambda r: self.ESME_CLASS(config, {
@@ -133,32 +133,65 @@ class EsmeGenericMixin(object):
 
     @inlineCallbacks
     def test_bind_timeout(self):
-        esme = yield self.get_unbound_esme()
+        callbacks_called = []
+        esme = yield self.get_unbound_esme(callbacks={
+            'connect': lambda client: callbacks_called.append('connect'),
+            'disconnect': lambda: callbacks_called.append('disconnect'),
+        })
         yield esme.connectionMade()
 
+        self.assertEqual([], callbacks_called)
         self.assertEqual(True, esme.transport.connected)
         self.assertNotEqual(None, esme._lose_conn)
 
         esme.clock.advance(esme.smpp_bind_timeout)
 
+        self.assertEqual(['disconnect'], callbacks_called)
         self.assertEqual(False, esme.transport.connected)
         self.assertEqual(None, esme._lose_conn)
 
     @inlineCallbacks
     def test_bind_no_timeout(self):
-        esme = yield self.get_unbound_esme()
+        callbacks_called = []
+        esme = yield self.get_unbound_esme(callbacks={
+            'connect': lambda client: callbacks_called.append('connect'),
+            'disconnect': lambda: callbacks_called.append('disconnect'),
+        })
         yield esme.connectionMade()
 
+        self.assertEqual([], callbacks_called)
         self.assertEqual(True, esme.transport.connected)
         self.assertNotEqual(None, esme._lose_conn)
 
         esme.handle_bind_transceiver_resp(unpack_pdu(
             BindTransceiverResp(1).get_bin()))
 
+        self.assertEqual(['connect'], callbacks_called)
         self.assertEqual(True, esme.transport.connected)
         self.assertEqual(None, esme._lose_conn)
         esme.lc_enquire.stop()
         yield esme.lc_enquire.deferred
+
+    @inlineCallbacks
+    def test_bind_and_disconnect(self):
+        callbacks_called = []
+        esme = yield self.get_unbound_esme(callbacks={
+            'connect': lambda client: callbacks_called.append('connect'),
+            'disconnect': lambda: callbacks_called.append('disconnect'),
+        })
+        yield esme.connectionMade()
+
+        esme.handle_bind_transceiver_resp(unpack_pdu(
+            BindTransceiverResp(1).get_bin()))
+
+        self.assertEqual(['connect'], callbacks_called)
+        esme.lc_enquire.stop()
+        yield esme.lc_enquire.deferred
+
+        yield esme.transport.loseConnection()
+
+        self.assertEqual(['connect', 'disconnect'], callbacks_called)
+        self.assertEqual(False, esme.transport.connected)
 
     @inlineCallbacks
     def test_sequence_rollover(self):
@@ -168,6 +201,14 @@ class EsmeGenericMixin(object):
         yield esme.redis.set('smpp_last_sequence_number', 0xFFFF0000)
         self.assertEqual(0xFFFF0001, (yield esme.get_next_seq()))
         self.assertEqual(1, (yield esme.get_next_seq()))
+
+    @inlineCallbacks
+    def test_unbind(self):
+        esme = yield self.get_esme()
+
+        yield esme.handle_data(Unbind(1).get_bin())
+
+        self.assertEqual(False, esme.transport.connected)
 
 
 class EsmeTransmitterMixin(EsmeGenericMixin):
@@ -202,6 +243,68 @@ class EsmeTransmitterMixin(EsmeGenericMixin):
             None, sm['body']['mandatory_parameters']['short_message'])
         self.assertEqual(''.join('%02x' % ord(c) for c in long_message),
                          pdu_opts['message_payload'])
+
+    @inlineCallbacks
+    def test_submit_sm_sms_multipart_sar(self):
+        """Submit a long SMS message using multipart sar fields."""
+        esme = yield self.get_esme(config={
+            'send_multipart_sar': True,
+        })
+        long_message = 'This is a long message.' * 20
+        seq_nums = yield esme.submit_sm(short_message=long_message)
+        self.assertEqual([2, 3, 4, 5], seq_nums)
+        self.assertEqual(4, len(esme.fake_sent_pdus))
+        msg_parts = []
+        msg_refs = []
+
+        for i, sm_pdu in enumerate(esme.fake_sent_pdus):
+            sm = unpack_pdu(sm_pdu.get_bin())
+            pdu_opts = unpacked_pdu_opts(sm)
+            mandatory_parameters = sm['body']['mandatory_parameters']
+
+            self.assertEqual('submit_sm', sm['header']['command_id'])
+            msg_parts.append(mandatory_parameters['short_message'])
+            self.assertTrue(len(mandatory_parameters['short_message']) <= 130)
+            msg_refs.append(pdu_opts['sar_msg_ref_num'])
+            self.assertEqual(i + 1, pdu_opts['sar_segment_seqnum'])
+            self.assertEqual(4, pdu_opts['sar_total_segments'])
+
+        self.assertEqual(long_message, ''.join(msg_parts))
+        self.assertEqual(1, len(set(msg_refs)))
+
+    @inlineCallbacks
+    def test_submit_sm_sms_multipart_udh(self):
+        """Submit a long SMS message using multipart user data headers."""
+        esme = yield self.get_esme(config={
+            'send_multipart_udh': True,
+        })
+        long_message = 'This is a long message.' * 20
+        seq_nums = yield esme.submit_sm(short_message=long_message)
+        self.assertEqual([2, 3, 4, 5], seq_nums)
+        self.assertEqual(4, len(esme.fake_sent_pdus))
+        msg_parts = []
+        msg_refs = []
+
+        for i, sm_pdu in enumerate(esme.fake_sent_pdus):
+            sm = unpack_pdu(sm_pdu.get_bin())
+            mandatory_parameters = sm['body']['mandatory_parameters']
+            self.assertEqual('submit_sm', sm['header']['command_id'])
+            msg = mandatory_parameters['short_message']
+
+            udh_hlen, udh_tag, udh_len, udh_ref, udh_tot, udh_seq = [
+                ord(octet) for octet in msg[:6]]
+            self.assertEqual(5, udh_hlen)
+            self.assertEqual(0, udh_tag)
+            self.assertEqual(3, udh_len)
+            msg_refs.append(udh_ref)
+            self.assertEqual(4, udh_tot)
+            self.assertEqual(i + 1, udh_seq)
+            self.assertTrue(len(msg) <= 136)
+            msg_parts.append(msg[6:])
+            self.assertEqual(0x40, mandatory_parameters['esm_class'])
+
+        self.assertEqual(long_message, ''.join(msg_parts))
+        self.assertEqual(1, len(set(msg_refs)))
 
     @inlineCallbacks
     def test_submit_sm_ussd_continue(self):
@@ -296,14 +399,74 @@ class EsmeReceiverMixin(EsmeGenericMixin):
         self.flushLoggedErrors()
 
     @inlineCallbacks
-    def test_deliver_sm_delivery_report(self):
-        esme = yield self.get_esme(delivery_report=self.assertion_cb(
-                u'DELIVRD', 'delivery_report', 'stat'))
+    def test_deliver_sm_delivery_report_delivered(self):
+        esme = yield self.get_esme(delivery_report=self.assertion_cb({
+            'message_id': '1b1720be-5f48-41c4-b3f8-6e59dbf45366',
+            'message_state': 'DELIVERED',
+        }))
+
+        sm = DeliverSM(1, short_message='delivery report')
+        sm._PDU__add_optional_parameter(
+            'receipted_message_id',
+            '1b1720be-5f48-41c4-b3f8-6e59dbf45366')
+        sm._PDU__add_optional_parameter('message_state', 2)
+
+        yield esme.handle_deliver_sm(unpack_pdu(sm.get_bin()))
+
+    @inlineCallbacks
+    def test_deliver_sm_delivery_report_rejected(self):
+        esme = yield self.get_esme(delivery_report=self.assertion_cb({
+            'message_id': '1b1720be-5f48-41c4-b3f8-6e59dbf45366',
+            'message_state': 'REJECTED',
+        }))
+
+        sm = DeliverSM(1, short_message='delivery report')
+        sm._PDU__add_optional_parameter(
+            'receipted_message_id',
+            '1b1720be-5f48-41c4-b3f8-6e59dbf45366')
+        sm._PDU__add_optional_parameter('message_state', 8)
+
+        yield esme.handle_deliver_sm(unpack_pdu(sm.get_bin()))
+
+    @inlineCallbacks
+    def test_deliver_sm_delivery_report_regex_fallback(self):
+        esme = yield self.get_esme(delivery_report=self.assertion_cb({
+            'message_id': '1b1720be-5f48-41c4-b3f8-6e59dbf45366',
+            'message_state': 'DELIVRD',
+        }))
 
         yield esme.handle_deliver_sm(self.get_sm(
                 'id:1b1720be-5f48-41c4-b3f8-6e59dbf45366 sub:001 dlvrd:001 '
                 'submit date:120726132548 done date:120726132548 stat:DELIVRD '
                 'err:000 text:'))
+
+    @inlineCallbacks
+    def test_deliver_sm_delivery_report_regex_fallback_ucs2(self):
+        esme = yield self.get_esme(delivery_report=self.assertion_cb({
+            'message_id': '1b1720be-5f48',
+            'message_state': 'DELIVRD',
+        }))
+
+        dr_text = (
+            u'id:1b1720be-5f48 sub:001 dlvrd:001 '
+            u'submit date:120726132548 done date:120726132548 stat:DELIVRD '
+            u'err:000 text:').encode('utf-16be')
+        yield esme.handle_deliver_sm(self.get_sm(dr_text, 8))
+
+    @inlineCallbacks
+    def test_deliver_sm_delivery_report_regex_fallback_ucs2_long(self):
+        esme = yield self.get_esme(delivery_report=self.assertion_cb({
+            'message_id': '1b1720be-5f48-41c4-b3f8-6e59dbf45366',
+            'message_state': 'DELIVRD',
+        }))
+
+        dr_text = (
+            u'id:1b1720be-5f48-41c4-b3f8-6e59dbf45366 sub:001 dlvrd:001 '
+            u'submit date:120726132548 done date:120726132548 stat:DELIVRD '
+            u'err:000 text:').encode('utf-16be')
+        sm = DeliverSM(1, short_message='', data_coding=8)
+        sm.add_message_payload(dr_text.encode('hex'))
+        yield esme.handle_deliver_sm(unpack_pdu(sm.get_bin()))
 
     @inlineCallbacks
     def test_deliver_sm_multipart(self):
@@ -324,6 +487,22 @@ class EsmeReceiverMixin(EsmeGenericMixin):
                 "\x05\x00\x03\xff\x02\x01\x00h\x00e\x00", 8))
 
     @inlineCallbacks
+    def test_deliver_sm_multipart_arabic_ucs2(self):
+        esme = yield self.get_esme(
+            deliver_sm=self.assertion_cb(
+                ('\xd8\xa7\xd9\x84\xd9\x84\xd9\x87 '
+                 '\xd9\x85\xd8\xb9\xd9\x83').decode('utf-8'), 'short_message'),
+            config={
+                'data_coding_overrides': {
+                    8: 'utf-8'
+                }
+            })
+        yield esme.handle_deliver_sm(self.get_sm(
+            "\x05\x00\x03\xff\x02\x01\xd8\xa7\xd9\x84\xd9\x84\xd9\x87 ", 8))
+        yield esme.handle_deliver_sm(self.get_sm(
+            "\x05\x00\x03\xff\x02\x02\xd9\x85\xd8\xb9\xd9\x83", 8))
+
+    @inlineCallbacks
     def test_deliver_sm_ussd_start(self):
         def assert_ussd(value):
             self.assertEqual('ussd', value['message_type'])
@@ -339,12 +518,12 @@ class EsmeReceiverMixin(EsmeGenericMixin):
         yield esme.handle_deliver_sm(unpack_pdu(sm.get_bin()))
 
 
-class EsmeTransceiverTestCase(EsmeTestCaseBase, EsmeReceiverMixin,
-                              EsmeTransmitterMixin):
+class TestEsmeTransceiver(EsmeTestCaseBase, EsmeReceiverMixin,
+                          EsmeTransmitterMixin):
     ESME_CLASS = FakeEsmeTransceiver
 
 
-class EsmeTransmitterTestCase(EsmeTestCaseBase, EsmeTransmitterMixin):
+class TestEsmeTransmitter(EsmeTestCaseBase, EsmeTransmitterMixin):
     ESME_CLASS = FakeEsmeTransmitter
 
     @inlineCallbacks
@@ -362,7 +541,7 @@ class EsmeTransmitterTestCase(EsmeTestCaseBase, EsmeTransmitterMixin):
             self.assertTrue('deliver_sm in wrong state' in error['message'][0])
 
 
-class EsmeReceiverTestCase(EsmeTestCaseBase, EsmeReceiverMixin):
+class TestEsmeReceiver(EsmeTestCaseBase, EsmeReceiverMixin):
     ESME_CLASS = FakeEsmeReceiver
 
     @inlineCallbacks
@@ -378,7 +557,7 @@ class EsmeReceiverTestCase(EsmeTestCaseBase, EsmeReceiverMixin):
                              error['message'][0]))
 
 
-class ESMETestCase(unittest.TestCase):
+class TestESME(VumiTestCase):
 
     def setUp(self):
         config = SmppTransportConfig({

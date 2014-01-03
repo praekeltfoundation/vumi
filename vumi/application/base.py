@@ -10,7 +10,7 @@ from vumi.config import ConfigText, ConfigDict
 from vumi.worker import BaseWorker
 from vumi import log
 from vumi.message import TransportUserMessage
-
+from vumi.errors import InvalidEndpoint
 
 SESSION_NEW = TransportUserMessage.SESSION_NEW
 SESSION_CLOSE = TransportUserMessage.SESSION_CLOSE
@@ -114,8 +114,9 @@ class ApplicationWorker(BaseWorker):
         return d
 
     def teardown_worker(self):
-        self.pause_connectors()
-        return self.teardown_application()
+        d = self.pause_connectors()
+        d.addCallback(lambda r: self.teardown_application())
+        return d
 
     def setup_application(self):
         """
@@ -188,6 +189,26 @@ class ApplicationWorker(BaseWorker):
         publisher = self.connectors[self.transport_name]
         return publisher.publish_outbound(message, endpoint_name=endpoint_name)
 
+    @staticmethod
+    def check_endpoint(allowed_endpoints, endpoint):
+        """Check that endpoint is in the list of allowed endpoints.
+
+        :param list allowed_endpoints:
+            List (or set) of allowed endpoints. If ``allowed_endpoints`` is
+            ``None``, all endpoints are allowed.
+        :param str endpoint:
+            Endpoint to check. The special value ``None`` is equivalent to
+            ``default``.
+        """
+        if allowed_endpoints is None:
+            return
+        if endpoint is None:
+            endpoint = "default"
+        if endpoint not in allowed_endpoints:
+            raise InvalidEndpoint(
+                "Endpoint %r not defined in list of allowed endpoints %r"
+                % (endpoint, allowed_endpoints))
+
     def reply_to(self, original_message, content, continue_session=True,
                  **kws):
         reply = original_message.reply(content, continue_session, **kws)
@@ -204,10 +225,7 @@ class ApplicationWorker(BaseWorker):
         if endpoint is None:
             endpoint = 'default'
 
-        if (self.ALLOWED_ENDPOINTS is not None
-                and endpoint not in self.ALLOWED_ENDPOINTS):
-            raise ValueError("Endpoint %r not defined in ALLOWED_ENDPOINTS" % (
-                endpoint,))
+        self.check_endpoint(self.ALLOWED_ENDPOINTS, endpoint)
 
         options = copy.deepcopy(
             self.get_static_config().send_to.get(endpoint, {}))

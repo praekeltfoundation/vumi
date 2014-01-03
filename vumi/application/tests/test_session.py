@@ -2,19 +2,17 @@
 
 import time
 
-from twisted.trial.unittest import TestCase
 from vumi.persist.fake_redis import FakeRedis
 from vumi.application import SessionManager
+from vumi.tests.helpers import VumiTestCase
 
 
-class SessionManagerTestCase(TestCase):
+class TestSessionManager(VumiTestCase):
     def setUp(self):
         self.fake_redis = FakeRedis()
+        self.add_cleanup(self.fake_redis.teardown)
         self.sm = SessionManager(self.fake_redis, prefix="test")
-
-    def tearDown(self):
-        self.sm.stop()
-        self.fake_redis.teardown()
+        self.add_cleanup(self.sm.stop)
 
     def test_active_sessions(self):
         def get_sessions():

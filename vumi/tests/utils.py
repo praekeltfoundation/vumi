@@ -1,33 +1,27 @@
 # -*- test-case-name: vumi.tests.test_testutils -*-
 
 import re
-import json
 from datetime import datetime, timedelta
-from collections import namedtuple
 import warnings
 from functools import wraps
 
 import pytz
-from twisted.trial.unittest import TestCase, SkipTest
-from twisted.internet import defer, reactor
+from twisted.internet import reactor
 from twisted.internet.error import ConnectionRefusedError
 from twisted.web.resource import Resource
 from twisted.internet.defer import DeferredQueue, inlineCallbacks, returnValue
 from twisted.python import log
+from twisted.python.monkey import MonkeyPatcher
 
-from vumi.utils import (vumi_resource_path, import_module, flatten_generator,
-                        LogFilterSite)
-from vumi.service import get_spec, Worker, WorkerCreator
+from vumi.utils import vumi_resource_path, flatten_generator, LogFilterSite
+from vumi.service import get_spec, WorkerCreator
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.tests.fake_amqp import FakeAMQPBroker, FakeAMQClient
+from vumi.tests.helpers import VumiTestCase
 
-
-def import_skip(exc, *expected):
-    msg = exc.args[0]
-    module = msg.split()[-1]
-    if expected and (module not in expected):
-        raise
-    raise SkipTest("Failed to import '%s'." % (module,))
+# For backcompat:
+from vumi.tests.helpers import import_filter, import_skip
+import_filter, import_skip  # To keep pyflakes happy.
 
 
 class UTCNearNow(object):
@@ -49,61 +43,6 @@ class RegexMatcher(object):
 
     def __eq__(self, other):
         return self.regex.match(other)
-
-
-class Mocking(object):
-
-    class HistoryItem(object):
-        def __init__(self, args, kwargs):
-            self.args = args
-            self.kwargs = kwargs
-
-        def __repr__(self):
-            return '<%r object at %r [args: %r, kw: %r]>' % (
-                self.__class__.__name__, id(self), self.args, self.kwargs)
-
-    def __init__(self, function):
-        """Mock a function"""
-        self.function = function
-        self.called = 0
-        self.history = []
-        self.return_value = None
-
-    def __enter__(self):
-        """Overwrite whatever module the function is part of"""
-        self.mod = import_module(self.function.__module__)
-        setattr(self.mod, self.function.__name__, self)
-        return self
-
-    def __exit__(self, *exc_info):
-        """Reset to whatever the function was originally when done"""
-        setattr(self.mod, self.function.__name__, self.function)
-
-    def __call__(self, *args, **kwargs):
-        """Return the return value when called, store the args & kwargs
-        for testing later, called is a counter and evaluates to True
-        if ever called."""
-        self.args = args
-        self.kwargs = kwargs
-        self.called += 1
-        self.history.append(self.HistoryItem(args, kwargs))
-        return self.return_value
-
-    def to_return(self, *args):
-        """Specify the return value"""
-        self.return_value = args if len(args) > 1 else list(args).pop()
-        return self
-
-
-def mocking(fn):
-    return Mocking(fn)
-
-
-def fake_amq_message(dictionary, delivery_tag='delivery_tag'):
-    Content = namedtuple('Content', ['body'])
-    Message = namedtuple('Message', ['content', 'delivery_tag'])
-    return Message(delivery_tag=delivery_tag,
-                   content=Content(body=json.dumps(dictionary)))
 
 
 def get_fake_amq_client(broker=None):
@@ -130,23 +69,6 @@ def get_stubbed_channel(broker=None, id=0):
     spec = get_spec(vumi_resource_path("amqp-spec-0-8.xml"))
     amq_client = FakeAMQClient(spec, {}, broker)
     return amq_client.channel(id)
-
-
-class TestResourceWorker(Worker):
-    port = 9999
-    _resources = ()
-
-    def set_resources(self, resources):
-        self._resources = resources
-
-    def startWorker(self):
-        resources = [(cls(*args), path) for path, cls, args in self._resources]
-        self.resources = self.start_web_resources(resources, self.port)
-        return defer.succeed(None)
-
-    def stopWorker(self):
-        if self.resources:
-            self.resources.stopListening()
 
 
 def FakeRedis():
@@ -255,6 +177,7 @@ class MockHttpServer(object):
 
     @inlineCallbacks
     def stop(self):
+        yield self._webserver.stopListening()
         yield self._webserver.loseConnection()
 
 
@@ -300,6 +223,10 @@ class PersistenceMixin(object):
     sync_or_async = staticmethod(maybe_async('sync_persistence'))
 
     def _persist_setUp(self):
+        warnings.warn("PersistenceMixin is deprecated. "
+                      "Use PersistenceHelper from vumi.tests.helpers instead.",
+                      category=DeprecationWarning)
+        self._persist_patches = []
         self._persist_riak_managers = []
         self._persist_redis_managers = []
         self._persist_config = {
@@ -313,33 +240,143 @@ class PersistenceMixin(object):
             }
         if not self.use_riak:
             self._persist_config['riak_manager'] = RiakDisabledForTest()
+        self._persist_patch_riak()
+        self._persist_patch_txriak()
+        self._persist_patch_redis()
+        self._persist_patch_txredis()
 
     def mk_config(self, config):
         return dict(self._persist_config, **config)
 
     @maybe_async('sync_persistence')
     def _persist_tearDown(self):
-        # We don't always have all the managers we want to clean up.
-        # Therefore, we create one of each with the base configuration.
-        # We may not have all the bits necessary here, so we ignore certain
-        # exceptions.
-        try:
-            yield self.get_redis_manager()
-        except (SkipTest, ConnectionRefusedError):
-            pass
-        try:
-            if self.use_riak:
-                yield self.get_riak_manager()
-        except SkipTest:
-            pass
+        for purge, manager in self._persist_get_teardown_riak_managers():
+            if purge:
+                try:
+                    yield self._persist_purge_riak(manager)
+                except ConnectionRefusedError:
+                    pass
 
+        # Hackily close all connections left open by the non-tx riak client.
+        # There's no other way to explicitly close these connections and not
+        # doing it means we can hit server-side connection limits in the middle
+        # of large test runs.
         for manager in self._persist_riak_managers:
-            try:
-                yield self._persist_purge_riak(manager)
-            except ConnectionRefusedError:
-                pass
+            if hasattr(manager.client, '_cm'):
+                while manager.client._cm.conns:
+                    manager.client._cm.conns.pop().close()
+
+        for purge, manager in self._persist_get_teardown_redis_managers():
+            if purge:
+                yield self._persist_purge_redis(manager)
+            yield manager.close_manager()
+
+        for patch in reversed(self._persist_patches):
+            patch.restore()
+
+    def _persist_get_teardown_riak_managers(self):
+        """Get a list of Riak managers and whether they should be purged.
+
+        The return value is a list of (`bool`, `Manager`) tuples. If the first
+        item is `True`, the manager should be purged. It's safe to purge
+        managers even if the first item is `False`, but it adds extra cleanup
+        time.
+        """
+        # NOTE: Assumes we're only ever connecting to one Riak cluster.
+        seen_bucket_prefixes = set()
+        managers = []
+        for manager in self._persist_riak_managers:
+            if manager.bucket_prefix in seen_bucket_prefixes:
+                managers.append((False, manager))
+            else:
+                seen_bucket_prefixes.add(manager.bucket_prefix)
+                managers.append((True, manager))
+        # Return in reverse order in case something overrides teardown and
+        # cares about ordering.
+        return reversed(managers)
+
+    def _persist_get_teardown_redis_managers(self):
+        """Get a list of Redis managers and whether they should be purged.
+
+        The return value is a list of (`bool`, `Manager`) tuples. If the first
+        item is `True`, the manager should be purged. It's safe to purge
+        managers even if the first item is `False`, but it adds extra cleanup
+        time.
+        """
+        # NOTE: Assumes we're only ever connecting to one Redis db.
+        seen_key_prefixes = set()
+        managers = []
         for manager in self._persist_redis_managers:
-            yield self._persist_purge_redis(manager)
+            if manager._key_prefix in seen_key_prefixes:
+                managers.append((False, manager))
+            else:
+                seen_key_prefixes.add(manager._key_prefix)
+                managers.append((True, manager))
+        # Return in reverse order in case something overrides teardown and
+        # cares about ordering.
+        return reversed(managers)
+
+    def _persist_patch(self, obj, attribute, value):
+        monkey_patch = MonkeyPatcher((obj, attribute, value))
+        self._persist_patches.append(monkey_patch)
+        monkey_patch.patch()
+        return monkey_patch
+
+    def _persist_patch_riak(self):
+        try:
+            from vumi.persist.riak_manager import RiakManager
+        except ImportError, e:
+            import_filter(e, 'riak')
+            return
+
+        orig_init = RiakManager.__init__
+
+        def wrapper(obj, *args, **kw):
+            orig_init(obj, *args, **kw)
+            self._persist_riak_managers.append(obj)
+
+        self._persist_patch(RiakManager, '__init__', wrapper)
+
+    def _persist_patch_txriak(self):
+        try:
+            from vumi.persist.txriak_manager import TxRiakManager
+        except ImportError, e:
+            import_filter(e, 'riakasaurus', 'riakasaurus.riak')
+            return
+
+        orig_init = TxRiakManager.__init__
+
+        def wrapper(obj, *args, **kw):
+            orig_init(obj, *args, **kw)
+            self._persist_riak_managers.append(obj)
+
+        self._persist_patch(TxRiakManager, '__init__', wrapper)
+
+    def _persist_patch_redis(self):
+        try:
+            from vumi.persist.redis_manager import RedisManager
+        except ImportError, e:
+            import_filter(e, 'redis')
+            return
+
+        orig_init = RedisManager.__init__
+
+        def wrapper(obj, *args, **kw):
+            orig_init(obj, *args, **kw)
+            self._persist_redis_managers.append(obj)
+
+        self._persist_patch(RedisManager, '__init__', wrapper)
+
+    def _persist_patch_txredis(self):
+        from vumi.persist.txredis_manager import TxRedisManager
+
+        orig_init = TxRedisManager.__init__
+
+        def wrapper(obj, *args, **kw):
+            orig_init(obj, *args, **kw)
+            self._persist_redis_managers.append(obj)
+
+        self._persist_patch(TxRedisManager, '__init__', wrapper)
 
     def _persist_purge_riak(self, manager):
         "This is a separate method to allow easy overriding."
@@ -370,9 +407,7 @@ class PersistenceMixin(object):
         except ImportError, e:
             import_skip(e, 'riakasaurus', 'riakasaurus.riak')
 
-        riak_manager = TxRiakManager.from_config(config)
-        self._persist_riak_managers.append(riak_manager)
-        return riak_manager
+        return TxRiakManager.from_config(config)
 
     def _get_sync_riak_manager(self, config):
         try:
@@ -380,9 +415,7 @@ class PersistenceMixin(object):
         except ImportError, e:
             import_skip(e, 'riak')
 
-        riak_manager = RiakManager.from_config(config)
-        self._persist_riak_managers.append(riak_manager)
-        return riak_manager
+        return RiakManager.from_config(config)
 
     def get_redis_manager(self, config=None):
         if config is None:
@@ -395,13 +428,7 @@ class PersistenceMixin(object):
     def _get_async_redis_manager(self, config):
         from vumi.persist.txredis_manager import TxRedisManager
 
-        d = TxRedisManager.from_config(config)
-
-        def add_to_self(redis_manager):
-            self._persist_redis_managers.append(redis_manager)
-            return redis_manager
-
-        return d.addCallback(add_to_self)
+        return TxRedisManager.from_config(config)
 
     def _get_sync_redis_manager(self, config):
         try:
@@ -409,18 +436,15 @@ class PersistenceMixin(object):
         except ImportError, e:
             import_skip(e, 'redis')
 
-        redis_manager = RedisManager.from_config(config)
-        self._persist_redis_managers.append(redis_manager)
-        return redis_manager
+        return RedisManager.from_config(config)
 
 
-class VumiWorkerTestCase(TestCase):
+class VumiWorkerTestCase(VumiTestCase):
     """Base test class for vumi workers.
 
     This (or a subclass of this) should be the starting point for any test
     cases that involve vumi workers.
     """
-    timeout = 5
 
     transport_name = "sphex"
     transport_type = None
@@ -428,11 +452,20 @@ class VumiWorkerTestCase(TestCase):
     MSG_ID_MATCHER = RegexMatcher(r'^[0-9a-fA-F]{32}$')
 
     def setUp(self):
+        warnings.warn("VumiWorkerTestCase and its subclasses are deprecated. "
+                      "Use VumiTestCase and other tools from "
+                      "vumi.tests.helpers instead.",
+                      category=DeprecationWarning)
         self._workers = []
         self._amqp = FakeAMQPBroker()
 
     @inlineCallbacks
     def tearDown(self):
+        yield super(VumiWorkerTestCase, self).tearDown()
+        # Wait for any pending message deliveries to avoid a race with a dirty
+        # reactor.
+        yield self._amqp.wait_delivery()
+        # Now stop all the workers.
         for worker in self._workers:
             yield worker.stopWorker()
 
