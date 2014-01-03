@@ -48,9 +48,11 @@ class EsmeTransceiver(Protocol):
         self._lose_conn = None
 
         self.dr_processor = config.delivery_report_processor(
-            self, self.config.delivery_report_processor_config)
+            redis, esme_callbacks,
+            self.config.delivery_report_processor_config)
         self.sm_processor = config.short_message_processor(
-            self, self.config.short_message_processor_config)
+            redis, esme_callbacks,
+            self.config.short_message_processor_config)
 
         # The PDU queue ensures that PDUs are processed in the order
         # they arrive. `self._process_pdu_queue()` loops forever

@@ -63,8 +63,9 @@ class EsmeCallbacksDeliveryReportProcessor(object):
     implements(IDeliveryReportProcessor)
     CONFIG_CLASS = DeliveryReportProcessorConfig
 
-    def __init__(self, protocol, config):
-        self.protocol = protocol
+    def __init__(self, redis, esme_callbacks, config):
+        self.redis = redis
+        self.esme_callbacks = esme_callbacks
         self.config = self.CONFIG_CLASS(config, static=True)
 
     def handle_delivery_report_pdu(self, pdu):
@@ -93,7 +94,7 @@ class EsmeCallbacksDeliveryReportProcessor(object):
             8: 'REJECTED',
         }.get(message_state, 'UNKNOWN')
 
-        d = self.protocol.esme_callbacks.delivery_report(
+        d = self.esme_callbacks.delivery_report(
             message_id=receipted_message_id,
             delivery_status=self.delivery_status(status))
         d.addCallback(lambda _: True)
@@ -110,7 +111,7 @@ class EsmeCallbacksDeliveryReportProcessor(object):
         fields = delivery_report.groupdict()
         receipted_message_id = fields['id']
         message_state = fields['stat']
-        d = self.protocol.esme_callbacks.delivery_report(
+        d = self.esme_callbacks.delivery_report(
             message_id=receipted_message_id,
             delivery_status=self.delivery_status(message_state))
         d.addCallback(lambda _: True)
@@ -134,8 +135,9 @@ class EsmeCallbacksDeliverShortMessageProcessor(object):
     implements(IDeliverShortMessageProcessor)
     CONFIG_CLASS = DeliverShortMessageProcessorConfig
 
-    def __init__(self, protocol, config):
-        self.protocol = protocol
+    def __init__(self, redis, esme_callbacks, config):
+        self.redis = redis
+        self.esme_callbacks = esme_callbacks
         self.config = self.CONFIG_CLASS(config, static=True)
 
     def decode_message(self, message, data_coding):
@@ -244,7 +246,7 @@ class EsmeCallbacksDeliverShortMessageProcessor(object):
 
     def handle_short_message_content(self, source_addr, destination_addr,
                                      short_message, **kw):
-        return self.protocol.esme_callbacks.deliver_sm(
+        return self.esme_callbacks.deliver_sm(
             source_addr=source_addr, destination_addr=destination_addr,
             short_message=short_message, message_id=uuid4().hex,
             **kw)
@@ -299,7 +301,7 @@ class EsmeCallbacksDeliverShortMessageProcessor(object):
         multi.add_pdu(pdu)
         completed = multi.get_completed()
         if completed:
-            yield self.protocol.redis.delete(redis_key)
+            yield self.redis.delete(redis_key)
             log.msg("Reassembled Message: %s" % (completed['message']))
             # We assume that all parts have the same data_coding here, because
             # otherwise there's nothing sensible we can do.
@@ -325,11 +327,11 @@ class EsmeCallbacksDeliverShortMessageProcessor(object):
 
     @inlineCallbacks
     def load_multipart_message(self, redis_key):
-        value = yield self.protocol.redis.get(redis_key)
+        value = yield self.redis.get(redis_key)
         value = json.loads(value) if value else {}
         log.debug("Retrieved value: %s" % (repr(value)))
         returnValue(MultipartMessage(self._unhex_from_redis(value)))
 
     def save_multipart_message(self, redis_key, multipart_message):
         data_dict = self._hex_for_redis(multipart_message.get_array())
-        return self.protocol.redis.set(redis_key, json.dumps(data_dict))
+        return self.redis.set(redis_key, json.dumps(data_dict))
