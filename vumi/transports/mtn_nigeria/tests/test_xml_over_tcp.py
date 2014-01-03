@@ -100,7 +100,7 @@ class TestXmlOverTcpClient(VumiTestCase, XmlOverTcpClientServerMixin):
         yield self.client.wait_for_data()
         err_msg = self.logs['err'][0]
         self.assertTrue("Error parsing packet" in err_msg)
-        self.assertTrue(data in err_msg)
+        self.assertTrue(('%r' % (data,)) in err_msg)
         self.assertTrue(self.client.disconnected)
 
     def test_packet_header_serializing(self):
