@@ -5,35 +5,35 @@ from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
 
 from vumi.utils import http_request_full
-from vumi.tests.utils import PersistenceMixin, VumiWorkerTestCase
 from vumi.message import TransportUserMessage
-from vumi.tests.utils import import_skip
+
+from vumi.tests.helpers import (
+    VumiTestCase, MessageHelper, WorkerHelper, PersistenceHelper, import_skip,
+)
 
 
-class MessageStoreAPITestCase(VumiWorkerTestCase, PersistenceMixin):
-
-    use_riak = True
-    timeout = 5
-    # Needed for the MessageMakerMixin
-    transport_type = 'sms'
-    transport_name = 'sphex'
-
+class TestMessageStoreAPI(VumiTestCase):
     @inlineCallbacks
     def setUp(self):
-        yield super(MessageStoreAPITestCase, self).setUp()
-        self._persist_setUp()
+        self.persistence_helper = self.add_helper(
+            PersistenceHelper(use_riak=True))
         try:
             from vumi.components.message_store_api import (
                 MatchResource, MessageStoreAPIWorker)
         except ImportError, e:
             import_skip(e, 'riakasaurus', 'riakasaurus.riak')
+
+        self.msg_helper = self.add_helper(MessageHelper())
+        self.worker_helper = self.add_helper(WorkerHelper())
+
         self.match_resource = MatchResource
         self.base_path = '/api/v1/'
-        self.worker = yield self.get_worker(self.mk_config({
+        self.worker = yield self.worker_helper.get_worker(
+            MessageStoreAPIWorker, self.persistence_helper.mk_config({
                 'web_path': self.base_path,
                 'web_port': 0,
                 'health_path': '/health/',
-            }), MessageStoreAPIWorker)
+            }))
         self.store = self.worker.store
         self.addr = self.worker.webserver.getHost()
         self.url = 'http://%s:%s%s' % (self.addr.host, self.addr.port,
@@ -47,9 +47,9 @@ class MessageStoreAPITestCase(VumiWorkerTestCase, PersistenceMixin):
         messages = []
         now = datetime.now()
         for i in range(count):
-            msg = self.mkmsg_in(content=content_template.format(i),
-                message_id=TransportUserMessage.generate_id())
-            msg['timestamp'] = now - timedelta(i * 10)
+            msg = self.msg_helper.make_inbound(
+                content_template.format(i),
+                timestamp=(now - timedelta(i * 10)))
             yield self.store.add_inbound_message(msg, batch_id=batch_id)
             messages.append(msg)
         returnValue(messages)
@@ -59,19 +59,12 @@ class MessageStoreAPITestCase(VumiWorkerTestCase, PersistenceMixin):
         messages = []
         now = datetime.now()
         for i in range(count):
-            msg = self.mkmsg_out(content=content_template.format(i),
-                message_id=TransportUserMessage.generate_id())
-            msg['timestamp'] = now - timedelta(i * 10)
+            msg = self.msg_helper.make_outbound(
+                content_template.format(i),
+                timestamp=(now - timedelta(i * 10)))
             yield self.store.add_outbound_message(msg, batch_id=batch_id)
             messages.append(msg)
         returnValue(messages)
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield super(MessageStoreAPITestCase, self).tearDown()
-        yield self._persist_tearDown()
-        redis = self.store.cache.redis  # yoink!
-        yield redis._close()
 
     def do_get(self, path, headers={}):
         url = '%s%s' % (self.url, path)

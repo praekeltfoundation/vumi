@@ -1,14 +1,29 @@
-from twisted.trial.unittest import TestCase
 from twisted.internet.endpoints import TCP4ServerEndpoint, TCP4ClientEndpoint
 
 from vumi.errors import ConfigError
 from vumi.config import (
     Config, ConfigField, ConfigText, ConfigInt, ConfigFloat, ConfigBool,
     ConfigList, ConfigDict, ConfigUrl, ConfigRegex, ConfigServerEndpoint,
-    ConfigClientEndpoint)
+    ConfigClientEndpoint, ConfigClassName)
+from vumi.tests.helpers import VumiTestCase
+
+from zope.interface import Interface, implements
 
 
-class ConfigTest(TestCase):
+class ITestConfigInterface(Interface):
+
+    def implements_this(foo):
+        """This should be implemented"""
+
+
+class TestConfigClassName(object):
+    implements(ITestConfigInterface)
+
+    def implements_this(self, foo):
+        pass
+
+
+class ConfigTest(VumiTestCase):
     def test_simple_config(self):
         class FooConfig(Config):
             "Test config."
@@ -174,7 +189,7 @@ class FakeModel(object):
         self._config_data = config
 
 
-class ConfigFieldTest(TestCase):
+class ConfigFieldTest(VumiTestCase):
     def fake_model(self, *value, **kw):
         config = kw.pop('config', {})
         if value:
@@ -214,6 +229,30 @@ class ConfigFieldTest(TestCase):
         self.assertTrue(value.match('vumi'))
         self.assertFalse(value.match('notvumi'))
         self.assertEqual(None, self.field_value(field, None))
+
+    def test_classname_field(self):
+        field = self.make_field(ConfigClassName)
+        klass = self.field_value(field,
+                                 'vumi.tests.test_config.TestConfigClassName')
+        self.assertEqual(klass, TestConfigClassName)
+
+    def test_invalid_classname_field(self):
+        field = self.make_field(ConfigClassName)
+        self.assert_field_invalid(field, '0000')
+        self.assert_field_invalid(field, '0000.bar')
+
+    def test_classname_implements_field(self):
+        field = self.make_field(ConfigClassName,
+                                implements=ITestConfigInterface)
+        klass = self.field_value(
+            field, 'vumi.tests.test_config.TestConfigClassName')
+        self.assertEqual(klass, TestConfigClassName)
+
+    def test_invalid_classname_implements_field(self):
+        field = self.make_field(ConfigClassName,
+                                implements=ITestConfigInterface)
+        self.assert_field_invalid(
+            field, 'vumi.tests.test_config.ConfigTest')
 
     def test_int_field(self):
         field = self.make_field(ConfigInt)

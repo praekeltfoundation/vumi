@@ -10,9 +10,9 @@ python-ssmi>=0.0.5
 wokkel
 redis
 txredis
-python-smpp
-pytz
-riakasaurus>=1.1.0
+python-smpp>=0.1.1
+pytz==2013b
+riakasaurus>=1.1.1
 riak==2
 https://github.com/dustin/twitty-twister/tarball/master#egg=twittytwister-0.1.1
 txJSON-RPC==0.3.1

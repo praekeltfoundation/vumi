@@ -127,11 +127,12 @@ class TruteqTransport(Transport):
         yield self.session_manager.stop()
 
     @inlineCallbacks
-    def ussd_callback(self, msisdn, ussd_type, phase, message):
+    def ussd_callback(self, msisdn, ussd_type, phase, message, genfields=None):
         log.msg("Received USSD, from: %s, message: %s" % (msisdn, message))
         session_event = self.SSMI_TO_VUMI_EVENT[ussd_type]
         msisdn = normalize_msisdn(msisdn)
         message = message.decode(self.SSMI_ENCODING)
+        genfields = genfields or {}
 
         if session_event == TransportUserMessage.SESSION_NEW:
             # If it's a new session then store the message as the USSD code
@@ -156,7 +157,11 @@ class TruteqTransport(Transport):
             transport_name=self.transport_name,
             transport_type=self.transport_type,
             transport_metadata={},
-            )
+            helper_metadata={
+                'truteq': {
+                    'genfields': genfields,
+                }
+            })
 
     def sms_callback(self, *args, **kwargs):
         log.err("Got SMS from SSMI but SMSes not supported: %r, %r"
@@ -177,7 +182,6 @@ class TruteqTransport(Transport):
         text = text.replace('\r', '\n')
 
         ssmi_session_type = self.VUMI_TO_SSMI_EVENT[message['session_event']]
-        # Everything we send to ssmi_client needs to be bytestrings.
-        data = text.encode(self.SSMI_ENCODING)
+        # We need to send unicode data to ssmi_client, but bytes for msisdn.
         msisdn = message['to_addr'].strip('+').encode(self.SSMI_ENCODING)
-        self.ssmi_client.send_ussd(msisdn, data, ssmi_session_type)
+        self.ssmi_client.send_ussd(msisdn, text, ssmi_session_type)

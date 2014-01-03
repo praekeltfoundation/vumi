@@ -1,15 +1,14 @@
 """Tests for vumi.persist.redis_base."""
 
-from twisted.trial.unittest import TestCase
-
 from vumi.persist.redis_base import Manager
+from vumi.tests.helpers import VumiTestCase
 
 
-class ManagerTestCase(TestCase):
-    def mk_manager(self, key_prefix='test', client=None):
+class TestBaseRedisManager(VumiTestCase):
+    def mk_manager(self, key_prefix='test', client=None, config=None):
         if client is None:
             client = object()
-        return Manager(client, key_prefix)
+        return Manager(client, config=config, key_prefix=key_prefix)
 
     def test_key_prefix(self):
         manager = self.mk_manager()

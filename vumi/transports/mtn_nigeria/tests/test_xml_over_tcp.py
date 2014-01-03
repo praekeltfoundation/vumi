@@ -4,7 +4,6 @@
 import struct
 from itertools import count
 
-from twisted.trial import unittest
 from twisted.internet.task import Clock
 from twisted.internet.defer import inlineCallbacks
 
@@ -12,6 +11,7 @@ from vumi import log
 from vumi.transports.mtn_nigeria.xml_over_tcp import (
     XmlOverTcpError, CodedXmlOverTcpError, XmlOverTcpClient)
 from vumi.transports.mtn_nigeria.tests import utils
+from vumi.tests.helpers import VumiTestCase
 
 
 class ToyXmlOverTcpClient(XmlOverTcpClient, utils.WaitForDataMixin):
@@ -63,9 +63,7 @@ class XmlOverTcpClientServerMixin(utils.MockClientServerMixin):
     server_protocol = utils.MockXmlOverTcpServer
 
 
-class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
-    timeout = 5
-
+class TestXmlOverTcpClient(VumiTestCase, XmlOverTcpClientServerMixin):
     def setUp(self):
         errors = dict(CodedXmlOverTcpError.ERRORS)
         errors['000'] = 'Dummy error occured'
@@ -76,10 +74,8 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
         self.patch(log, 'err', lambda *a: self.append_to_log('err', *a))
         self.patch(log, 'debug', lambda *a: self.append_to_log('debug', *a))
 
+        self.add_cleanup(self.stop_protocols)
         return self.start_protocols()
-
-    def tearDown(self):
-        return self.stop_protocols()
 
     def append_to_log(self, log_name, *args):
         self.logs[log_name].append(' '.join(str(a) for a in args))
@@ -104,7 +100,7 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
         yield self.client.wait_for_data()
         err_msg = self.logs['err'][0]
         self.assertTrue("Error parsing packet" in err_msg)
-        self.assertTrue(data in err_msg)
+        self.assertTrue(('%r' % (data,)) in err_msg)
         self.assertTrue(self.client.disconnected)
 
     def test_packet_header_serializing(self):
@@ -131,16 +127,157 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
             "</DummyPacket>")
         self.assertEqual(body, expected_body)
 
-    def test_packet_body_deserializing(self):
-        body = (
+    def test_packet_body_serializing_for_non_latin1_chars(self):
+        body = XmlOverTcpClient.serialize_body(
+            'DummyPacket',
+            [('requestId', '123456789abcdefg'),
+             ('userdata', u'Erdős')])
+        expected_body = (
             "<DummyPacket>"
-            "<requestId>123456789abcdefg\0\0\0</requestId>"
-            "</DummyPacket>"
-        )
+            "<requestId>123456789abcdefg</requestId>"
+            "<userdata>Erd&#337;s</userdata>"
+            "</DummyPacket>")
+        self.assertEqual(body, expected_body)
+
+    def test_packet_body_deserializing(self):
+        body = '\n'.join([
+            "<USSDRequest>",
+            "\t<requestId>",
+            "\t\t123456789abcdefg",
+            "\t</requestId>",
+            "\t<msisdn>",
+            "\t\t2347067123456",
+            "\t</msisdn>",
+            "\t<starCode>",
+            "\t\t759",
+            "\t</starCode>",
+            "\t<clientId>",
+            "\t\t441",
+            "\t</clientId>",
+            "\t<phase>",
+            "\t\t2",
+            "\t</phase>",
+            "\t<dcs>",
+            "\t\t15",
+            "\t</dcs>",
+            "\t<userdata>",
+            "\t\t\xa4",
+            "\t</userdata>",
+            "\t<msgtype>",
+            "\t\t4",
+            "\t</msgtype>",
+            "\t<EndofSession>",
+            "\t\t0",
+            "\t</EndofSession>",
+            "</USSDRequest>\n"
+        ])
         packet_type, params = XmlOverTcpClient.deserialize_body(body)
 
-        self.assertEqual(packet_type, 'DummyPacket')
-        self.assertEqual(params, {'requestId': '123456789abcdefg'})
+        self.assertEqual(packet_type, 'USSDRequest')
+        self.assertEqual(params, {
+            'requestId': '123456789abcdefg',
+            'msisdn': '2347067123456',
+            'userdata': u'\xa4',
+            'clientId': '441',
+            'dcs': '15',
+            'msgtype': '4',
+            'phase': '2',
+            'starCode': '759',
+            'EndofSession': '0',
+        })
+
+    def test_packet_body_deserializing_for_invalid_xml_chars(self):
+        body = '\n'.join([
+            '<USSDRequest>'
+            '\t<requestId>'
+            '\t\t123456789abcdefg'
+            '\t</requestId>'
+            '\t<msisdn>'
+            '\t\t2341234567890',
+            '\t</msisdn>',
+            '\t<starCode>',
+            '\t\t759',
+            '\t</starCode>',
+            '\t<clientId>',
+            '\t\t441',
+            '\t</clientId>',
+            '\t<phase>',
+            '\t\t2',
+            '\t</phase>',
+            '\t<dcs>',
+            '\t\t229',
+            '\t</dcs>',
+            '\t<userdata>',
+            '\t\t\x18',
+            '\t</userdata>',
+            '\t<msgtype>',
+            '\t\t4',
+            '\t</msgtype>',
+            '\t<EndofSession>',
+            '\t\t0',
+            '\t</EndofSession>',
+            '</USSDRequest>',
+        ])
+        packet_type, params = XmlOverTcpClient.deserialize_body(body)
+
+        self.assertEqual(packet_type, 'USSDRequest')
+        self.assertEqual(params, {
+            'EndofSession': '0',
+            'clientId': '441',
+            'dcs': '229',
+            'msgtype': '4',
+            'msisdn': '2341234567890',
+            'phase': '2',
+            'requestId': '123456789abcdefg',
+            'starCode': '759',
+            'userdata': u'\x18',
+        })
+
+    def test_packet_body_deserializing_for_entity_references(self):
+        body = '\n'.join([
+            '<USSDRequest>',
+            '\t<requestId>',
+            '\t\t123456789abcdefg',
+            '\t</requestId>',
+            '\t<msisdn>',
+            '\t\t2341234567890',
+            '\t</msisdn>',
+            '\t<starCode>',
+            '\t\t759',
+            '\t</starCode>',
+            '\t<clientId>',
+            '\t\t441',
+            '\t</clientId>',
+            '\t<phase>',
+            '\t\t2',
+            '\t</phase>',
+            '\t<dcs>',
+            '\t\t15',
+            '\t</dcs>',
+            '\t<userdata>',
+            '\t\tTeam&apos;s rank',
+            '\t</userdata>',
+            '\t<msgtype>\n\t\t4',
+            '\t</msgtype>',
+            '\t<EndofSession>',
+            '\t\t0',
+            '\t</EndofSession>',
+            '</USSDRequest>',
+        ])
+        packet_type, params = XmlOverTcpClient.deserialize_body(body)
+
+        self.assertEqual(packet_type, 'USSDRequest')
+        self.assertEqual(params, {
+            'EndofSession': u'0',
+            'clientId': u'441',
+            'dcs': u'15',
+            'msgtype': u'4',
+            'msisdn': u'2341234567890',
+            'phase': u'2',
+            'requestId': u'123456789abcdefg',
+            'starCode': u'759',
+            'userdata': u"Team's rank"
+        })
 
     @inlineCallbacks
     def test_contiguous_packets_received(self):
@@ -328,6 +465,29 @@ class XmlOverTcpClientTestCase(unittest.TestCase, XmlOverTcpClientServerMixin):
         self.assertEqual(
             self.client.received_data_request_packets,
             [('0', expected_params)])
+
+    @inlineCallbacks
+    def test_data_response_handling(self):
+        body = (
+            "<USSDResponse>"
+            "<requestId>1291850641</requestId>"
+            "<msisdn>27845335367</msisdn>"
+            "<starCode>123</starCode>"
+            "<clientId>123</clientId>"
+            "<phase>2</phase>"
+            "<dcs>15</dcs>"
+            "<userdata>Session closed due to cause 0</userdata>"
+            "<msgtype>1</msgtype>"
+            "<EndofSession>1</EndofSession>"
+            "</USSDResponse>"
+        )
+        packet = utils.mk_packet('0', body)
+        self.client.authenticated = True
+        self.server.send_data(packet)
+
+        yield self.client.wait_for_data()
+        self.assert_in_log(
+            'msg', "Received spurious USSDResponse message, ignoring.")
 
     def test_field_validation_for_valid_cases(self):
         self.client.validate_packet_fields(

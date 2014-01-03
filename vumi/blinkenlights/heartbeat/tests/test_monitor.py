@@ -5,14 +5,13 @@
 import time
 import json
 
-from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
 
-from vumi.tests.utils import get_stubbed_worker
 from vumi.blinkenlights.heartbeat import publisher
 from vumi.blinkenlights.heartbeat import monitor
 from vumi.blinkenlights.heartbeat.storage import issue_key
 from vumi.utils import generate_worker_id
+from vumi.tests.helpers import VumiTestCase, WorkerHelper, PersistenceHelper
 
 
 def expected_wkr_dict():
@@ -36,7 +35,7 @@ def expected_sys_dict():
     return sys
 
 
-class TestWorkerInstance(TestCase):
+class TestWorkerInstance(VumiTestCase):
 
     def test_create(self):
         worker = monitor.WorkerInstance('foo', 34)
@@ -61,7 +60,7 @@ class TestWorkerInstance(TestCase):
         self.assertNotEqual(hash(worker1), hash(worker4))
 
 
-class TestWorker(TestCase):
+class TestWorker(VumiTestCase):
 
     def test_to_dict(self):
         wkr = monitor.Worker('system-1', 'foo', 1)
@@ -97,7 +96,7 @@ class TestWorker(TestCase):
         self.assertEqual(len(wkr._instances), 2)
 
 
-class TestSystem(TestCase):
+class TestSystem(VumiTestCase):
 
     def test_to_dict(self):
         wkr = monitor.Worker('system-1', 'foo', 1)
@@ -119,9 +118,12 @@ class TestSystem(TestCase):
         self.assertEqual(obj, expected_sys_dict())
 
 
-class TestHeartBeatMonitor(TestCase):
+class TestHeartBeatMonitor(VumiTestCase):
 
+    @inlineCallbacks
     def setUp(self):
+        self.persistence_helper = self.add_helper(PersistenceHelper())
+        self.worker_helper = self.add_helper(WorkerHelper())
         config = {
             'deadline': 30,
             'redis_manager': {
@@ -142,14 +144,8 @@ class TestHeartBeatMonitor(TestCase):
                 }
             }
         }
-        self.worker = get_stubbed_worker(monitor.HeartBeatMonitor, config)
-
-    @inlineCallbacks
-    def tearDown(self):
-        redis = self.worker._redis
-        yield redis._purge_all()
-        yield redis.close_manager()
-        yield self.worker.stopWorker()
+        self.worker = yield self.worker_helper.get_worker(
+            monitor.HeartBeatMonitor, config, start=False)
 
     def gen_fake_attrs(self, timestamp):
         sys_id = 'system-1'

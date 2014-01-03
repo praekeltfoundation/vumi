@@ -4,7 +4,7 @@
 
 from twisted.internet import reactor
 from twisted.internet.protocol import ServerFactory
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, Deferred, gatherResults
 from twisted.conch.telnet import (TelnetTransport, TelnetProtocol,
                                     StatefulTelnetProtocol)
 from twisted.python import log
@@ -124,12 +124,21 @@ class TelnetServerTransport(Transport):
     @inlineCallbacks
     def teardown_transport(self):
         if hasattr(self, 'telnet_server'):
-            yield self.telnet_server.loseConnection()
+            # We need to wait for all the client connections to be closed (and
+            # their deregistration messages sent) before tearing down the rest
+            # of the transport.
+            wait_for_closed = gatherResults([
+                client.registration_d for client in self._clients.values()])
+            self.telnet_server.loseConnection()
+            yield wait_for_closed
 
     def _format_addr(self, addr):
         return "%s:%s" % (addr.host, addr.port)
 
     def register_client(self, client):
+        # We add our own Deferred to the client here because we only want to
+        # fire it after we're finished with our own deregistration process.
+        client.registration_d = Deferred()
         client_addr = client.getAddress()
         log.msg("Registering client connected from %r" % client_addr)
         self._clients[client_addr] = client
@@ -138,9 +147,10 @@ class TelnetServerTransport(Transport):
 
     def deregister_client(self, client):
         log.msg("Deregistering client.")
-        self.send_inbound_message(client, None,
-                                  TransportUserMessage.SESSION_CLOSE)
+        self.send_inbound_message(
+            client, None, TransportUserMessage.SESSION_CLOSE)
         del self._clients[client.getAddress()]
+        client.registration_d.callback(None)
 
     def handle_input(self, client, text):
         self.send_inbound_message(client, text,

@@ -23,6 +23,7 @@ Transports for common protocols
     truteq.rst
     httprpc.rst
     mxit.rst
+    parlayx.rst
     smssync.rst
     telnet.rst
     twitter.rst

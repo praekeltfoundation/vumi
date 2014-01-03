@@ -1,11 +1,10 @@
-from twisted.trial.unittest import TestCase
-
 from vumi.servicemaker import (
     VumiOptions, StartWorkerOptions, VumiWorkerServiceMaker)
 from vumi import servicemaker
+from vumi.tests.helpers import VumiTestCase
 
 
-class OptionsTestCase(TestCase):
+class OptionsTestCase(VumiTestCase):
     "Base class for handling options files"
 
     def mk_config_file(self, name, lines=None):
@@ -19,7 +18,7 @@ class OptionsTestCase(TestCase):
         self.config_file = {}
 
 
-class VumiOptionsTestCase(OptionsTestCase):
+class TestVumiOptions(OptionsTestCase):
     def test_defaults(self):
         options = VumiOptions()
         options.parseOptions([])
@@ -74,7 +73,7 @@ class NewConfigWorker(object):
     CONFIG_CLASS = DummyConfigClass
 
 
-class StartWorkerOptionsTestCase(OptionsTestCase):
+class TestStartWorkerOptions(OptionsTestCase):
     def test_override(self):
         options = StartWorkerOptions()
         options.parseOptions(['--worker-class', 'foo.FooWorker',
@@ -164,7 +163,7 @@ class DummyService(object):
     name = "Dummy"
 
 
-class VumiWorkerServiceMakerTestCase(OptionsTestCase):
+class TestVumiWorkerServiceMaker(OptionsTestCase):
 
     def test_make_worker(self):
         self.mk_config_file('worker', ["transport_name: sphex"])

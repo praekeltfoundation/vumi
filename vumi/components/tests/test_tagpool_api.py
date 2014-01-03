@@ -3,7 +3,6 @@
 """Tests for vumi.components.tagpool_api."""
 
 from txjsonrpc.web.jsonrpc import Proxy
-from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet import reactor
 from twisted.web.server import Site
@@ -11,27 +10,23 @@ from twisted.python import log
 
 from vumi.components.tagpool_api import TagpoolApiServer, TagpoolApiWorker
 from vumi.components.tagpool import TagpoolManager
-from vumi.tests.utils import VumiWorkerTestCase, PersistenceMixin
 from vumi.utils import http_request
+from vumi.tests.helpers import VumiTestCase, WorkerHelper, PersistenceHelper
 
 
-class TestTagpoolApiServer(TestCase, PersistenceMixin):
+class TestTagpoolApiServer(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self._persist_setUp()
-        self.redis = yield self.get_redis_manager()
+        self.persistence_helper = self.add_helper(PersistenceHelper())
+        self.redis = yield self.persistence_helper.get_redis_manager()
         self.tagpool = TagpoolManager(self.redis)
         site = Site(TagpoolApiServer(self.tagpool))
         self.server = yield reactor.listenTCP(0, site)
+        self.add_cleanup(self.server.loseConnection)
         addr = self.server.getHost()
         self.proxy = Proxy("http://%s:%d/" % (addr.host, addr.port))
         yield self.setup_tags()
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield self.server.loseConnection()
-        yield self._persist_tearDown()
 
     @inlineCallbacks
     def setup_tags(self):
@@ -183,20 +178,18 @@ class TestTagpoolApiServer(TestCase, PersistenceMixin):
         self.assertEqual(result, [["pool1", "tag1"]])
 
 
-class TestTagpoolApiWorker(VumiWorkerTestCase, PersistenceMixin):
+class TestTagpoolApiWorker(VumiTestCase):
 
     def setUp(self):
-        self._persist_setUp()
-        super(TestTagpoolApiWorker, self).setUp()
+        self.persistence_helper = self.add_helper(PersistenceHelper())
+        self.worker_helper = self.add_helper(WorkerHelper())
 
     @inlineCallbacks
-    def tearDown(self):
-        for worker in self._workers:
-            if worker.running:
-                yield worker.redis_manager._purge_all()
-                yield worker.redis_manager.close_manager()
-                yield worker.stopService()
-        yield super(TestTagpoolApiWorker, self).tearDown()
+    def cleanup_worker(self, worker):
+        if worker.running:
+            yield worker.redis_manager._purge_all()
+            yield worker.redis_manager.close_manager()
+            yield worker.stopService()
 
     @inlineCallbacks
     def get_api_worker(self, config=None, start=True):
@@ -205,8 +198,10 @@ class TestTagpoolApiWorker(VumiWorkerTestCase, PersistenceMixin):
         config.setdefault('twisted_endpoint', 'tcp:0')
         config.setdefault('web_path', 'api')
         config.setdefault('health_path', 'health')
-        config = self.mk_config(config)
-        worker = yield self.get_worker(config, TagpoolApiWorker, start)
+        config = self.persistence_helper.mk_config(config)
+        worker = yield self.worker_helper.get_worker(
+            TagpoolApiWorker, config, start)
+        self.add_cleanup(self.cleanup_worker, worker)
         if not start:
             returnValue(worker)
         yield worker.startService()

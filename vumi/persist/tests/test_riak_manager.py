@@ -2,16 +2,15 @@
 
 from itertools import count
 
-from twisted.trial.unittest import TestCase
 from twisted.internet.defer import returnValue
 
 from vumi.persist.tests.test_txriak_manager import (
     CommonRiakManagerTests, DummyModel)
 from vumi.persist.model import Manager
-from vumi.tests.utils import import_skip
+from vumi.tests.helpers import VumiTestCase, import_skip
 
 
-class TestRiakManager(CommonRiakManagerTests, TestCase):
+class TestRiakManager(CommonRiakManagerTests, VumiTestCase):
     """Most tests are inherited from the CommonRiakManagerTests mixin."""
 
     def setUp(self):
@@ -22,9 +21,7 @@ class TestRiakManager(CommonRiakManagerTests, TestCase):
             import_skip(e, 'riak')
         self.call_decorator = flatten_generator
         self.manager = RiakManager.from_config({'bucket_prefix': 'test.'})
-        self.manager.purge_all()
-
-    def tearDown(self):
+        self.add_cleanup(self.manager.purge_all)
         self.manager.purge_all()
 
     def test_call_decorator(self):

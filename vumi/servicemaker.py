@@ -14,7 +14,6 @@ from vumi.utils import (load_class_by_string,
                         generate_worker_id)
 from vumi.errors import VumiError
 from vumi.sentry import SentryLoggerService
-from vumi.worker import BaseWorker
 
 
 def overlay_configs(*configs):

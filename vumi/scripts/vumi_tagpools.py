@@ -41,6 +41,28 @@ class UpdatePoolMetadataCmd(PoolSubCmd):
         cfg.emit("  Done.")
 
 
+class UpdateAllPoolMetadataCmd(usage.Options):
+    def run(self, cfg):
+        pools_in_tagpool = cfg.tagpool.list_pools()
+        pools_in_cfg = set(cfg.pools.keys())
+        pools_in_both = sorted(pools_in_tagpool.intersection(pools_in_cfg))
+
+        cfg.emit("Updating pool metadata.")
+        cfg.emit("Note: Pools not present in both the config and tagpool"
+                 " store will not be updated.")
+
+        if not pools_in_both:
+            cfg.emit("No pools found.")
+            return
+
+        for pool in pools_in_both:
+            cfg.emit("  Updating metadata for pool %s ..." % pool)
+            metadata = cfg.metadata(pool)
+            cfg.tagpool.set_metadata(pool, metadata)
+
+        cfg.emit("Done.")
+
+
 class PurgePoolCmd(PoolSubCmd):
     def run(self, cfg):
         cfg.emit("Purging pool %s ..." % self.pool)
@@ -116,19 +138,46 @@ class ListPoolsCmd(usage.Options):
                            or ['-- None --']))
 
 
+class ReleaseTagCmd(usage.Options):
+
+    synopsis = "<pool> <tag>"
+
+    def parseArgs(self, pool, tag):
+        self.pool = pool
+        self.tag = tag
+
+    def run(self, cfg):
+        free_tags = cfg.tagpool.free_tags(self.pool)
+        inuse_tags = cfg.tagpool.inuse_tags(self.pool)
+        tag_tuple = (self.pool, self.tag)
+        if tag_tuple not in inuse_tags:
+            if tag_tuple not in free_tags:
+                cfg.emit('Unknown tag %s.' % (tag_tuple,))
+            else:
+                cfg.emit('Tag %s not in use.' % (tag_tuple,))
+        else:
+            cfg.tagpool.release_tag(tag_tuple)
+            cfg.emit('Released %s.' % (tag_tuple,))
+
+
 class Options(usage.Options):
     subCommands = [
         ["create-pool", None, CreatePoolCmd,
          "Declare tags for a tag pool."],
         ["update-pool-metadata", None, UpdatePoolMetadataCmd,
          "Update a pool's metadata from config."],
+        ["update-all-metadata", None, UpdateAllPoolMetadataCmd,
+         "Update all pool meta data from config."],
         ["purge-pool", None, PurgePoolCmd,
          "Purge all tags from a tag pool."],
         ["list-keys", None, ListKeysCmd,
          "List the free and inuse keys associated with a tag pool."],
         ["list-pools", None, ListPoolsCmd,
          "List all pools defined in config and in the tag store."],
-        ]
+        ["release-tag", None, ReleaseTagCmd,
+         "Release a single tag, moves it from the in-use to the free set. "
+         "Use only if you know what you are doing."]
+    ]
 
     optParameters = [
         ["config", "c", "tagpools.yaml",

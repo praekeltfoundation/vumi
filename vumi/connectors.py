@@ -45,9 +45,8 @@ class BaseConnector(object):
                    for consumer in self._consumers.itervalues())
 
     def pause(self):
-        # This doesn't return a deferred.
-        for consumer in self._consumers.values():
-            consumer.pause()
+        return gatherResults([
+            consumer.pause() for consumer in self._consumers.itervalues()])
 
     def unpause(self):
         # This doesn't return a deferred.

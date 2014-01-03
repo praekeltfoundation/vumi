@@ -4,11 +4,9 @@ import json
 import datetime
 
 import yaml
-from twisted.trial.unittest import TestCase
-
-from vumi.tests.utils import PersistenceMixin
 
 from vumi.scripts.db_backup import ConfigHolder, Options, vumi_version
+from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 
 
 class TestConfigHolder(ConfigHolder):
@@ -29,17 +27,13 @@ class TestConfigHolder(ConfigHolder):
         return self.testcase.get_sub_redis(config)
 
 
-class DbBackupBaseTestCase(TestCase, PersistenceMixin):
-    sync_persistence = True
-
+class DbBackupBaseTestCase(VumiTestCase):
     def setUp(self):
-        self._persist_setUp()
+        self.persistence_helper = self.add_helper(
+            PersistenceHelper(is_sync=True))
+        self.redis = self.persistence_helper.get_redis_manager()
         # Make sure we start fresh.
-        self.get_redis_manager()._purge_all()
-        self.redis = self.get_redis_manager()
-
-    def tearDown(self):
-        return self._persist_tearDown()
+        self.redis._purge_all()
 
     def make_cfg(self, args):
         options = Options()
@@ -64,7 +58,7 @@ class DbBackupBaseTestCase(TestCase, PersistenceMixin):
         config = config.copy()
         config['FAKE_REDIS'] = self.redis._client
         config['key_prefix'] = self.redis._key(config['key_prefix'])
-        return self.get_redis_manager(config)
+        return self.persistence_helper.get_redis_manager(config)
 
     def mkdbbackup(self, data=None, raw=False):
         if data is None:
@@ -76,7 +70,7 @@ class DbBackupBaseTestCase(TestCase, PersistenceMixin):
         return self.mkfile("\n".join([dumps(x) for x in data]))
 
 
-class BackupDbCmdTestCase(DbBackupBaseTestCase):
+class TestBackupDbCmd(DbBackupBaseTestCase):
     def test_backup_db(self):
         self.redis.set("foo", 1)
         self.redis.set("bar:bar", 2)
@@ -153,7 +147,7 @@ class BackupDbCmdTestCase(DbBackupBaseTestCase):
                                       'value': "foo"})
 
 
-class RestoreDbCmdTestCase(DbBackupBaseTestCase):
+class TestRestoreDbCmd(DbBackupBaseTestCase):
 
     DB_BACKUP = [
         {'backup_type': 'redis',
@@ -289,7 +283,7 @@ class RestoreDbCmdTestCase(DbBackupBaseTestCase):
         self.assertTrue(0 < self.redis.ttl("bar:s") <= 30)
 
 
-class MigrateDbCmdTestCase(DbBackupBaseTestCase):
+class TestMigrateDbCmd(DbBackupBaseTestCase):
 
     def mkrules(self, rules):
         config = {
@@ -349,7 +343,7 @@ class MigrateDbCmdTestCase(DbBackupBaseTestCase):
                          [])
 
 
-class AnalyzeCmdTestCase(DbBackupBaseTestCase):
+class TestAnalyzeCmd(DbBackupBaseTestCase):
     def mkkeysbackup(self, keys):
         records = [{'backup_type': 'redis'}]
         records.extend({'key': k} for k in keys)

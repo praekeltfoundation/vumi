@@ -1,8 +1,10 @@
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.tests.utils import VumiWorkerTestCase, PersistenceMixin
-from vumi.middleware import MiddlewareStack
-from vumi.dispatchers.base import BaseDispatchWorker
+
+# For backcompat
+from .helpers import DummyDispatcher
+DummyDispatcher  # To keep pyflakes happy.
 
 
 class DispatcherTestCase(VumiWorkerTestCase, PersistenceMixin):
@@ -63,29 +65,3 @@ class DispatcherTestCase(VumiWorkerTestCase, PersistenceMixin):
                  exchange='vumi'):
         return self._dispatch(
             message, '%s.%s' % (transport_name, direction), exchange)
-
-
-class DummyDispatcher(BaseDispatchWorker):
-
-    class DummyPublisher(object):
-        def __init__(self):
-            self.msgs = []
-
-        def publish_message(self, msg):
-            self.msgs.append(msg)
-
-        def clear(self):
-            self.msgs[:] = []
-
-    def __init__(self, config):
-        self.transport_publisher = {}
-        self.transport_names = config.get('transport_names', [])
-        for transport in self.transport_names:
-            self.transport_publisher[transport] = self.DummyPublisher()
-        self.exposed_publisher = {}
-        self.exposed_event_publisher = {}
-        self.exposed_names = config.get('exposed_names', [])
-        for exposed in self.exposed_names:
-            self.exposed_publisher[exposed] = self.DummyPublisher()
-            self.exposed_event_publisher[exposed] = self.DummyPublisher()
-        self._middlewares = MiddlewareStack([])

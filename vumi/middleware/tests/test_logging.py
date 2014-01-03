@@ -1,9 +1,8 @@
 """Tests from vumi.middleware.logging."""
 
-from twisted.trial.unittest import TestCase
-
 from vumi.middleware.logging import LoggingMiddleware
 from vumi.tests.utils import LogCatcher
+from vumi.tests.helpers import VumiTestCase
 
 
 class DummyMessage(object):
@@ -14,7 +13,7 @@ class DummyMessage(object):
         return self._json
 
 
-class LoggingMiddlewareTestCase(TestCase):
+class TestLoggingMiddleware(VumiTestCase):
 
     def mklogger(self, config):
         worker = object()

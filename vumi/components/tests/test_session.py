@@ -3,26 +3,19 @@
 import time
 
 from twisted.internet.defer import inlineCallbacks
-from twisted.trial.unittest import TestCase
 
 from vumi.components.session import SessionManager
-from vumi.tests.utils import PersistenceMixin
+from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 
 
-class SessionManagerTestCase(TestCase, PersistenceMixin):
-    timeout = 2
-
+class TestSessionManager(VumiTestCase):
     @inlineCallbacks
     def setUp(self):
-        self._persist_setUp()
-        self.manager = yield self.get_redis_manager()
+        self.persistence_helper = self.add_helper(PersistenceHelper())
+        self.manager = yield self.persistence_helper.get_redis_manager()
         yield self.manager._purge_all()  # Just in case
         self.sm = SessionManager(self.manager)
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield self.sm.stop()
-        yield self._persist_tearDown()
+        self.add_cleanup(self.sm.stop)
 
     @inlineCallbacks
     def test_active_sessions(self):
@@ -52,6 +45,18 @@ class SessionManagerTestCase(TestCase, PersistenceMixin):
         session = yield self.sm.create_session("u1")
         self.assertEqual(sorted(session.keys()), ['created_at'])
         self.assertTrue(time.time() - float(session['created_at']) < 10.0)
+        loaded = yield self.sm.load_session("u1")
+        self.assertEqual(loaded, session)
+
+    @inlineCallbacks
+    def test_create_clears_existing_session(self):
+        session = yield self.sm.create_session("u1", foo="bar")
+        self.assertEqual(sorted(session.keys()), ['created_at', 'foo'])
+        loaded = yield self.sm.load_session("u1")
+        self.assertEqual(loaded, session)
+
+        session = yield self.sm.create_session("u1", bar="baz")
+        self.assertEqual(sorted(session.keys()), ['bar', 'created_at'])
         loaded = yield self.sm.load_session("u1")
         self.assertEqual(loaded, session)
 

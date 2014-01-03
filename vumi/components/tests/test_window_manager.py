@@ -1,17 +1,16 @@
-from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet.task import Clock
 
 from vumi.components.window_manager import WindowManager, WindowException
-from vumi.tests.utils import PersistenceMixin
+from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 
 
-class WindowManagerTestCase(TestCase, PersistenceMixin):
+class TestWindowManager(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self._persist_setUp()
-        redis = yield self.get_redis_manager()
+        self.persistence_helper = self.add_helper(PersistenceHelper())
+        redis = yield self.persistence_helper.get_redis_manager()
         self.window_id = 'window_id'
 
         # Patch the clock so we can control time
@@ -19,13 +18,9 @@ class WindowManagerTestCase(TestCase, PersistenceMixin):
         self.patch(WindowManager, 'get_clock', lambda _: self.clock)
 
         self.wm = WindowManager(redis, window_size=10, flight_lifetime=10)
+        self.add_cleanup(self.wm.stop)
         yield self.wm.create_window(self.window_id)
         self.redis = self.wm.redis
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield self._persist_tearDown()
-        self.wm.stop()
 
     @inlineCallbacks
     def test_windows(self):
@@ -214,12 +209,12 @@ class WindowManagerTestCase(TestCase, PersistenceMixin):
         self.assertEqual(set(cleanup_callbacks), set(window_ids))
 
 
-class ConcurrentWindowManagerTestCase(TestCase, PersistenceMixin):
+class TestConcurrentWindowManager(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self._persist_setUp()
-        redis = yield self.get_redis_manager()
+        self.persistence_helper = self.add_helper(PersistenceHelper())
+        redis = yield self.persistence_helper.get_redis_manager()
         self.window_id = 'window_id'
 
         # Patch the count_waiting so we can fake the race condition
@@ -227,13 +222,9 @@ class ConcurrentWindowManagerTestCase(TestCase, PersistenceMixin):
         self.patch(WindowManager, 'count_waiting', lambda _, window_id: 100)
 
         self.wm = WindowManager(redis, window_size=10, flight_lifetime=10)
+        self.add_cleanup(self.wm.stop)
         yield self.wm.create_window(self.window_id)
         self.redis = self.wm.redis
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield self._persist_tearDown()
-        self.wm.stop()
 
     @inlineCallbacks
     def test_race_condition(self):

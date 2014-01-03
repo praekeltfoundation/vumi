@@ -7,6 +7,7 @@ import os
 import json
 import pkg_resources
 import logging
+import operator
 from uuid import uuid4
 
 from twisted.internet import reactor
@@ -16,6 +17,10 @@ from twisted.internet.defer import (
     succeed)
 from twisted.internet.error import ProcessDone
 from twisted.python.failure import Failure
+from twisted.web.client import WebClientContextFactory
+
+from OpenSSL.SSL import (
+    VERIFY_PEER, VERIFY_FAIL_IF_NO_PEER_CERT, VERIFY_CLIENT_ONCE, VERIFY_NONE)
 
 from vumi.config import ConfigText, ConfigInt, ConfigList, ConfigDict
 from vumi.application.base import ApplicationWorker
@@ -93,6 +98,7 @@ class SandboxProtocol(ProcessProtocol):
         self.recv_bytes = 0
         self.chunk = ''
         self.error_chunk = ''
+        self.error_lines = []
         api.set_sandbox(self)
 
     def spawn(self):
@@ -160,12 +166,12 @@ class SandboxProtocol(ProcessProtocol):
     def errReceived(self, data):
         lines = self._process_data(self.error_chunk, data)
         for i in range(len(lines) - 1):
-            self.api.log(lines[i], logging.ERROR)
+            self.error_lines.append(lines[i])
         self.error_chunk = lines[-1]
 
     def errConnectionLost(self):
         if self.error_chunk:
-            self.api.log(self.error_chunk, logging.ERROR)
+            self.error_lines.append(self.error_chunk)
             self.error_chunk = ""
 
     def _process_request_results(self, results):
@@ -188,6 +194,9 @@ class SandboxProtocol(ProcessProtocol):
         if not self._started.fired():
             self._started.callback(Failure(
                 SandboxError("Process failed to start.")))
+        if self.error_lines:
+            self.api.log("\n".join(self.error_lines), logging.ERROR)
+            self.error_lines = []
         requests_done = DeferredList(self._pending_requests)
         requests_done.addCallback(self._process_request_results)
         requests_done.addCallback(lambda _r: self._done.callback(result))
@@ -268,15 +277,24 @@ class RedisResource(SandboxResource):
 
     :param dict redis_manager:
         Redis manager configuration options.
-    :param int keys_per_user:
+    :param int keys_per_user_soft:
         Maximum number of keys each user may make use of in redis
-        (default: 100).
+        before usage warnings are logged.
+        (default: 80% of hard limit).
+    :param int keys_per_user_hard:
+        Maximum number of keys each user may make use of in redis
+        (default: 100). Falls back to keys_per_user.
+    :param int keys_per_user:
+        Synonym for `keys_per_user_hard`. Deprecated.
     """
 
     @inlineCallbacks
     def setup(self):
         self.r_config = self.config.get('redis_manager', {})
-        self.keys_per_user = self.config.get('keys_per_user', 100)
+        self.keys_per_user_hard = self.config.get(
+            'keys_per_user_hard', self.config.get('keys_per_user', 100))
+        self.keys_per_user_soft = self.config.get(
+            'keys_per_user_soft', int(0.8 * self.keys_per_user_hard))
         self.redis = yield TxRedisManager.from_config(self.r_config)
 
     def teardown(self):
@@ -293,19 +311,34 @@ class RedisResource(SandboxResource):
                           reason="Too many keys")
 
     @inlineCallbacks
-    def check_keys(self, sandbox_id, key):
+    def check_keys(self, api, key):
         if (yield self.redis.exists(key)):
             returnValue(True)
-        count_key = self._count_key(sandbox_id)
-        if (yield self.redis.incr(count_key, 1)) > self.keys_per_user:
-            yield self.redis.incr(count_key, -1)
-            returnValue(False)
+        count_key = self._count_key(api.sandbox_id)
+        key_count = yield self.redis.incr(count_key, 1)
+        if key_count > self.keys_per_user_soft:
+            if key_count < self.keys_per_user_hard:
+                api.log('Redis soft limit of %s keys reached for sandbox %s. '
+                        'Once the hard limit of %s is reached no more keys '
+                        'can be written.' % (
+                            self.keys_per_user_soft,
+                            api.sandbox_id,
+                            self.keys_per_user_hard),
+                        logging.WARNING)
+            else:
+                api.log('Redis hard limit of %s keys reached for sandbox %s. '
+                        'No more keys can be written.' % (
+                            api.sandbox_id,
+                            self.keys_per_user_hard),
+                        logging.ERROR)
+                yield self.redis.incr(count_key, -1)
+                returnValue(False)
         returnValue(True)
 
     @inlineCallbacks
     def handle_set(self, api, command):
         key = self._sandboxed_key(api.sandbox_id, command.get('key'))
-        if not (yield self.check_keys(api.sandbox_id, key)):
+        if not (yield self.check_keys(api, key)):
             returnValue(self._too_many_keys(command))
         value = command.get('value')
         yield self.redis.set(key, json.dumps(value))
@@ -332,7 +365,7 @@ class RedisResource(SandboxResource):
     @inlineCallbacks
     def handle_incr(self, api, command):
         key = self._sandboxed_key(api.sandbox_id, command.get('key'))
-        if not (yield self.check_keys(api.sandbox_id, key)):
+        if not (yield self.check_keys(api, key)):
             returnValue(self._too_many_keys(command))
         amount = command.get('amount', 1)
         try:
@@ -407,7 +440,10 @@ class LoggingResource(SandboxResource):
         if msg is None:
             returnValue(self.reply(command, success=False,
                                    reason="Value expected for msg"))
-        msg = str(msg)
+        if not isinstance(msg, basestring):
+            msg = str(msg)
+        elif isinstance(msg, unicode):
+            msg = msg.encode('utf-8')
         yield self.log(api, msg, level)
         returnValue(self.reply(command, success=True))
 
@@ -427,8 +463,55 @@ class LoggingResource(SandboxResource):
         return self.handle_log(api, command, level=logging.CRITICAL)
 
 
+class HttpClientContextFactory(WebClientContextFactory):
+
+    def __init__(self, verify_options=None):
+        self.verify_options = verify_options
+
+    def verify_callback(self, conn, cert, errno, errdepth, ok):
+        return ok
+
+    def getContext(self, hostname, port):
+        context = WebClientContextFactory.getContext(self, hostname, port)
+        if self.verify_options is not None:
+            context.set_verify(self.verify_options, self.verify_callback)
+        return context
+
+
 class HttpClientResource(SandboxResource):
-    """Resource that allows making HTTP calls to outside services."""
+    """Resource that allows making HTTP calls to outside services.
+
+    Command fields:
+        - ``url``: The URL to request
+        - ``verify_options``: A list of options to verify when doing
+            an HTTPS request. Possible string values are ``VERIFY_NONE``,
+            ``VERIFY_PEER``, ``VERIFY_CLIENT_ONCE`` and
+            ``VERIFY_FAIL_IF_NO_PEER_CERT``. Specifying multiple values
+            results in passing along a reduced ``OR`` value
+            (e.g. VERIFY_PEER | VERIFY_FAIL_IF_NO_PEER_CERT)
+        - ``headers``: A dictionary of keys for the header name and a list
+            of values to provide as header values.
+        - ``data``: The payload to submit as part of the request.
+
+    Success reply fields:
+        - ``success``: Set to ``true``
+        - ``body``: The response body
+        - ``code``: The HTTP response code
+
+    Failure reply fields:
+        - ``success``: set to ``false``
+        - ``reason``: Reason for the failure
+
+    Example:
+
+    .. code-block:: javascript
+
+        api.request(
+            'http.get',
+            {url: 'http://foo/'},
+            function(reply) { api.log_info(reply.body); });
+
+    """
 
     DEFAULT_TIMEOUT = 30  # seconds
     DEFAULT_DATA_LIMIT = 128 * 1024  # 128 KB
@@ -444,6 +527,24 @@ class HttpClientResource(SandboxResource):
             return succeed(self.reply(command, success=False,
                                       reason="No URL given"))
         url = url.encode("utf-8")
+
+        verify_map = {
+            'VERIFY_NONE': VERIFY_NONE,
+            'VERIFY_PEER': VERIFY_PEER,
+            'VERIFY_CLIENT_ONCE': VERIFY_CLIENT_ONCE,
+            'VERIFY_FAIL_IF_NO_PEER_CERT': VERIFY_FAIL_IF_NO_PEER_CERT
+        }
+
+        if 'verify_options' in command:
+            verify_options = [verify_map[key] for key in
+                                command.get('verify_options', [])]
+            verify_options = reduce(operator.or_, verify_options)
+        else:
+            verify_options = None
+
+        context_factory = HttpClientContextFactory(
+            verify_options=verify_options)
+
         headers = command.get('headers', {})
         headers = dict((k.encode("utf-8"), [x.encode("utf-8") for x in v])
                        for k, v in headers.items())
@@ -452,7 +553,8 @@ class HttpClientResource(SandboxResource):
             data = data.encode("utf-8")
         d = http_request_full(url, data=data, headers=headers,
                               method=method, timeout=self.timeout,
-                              data_limit=self.data_limit)
+                              data_limit=self.data_limit,
+                              context_factory=context_factory)
         d.addCallback(self._make_success_reply, command)
         d.addErrback(self._make_failure_reply, command)
         return d

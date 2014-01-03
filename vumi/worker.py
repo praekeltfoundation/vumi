@@ -6,7 +6,8 @@ import time
 import os
 import socket
 
-from twisted.internet.defer import inlineCallbacks, succeed, maybeDeferred
+from twisted.internet.defer import (
+    inlineCallbacks, succeed, maybeDeferred, gatherResults)
 from twisted.python import log
 
 from vumi.service import Worker
@@ -203,8 +204,8 @@ class BaseWorker(Worker):
                                     middleware=middleware)
 
     def pause_connectors(self):
-        for connector in self.connectors.itervalues():
-            connector.pause()
+        return gatherResults([
+            connector.pause() for connector in self.connectors.itervalues()])
 
     def unpause_connectors(self):
         for connector in self.connectors.itervalues():

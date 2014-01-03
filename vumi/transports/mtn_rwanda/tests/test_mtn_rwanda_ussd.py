@@ -9,43 +9,27 @@ from vumi.message import TransportUserMessage
 from vumi.transports.mtn_rwanda.mtn_rwanda_ussd import (
         MTNRwandaUSSDTransport, MTNRwandaXMLRPCResource, RequestTimedOutError,
         InvalidRequest)
-from vumi.transports.tests.utils import TransportTestCase
+from vumi.tests.helpers import VumiTestCase
+from vumi.transports.tests.helpers import TransportHelper
 
 
-class MTNRwandaUSSDTransportTestCase(TransportTestCase):
+class TestMTNRwandaUSSDTransport(VumiTestCase):
 
-    transport_class = MTNRwandaUSSDTransport
-    transport_name = 'test_mtn_rwanda_ussd_transport'
     session_id = 'session_id'
-
-    EXPECTED_INBOUND_PAYLOAD = {
-            'message_id': '',
-            'content': None,
-            'from_addr': '',    # msisdn
-            'to_addr': '',      # service code
-            'session_event': TransportUserMessage.SESSION_RESUME,
-            'transport_name': transport_name,
-            'transport_type': 'ussd',
-            'transport_metadata': {
-                'mtn_rwanda_ussd': {
-                    'transaction_id': '0001',
-                    'transaction_time': '2013-07-05T22:58:47.565596',
-                    },
-                },
-            }
 
     @inlineCallbacks
     def setUp(self):
         """
         Create the server (i.e. vumi transport instance)
         """
-        super(MTNRwandaUSSDTransportTestCase, self).setUp()
         self.clock = Clock()
-        config = self.mk_config({
+        self.tx_helper = self.add_helper(
+            TransportHelper(MTNRwandaUSSDTransport))
+        self.transport = yield self.tx_helper.get_transport({
             'twisted_endpoint': 'tcp:port=0',
             'timeout': '30',
+            'web_path': '/foo/',
         })
-        self.transport = yield self.get_transport(config)
         self.transport.callLater = self.clock.callLater
         self.session_manager = self.transport.session_manager
 
@@ -54,7 +38,6 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
         self.assertIsInstance(self.transport.endpoint,
                 endpoints.TCP4ServerEndpoint)
         self.assertIsInstance(self.transport.xmlrpc_server, tcp.Port)
-        self.assertIsInstance(self.transport.r, MTNRwandaXMLRPCResource)
 
     def test_transport_teardown(self):
         d = self.transport.teardown_transport()
@@ -67,14 +50,10 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
         for field, expected_value in expected_payload.iteritems():
             self.assertEqual(msg[field], expected_value)
 
-    def mk_reply(self, request_msg, reply_content, continue_session=True):
-        request_msg = TransportUserMessage(**request_msg.payload)
-        return request_msg.reply(reply_content, continue_session)
-
     @inlineCallbacks
     def test_inbound_request_and_reply(self):
         address = self.transport.xmlrpc_server.getHost()
-        url = 'http://' + address.host + ':' + str(address.port) + '/'
+        url = 'http://' + address.host + ':' + str(address.port) + '/foo/'
         proxy = Proxy(url)
         x = proxy.callRemote('handleUSSD', {
             'TransactionId': '0001',
@@ -84,13 +63,28 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
             'USSDEncoding': 'GSM0338',      # Optional
             'TransactionTime': '2013-07-05T22:58:47.565596'
             })
-        [msg] = yield self.wait_for_dispatched_messages(1)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        expected_inbound_payload = {
+            'message_id': '',
+            'content': None,
+            'from_addr': '',    # msisdn
+            'to_addr': '',      # service code
+            'session_event': TransportUserMessage.SESSION_RESUME,
+            'transport_name': self.tx_helper.transport_name,
+            'transport_type': 'ussd',
+            'transport_metadata': {
+                'mtn_rwanda_ussd': {
+                    'transaction_id': '0001',
+                    'transaction_time': '2013-07-05T22:58:47.565596',
+                },
+            },
+        }
         yield self.assert_inbound_message(
-                self.EXPECTED_INBOUND_PAYLOAD.copy(),
-                msg,
-                from_addr='275551234',
-                to_addr='543',
-                session_event=TransportUserMessage.SESSION_NEW)
+            expected_inbound_payload,
+            msg,
+            from_addr='275551234',
+            to_addr='543',
+            session_event=TransportUserMessage.SESSION_NEW)
 
         expected_reply = {'MSISDN': '275551234',
                           'TransactionId': '0001',
@@ -100,10 +94,9 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
                           'USSDServiceCode': '543',
                           'action': 'end'}
 
-        reply = self.mk_reply(msg, expected_reply['USSDResponseString'],
-                continue_session=False)
+        self.tx_helper.make_dispatch_reply(
+            msg, expected_reply['USSDResponseString'], continue_session=False)
 
-        self.dispatch(reply)
         received_text = yield x
         for key in received_text.keys():
             if key == 'TransactionTime':
@@ -114,9 +107,8 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_nack(self):
-        msg = self.mkmsg_out()
-        self.dispatch(msg)
-        [nack] = yield self.wait_for_dispatched_events(1)
+        msg = yield self.tx_helper.make_dispatch_outbound("outbound")
+        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(nack['user_message_id'], msg['message_id'])
         self.assertEqual(nack['sent_message_id'], msg['message_id'])
         self.assertEqual(nack['nack_reason'], 'Request not found')
@@ -124,17 +116,17 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def test_inbound_faulty_request(self):
         address = self.transport.xmlrpc_server.getHost()
-        url = 'http://' + address.host + ':' + str(address.port) + '/'
+        url = 'http://' + address.host + ':' + str(address.port) + '/foo/'
         proxy = Proxy(url)
         try:
             yield proxy.callRemote('handleUSSD', {
-            'TransactionId': '0001',
-            'USSDServiceCode': '543',
-            'USSDRequestString': '14321*1000#',
-            'MSISDN': '275551234',
-            'USSDEncoding': 'GSM0338',
+                'TransactionId': '0001',
+                'USSDServiceCode': '543',
+                'USSDRequestString': '14321*1000#',
+                'MSISDN': '275551234',
+                'USSDEncoding': 'GSM0338',
             })
-            [msg] = yield self.wait_for_dispatched_messages(1)
+            [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         except xmlrpclib.Fault, e:
             self.assertEqual(e.faultCode, 8002)
             self.assertEqual(e.faultString, 'error')
@@ -147,7 +139,7 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
     @inlineCallbacks
     def test_timeout(self):
         address = self.transport.xmlrpc_server.getHost()
-        url = 'http://' + address.host + ':' + str(address.port) + '/'
+        url = 'http://' + address.host + ':' + str(address.port) + '/foo/'
         proxy = Proxy(url)
         x = proxy.callRemote('handleUSSD', {
             'TransactionId': '0001',
@@ -156,7 +148,7 @@ class MTNRwandaUSSDTransportTestCase(TransportTestCase):
             'MSISDN': '275551234',
             'TransactionTime': '2013-07-05T22:58:47.565596'
             })
-        [msg] = yield self.wait_for_dispatched_messages(1)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.clock.advance(30)
         try:
             yield x

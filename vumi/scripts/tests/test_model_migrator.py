@@ -1,23 +1,22 @@
 """Tests for vumi.scripts.model_migrator."""
 
 from twisted.python import usage
-from twisted.trial.unittest import TestCase
 
 from vumi.persist.model import Model
 from vumi.persist.fields import Unicode
 from vumi.scripts.model_migrator import ModelMigrator, Options
-from vumi.tests.utils import PersistenceMixin
+from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 
 
 class SimpleModel(Model):
     a = Unicode()
 
 
-class TestModelMigrator(ModelMigrator):
+class StubbedModelMigrator(ModelMigrator):
     def __init__(self, testcase, *args, **kwargs):
         self.testcase = testcase
         self.output = []
-        super(TestModelMigrator, self).__init__(*args, **kwargs)
+        super(StubbedModelMigrator, self).__init__(*args, **kwargs)
 
     def emit(self, s):
         self.output.append(s)
@@ -26,13 +25,12 @@ class TestModelMigrator(ModelMigrator):
         return self.testcase.get_sub_riak(riak_config)
 
 
-class ModelMigratorTestCase(TestCase, PersistenceMixin):
-    sync_persistence = True
-    use_riak = True
+class TestModelMigrator(VumiTestCase):
 
     def setUp(self):
-        self._persist_setUp()
-        self.riak_manager = self.get_riak_manager()
+        self.persistence_helper = self.add_helper(
+            PersistenceHelper(use_riak=True, is_sync=True))
+        self.riak_manager = self.persistence_helper.get_riak_manager()
         self.model = self.riak_manager.proxy(SimpleModel)
         self.model_cls_path = ".".join([
             SimpleModel.__module__, SimpleModel.__name__])
@@ -42,15 +40,12 @@ class ModelMigratorTestCase(TestCase, PersistenceMixin):
             "-b", self.expected_bucket_prefix,
         ]
 
-    def tearDown(self):
-        return self._persist_tearDown()
-
     def make_migrator(self, args=None):
         if args is None:
             args = self.default_args
         options = Options()
         options.parseOptions(args)
-        return TestModelMigrator(self, options)
+        return StubbedModelMigrator(self, options)
 
     def get_sub_riak(self, config):
         self.assertEqual(config.get('bucket_prefix'),
@@ -112,7 +107,7 @@ class ModelMigratorTestCase(TestCase, PersistenceMixin):
         cfg = self.make_migrator()
         cfg.run()
         for i in range(3):
-            self.assertTrue(("Skipping tombstone key 'key-%d'." % i)
+            self.assertTrue(("Skipping tombstone key u'key-%d'." % i)
                             in cfg.output)
         self.assertEqual(cfg.output[:1], [
             "3 keys found. Migrating ...",
@@ -135,7 +130,7 @@ class ModelMigratorTestCase(TestCase, PersistenceMixin):
         line_pairs = zip(cfg.output, cfg.output[1:])
         for i in range(3):
             self.assertTrue((
-                "Failed to migrate key 'key-0':",
+                "Failed to migrate key u'key-0':",
                 "  ValueError: Failed to load.",
             ) in line_pairs)
         self.assertEqual(cfg.output[:1], [

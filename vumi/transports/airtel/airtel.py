@@ -1,6 +1,7 @@
 # -*- test-case-name: vumi.transports.airtel.tests.test_airtel -*-
 
 import json
+import re
 
 from twisted.internet.defer import inlineCallbacks
 from twisted.web import http
@@ -24,9 +25,19 @@ class AirtelUSSDTransportConfig(HttpRpcTransport.CONFIG_CLASS):
                                      required=False, static=True)
     redis_manager = ConfigDict('Parameters to connect to Redis with.',
                                default={}, required=False, static=True)
+    session_key_prefix = ConfigText(
+        'The prefix to use for session key management. Specify this'
+        'if you are using more than 1 worker in a load-balanced'
+        'fashion.', default=None, static=True)
     ussd_session_timeout = ConfigInt('Max length of a USSD session',
                                      default=60 * 10, required=False,
                                      static=True)
+    to_addr_pattern = ConfigText(
+        'A regular expression that to_addr values in messages that start a'
+        ' new USSD session must match. Initial messages with invalid'
+        ' to_addr values are rejected.',
+        default=None, required=False, static=True,
+    )
 
 
 class AirtelUSSDTransport(HttpRpcTransport):
@@ -37,6 +48,7 @@ class AirtelUSSDTransport(HttpRpcTransport):
 
     transport_type = 'ussd'
     content_type = 'text/plain; charset=utf-8'
+    to_addr_re = None
     ENCODING = 'utf-8'
     CONFIG_CLASS = AirtelUSSDTransportConfig
     EXPECTED_AUTH_FIELDS = set(['userid', 'password'])
@@ -47,10 +59,17 @@ class AirtelUSSDTransport(HttpRpcTransport):
     def setup_transport(self):
         super(AirtelUSSDTransport, self).setup_transport()
         config = self.get_static_config()
-        r_prefix = "vumi.transports.airtel:%s" % self.transport_name
         self.session_manager = yield SessionManager.from_redis_config(
-            config.redis_manager, r_prefix,
+            config.redis_manager, self.get_session_key_prefix(),
             config.ussd_session_timeout)
+        if config.to_addr_pattern is not None:
+            self.to_addr_re = re.compile(config.to_addr_pattern)
+
+    def get_session_key_prefix(self):
+        config = self.get_static_config()
+        default_session_key_prefix = "vumi.transports.airtel:%s" % (
+                                        self.transport_name,)
+        return (config.session_key_prefix or default_session_key_prefix)
 
     def is_cleanup(self, request):
         return 'clean' in request.args
@@ -70,6 +89,11 @@ class AirtelUSSDTransport(HttpRpcTransport):
                 log.msg('Invalid authentication credentials: %s:%s' % (
                         username, password))
             return auth
+
+    def valid_to_addr(self, to_addr):
+        if self.to_addr_re is None:
+            return True
+        return bool(self.to_addr_re.match(to_addr))
 
     def handle_bad_request(self, message_id, request, errors):
         log.msg('Unhappy incoming message: %s' % (errors,))
@@ -101,8 +125,8 @@ class AirtelUSSDTransport(HttpRpcTransport):
         session_id = values['SessionID']
         session = yield self.session_manager.load_session(session_id)
         if not session:
-            log.warning('Received cleanup for unknown session: %s' % (
-                        session_id,))
+            log.warning('Received cleanup for unknown airtel session.',
+                        session_id=session_id)
             self.finish_request(message_id, 'Unknown Session', code=http.OK)
             return
 
@@ -153,10 +177,22 @@ class AirtelUSSDTransport(HttpRpcTransport):
             # and ending # are omitted, add those again so we can use it
             # for internal routing.
             to_addr = '*%s#' % (values['input'],)
-            yield self.session_manager.create_session(
-                session_id, from_addr=from_addr, to_addr=to_addr)
-            session_event = TransportUserMessage.SESSION_NEW
-            content = ''
+            if self.valid_to_addr(to_addr):
+                yield self.session_manager.create_session(
+                    session_id, from_addr=from_addr, to_addr=to_addr)
+                session_event = TransportUserMessage.SESSION_NEW
+                content = ''
+            else:
+                self.handle_bad_request(message_id, request, {
+                    "invalid_session": (
+                        "Session id %r has not been encountered in the last %s"
+                        " seconds and the 'input' request parameter value"
+                        " %r doesn't look like a valid USSD address."
+                        % (session_id, self.session_manager.max_session_length,
+                           to_addr)
+                    )
+                })
+                return
 
         yield self.publish_message(
             message_id=message_id,
@@ -193,7 +229,7 @@ class AirtelUSSDTransport(HttpRpcTransport):
 
         if self.noisy:
             log.debug('in_reply_to: %s' % (message['in_reply_to'],))
-            log.debug('content: %s' % (message['content'],))
+            log.debug('content: %r' % (message['content'],))
             log.debug('Response headers: %r' % (headers,))
 
         self.finish_request(

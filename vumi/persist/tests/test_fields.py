@@ -4,14 +4,13 @@
 
 from datetime import datetime
 
-from twisted.trial.unittest import TestCase
-
 from vumi.persist.fields import (
     ValidationError, Field, Integer, Unicode, Tag, Timestamp, Json,
     ListOf, Dynamic, FieldWithSubtype, Boolean)
+from vumi.tests.helpers import VumiTestCase
 
 
-class TestBaseField(TestCase):
+class TestBaseField(VumiTestCase):
     def test_validate(self):
         f = Field()
         f.validate("foo")
@@ -41,7 +40,7 @@ class TestBaseField(TestCase):
         self.assertTrue("Field object" in repr(descriptor))
 
 
-class TestInteger(TestCase):
+class TestInteger(VumiTestCase):
     def test_validate_unbounded(self):
         i = Integer()
         i.validate(5)
@@ -62,7 +61,7 @@ class TestInteger(TestCase):
         self.assertRaises(ValidationError, i.validate, 6)
 
 
-class TestBoolean(TestCase):
+class TestBoolean(VumiTestCase):
 
     def test_validate(self):
         b = Boolean()
@@ -74,7 +73,7 @@ class TestBoolean(TestCase):
         self.assertRaises(ValidationError, b.validate, 0)
 
 
-class TestUnicode(TestCase):
+class TestUnicode(VumiTestCase):
     def test_validate(self):
         u = Unicode()
         u.validate(u"")
@@ -92,7 +91,7 @@ class TestUnicode(TestCase):
         self.assertRaises(ValidationError, u.validate, u"123456")
 
 
-class TestTag(TestCase):
+class TestTag(VumiTestCase):
     def test_validate(self):
         t = Tag()
         t.validate(("pool", "tagname"))
@@ -108,7 +107,7 @@ class TestTag(TestCase):
         self.assertEqual(t.from_riak(["pool", "tagname"]), ("pool", "tagname"))
 
 
-class TestTimestamp(TestCase):
+class TestTimestamp(VumiTestCase):
     def test_validate(self):
         t = Timestamp()
         t.validate(datetime.now())
@@ -127,7 +126,7 @@ class TestTimestamp(TestCase):
         self.assertEqual(t.from_riak("2100-10-05 11:10:09.000000"), dt)
 
 
-class TestJson(TestCase):
+class TestJson(VumiTestCase):
     def test_validate(self):
         j = Json()
         j.validate({"foo": None})
@@ -144,12 +143,12 @@ class TestJson(TestCase):
         self.assertEqual(j.from_riak(d), d)
 
 
-class TestFieldWithSubtype(TestCase):
+class TestFieldWithSubtype(VumiTestCase):
     def test_fails_on_fancy_subtype(self):
         self.assertRaises(RuntimeError, FieldWithSubtype, Dynamic())
 
 
-class TestDynamic(TestCase):
+class TestDynamic(VumiTestCase):
     def test_validate(self):
         dynamic = Dynamic()
         dynamic.validate({u'a': u'foo', u'b': u'bar'})
@@ -161,7 +160,7 @@ class TestDynamic(TestCase):
                           {u'a': 'foo', u'b': 2})
 
 
-class TestListOf(TestCase):
+class TestListOf(VumiTestCase):
     def test_validate(self):
         listof = ListOf()
         listof.validate([u'foo', u'bar'])

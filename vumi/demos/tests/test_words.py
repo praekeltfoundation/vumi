@@ -1,12 +1,14 @@
+# -*- coding: utf-8 -*-
 """Tests for vumi.demos.words."""
 
-from twisted.trial import unittest
-from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.defer import inlineCallbacks
 
-from vumi.tests.utils import get_stubbed_worker
 from vumi.demos.words import (SimpleAppWorker, EchoWorker, ReverseWorker,
                               WordCountWorker)
 from vumi.message import TransportUserMessage
+from vumi.tests.helpers import VumiTestCase
+from vumi.application.tests.helpers import ApplicationHelper
+from vumi.tests.utils import LogCatcher
 
 
 class EchoTestApp(SimpleAppWorker):
@@ -15,68 +17,39 @@ class EchoTestApp(SimpleAppWorker):
         return 'echo:%s' % data
 
 
-class TestSimpleAppWorker(unittest.TestCase):
+class TestSimpleAppWorker(VumiTestCase):
     @inlineCallbacks
     def setUp(self):
-        self.transport_name = 'test_transport'
-        self.worker = get_stubbed_worker(EchoTestApp, {
-                'transport_name': self.transport_name})
-        self.broker = self.worker._amqp_client.broker
-        yield self.worker.startWorker()
-
-    @inlineCallbacks
-    def send(self, content, session_event=None):
-        msg = TransportUserMessage(content=content,
-                                   session_event=session_event,
-                                   from_addr='+1234', to_addr='+134567',
-                                   transport_name='test',
-                                   transport_type='fake',
-                                   transport_metadata={})
-        self.broker.publish_message('vumi', '%s.inbound' % self.transport_name,
-                                    msg)
-        yield self.broker.kick_delivery()
-
-    @inlineCallbacks
-    def recv(self, n=0):
-        msgs = yield self.broker.wait_messages('vumi', '%s.outbound'
-                                                % self.transport_name, n)
-
-        def reply_code(msg):
-            if msg['session_event'] == TransportUserMessage.SESSION_CLOSE:
-                return 'end'
-            return 'reply'
-
-        returnValue([(reply_code(msg), msg['content']) for msg in msgs])
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield self.worker.stopWorker()
+        self.app_helper = self.add_helper(ApplicationHelper(None))
+        self.worker = yield self.app_helper.get_application({}, EchoTestApp)
 
     @inlineCallbacks
     def test_help(self):
-        yield self.send(None, TransportUserMessage.SESSION_NEW)
-        reply, = yield self.recv(1)
-        self.assertEqual(reply[0], 'reply')
-        self.assertEqual(reply[1], 'Enter text:')
+        yield self.app_helper.make_dispatch_inbound(
+            None, session_event=TransportUserMessage.SESSION_NEW)
+        [reply] = self.app_helper.get_dispatched_outbound()
+        self.assertEqual(reply['session_event'], None)
+        self.assertEqual(reply['content'], 'Enter text:')
 
     @inlineCallbacks
     def test_content_text(self):
-        yield self.send("test", TransportUserMessage.SESSION_NEW)
-        reply, = yield self.recv(1)
-        self.assertEqual(reply[0], 'reply')
-        self.assertEqual(reply[1], 'echo:test')
+        yield self.app_helper.make_dispatch_inbound(
+            "test", session_event=TransportUserMessage.SESSION_NEW)
+        [reply] = self.app_helper.get_dispatched_outbound()
+        self.assertEqual(reply['session_event'], None)
+        self.assertEqual(reply['content'], 'echo:test')
 
+    @inlineCallbacks
     def test_base_process_message(self):
-        worker = get_stubbed_worker(SimpleAppWorker, {
-                'transport_name': self.transport_name})
+        worker = yield self.app_helper.get_application({}, SimpleAppWorker)
         self.assertRaises(NotImplementedError, worker.process_message, 'foo')
 
 
-class TestEchoWorker(unittest.TestCase):
-
+class TestEchoWorker(VumiTestCase):
+    @inlineCallbacks
     def setUp(self):
-        self.worker = get_stubbed_worker(EchoWorker, {
-            'transport_name': 'test_echoworker'})
+        self.app_helper = self.add_helper(ApplicationHelper(None))
+        self.worker = yield self.app_helper.get_application({}, EchoWorker)
 
     def test_process_message(self):
         self.assertEqual(self.worker.process_message("foo"), "foo")
@@ -84,12 +57,22 @@ class TestEchoWorker(unittest.TestCase):
     def test_help(self):
         self.assertEqual(self.worker.get_help(), "Enter text to echo:")
 
+    @inlineCallbacks
+    def test_echo_non_ascii(self):
+        content = u'Zoë destroyer of Ascii'
+        with LogCatcher() as log:
+            yield self.app_helper.make_dispatch_inbound(content)
+            [reply] = self.app_helper.get_dispatched_outbound()
+            self.assertEqual(
+                log.messages(),
+                ['User message: Zo\xc3\xab destroyer of Ascii'])
 
-class TestReverseWorker(unittest.TestCase):
 
+class TestReverseWorker(VumiTestCase):
+    @inlineCallbacks
     def setUp(self):
-        self.worker = get_stubbed_worker(ReverseWorker, {
-            'transport_name': 'test_reverseworker'})
+        self.app_helper = self.add_helper(ApplicationHelper(None))
+        self.worker = yield self.app_helper.get_application({}, ReverseWorker)
 
     def test_process_message(self):
         self.assertEqual(self.worker.process_message("foo"), "oof")
@@ -98,11 +81,12 @@ class TestReverseWorker(unittest.TestCase):
         self.assertEqual(self.worker.get_help(), "Enter text to reverse:")
 
 
-class TestWordCountWorker(unittest.TestCase):
-
+class TestWordCountWorker(VumiTestCase):
+    @inlineCallbacks
     def setUp(self):
-        self.worker = get_stubbed_worker(WordCountWorker, {
-            'transport_name': 'test_wordcountworker'})
+        self.app_helper = self.add_helper(ApplicationHelper(None))
+        self.worker = yield self.app_helper.get_application(
+            {}, WordCountWorker)
 
     def test_process_message(self):
         self.assertEqual(self.worker.process_message("foo bar"),
