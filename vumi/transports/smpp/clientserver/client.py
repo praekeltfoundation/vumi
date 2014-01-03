@@ -11,19 +11,12 @@ import binascii
 from smpp.pdu import unpack_pdu
 from smpp.pdu_builder import (
     BindTransceiver, BindTransmitter, BindReceiver, DeliverSMResp, SubmitSM,
-    EnquireLink, EnquireLinkResp, QuerySM, PDU)
+    EnquireLink, EnquireLinkResp, QuerySM, PDU, UnbindResp)
 
 from vumi import log
 
 
 GSM_MAX_SMS_BYTES = 140
-
-
-class UnbindResp(PDU):
-    # pdu_builder doesn't have one of these yet.
-    def __init__(self, sequence_number, **kwargs):
-        super(UnbindResp, self).__init__(
-            'unbind_resp', 'ESME_ROK', sequence_number, **kwargs)
 
 
 def update_ussd_pdu(sm_pdu, continue_session, session_info=None):

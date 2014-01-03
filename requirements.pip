@@ -10,7 +10,7 @@ python-ssmi>=0.0.5
 wokkel
 redis
 txredis
-python-smpp
+python-smpp>=0.1.1
 pytz==2013b
 riakasaurus>=1.1.1
 riak==1.5.2
