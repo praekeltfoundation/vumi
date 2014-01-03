@@ -55,6 +55,10 @@ class IDeliverShortMessageProcessor(Interface):
         This should always return a Deferred that fires ``True`` or
         ``False`` depending on whether the PDU had a PDU payload.
 
+        NOTE: It is likely that the USSD bits of this Interface will
+              move to its own Interface implementation once work starts
+              on an USSD over SMPP implementation.
+
         All processors should implement this even if it does nothing.
         """
 
