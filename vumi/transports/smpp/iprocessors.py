@@ -10,16 +10,7 @@ class IDeliveryReportProcessor(Interface):
         if a delivery report was found and handled and ``False`` if that
         was not the case.
 
-        All helpers should implement this even if it does nothing.
-        """
-
-    def inspect_delivery_report_content(content):
-        """Inspect content received in a short message and return an
-        object that can be passed through to
-        ``handle_delivery_report_content`` if a delivery report was
-        found
-
-        Returns ``None`` if no delivery report was found.
+        All processors should implement this even if it does nothing.
         """
 
     def handle_delivery_report_content(pdu_data):
@@ -43,6 +34,31 @@ class IDeliverShortMessageProcessor(Interface):
         see if that is the case and handle appropriately if that is the
         case.
 
-        This should always return a Deferred.
-        All helpers should implement this even if it does nothing.
+        This should always return a Deferred that fires ``True`` or
+        ``False`` depending on whether the PDU was handled succesfully.
+
+        All processors should implement this even if it does nothing.
+        """
+
+    def handle_multipart_pdu(pdu):
+        """Handle a part of a multipart PDU.
+
+        This should always return a Deferred that fires ``True`` or
+        ``False`` depending on whether the PDU was a multipart-part.
+
+        All processors should implement this even if it does nothing.
+        """
+
+    def handle_ussd_pdu(pdu):
+        """Handle a USSD pdu.
+
+        This should always return a Deferred that fires ``True`` or
+        ``False`` depending on whether the PDU had a PDU payload.
+
+        All processors should implement this even if it does nothing.
+        """
+
+    def decode_pdus(pdus):
+        """Decode a list of PDUs and return the contents for each PDUs
+        ``short_message`` field.
         """

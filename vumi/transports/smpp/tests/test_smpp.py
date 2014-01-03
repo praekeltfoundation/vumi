@@ -74,6 +74,11 @@ class TestSmppTransport(VumiTestCase):
             "smpp_bind_timeout": 12,
             "smpp_enquire_link_interval": 123,
             "third_party_id_expiry": 3600,  # just 1 hour
+            'short_message_processor_config': {
+                'data_coding_overrides': {
+                    0: 'utf-8'
+                }
+            }
         }
 
         # hack a lot of transport setup
@@ -361,6 +366,11 @@ class EsmeToSmscTestCase(VumiTestCase):
             "password": "password",
             "twisted_endpoint": "tcp:0",
             "transport_type": "smpp",
+            'short_message_processor_config': {
+                'data_coding_overrides': {
+                    0: 'utf-8'
+                }
+            }
         }
         server_config.update(self.CONFIG_OVERRIDE)
         self.service = SmppService(None, config=server_config)
@@ -906,6 +916,11 @@ class TestEsmeToSmscRx(VumiTestCase):
             "host": "localhost",
             "port": 0,
             "transport_type": "smpp",
+            'short_message_processor_config': {
+                'data_coding_overrides': {
+                    0: 'utf-8'
+                }
+            }
         }
         self.service = SmppService(None, config=self.config)
         self.add_cleanup(self.cleanup_service)
@@ -959,12 +974,14 @@ class TestEsmeToSmscRx(VumiTestCase):
         bad_pdu = DeliverSM(555,
                             short_message="SMS from server containing \xa7",
                             destination_addr="2772222222",
-                            source_addr="2772000000")
+                            source_addr="2772000000",
+                            data_coding=1)
 
         good_pdu = DeliverSM(555,
                              short_message="Next message",
                              destination_addr="2772222222",
-                             source_addr="2772000000")
+                             source_addr="2772000000",
+                             data_coding=1)
 
         self.service.factory.smsc.send_pdu(bad_pdu)
         self.service.factory.smsc.send_pdu(good_pdu)
@@ -980,9 +997,9 @@ class TestEsmeToSmscRx(VumiTestCase):
         [failure] = self.flushLoggedErrors(UnicodeDecodeError)
         message = failure.getErrorMessage()
         codec, rest = message.split(' ', 1)
-        self.assertTrue(codec in ("'utf8'", "'utf-8'"))
-        self.assertTrue(rest.startswith(
-                "codec can't decode byte 0xa7 in position 27"))
+        self.assertEqual(codec, "'ascii'")
+        self.assertTrue(
+            rest.startswith("codec can't decode byte 0xa7 in position 27"))
 
     @inlineCallbacks
     def test_deliver_ussd_start(self):

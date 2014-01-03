@@ -78,6 +78,11 @@ class EsmeTestCaseBase(VumiTestCase):
             "port": port,
             "system_id": system_id,
             "password": password,
+            'short_message_processor_config': {
+                'data_coding_overrides': {
+                    0: 'utf-8'
+                }
+            }
         }
         config_data.update(extra_config)
         config = SmppTransportConfig(config_data)
@@ -396,12 +401,13 @@ class EsmeReceiverMixin(EsmeGenericMixin):
     def test_bad_sm_ucs2(self):
         """An invalid UCS-2 message should be discarded."""
         bad_msg = '\n\x00h\x00e\x00l\x00l\x00o'
-
-        esme = yield self.get_esme(
-            deliver_sm=self.assertion_cb(bad_msg, 'short_message'))
-
+        esme = yield self.get_esme()
         yield esme.handle_deliver_sm(self.get_sm(bad_msg, 8))
-        self.flushLoggedErrors()
+        [failure] = self.flushLoggedErrors(UnicodeDecodeError)
+        message = failure.getErrorMessage()
+        codec, rest = message.split(' ', 1)
+        self.assertEqual(codec, "'utf16'")
+        self.assertTrue(rest.startswith("codec can't decode byte"))
 
     @inlineCallbacks
     def test_deliver_sm_delivery_report_delivered(self):
@@ -515,6 +521,7 @@ class EsmeReceiverMixin(EsmeGenericMixin):
             self.assertEqual('ussd', value['message_type'])
             self.assertEqual('new', value['session_event'])
             self.assertEqual(None, value['short_message'])
+            return succeed(True)
 
         esme = yield self.get_esme(deliver_sm=self.make_cb(assert_ussd))
 

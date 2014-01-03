@@ -99,22 +99,22 @@ class EsmeCallbacksDeliveryReportProcessor(object):
         d.addCallback(lambda _: True)
         return d
 
-    def inspect_delivery_report_content(self, content):
+    def handle_delivery_report_content(self, content):
         delivery_report = self.config.delivery_report_regex.search(
             content or '')
 
-        if delivery_report:
-            # We have a delivery report.
-            fields = delivery_report.groupdict()
-            return (fields['id'], fields['stat'])
+        if not delivery_report:
+            return succeed(False)
 
-        return None
-
-    def handle_delivery_report_content(self, pdu_data):
-        receipted_message_id, message_state = pdu_data
-        return self.protocol.esme_callbacks.delivery_report(
+        # We have a delivery report.
+        fields = delivery_report.groupdict()
+        receipted_message_id = fields['id']
+        message_state = fields['stat']
+        d = self.protocol.esme_callbacks.delivery_report(
             message_id=receipted_message_id,
             delivery_status=self.delivery_status(message_state))
+        d.addCallback(lambda _: True)
+        return d
 
     def delivery_status(self, state):
         return self.config.delivery_report_status_mapping.get(state, 'pending')
@@ -179,47 +179,71 @@ class EsmeCallbacksDeliverShortMessageProcessor(object):
                 return message.decode(codec)
             except Exception, e:
                 log.msg("Error decoding message with data_coding=%s" % (
-                        data_coding,))
+                    data_coding,))
                 log.err(e)
+
         return message
 
-    @inlineCallbacks
-    def handle_short_message_pdu(self, pdu):
-        # TODO: There's the possibility that we'd need to split this
-        #       processor into separate `inspect_*` and `handle_*`
-        #       functions. That work is currently left for when we have
-        #       an implementation that could benefit from that as it
-        #       would help us figure out how that functionality should
-        #       actually be split up.
+    def decode_pdus(self, pdus):
+        content = []
+        for pdu in pdus:
+            pdu_params = pdu['body']['mandatory_parameters']
+            pdu_opts = unpacked_pdu_opts(pdu)
+
+            # We might have a `message_payload` optional field to worry about.
+            message_payload = pdu_opts.get('message_payload', None)
+            if message_payload is not None:
+                short_message = message_payload.decode('hex')
+            else:
+                short_message = pdu_params['short_message']
+
+            content.append(
+                self.decode_message(short_message, pdu_params['data_coding']))
+
+        if any(content):
+            return content
+        return None
+
+    def handle_multipart_pdu(self, pdu):
+        if not detect_multipart(pdu):
+            return succeed(False)
+
+        # We have a multipart SMS.
+        pdu_params = pdu['body']['mandatory_parameters']
+        d = self.handle_deliver_sm_multipart(pdu, pdu_params)
+        d.addCallback(lambda _: True)
+        return d
+
+    def handle_ussd_pdu(self, pdu):
         pdu_params = pdu['body']['mandatory_parameters']
         pdu_opts = unpacked_pdu_opts(pdu)
 
-        # We might have a `message_payload` optional field to worry about.
-        message_payload = pdu_opts.get('message_payload', None)
-        if message_payload is not None:
-            pdu_params['short_message'] = message_payload.decode('hex')
+        if not detect_ussd(pdu_opts):
+            return succeed(False)
 
-        if detect_ussd(pdu_opts):
-            # We have a USSD message.
-            yield self.handle_deliver_sm_ussd(pdu, pdu_params, pdu_opts)
-        elif detect_multipart(pdu):
-            # We have a multipart SMS.
-            yield self.handle_deliver_sm_multipart(pdu, pdu_params)
+        # We have a USSD message.
+        d = self.handle_deliver_sm_ussd(pdu, pdu_params, pdu_opts)
+        d.addCallback(lambda _: True)
+        return d
+
+    def handle_short_message_pdu(self, pdu):
+        pdu_params = pdu['body']['mandatory_parameters']
+
+        content_parts = self.decode_pdus([pdu])
+        if content_parts is not None:
+            content = u''.join(content_parts)
         else:
-            decoded_msg = self.decode_message(pdu_params['short_message'],
-                                              pdu_params['data_coding'])
-            yield self.handle_short_message_content(
-                source_addr=pdu_params['source_addr'],
-                destination_addr=pdu_params['destination_addr'],
-                short_message=decoded_msg)
+            content = None
+
+        d = self.handle_short_message_content(
+            source_addr=pdu_params['source_addr'],
+            destination_addr=pdu_params['destination_addr'],
+            short_message=content)
+        d.addCallback(lambda _: True)
+        return d
 
     def handle_short_message_content(self, source_addr, destination_addr,
                                      short_message, **kw):
-        dr_processor = self.protocol.dr_processor
-        dr_data = dr_processor.inspect_delivery_report_content(short_message)
-        if dr_data is not None:
-            return dr_processor.handle_delivery_report_content(dr_data)
-
         return self.protocol.esme_callbacks.deliver_sm(
             source_addr=source_addr, destination_addr=destination_addr,
             short_message=short_message, message_id=uuid4().hex,

@@ -259,8 +259,28 @@ class EsmeTransceiver(Protocol):
         pdu_resp = DeliverSMResp(sequence_number, **self.bind_params)
         yield self.send_pdu(pdu_resp)
 
-        handled = yield self.dr_processor.handle_delivery_report_pdu(pdu)
-        if handled:
+        was_dr = yield self.dr_processor.handle_delivery_report_pdu(pdu)
+        if was_dr:
+            return
+
+        was_multipart = yield self.sm_processor.handle_multipart_pdu(pdu)
+        if was_multipart:
+            return
+
+        was_ussd = yield self.sm_processor.handle_ussd_pdu(pdu)
+        if was_ussd:
+            return
+
+        content_parts = self.sm_processor.decode_pdus([pdu])
+        if not all([isinstance(part, unicode) for part in content_parts]):
+            log.msg('Not all parts of the PDU were able to be decoded.',
+                    parts=content_parts)
+            return
+
+        content = u''.join(content_parts)
+        was_cdr = yield self.dr_processor.handle_delivery_report_content(
+            content)
+        if was_cdr:
             return
 
         yield self.sm_processor.handle_short_message_pdu(pdu)
