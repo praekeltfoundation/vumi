@@ -3,7 +3,6 @@
 from twisted.python import log
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet import task
-from twisted.web import error
 from txtwitter.twitter import TwitterClient
 
 from vumi.transports.base import Transport
@@ -88,11 +87,11 @@ class TwitterTransport(Transport):
             yield self.publish_ack(
                 user_message_id=message['message_id'],
                 sent_message_id=response['id_str'])
-        except error.Error, e:
+        except Exception, e:
             yield self.publish_nack(
                 user_message_id=message['message_id'],
                 sent_message_id=message['message_id'],
-                reason=str(e))
+                reason='%r' % (e,))
 
     def handle_track(self, status):
         """
