@@ -1,7 +1,7 @@
 zope.interface
 Twisted
 # txAMQP prior to 0.5 does not support modern rabbitMQ versions.
-txAMQP>=0.5
+txAMQP>=0.6.2
 PyYAML
 iso8601
 supervisor
