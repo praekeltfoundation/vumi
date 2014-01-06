@@ -4,6 +4,7 @@ from twisted.python import log
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet import task
 from txtwitter.twitter import TwitterClient
+from txtwitter.messagetools import is_tweet
 
 from vumi.transports.base import Transport
 from vumi.config import ConfigText, ConfigList, ConfigInt
@@ -93,18 +94,21 @@ class TwitterTransport(Transport):
                 sent_message_id=message['message_id'],
                 reason='%r' % (e,))
 
-    def handle_track(self, status):
+    def handle_track(self, msg):
         """
         Gets called with a status update whenever a tweet matching
         a term being tracked is detected. Attached the SESSION_NONE
         event type as these messages aren't necessarily part of a
         conversation.
         """
-        self.publish_message(
-            message_id=self.decode(status['id_str']),
-            content=self.decode(status['text']),
-            to_addr=self.decode(status.get('in_reply_to_screen_name', '')),
-            from_addr=self.decode(status['user']['screen_name']),
-            session_event=TransportUserMessage.SESSION_NONE,
-            transport_type=self.transport_type,
-            transport_metadata=status)
+        if is_tweet(msg):
+            self.publish_message(
+                message_id=self.decode(msg['id_str']),
+                content=self.decode(msg['text']),
+                to_addr=self.decode(msg.get('in_reply_to_screen_name', '')),
+                from_addr=self.decode(msg['user']['screen_name']),
+                session_event=TransportUserMessage.SESSION_NONE,
+                transport_type=self.transport_type,
+                transport_metadata=msg)
+        else:
+            log.msg("Received non-tweet from tracking stream: %r" % msg)

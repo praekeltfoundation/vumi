@@ -2,6 +2,7 @@ from twisted.internet.defer import inlineCallbacks, succeed
 from txtwitter.twitter import TwitterClient
 
 from vumi.message import TransportUserMessage
+from vumi.tests.utils import LogCatcher
 from vumi.tests.helpers import VumiTestCase
 from vumi.transports.twitter import TwitterTransport
 from vumi.transports.tests.helpers import TransportHelper
@@ -87,6 +88,13 @@ class TestTwitterTransport(VumiTestCase):
         self.assertEqual(msg['message_id'], '1')
         self.assertEqual(msg['session_event'],
                          TransportUserMessage.SESSION_NONE)
+
+    def test_handle_track_for_non_tweet(self):
+        with LogCatcher() as lc:
+            self.transport.track_stream.respond_with({'foo': 'bar'})
+            self.assertEqual(
+                lc.messages(),
+                ["Received non-tweet from tracking stream: {'foo': 'bar'}"])
 
     @inlineCallbacks
     def test_sending(self):
