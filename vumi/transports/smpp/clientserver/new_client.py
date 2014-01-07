@@ -42,6 +42,14 @@ def command_status(pdu):
     return pdu['header']['command_status']
 
 
+def command_id(pdu):
+    return pdu['header']['command_id']
+
+
+def message_id(pdu):
+    return pdu['body']['mandatory_parameters']['message_id']
+
+
 class EsmeProtocolError(Exception):
     pass
 
@@ -164,8 +172,7 @@ class EsmeTransceiver(Protocol):
         return data
 
     def onPdu(self, pdu):
-        command_id = pdu['header']['command_id']
-        handler = getattr(self, 'handle_%s' % (command_id,),
+        handler = getattr(self, 'handle_%s' % (command_id(pdu),),
                           self.onUnsupportedCommandId)
         return maybeDeferred(handler, pdu)
 
@@ -174,8 +181,8 @@ class EsmeTransceiver(Protocol):
         Called when an SMPP PDU is received for which no handler function has
         been defined.
         """
-        command_id = pdu['header']['command_id']
-        log.warning('Received unsupported SMPP command_id: %r' % (command_id,))
+        log.warning(
+            'Received unsupported SMPP command_id: %r' % (command_id(pdu),))
 
     def handle_bind_transceiver_resp(self, pdu):
         if not pdu_ok(pdu):
@@ -199,9 +206,11 @@ class EsmeTransceiver(Protocol):
         return self.sendPDU(UnbindResp(sequence_number))
 
     def handle_submit_sm_resp(self, pdu):
-        sequence_number = pdu['header']['sequence_number']
-        message_id = pdu['body']['mandatory_parameters']['message_id']
-        return self.onSubmitSmResp(sequence_number, message_id)
+        return self.onSubmitSMResp(
+            seq_no(pdu), message_id(pdu), command_status(pdu))
+
+    def onSubmitSMResp(self, sequence_number, message_id, command_status):
+        pass
 
 
 class EsmeTransceiverFactory(ClientFactory):
