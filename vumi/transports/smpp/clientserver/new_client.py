@@ -141,7 +141,7 @@ class EsmeTransceiver(Protocol):
         return self.onConnectionMade()
 
     def onConnectionMade(self):
-        pass
+        log.msg('Connection Made')
 
     @inlineCallbacks
     def bind(self):
@@ -268,7 +268,8 @@ class EsmeTransceiver(Protocol):
             seq_no(pdu), message_id(pdu), command_status(pdu))
 
     def onSubmitSMResp(self, sequence_number, message_id, command_status):
-        """TODO: to be implemented"""
+        log.warning(
+            'onSubmitSMResp called but not implemented by ESME class.')
 
     @require_bind
     @inlineCallbacks
