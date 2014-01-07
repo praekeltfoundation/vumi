@@ -83,11 +83,13 @@ class EsmeTestCase(VumiTestCase):
         default_config = {
             'transport_name': 'sphex_transport',
             'twisted_endpoint': 'tcp:host=localhost:port=0',
-            'system_id': 'system_id',
-            'password': 'password',
-            'smpp_bind_timeout': 30,
+            'smpp_config': {
+                'system_id': 'system_id',
+                'password': 'password',
+                'smpp_bind_timeout': 30,
+            }
         }
-        default_config.update(config)
+        default_config['smpp_config'].update(config)
         cfg = SmppTransport.CONFIG_CLASS(default_config, static=True)
         if sm_processor is None:
             sm_processor = cfg.short_message_processor(
