@@ -98,6 +98,8 @@ class ConfigField(object):
         return self.clean(value) if value is not None else None
 
     def __get__(self, obj, cls):
+        if obj is None:
+            return self
         if obj.static and not self.static:
             self.raise_config_error("is not marked as static.")
         return self.get_value(obj)
