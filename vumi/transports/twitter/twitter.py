@@ -2,13 +2,11 @@
 
 from twisted.python import log
 from twisted.internet.defer import inlineCallbacks
-from twisted.internet import task
 from txtwitter.twitter import TwitterClient
-from txtwitter.messagetools import is_tweet
+from txtwitter import messagetools
 
 from vumi.transports.base import Transport
-from vumi.config import ConfigText, ConfigList, ConfigInt
-from vumi.message import TransportUserMessage
+from vumi.config import ConfigText, ConfigList
 
 
 class TwitterTransportConfig(Transport.CONFIG_CLASS):
@@ -27,9 +25,6 @@ class TwitterTransportConfig(Transport.CONFIG_CLASS):
     terms = ConfigList(
         "A list of terms to be tracked by the transport",
         default=[], static=True)
-    check_replies_interval = ConfigInt(
-        "How often (in seconds) to poll for replies to status updates",
-        default=0, static=True)
 
 
 class TwitterTransport(Transport):
@@ -40,12 +35,6 @@ class TwitterTransport(Transport):
     CONFIG_CLASS = TwitterTransportConfig
     ENCODING = 'utf8'
     CLIENT_CLS = TwitterClient
-
-    @classmethod
-    def decode(cls, s):
-        if not isinstance(s, basestring):
-            s = str(s)
-        return s.decode(cls.ENCODING)
 
     def setup_transport(self):
         config = self.get_static_config()
@@ -58,24 +47,54 @@ class TwitterTransport(Transport):
             config.consumer_secret)
 
         self.track_stream = self.client.stream_filter(
-            self.handle_track, self.terms)
+            self.handle_track_stream, self.terms)
         if self.terms:
             self.track_stream.startService()
 
-        self.check_replies = task.LoopingCall(self.check_for_replies)
-        if config.check_replies_interval > 0:
-            self.check_replies.start(config.check_replies_interval)
+        self.user_stream = self.client.userstream_user(self.handle_user_stream)
+        self.user_stream.startService()
 
     @inlineCallbacks
     def teardown_transport(self):
-        if self.check_replies.running:
-            self.check_replies.stop()
-
+        yield self.user_stream.stopService()
         yield self.track_stream.stopService()
 
-    def check_for_replies(self):
-        #TODO
-        pass
+    @classmethod
+    def decode(cls, value):
+        if value is None:
+            return value
+
+        if not isinstance(value, basestring):
+            value = str(value)
+
+        return value.decode(cls.ENCODING)
+
+    @classmethod
+    def encode(cls, value):
+        if value is None:
+            return value
+
+        if not isinstance(value, basestring):
+            value = str(value)
+
+        return value.encode(cls.ENCODING)
+
+    def publish_tweet_message(self, tweet):
+        in_reply_to_screen_name = tweet.get('in_reply_to_screen_name')
+
+        return self.publish_message(
+            content=self.decode(messagetools.tweet_text(tweet)),
+            to_addr=self.decode(in_reply_to_screen_name or ''),
+            from_addr=self.decode(tweet['user'].get('screen_name', '')),
+            transport_type=self.transport_type,
+            transport_metadata={'id': self.decode(tweet.get('id_str'))},
+            helper_metadata={
+                'in_reply_to_status_id': self.decode(
+                    messagetools.tweet_in_reply_to_id(tweet)),
+                'in_reply_to_screen_name': self.decode(
+                    in_reply_to_screen_name),
+                'user_mentions': messagetools.tweet_user_mentions(tweet),
+            })
 
     @inlineCallbacks
     def handle_outbound_message(self, message):
@@ -83,32 +102,27 @@ class TwitterTransport(Transport):
         log.msg("Twitter transport sending %r" % (message,))
 
         try:
-            response = yield self.client.update(message['content'])
+            yield self.client.update(message['content'])
 
             yield self.publish_ack(
                 user_message_id=message['message_id'],
-                sent_message_id=response['id_str'])
+                sent_message_id=message['message_id'])
         except Exception, e:
             yield self.publish_nack(
                 user_message_id=message['message_id'],
                 sent_message_id=message['message_id'],
                 reason='%r' % (e,))
 
-    def handle_track(self, msg):
-        """
-        Gets called with a status update whenever a tweet matching
-        a term being tracked is detected. Attached the SESSION_NONE
-        event type as these messages aren't necessarily part of a
-        conversation.
-        """
-        if is_tweet(msg):
-            self.publish_message(
-                message_id=self.decode(msg['id_str']),
-                content=self.decode(msg['text']),
-                to_addr=self.decode(msg.get('in_reply_to_screen_name', '')),
-                from_addr=self.decode(msg['user']['screen_name']),
-                session_event=TransportUserMessage.SESSION_NONE,
-                transport_type=self.transport_type,
-                transport_metadata=msg)
+    def handle_track_stream(self, message):
+        if messagetools.is_tweet(message):
+            log.msg("Tracked a tweet: %r" % (message,))
+            self.publish_tweet_message(message)
         else:
-            log.msg("Received non-tweet from tracking stream: %r" % msg)
+            log.msg("Received non-tweet from tracking stream: %r" % message)
+
+    def handle_user_stream(self, message):
+        if messagetools.is_tweet(message):
+            log.msg("Received tweet on user stream: %r" % (message,))
+            self.publish_tweet_message(message)
+        else:
+            log.msg("Received non-tweet from user stream: %r" % message)
