@@ -36,11 +36,6 @@ def pdu_ok(pdu):
     return command_status(pdu) == 'ESME_ROK'
 
 
-def pdu_reply(seq_number, reply_pdu):
-    reply_pdu['header']['sequence_number'] = seq_number
-    return reply_pdu
-
-
 def seq_no(pdu):
     return pdu['header']['sequence_number']
 
