@@ -102,7 +102,7 @@ class TwitterTransport(Transport):
         log.msg("Twitter transport sending %r" % (message,))
 
         try:
-            yield self.client.update(message['content'])
+            yield self.client.statuses_update(message['content'])
 
             yield self.publish_ack(
                 user_message_id=message['message_id'],

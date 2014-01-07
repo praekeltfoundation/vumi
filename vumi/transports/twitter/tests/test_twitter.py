@@ -27,26 +27,25 @@ class FakeTwitterClient(TwitterClient):
     def __init__(self, *a, **kw):
         super(FakeTwitterClient, self).__init__(*a, **kw)
         self.stream_filters = []
-        self.updates = []
-        self.update_response = None
-        self.update_error = None
+        self.status_updates = []
+        self.status_update_response = None
+        self.status_update_error = None
 
-    def set_update_response(self, resp):
-        self.update_response = resp
+    def set_status_update_response(self, resp):
+        self.status_update_response = resp
 
-    def set_update_to_fail(self, e):
-        self.update_error = e
+    def set_status_update_to_fail(self, e):
+        self.status_update_error = e
 
-    def get_updates(self):
-        return self.updates
+    def get_status_updates(self):
+        return self.status_updates
 
-    def update(self, content):
-        self.updates.append(content)
+    def statuses_update(self, content):
+        if self.status_update_error is not None:
+            raise self.status_update_error
 
-        if self.update_error is not None:
-            raise self.update_error
-
-        return succeed(self.update_response)
+        self.status_updates.append(content)
+        return succeed(self.status_update_response)
 
     def stream_filter(self, delegate, track=None):
         return FakeTwitterStreamService(delegate)
@@ -75,25 +74,27 @@ class TestTwitterTransport(VumiTestCase):
 
     @inlineCallbacks
     def test_sending(self):
-        self.transport.client.set_update_response({'id_str': '1'})
+        self.transport.client.set_status_update_response({'id_str': '1'})
 
         msg = yield self.tx_helper.make_dispatch_outbound('adnap das')
         [ack] = yield self.tx_helper.wait_for_dispatched_events(1)
 
-        self.assertEqual(self.transport.client.get_updates(), ['adnap das'])
+        self.assertEqual(
+            self.transport.client.get_status_updates(),
+            ['adnap das'])
+
         self.assertEqual(ack['user_message_id'], msg['message_id'])
         self.assertEqual(ack['sent_message_id'], msg['message_id'])
 
     @inlineCallbacks
     def test_sending_failure(self):
         error = Exception(':(')
-        self.transport.client.set_update_response({'id_str': '1'})
-        self.transport.client.set_update_to_fail(error)
+        self.transport.client.set_status_update_to_fail(error)
 
         msg = yield self.tx_helper.make_dispatch_outbound('adnap das')
         [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
 
-        self.assertEqual(self.transport.client.get_updates(), ['adnap das'])
+        self.assertEqual(self.transport.client.get_status_updates(), [])
         self.assertEqual(nack['user_message_id'], msg['message_id'])
         self.assertEqual(nack['sent_message_id'], msg['message_id'])
         self.assertEqual(nack['nack_reason'], '%r' % (error,))
