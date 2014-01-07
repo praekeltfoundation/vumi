@@ -92,13 +92,13 @@ class EsmeTransceiver(Protocol):
         return dict([(key, getattr(self.config, key))
                      for key in bind_keys if hasattr(self.config, key)])
 
-    def connectionMade(self):
-        self.state = self.OPEN_STATE
-        self.onConnectionMade()
-
     def get_next_seq(self):
         """TODO: refactor into proper sequence number generator"""
         return self.sequence_generator.next()
+
+    def connectionMade(self):
+        self.state = self.OPEN_STATE
+        self.onConnectionMade()
 
     @inlineCallbacks
     def onConnectionMade(self):

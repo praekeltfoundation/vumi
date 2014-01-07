@@ -6,7 +6,7 @@ from twisted.internet.task import Clock
 from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 from vumi.transports.smpp.transport import SmppTransport
 from vumi.transports.smpp.clientserver.new_client import (
-    EsmeTransceiver, EsmeTransceiverFactory, seq_no)
+    EsmeTransceiver, EsmeTransceiverFactory, seq_no, command_status)
 
 from smpp.pdu import unpack_pdu
 from smpp.pdu_builder import BindTransceiverResp
@@ -58,6 +58,14 @@ class EsmeTestCase(VumiTestCase):
         protocol.makeConnection(transport)
         return transport
 
+    def assertCommand(self, pdu, command_id, sequence_number=None,
+                      status=None):
+        self.assertEqual(pdu['header']['command_id'], command_id)
+        if sequence_number is not None:
+            self.assertEqual(seq_no(pdu), sequence_number)
+        if status is not None:
+            self.assertEqual(command_status(pdu), status)
+
     def test_on_connection_made(self):
         protocol = self.get_protocol()
         self.assertEqual(protocol.state, EsmeTransceiver.CLOSED_STATE)
@@ -96,7 +104,13 @@ class EsmeTestCase(VumiTestCase):
         protocol = self.get_protocol()
         transport = self.connect_transport(protocol)
         bind_pdu = unpack_pdu(transport.value())
+        transport.clear()
         protocol.dataReceived(
             BindTransceiverResp(seq_no(bind_pdu)).get_bin())
         self.assertEqual(protocol.state, EsmeTransceiver.BOUND_STATE_TRX)
         self.assertTrue(protocol.isBound())
+        self.assertTrue(protocol.enquire_link_call.running)
+        enquire_link_pdu = unpack_pdu(transport.value())
+        self.assertCommand(enquire_link_pdu,
+                           command_id='enquire_link', sequence_number=1,
+                           status='ESME_ROK')
