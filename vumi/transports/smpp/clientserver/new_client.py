@@ -138,10 +138,13 @@ class EsmeTransceiver(Protocol):
 
     def connectionMade(self):
         self.state = self.OPEN_STATE
-        self.onConnectionMade()
+        return self.onConnectionMade()
+
+    def onConnectionMade(self):
+        pass
 
     @inlineCallbacks
-    def onConnectionMade(self):
+    def bind(self):
         sequence_number = yield self.get_next_seq()
         bind_params = self.getBindParams()
         pdu = self.bind_pdu(sequence_number, **bind_params)
