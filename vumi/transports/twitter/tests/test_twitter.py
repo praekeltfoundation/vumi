@@ -81,7 +81,10 @@ class TestTwitterTransport(VumiTestCase):
             'text': 'hello',
             'in_reply_to_status_id_str': None,
             'in_reply_to_screen_name': None,
-            'user': {'screen_name': 'someone'},
+            'user': {
+                'id_str': '0',
+                'screen_name': 'someone'
+            },
             'entities': {
                 'user_mentions': [{'screen_name': 'someone_else'}]
             }
@@ -109,7 +112,10 @@ class TestTwitterTransport(VumiTestCase):
             'text': 'hello',
             'in_reply_to_status_id_str': '1',
             'in_reply_to_screen_name': 'someone_else',
-            'user': {'screen_name': 'someone'},
+            'user': {
+                'id_str': '0',
+                'screen_name': 'someone'
+            },
             'entities': {
                 'user_mentions': [{'screen_name': 'someone_else'}]
             }
@@ -137,7 +143,10 @@ class TestTwitterTransport(VumiTestCase):
             'text': 'hëllo',
             'in_reply_to_status_id_str': '1',
             'in_reply_to_screen_name': 'somëone_else',
-            'user': {'screen_name': 'somëone'},
+            'user': {
+                'id_str': '0',
+                'screen_name': 'somëone'
+            },
             'entities': {
                 'user_mentions': [{'screen_name': 'somëone_else'}]
             }
@@ -165,7 +174,10 @@ class TestTwitterTransport(VumiTestCase):
             'text': 'hello',
             'in_reply_to_screen_name': None,
             'in_reply_to_status_id_str': None,
-            'user': {'screen_name': 'someone'},
+            'user': {
+                'id_str': '0',
+                'screen_name': 'someone'
+            },
             'entities': {
                 'user_mentions': [{'screen_name': 'me'}]
             }
@@ -193,7 +205,10 @@ class TestTwitterTransport(VumiTestCase):
             'text': 'hello',
             'in_reply_to_status_id_str': '1',
             'in_reply_to_screen_name': 'me',
-            'user': {'screen_name': 'someone'},
+            'user': {
+                'id_str': '0',
+                'screen_name': 'someone'
+            },
             'entities': {
                 'user_mentions': [{'screen_name': 'me'}]
             }
@@ -221,7 +236,10 @@ class TestTwitterTransport(VumiTestCase):
             'text': 'hëllo',
             'in_reply_to_status_id_str': '1',
             'in_reply_to_screen_name': 'somëone_else',
-            'user': {'screen_name': 'somëone'},
+            'user': {
+                'id_str': '0',
+                'screen_name': 'somëone'
+            },
             'entities': {
                 'user_mentions': [{'screen_name': 'somëone_else'}]
             }

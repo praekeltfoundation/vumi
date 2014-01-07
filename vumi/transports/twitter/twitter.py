@@ -80,16 +80,18 @@ class TwitterTransport(Transport):
         return value.encode(cls.ENCODING)
 
     def publish_tweet_message(self, tweet):
-        in_reply_to_screen_name = tweet.get('in_reply_to_screen_name')
+        user = messagetools.tweet_user(tweet)
+        in_reply_to_screen_name = (
+            messagetools.tweet_in_reply_to_screen_name(tweet))
 
         return self.publish_message(
             content=self.decode(messagetools.tweet_text(tweet)),
             to_addr=self.decode(in_reply_to_screen_name or ''),
-            from_addr=self.decode(tweet['user'].get('screen_name', '')),
+            from_addr=self.decode(messagetools.user_screen_name(user)),
             transport_type=self.transport_type,
             transport_metadata={
                 self.transport_type: {
-                    'status_id': self.decode(tweet.get('id_str'))
+                    'status_id': self.decode(messagetools.tweet_id(tweet))
                 }
             },
             helper_metadata={
