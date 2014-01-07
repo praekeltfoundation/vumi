@@ -87,7 +87,11 @@ class TwitterTransport(Transport):
             to_addr=self.decode(in_reply_to_screen_name or ''),
             from_addr=self.decode(tweet['user'].get('screen_name', '')),
             transport_type=self.transport_type,
-            transport_metadata={'id': self.decode(tweet.get('id_str'))},
+            transport_metadata={
+                self.transport_type: {
+                    'status_id': self.decode(tweet.get('id_str'))
+                }
+            },
             helper_metadata={
                 'in_reply_to_status_id': self.decode(
                     messagetools.tweet_in_reply_to_id(tweet)),
@@ -102,7 +106,7 @@ class TwitterTransport(Transport):
         log.msg("Twitter transport sending %r" % (message,))
 
         try:
-            yield self.client.statuses_update(message['content'])
+            yield self.client.statuses_update(self.encode(message['content']))
 
             yield self.publish_ack(
                 user_message_id=message['message_id'],

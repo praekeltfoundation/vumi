@@ -117,7 +117,10 @@ class TestTwitterTransport(VumiTestCase):
         self.assertEqual(msg['from_addr'], 'someone')
         self.assertEqual(msg['to_addr'], '')
         self.assertEqual(msg['content'], 'hello')
-        self.assertEqual(msg['transport_metadata'], {'id': '1'})
+
+        self.assertEqual(
+            msg['transport_metadata'],
+            {'twitter': {'status_id': '1'}})
 
         self.assertEqual(msg['helper_metadata'], {
             'in_reply_to_status_id': None,
@@ -142,7 +145,10 @@ class TestTwitterTransport(VumiTestCase):
         self.assertEqual(msg['from_addr'], 'someone')
         self.assertEqual(msg['to_addr'], 'someone_else')
         self.assertEqual(msg['content'], 'hello')
-        self.assertEqual(msg['transport_metadata'], {'id': '2'})
+
+        self.assertEqual(
+            msg['transport_metadata'],
+            {'twitter': {'status_id': '2'}})
 
         self.assertEqual(msg['helper_metadata'], {
             'in_reply_to_status_id': '1',
@@ -167,6 +173,11 @@ class TestTwitterTransport(VumiTestCase):
         self.assertEqual(msg['from_addr'], 'someone')
         self.assertEqual(msg['to_addr'], '')
         self.assertEqual(msg['content'], 'hello')
+
+        self.assertEqual(
+            msg['transport_metadata'],
+            {'twitter': {'status_id': '1'}})
+
         self.assertEqual(msg['helper_metadata'], {
             'in_reply_to_status_id': None,
             'in_reply_to_screen_name': None,
@@ -190,6 +201,11 @@ class TestTwitterTransport(VumiTestCase):
         self.assertEqual(msg['from_addr'], 'someone')
         self.assertEqual(msg['to_addr'], 'me')
         self.assertEqual(msg['content'], 'hello')
+
+        self.assertEqual(
+            msg['transport_metadata'],
+            {'twitter': {'status_id': '2'}})
+
         self.assertEqual(msg['helper_metadata'], {
             'in_reply_to_status_id': '1',
             'in_reply_to_screen_name': 'me',
