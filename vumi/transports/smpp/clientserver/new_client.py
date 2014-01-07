@@ -1,6 +1,7 @@
 # -*- test-case-name: vumi.transports.smpp.clientserver.tests.test_new_client -*-
 
 from functools import wraps
+from random import randint
 
 from twisted.internet import reactor
 from twisted.internet.protocol import Protocol, ClientFactory
@@ -57,6 +58,20 @@ def message_id(pdu):
 
 class EsmeProtocolError(Exception):
     pass
+
+
+def chop_pdu_stream(data):
+    if len(data) < 16:
+        return
+
+    bytes = binascii.b2a_hex(data[0:4])
+    cmd_length = int(bytes, 16)
+    if len(data) < cmd_length:
+        return
+
+    pdu, data = (data[0:cmd_length],
+                 data[cmd_length:])
+    return pdu, data
 
 
 class EsmeTransceiver(Protocol):
@@ -168,16 +183,11 @@ class EsmeTransceiver(Protocol):
             data = self.handleBuffer()
 
     def handleBuffer(self):
-        if len(self.buffer) < 16:
+        pdu_found = chop_pdu_stream(self.buffer)
+        if pdu_found is None:
             return
 
-        bytes = binascii.b2a_hex(self.buffer[0:4])
-        cmd_length = int(bytes, 16)
-        if len(self.buffer) < cmd_length:
-            return
-
-        data, self.buffer = (self.buffer[0:cmd_length],
-                             self.buffer[cmd_length:])
+        data, self.buffer = pdu_found
         return data
 
     def onPdu(self, pdu):
