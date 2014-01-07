@@ -101,9 +101,12 @@ class TestTwitterTransport(VumiTestCase):
             {'twitter': {'status_id': '1'}})
 
         self.assertEqual(msg['helper_metadata'], {
-            'in_reply_to_status_id': None,
-            'in_reply_to_screen_name': None,
-            'user_mentions': [{'screen_name': 'someone_else'}]})
+            'twitter': {
+                'in_reply_to_status_id': None,
+                'in_reply_to_screen_name': None,
+                'user_mentions': [{'screen_name': 'someone_else'}]
+            }
+        })
 
     @inlineCallbacks
     def test_tracking_reply_messages(self):
@@ -132,9 +135,12 @@ class TestTwitterTransport(VumiTestCase):
             {'twitter': {'status_id': '2'}})
 
         self.assertEqual(msg['helper_metadata'], {
-            'in_reply_to_status_id': '1',
-            'in_reply_to_screen_name': 'someone_else',
-            'user_mentions': [{'screen_name': 'someone_else'}]})
+            'twitter': {
+                'in_reply_to_status_id': '1',
+                'in_reply_to_screen_name': 'someone_else',
+                'user_mentions': [{'screen_name': 'someone_else'}]
+            }
+        })
 
     @inlineCallbacks
     def test_tracking_message_decoding(self):
@@ -163,9 +169,12 @@ class TestTwitterTransport(VumiTestCase):
             {'twitter': {'status_id': '2'}})
 
         self.assertEqual(msg['helper_metadata'], {
-            'in_reply_to_status_id': '1',
-            'in_reply_to_screen_name': u'somëone_else',
-            'user_mentions': [{'screen_name': u'somëone_else'}]})
+            'twitter': {
+                'in_reply_to_status_id': '1',
+                'in_reply_to_screen_name': u'somëone_else',
+                'user_mentions': [{'screen_name': u'somëone_else'}]
+            }
+        })
 
     @inlineCallbacks
     def test_inbound_user_message(self):
@@ -194,9 +203,12 @@ class TestTwitterTransport(VumiTestCase):
             {'twitter': {'status_id': '1'}})
 
         self.assertEqual(msg['helper_metadata'], {
-            'in_reply_to_status_id': None,
-            'in_reply_to_screen_name': None,
-            'user_mentions': [{'screen_name': 'me'}]})
+            'twitter': {
+                'in_reply_to_status_id': None,
+                'in_reply_to_screen_name': None,
+                'user_mentions': [{'screen_name': 'me'}]
+            }
+        })
 
     @inlineCallbacks
     def test_inbound_user_reply_message(self):
@@ -225,9 +237,12 @@ class TestTwitterTransport(VumiTestCase):
             {'twitter': {'status_id': '2'}})
 
         self.assertEqual(msg['helper_metadata'], {
-            'in_reply_to_status_id': '1',
-            'in_reply_to_screen_name': 'me',
-            'user_mentions': [{'screen_name': 'me'}]})
+            'twitter': {
+                'in_reply_to_status_id': '1',
+                'in_reply_to_screen_name': 'me',
+                'user_mentions': [{'screen_name': 'me'}]
+            }
+        })
 
     @inlineCallbacks
     def test_inbound_user_message_decoding(self):
@@ -256,9 +271,12 @@ class TestTwitterTransport(VumiTestCase):
             {'twitter': {'status_id': '2'}})
 
         self.assertEqual(msg['helper_metadata'], {
-            'in_reply_to_status_id': '1',
-            'in_reply_to_screen_name': u'somëone_else',
-            'user_mentions': [{'screen_name': u'somëone_else'}]})
+            'twitter': {
+                'in_reply_to_status_id': '1',
+                'in_reply_to_screen_name': u'somëone_else',
+                'user_mentions': [{'screen_name': u'somëone_else'}]
+            }
+        })
 
     @inlineCallbacks
     def test_sending(self):

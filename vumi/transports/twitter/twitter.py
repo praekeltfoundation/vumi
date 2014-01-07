@@ -90,16 +90,18 @@ class TwitterTransport(Transport):
             from_addr=self.decode(messagetools.user_screen_name(user)),
             transport_type=self.transport_type,
             transport_metadata={
-                self.transport_type: {
+                'twitter': {
                     'status_id': self.decode(messagetools.tweet_id(tweet))
                 }
             },
             helper_metadata={
-                'in_reply_to_status_id': self.decode(
-                    messagetools.tweet_in_reply_to_id(tweet)),
-                'in_reply_to_screen_name': self.decode(
-                    in_reply_to_screen_name),
-                'user_mentions': messagetools.tweet_user_mentions(tweet),
+                'twitter': {
+                    'in_reply_to_status_id': self.decode(
+                        messagetools.tweet_in_reply_to_id(tweet)),
+                    'in_reply_to_screen_name': self.decode(
+                        in_reply_to_screen_name),
+                    'user_mentions': messagetools.tweet_user_mentions(tweet),
+                }
             })
 
     @inlineCallbacks
