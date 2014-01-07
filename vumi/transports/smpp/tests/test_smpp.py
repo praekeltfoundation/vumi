@@ -221,8 +221,8 @@ class TestSmppTransport(VumiTestCase):
             [warning] = lc.logs
             self.assertEqual(warning['message'],
                              ("Failed to retrieve message id for delivery "
-                              "report. Delivery report from sphex "
-                              "discarded.",))
+                              "report. Delivery report from %s "
+                              "discarded." % self.tx_helper.transport_name,))
 
     @inlineCallbacks
     def test_throttled_submit_ESME_RTHROTTLED(self):
@@ -356,7 +356,9 @@ class EsmeToSmscTestCase(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
+        self.tx_helper = self.add_helper(TransportHelper(MockSmppTransport))
         server_config = {
+            "transport_name": self.tx_helper.transport_name,
             "system_id": "VumiTestSMSC",
             "password": "password",
             "twisted_endpoint": "tcp:0",
@@ -372,7 +374,6 @@ class EsmeToSmscTestCase(VumiTestCase):
         client_config = server_config.copy()
         client_config['twisted_endpoint'] = 'tcp:host=%s:port=%s' % (
             host.host, host.port)
-        self.tx_helper = self.add_helper(TransportHelper(MockSmppTransport))
         self.transport = yield self.tx_helper.get_transport(
             client_config, start=False)
         self.expected_delivery_status = 'delivered'
@@ -828,7 +829,9 @@ class TestEsmeToSmscTx(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
+        self.tx_helper = self.add_helper(TransportHelper(MockSmppTxTransport))
         self.config = {
+            "transport_name": self.tx_helper.transport_name,
             "system_id": "VumiTestSMSC",
             "password": "password",
             "host": "localhost",
@@ -840,7 +843,6 @@ class TestEsmeToSmscTx(VumiTestCase):
         yield self.service.startWorker()
         self.service.factory.protocol = SmscTestServer
         self.config['port'] = self.service.listening.getHost().port
-        self.tx_helper = self.add_helper(TransportHelper(MockSmppTxTransport))
         self.transport = yield self.tx_helper.get_transport(
             self.config, start=False)
         self.expected_delivery_status = 'delivered'
@@ -896,7 +898,9 @@ class TestEsmeToSmscRx(VumiTestCase):
         from twisted.internet.base import DelayedCall
         DelayedCall.debug = True
 
+        self.tx_helper = self.add_helper(TransportHelper(MockSmppRxTransport))
         self.config = {
+            "transport_name": self.tx_helper.transport_name,
             "system_id": "VumiTestSMSC",
             "password": "password",
             "host": "localhost",
@@ -908,7 +912,6 @@ class TestEsmeToSmscRx(VumiTestCase):
         yield self.service.startWorker()
         self.service.factory.protocol = SmscTestServer
         self.config['port'] = self.service.listening.getHost().port
-        self.tx_helper = self.add_helper(TransportHelper(MockSmppRxTransport))
         self.transport = yield self.tx_helper.get_transport(
             self.config, start=False)
         self.expected_delivery_status = 'delivered'
