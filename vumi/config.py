@@ -2,6 +2,7 @@
 
 from copy import deepcopy
 from urllib2 import urlparse
+import inspect
 import textwrap
 import re
 
@@ -98,6 +99,8 @@ class ConfigField(object):
         return self.clean(value) if value is not None else None
 
     def __get__(self, obj, cls):
+        if obj is None:
+            return self
         if obj.static and not self.static:
             self.raise_config_error("is not marked as static.")
         return self.get_value(obj)
@@ -325,12 +328,10 @@ class ConfigMetaClass(type):
         fields = []
         unified_class_dict = {}
         for base in bases:
-            unified_class_dict.update(base.__dict__)
+            unified_class_dict.update(inspect.getmembers(base))
         unified_class_dict.update(dict)
 
         for key, possible_field in unified_class_dict.items():
-            if key in fields:
-                continue
             if isinstance(possible_field, ConfigField):
                 fields.append(possible_field)
                 possible_field.setup(key)
