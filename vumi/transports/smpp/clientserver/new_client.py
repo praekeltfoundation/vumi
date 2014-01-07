@@ -99,6 +99,10 @@ class EsmeTransceiver(Protocol):
         self.sequence_generator = sequence_generator
         self.enquire_link_call = LoopingCall(self.enquireLink)
         self.drop_link_call = None
+        self.disconnect_call = self.clock.callLater(
+            config.smpp_enquire_link_interval, self.disconnect,
+            'Disconnecting, no response from SMSC for longer '
+            'than %s seconds' % (config.smpp_enquire_link_interval,))
 
     def getBindParams(self):
         # TODO: validate these bind params somewhere as a config option
@@ -147,8 +151,13 @@ class EsmeTransceiver(Protocol):
         if self.isBound():
             return
 
-        log.warning('Dropping link due to binding delay. Current state: %s' % (
-            self.state))
+        self.disconnect(
+            'Dropping link due to binding delay. Current state: %s' % (
+                self.state))
+
+    def disconnect(self, msg=None):
+        if msg is not None:
+            log.warning(msg)
         self.transport.loseConnection()
 
     def connectionLost(self, reason):
@@ -193,6 +202,7 @@ class EsmeTransceiver(Protocol):
     def onPdu(self, pdu):
         handler = getattr(self, 'handle_%s' % (command_id(pdu),),
                           self.onUnsupportedCommandId)
+        self.disconnect_call.reset(self.config.smpp_enquire_link_interval)
         return maybeDeferred(handler, pdu)
 
     def onUnsupportedCommandId(self, pdu):

@@ -201,6 +201,27 @@ class EsmeTestCase(VumiTestCase):
         [(seq_number,)] = calls
         self.assertEqual(seq_number, 0)
 
+    def test_enquire_link_no_response(self):
+        transport, protocol = self.setup_bind(clear=False)
+        [enquire_link] = receive_pdus(transport)
+        interval = protocol.config.smpp_enquire_link_interval
+        protocol.clock.advance(interval)
+        self.assertTrue(transport.disconnecting)
+
+    def test_enquire_link_looping(self):
+        transport, protocol = self.setup_bind(clear=False)
+        interval = protocol.config.smpp_enquire_link_interval
+        [enquire_link] = receive_pdus(transport)
+        enquire_link_resp = EnquireLinkResp(seq_no(enquire_link))
+
+        protocol.clock.advance(interval - 1)
+        protocol.dataReceived(enquire_link_resp.get_bin())
+
+        protocol.clock.advance(interval - 1)
+        self.assertFalse(transport.disconnecting)
+        protocol.clock.advance(1)
+        self.assertTrue(transport.disconnecting)
+
     @inlineCallbacks
     def test_submit_sm(self):
         transport, protocol = self.setup_bind()
