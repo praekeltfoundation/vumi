@@ -1,5 +1,7 @@
 from twisted.test import proto_helpers
-from twisted.internet.defer import succeed, inlineCallbacks
+from twisted.internet import reactor
+from twisted.internet.defer import (
+    succeed, inlineCallbacks, Deferred, returnValue)
 from twisted.internet.error import ConnectionDone
 from twisted.internet.task import Clock
 
@@ -38,8 +40,9 @@ def connect_transport(protocol):
     return transport
 
 
+@inlineCallbacks
 def bind_protocol(transport, protocol, clear=True):
-    [bind_pdu] = receive_pdus(transport)
+    [bind_pdu] = yield wait_for_pdus(transport, 1)
     resp_pdu_class = {
         BindTransceiver: BindTransceiverResp,
         BindReceiver: BindReceiverResp,
@@ -49,18 +52,29 @@ def bind_protocol(transport, protocol, clear=True):
         resp_pdu_class(seq_no(bind_pdu)).get_bin())
     if clear:
         transport.clear()
-    return bind_pdu
+    returnValue(bind_pdu)
 
 
-def receive_pdus(transport):
-    pdus = []
-    data_stream = transport.value()
-    pdu_found = chop_pdu_stream(data_stream)
-    while pdu_found is not None:
-        pdu_data, remainder = pdu_found
-        pdus.append(unpack_pdu(pdu_data))
-        pdu_found = chop_pdu_stream(remainder)
-    return pdus
+def wait_for_pdus(transport, count):
+    d = Deferred()
+
+    def cb():
+        pdus = []
+        data_stream = transport.value()
+        pdu_found = chop_pdu_stream(data_stream)
+        while pdu_found is not None:
+            pdu_data, remainder = pdu_found
+            pdus.append(unpack_pdu(pdu_data))
+            pdu_found = chop_pdu_stream(remainder)
+
+        if len(pdus) == count:
+            d.callback(pdus)
+        else:
+            reactor.callLater(0, cb)
+
+    cb()
+
+    return d
 
 
 class DummySmppTransport(object):
@@ -127,18 +141,19 @@ class EsmeTestCase(VumiTestCase):
             for key, value in params.items():
                 self.assertEqual(mandatory_parameters.get(key), value)
 
+    @inlineCallbacks
     def setup_bind(self, config={}, clear=True, factory_class=None):
         protocol = self.get_protocol(config, factory_class=factory_class)
         transport = connect_transport(protocol)
-        bind_protocol(transport, protocol, clear=clear)
-        return transport, protocol
+        yield bind_protocol(transport, protocol, clear=clear)
+        returnValue((transport, protocol))
 
     def test_on_connection_made(self):
         protocol = self.get_protocol()
         self.assertEqual(protocol.state, EsmeTransceiver.CLOSED_STATE)
         transport = connect_transport(protocol)
         self.assertEqual(protocol.state, EsmeTransceiver.OPEN_STATE)
-        [bind_pdu] = receive_pdus(transport)
+        [bind_pdu] = yield wait_for_pdus(transport, 1)
         self.assertCommand(
             bind_pdu,
             'bind_transceiver',
@@ -157,37 +172,41 @@ class EsmeTestCase(VumiTestCase):
         self.clock.advance(protocol.config.smpp_bind_timeout + 1)
         self.assertTrue(transport.disconnecting)
 
+    @inlineCallbacks
     def test_on_smpp_bind(self):
         protocol = self.get_protocol()
         transport = connect_transport(protocol)
-        bind_protocol(transport, protocol, clear=False)
+        yield bind_protocol(transport, protocol, clear=False)
         self.assertEqual(protocol.state, EsmeTransceiver.BOUND_STATE_TRX)
         self.assertTrue(protocol.isBound())
         self.assertTrue(protocol.enquire_link_call.running)
-        [bind_pdu, enquire_link_pdu] = receive_pdus(transport)
+        [bind_pdu, enquire_link_pdu] = yield wait_for_pdus(transport, 2)
         self.assertCommand(bind_pdu, 'bind_transceiver', sequence_number=1)
         self.assertCommand(enquire_link_pdu, 'enquire_link',
                            sequence_number=2, status='ESME_ROK')
 
+    @inlineCallbacks
     def test_handle_unbind(self):
-        transport, protocol = self.setup_bind()
+        transport, protocol = yield self.setup_bind()
         protocol.dataReceived(Unbind(sequence_number=0).get_bin())
-        [pdu] = receive_pdus(transport)
+        [pdu] = yield wait_for_pdus(transport, 1)
         self.assertCommand(pdu, 'unbind_resp',
                            sequence_number=0, status='ESME_ROK')
 
+    @inlineCallbacks
     def test_on_submit_sm_resp(self):
         calls = []
         EsmeTransceiver.onSubmitSMResp = lambda p, *a: calls.append(a)
-        transport, protocol = self.setup_bind()
+        transport, protocol = yield self.setup_bind()
         pdu = SubmitSMResp(sequence_number=0, message_id='foo')
         protocol.dataReceived(pdu.get_bin())
         self.assertEqual(calls, [(0, 'foo', 'ESME_ROK')])
 
+    @inlineCallbacks
     def test_deliver_sm(self):
         calls = []
         EsmeTransceiver.onDeliverSM = lambda p, *a: calls.append(a)
-        transport, protocol = self.setup_bind()
+        transport, protocol = yield self.setup_bind()
         pdu = DeliverSM(
             sequence_number=0, message_id='foo', short_message='bar')
         protocol.dataReceived(pdu.get_bin())
@@ -195,51 +214,56 @@ class EsmeTestCase(VumiTestCase):
         self.assertEqual(seq_no, 0)
         self.assertCommand(deliver_sm, 'deliver_sm', sequence_number=0)
 
-        [deliver_sm_resp] = receive_pdus(transport)
+        [deliver_sm_resp] = yield wait_for_pdus(transport, 1)
         self.assertCommand(
             deliver_sm_resp, 'deliver_sm_resp', sequence_number=0,
             status='ESME_ROK')
 
+    @inlineCallbacks
     def test_deliver_sm_fail(self):
         EsmeTransceiver.onDeliverSM = lambda p, *a: 'ESME_RDELIVERYFAILURE'
-        transport, protocol = self.setup_bind()
+        transport, protocol = yield self.setup_bind()
         pdu = DeliverSM(
             sequence_number=0, message_id='foo', short_message='bar')
         protocol.dataReceived(pdu.get_bin())
-        [deliver_sm_resp] = receive_pdus(transport)
+        [deliver_sm_resp] = yield wait_for_pdus(transport, 1)
         self.assertCommand(
             deliver_sm_resp, 'deliver_sm_resp', sequence_number=0,
             status='ESME_RDELIVERYFAILURE')
 
+    @inlineCallbacks
     def test_on_enquire_link(self):
-        transport, protocol = self.setup_bind()
+        transport, protocol = yield self.setup_bind()
         pdu = EnquireLink(sequence_number=0)
         protocol.dataReceived(pdu.get_bin())
-        [enquire_link_resp] = receive_pdus(transport)
+        [enquire_link_resp] = yield wait_for_pdus(transport, 1)
         self.assertCommand(
             enquire_link_resp, 'enquire_link_resp', sequence_number=0,
             status='ESME_ROK')
 
+    @inlineCallbacks
     def test_on_enquire_link_resp(self):
         calls = []
         EsmeTransceiver.onEnquireLinkResp = lambda p, *a: calls.append(a)
-        transport, protocol = self.setup_bind()
+        transport, protocol = yield self.setup_bind()
         pdu = EnquireLinkResp(sequence_number=0)
         protocol.dataReceived(pdu.get_bin())
         [(seq_number,)] = calls
         self.assertEqual(seq_number, 0)
 
+    @inlineCallbacks
     def test_enquire_link_no_response(self):
-        transport, protocol = self.setup_bind(clear=False)
-        [_, enquire_link] = receive_pdus(transport)
+        transport, protocol = yield self.setup_bind(clear=False)
+        [_, enquire_link] = yield wait_for_pdus(transport, 2)
         interval = protocol.config.smpp_enquire_link_interval
         protocol.clock.advance(interval)
         self.assertTrue(transport.disconnecting)
 
+    @inlineCallbacks
     def test_enquire_link_looping(self):
-        transport, protocol = self.setup_bind(clear=False)
+        transport, protocol = yield self.setup_bind(clear=False)
         interval = protocol.config.smpp_enquire_link_interval
-        [_, enquire_link] = receive_pdus(transport)
+        [_, enquire_link] = yield wait_for_pdus(transport, 2)
         enquire_link_resp = EnquireLinkResp(seq_no(enquire_link))
 
         protocol.clock.advance(interval - 1)
@@ -252,22 +276,22 @@ class EsmeTestCase(VumiTestCase):
 
     @inlineCallbacks
     def test_submit_sm(self):
-        transport, protocol = self.setup_bind()
+        transport, protocol = yield self.setup_bind()
         yield protocol.submitSM(short_message='foo')
-        [pdu] = receive_pdus(transport)
+        [pdu] = yield wait_for_pdus(transport, 1)
         self.assertCommand(pdu, 'submit_sm', params={
             'short_message': 'foo',
         })
 
     @inlineCallbacks
     def test_submit_sm_long(self):
-        transport, protocol = self.setup_bind(config={
+        transport, protocol = yield self.setup_bind(config={
             'send_long_messages': True,
         })
 
         long_message = 'This is a long message.' * 20
         yield protocol.submitSM(short_message=long_message)
-        [sm] = receive_pdus(transport)
+        [sm] = yield wait_for_pdus(transport, 1)
         pdu_opts = unpacked_pdu_opts(sm)
 
         self.assertEqual('submit_sm', sm['header']['command_id'])
@@ -278,14 +302,13 @@ class EsmeTestCase(VumiTestCase):
 
     @inlineCallbacks
     def test_submit_sm_multipart_udh(self):
-        transport, protocol = self.setup_bind(config={
+        transport, protocol = yield self.setup_bind(config={
             'send_multipart_udh': True,
         })
         long_message = 'This is a long message.' * 20
         seq_numbers = yield protocol.submitSM(short_message=long_message)
-        pdus = receive_pdus(transport)
+        pdus = yield wait_for_pdus(transport, 4)
         self.assertEqual(len(seq_numbers), 4)
-        self.assertEqual(len(pdus), 4)
 
         msg_parts = []
         msg_refs = []
@@ -312,12 +335,12 @@ class EsmeTestCase(VumiTestCase):
 
     @inlineCallbacks
     def test_submit_sm_multipart_sar(self):
-        transport, protocol = self.setup_bind(config={
+        transport, protocol = yield self.setup_bind(config={
             'send_multipart_sar': True,
         })
         long_message = 'This is a long message.' * 20
         seq_nums = yield protocol.submitSM(short_message=long_message)
-        pdus = receive_pdus(transport)
+        pdus = yield wait_for_pdus(transport, 4)
         self.assertEqual([3, 4, 5, 6], seq_nums)
         self.assertEqual(4, len(pdus))
         msg_parts = []
@@ -339,9 +362,9 @@ class EsmeTestCase(VumiTestCase):
 
     @inlineCallbacks
     def test_query_sm(self):
-        transport, protocol = self.setup_bind()
+        transport, protocol = yield self.setup_bind()
         yield protocol.querySM('foo', 'bar')
-        [pdu] = receive_pdus(transport)
+        [pdu] = yield wait_for_pdus(transport, 1)
         self.assertCommand(pdu, 'query_sm', params={
             'message_id': 'foo',
             'source_addr': 'bar',
@@ -351,24 +374,26 @@ class EsmeTestCase(VumiTestCase):
     def test_unbind(self):
         calls = []
         EsmeTransceiver.onUnbindResp = lambda p, sn: calls.append(sn)
-        transport, protocol = self.setup_bind()
+        transport, protocol = yield self.setup_bind()
         yield protocol.unbind()
-        [unbind_pdu] = receive_pdus(transport)
+        [unbind_pdu] = yield wait_for_pdus(transport, 1)
         protocol.dataReceived(UnbindResp(seq_no(unbind_pdu)).get_bin())
         self.assertEqual(calls, [seq_no(unbind_pdu)])
 
+    @inlineCallbacks
     def test_bind_transmitter(self):
-        transport, protocol = self.setup_bind(
+        transport, protocol = yield self.setup_bind(
             factory_class=EsmeTransmitterFactory, clear=False)
-        [bind_pdu, enquire_link] = receive_pdus(transport)
+        [bind_pdu, enquire_link] = yield wait_for_pdus(transport, 2)
         self.assertCommand(bind_pdu, 'bind_transmitter')
         self.assertTrue(protocol.isBound())
         self.assertEqual(protocol.state, protocol.BOUND_STATE_TX)
 
+    @inlineCallbacks
     def test_bind_receiver(self):
-        transport, protocol = self.setup_bind(
+        transport, protocol = yield self.setup_bind(
             factory_class=EsmeReceiverFactory, clear=False)
-        [bind_pdu, enquire_link] = receive_pdus(transport)
+        [bind_pdu, enquire_link] = yield wait_for_pdus(transport, 2)
         self.assertCommand(bind_pdu, 'bind_receiver')
         self.assertTrue(protocol.isBound())
         self.assertEqual(protocol.state, protocol.BOUND_STATE_RX)
