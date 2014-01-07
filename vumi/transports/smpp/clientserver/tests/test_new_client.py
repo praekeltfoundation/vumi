@@ -14,7 +14,7 @@ from smpp.pdu_builder import (
     BindTransceiverResp, Unbind,
     SubmitSMResp,
     DeliverSM,
-    EnquireLink)
+    EnquireLink, EnquireLinkResp)
 
 
 def sequence_generator():
@@ -177,3 +177,12 @@ class EsmeTestCase(VumiTestCase):
         self.assertCommand(
             enquire_link_resp, 'enquire_link_resp', sequence_number=0,
             status='ESME_ROK')
+
+    def test_on_enquire_link_resp(self):
+        calls = []
+        EsmeTransceiver.onEnquireLinkResp = lambda p, *a: calls.append(a)
+        transport, protocol = self.setup_bind()
+        pdu = EnquireLinkResp(sequence_number=0)
+        protocol.dataReceived(pdu.get_bin())
+        [(seq_number,)] = calls
+        self.assertEqual(seq_number, 0)

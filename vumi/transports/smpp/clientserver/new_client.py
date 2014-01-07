@@ -253,6 +253,12 @@ class EsmeTransceiver(Protocol):
     def handle_enquire_link(self, pdu):
         return self.sendPDU(EnquireLinkResp(seq_no(pdu)))
 
+    def handle_enquire_link_resp(self, pdu):
+        return self.onEnquireLinkResp(seq_no(pdu))
+
+    def onEnquireLinkResp(self, sequence_number):
+        """TODO: to be implemented"""
+
 
 class EsmeTransceiverFactory(ClientFactory):
 
