@@ -12,7 +12,8 @@ from twisted.internet.defer import (
 import binascii
 from smpp.pdu import unpack_pdu
 from smpp.pdu_builder import (
-    BindTransceiver, UnbindResp, Unbind,
+    BindTransceiver, BindReceiver, BindTransmitter,
+    UnbindResp, Unbind,
     DeliverSMResp,
     EnquireLink, EnquireLinkResp,
     SubmitSM, QuerySM)
@@ -71,20 +72,20 @@ def chop_pdu_stream(data):
 
 
 class EsmeTransceiver(Protocol):
-    BIND_PDU = BindTransceiver
+
+    bind_pdu = BindTransceiver
+    clock = reactor
 
     OPEN_STATE = 'OPEN'
     CLOSED_STATE = 'CLOSED'
     BOUND_STATE_TRX = 'BOUND_TRX'
-    BOUND_STATE_TR = 'BOUND_TR'
+    BOUND_STATE_TX = 'BOUND_TR'
     BOUND_STATE_RX = 'BOUND_RX'
     BOUND_STATES = set([
         BOUND_STATE_RX,
-        BOUND_STATE_TR,
+        BOUND_STATE_TX,
         BOUND_STATE_TRX,
     ])
-
-    clock = reactor
 
     def __init__(self, config, sm_processor, dr_processor, sequence_generator):
         self.buffer = b''
@@ -136,7 +137,7 @@ class EsmeTransceiver(Protocol):
     def onConnectionMade(self):
         sequence_number = yield self.get_next_seq()
         bind_params = self.getBindParams()
-        pdu = self.BIND_PDU(sequence_number, **bind_params)
+        pdu = self.bind_pdu(sequence_number, **bind_params)
         self.sendPDU(pdu)
         self.drop_link_call = self.clock.callLater(
             self.config.smpp_bind_timeout, self.dropLink)
@@ -211,13 +212,35 @@ class EsmeTransceiver(Protocol):
 
     def handle_bind_transceiver_resp(self, pdu):
         if not pdu_ok(pdu):
-            log.warning('Unable to bind: %r' % (command_status(pdu)))
+            log.warning('Unable to bind: %r' % (command_status(pdu),))
             self.transport.loseConnection()
 
         self.state = self.BOUND_STATE_TRX
         return self.onBindTransceiverResp(seq_no(pdu))
 
     def onBindTransceiverResp(self, sequence_number):
+        return self.onSmppBind(sequence_number)
+
+    def handle_bind_transmitter_resp(self, pdu):
+        if not pdu_ok(pdu):
+            log.warning('Unable to bind: %r' % (command_status(pdu),))
+            self.transport.loseConnection()
+
+        self.state = self.BOUND_STATE_TX
+        return self.onBindTransmitterResp(seq_no(pdu))
+
+    def onBindTransmitterResp(self, sequence_number):
+        return self.onSmppBind(sequence_number)
+
+    def handle_bind_receiver_resp(self, pdu):
+        if not pdu_ok(pdu):
+            log.warning('Unable to bind: %r' % (command_status(pdu),))
+            self.transport.loseConnection()
+
+        self.state = self.BOUND_STATE_RX
+        return self.onBindReceiverResp(seq_no(pdu))
+
+    def onBindReceiverResp(self, sequence_number):
         return self.onSmppBind(sequence_number)
 
     def onSmppBind(self, sequence_number):
@@ -436,3 +459,19 @@ class EsmeTransceiverFactory(ClientFactory):
             self.sequence_generator)
         proto.factory = self
         return proto
+
+
+class EsmeReceiver(EsmeTransceiver):
+    bind_pdu = BindReceiver
+
+
+class EsmeReceiverFactory(EsmeTransceiverFactory):
+    protocol = EsmeReceiver
+
+
+class EsmeTransmitter(EsmeTransceiver):
+    bind_pdu = BindTransmitter
+
+
+class EsmeTransmitterFactory(EsmeTransceiverFactory):
+    protocol = EsmeTransmitter

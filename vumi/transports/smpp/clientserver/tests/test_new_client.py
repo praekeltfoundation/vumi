@@ -9,13 +9,17 @@ DelayedCall.debug = True
 from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 from vumi.transports.smpp.transport import SmppTransport
 from vumi.transports.smpp.clientserver.new_client import (
-    EsmeTransceiver, EsmeTransceiverFactory, seq_no, command_status,
-    command_id, chop_pdu_stream)
+    EsmeTransceiver, EsmeTransceiverFactory,
+    EsmeTransmitterFactory, EsmeReceiverFactory,
+    seq_no, command_status, command_id, chop_pdu_stream)
 from vumi.transports.smpp.smpp_utils import unpacked_pdu_opts
 
 from smpp.pdu import unpack_pdu
 from smpp.pdu_builder import (
-    BindTransceiverResp, Unbind, UnbindResp,
+    Unbind, UnbindResp,
+    BindTransceiver, BindTransceiverResp,
+    BindTransmitter, BindTransmitterResp,
+    BindReceiver, BindReceiverResp,
     SubmitSMResp,
     DeliverSM,
     EnquireLink, EnquireLinkResp)
@@ -34,11 +38,17 @@ def connect_transport(protocol):
     return transport
 
 
-def bind_protocol(transport, protocol):
+def bind_protocol(transport, protocol, clear=True):
     [bind_pdu] = receive_pdus(transport)
-    transport.clear()
+    resp_pdu_class = {
+        BindTransceiver: BindTransceiverResp,
+        BindReceiver: BindReceiverResp,
+        BindTransmitter: BindTransmitterResp,
+    }.get(protocol.bind_pdu)
     protocol.dataReceived(
-        BindTransceiverResp(seq_no(bind_pdu)).get_bin())
+        resp_pdu_class(seq_no(bind_pdu)).get_bin())
+    if clear:
+        transport.clear()
     return bind_pdu
 
 
@@ -61,7 +71,10 @@ class EsmeTestCase(VumiTestCase):
         self.patch(EsmeTransceiver, 'clock', self.clock)
 
     def get_protocol(self, config={}, redis=None,
-                     sm_processor=None, dr_processor=None):
+                     sm_processor=None, dr_processor=None,
+                     factory_class=None):
+
+        factory_class = factory_class or EsmeTransceiverFactory
 
         default_config = {
             'transport_name': 'sphex_transport',
@@ -79,7 +92,7 @@ class EsmeTestCase(VumiTestCase):
             dr_processor = cfg.delivery_report_processor(
                 redis, None, cfg.delivery_report_processor_config)
 
-        factory = EsmeTransceiverFactory(
+        factory = factory_class(
             cfg, sm_processor, dr_processor, sequence_generator())
         proto = factory.buildProtocol(('127.0.0.1', 0))
         self.add_cleanup(proto.connectionLost, reason=ConnectionDone)
@@ -101,12 +114,10 @@ class EsmeTestCase(VumiTestCase):
             for key, value in params.items():
                 self.assertEqual(mandatory_parameters.get(key), value)
 
-    def setup_bind(self, config={}, clear=True):
-        protocol = self.get_protocol(config)
+    def setup_bind(self, config={}, clear=True, factory_class=None):
+        protocol = self.get_protocol(config, factory_class=factory_class)
         transport = connect_transport(protocol)
-        bind_protocol(transport, protocol)
-        if clear:
-            transport.clear()
+        bind_protocol(transport, protocol, clear=clear)
         return transport, protocol
 
     def test_on_connection_made(self):
@@ -136,11 +147,12 @@ class EsmeTestCase(VumiTestCase):
     def test_on_smpp_bind(self):
         protocol = self.get_protocol()
         transport = connect_transport(protocol)
-        bind_protocol(transport, protocol)
+        bind_protocol(transport, protocol, clear=False)
         self.assertEqual(protocol.state, EsmeTransceiver.BOUND_STATE_TRX)
         self.assertTrue(protocol.isBound())
         self.assertTrue(protocol.enquire_link_call.running)
-        [enquire_link_pdu] = receive_pdus(transport)
+        [bind_pdu, enquire_link_pdu] = receive_pdus(transport)
+        self.assertCommand(bind_pdu, 'bind_transceiver', sequence_number=0)
         self.assertCommand(enquire_link_pdu, 'enquire_link',
                            sequence_number=1, status='ESME_ROK')
 
@@ -206,7 +218,7 @@ class EsmeTestCase(VumiTestCase):
 
     def test_enquire_link_no_response(self):
         transport, protocol = self.setup_bind(clear=False)
-        [enquire_link] = receive_pdus(transport)
+        [_, enquire_link] = receive_pdus(transport)
         interval = protocol.config.smpp_enquire_link_interval
         protocol.clock.advance(interval)
         self.assertTrue(transport.disconnecting)
@@ -214,7 +226,7 @@ class EsmeTestCase(VumiTestCase):
     def test_enquire_link_looping(self):
         transport, protocol = self.setup_bind(clear=False)
         interval = protocol.config.smpp_enquire_link_interval
-        [enquire_link] = receive_pdus(transport)
+        [_, enquire_link] = receive_pdus(transport)
         enquire_link_resp = EnquireLinkResp(seq_no(enquire_link))
 
         protocol.clock.advance(interval - 1)
@@ -331,3 +343,19 @@ class EsmeTestCase(VumiTestCase):
         [unbind_pdu] = receive_pdus(transport)
         protocol.dataReceived(UnbindResp(seq_no(unbind_pdu)).get_bin())
         self.assertEqual(calls, [seq_no(unbind_pdu)])
+
+    def test_bind_transmitter(self):
+        transport, protocol = self.setup_bind(
+            factory_class=EsmeTransmitterFactory, clear=False)
+        [bind_pdu, enquire_link] = receive_pdus(transport)
+        self.assertCommand(bind_pdu, 'bind_transmitter')
+        self.assertTrue(protocol.isBound())
+        self.assertEqual(protocol.state, protocol.BOUND_STATE_TX)
+
+    def test_bind_receiver(self):
+        transport, protocol = self.setup_bind(
+            factory_class=EsmeReceiverFactory, clear=False)
+        [bind_pdu, enquire_link] = receive_pdus(transport)
+        self.assertCommand(bind_pdu, 'bind_receiver')
+        self.assertTrue(protocol.isBound())
+        self.assertEqual(protocol.state, protocol.BOUND_STATE_RX)
