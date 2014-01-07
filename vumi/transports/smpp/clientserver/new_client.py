@@ -19,6 +19,7 @@ from smpp.pdu_builder import (
     SubmitSM, QuerySM)
 
 from vumi import log
+from vumi.config import Config, ConfigInt
 from vumi.transports.smpp.smpp_utils import update_ussd_pdu
 
 GSM_MAX_SMS_BYTES = 140
@@ -87,19 +88,24 @@ class EsmeTransceiver(Protocol):
         BOUND_STATE_TRX,
     ])
 
-    def __init__(self, config, sm_processor, dr_processor, sequence_generator):
+    def __init__(self, transport):
+        self.transport = transport
+
+        # TODO: split Esme* config parameters to its own Config class
+        self.config = transport.config
+
         self.buffer = b''
         self.state = self.CLOSED_STATE
-        self.config = config
-        self.sm_processor = sm_processor
-        self.dr_processor = dr_processor
-        self.sequence_generator = sequence_generator
+
+        self.sm_processor = transport.sm_processor
+        self.dr_processor = transport.dr_processor
+        self.sequence_generator = transport.sequence_generator
         self.enquire_link_call = LoopingCall(self.enquireLink)
         self.drop_link_call = None
         self.disconnect_call = self.clock.callLater(
-            config.smpp_enquire_link_interval, self.disconnect,
+            self.config.smpp_enquire_link_interval, self.disconnect,
             'Disconnecting, no response from SMSC for longer '
-            'than %s seconds' % (config.smpp_enquire_link_interval,))
+            'than %s seconds' % (self.config.smpp_enquire_link_interval,))
 
     def getBindParams(self):
         # TODO: validate these bind params somewhere as a config option
@@ -447,16 +453,11 @@ class EsmeTransceiverFactory(ClientFactory):
 
     protocol = EsmeTransceiver
 
-    def __init__(self, config, sm_processor, dr_processor, sequence_generator):
-        self.config = config
-        self.sm_processor = sm_processor
-        self.dr_processor = dr_processor
-        self.sequence_generator = sequence_generator
+    def __init__(self, transport):
+        self.transport = transport
 
     def buildProtocol(self, addr):
-        proto = self.protocol(
-            self.config, self.sm_processor, self.dr_processor,
-            self.sequence_generator)
+        proto = self.protocol(self.transport)
         proto.factory = self
         return proto
 

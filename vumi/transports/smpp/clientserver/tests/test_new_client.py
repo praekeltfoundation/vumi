@@ -63,6 +63,10 @@ def receive_pdus(transport):
     return pdus
 
 
+class DummySmppTransport(object):
+    pass
+
+
 class EsmeTestCase(VumiTestCase):
 
     def setUp(self):
@@ -92,8 +96,13 @@ class EsmeTestCase(VumiTestCase):
             dr_processor = cfg.delivery_report_processor(
                 redis, None, cfg.delivery_report_processor_config)
 
-        factory = factory_class(
-            cfg, sm_processor, dr_processor, sequence_generator())
+        dummy_smpp_transport = DummySmppTransport()
+        dummy_smpp_transport.config = cfg
+        dummy_smpp_transport.dr_processor = dr_processor
+        dummy_smpp_transport.sm_processor = sm_processor
+        dummy_smpp_transport.sequence_generator = sequence_generator()
+
+        factory = factory_class(dummy_smpp_transport)
         proto = factory.buildProtocol(('127.0.0.1', 0))
         self.add_cleanup(proto.connectionLost, reason=ConnectionDone)
         return proto
