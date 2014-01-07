@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 from twisted.internet.defer import inlineCallbacks, succeed
 from txtwitter.twitter import TwitterClient
 
@@ -73,19 +75,6 @@ class TestTwitterTransport(VumiTestCase):
         })
 
     @inlineCallbacks
-    def test_sending_failure(self):
-        error = Exception(':(')
-        self.transport.client.set_status_update_to_fail(error)
-
-        msg = yield self.tx_helper.make_dispatch_outbound('hello')
-        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
-
-        self.assertEqual(self.transport.client.get_status_updates(), [])
-        self.assertEqual(nack['user_message_id'], msg['message_id'])
-        self.assertEqual(nack['sent_message_id'], msg['message_id'])
-        self.assertEqual(nack['nack_reason'], '%r' % (error,))
-
-    @inlineCallbacks
     def test_tracking_messages(self):
         self.transport.track_stream.respond_with({
             'id_str': '1',
@@ -111,7 +100,7 @@ class TestTwitterTransport(VumiTestCase):
         self.assertEqual(msg['helper_metadata'], {
             'in_reply_to_status_id': None,
             'in_reply_to_screen_name': None,
-            'user_mentions': [{'screen_name': u'someone_else'}]})
+            'user_mentions': [{'screen_name': 'someone_else'}]})
 
     @inlineCallbacks
     def test_tracking_reply_messages(self):
@@ -139,7 +128,35 @@ class TestTwitterTransport(VumiTestCase):
         self.assertEqual(msg['helper_metadata'], {
             'in_reply_to_status_id': '1',
             'in_reply_to_screen_name': 'someone_else',
-            'user_mentions': [{'screen_name': u'someone_else'}]})
+            'user_mentions': [{'screen_name': 'someone_else'}]})
+
+    @inlineCallbacks
+    def test_tracking_message_decoding(self):
+        self.transport.track_stream.respond_with({
+            'id_str': '2',
+            'text': 'hëllo',
+            'in_reply_to_status_id_str': '1',
+            'in_reply_to_screen_name': 'somëone_else',
+            'user': {'screen_name': 'somëone'},
+            'entities': {
+                'user_mentions': [{'screen_name': 'somëone_else'}]
+            }
+        })
+
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+
+        self.assertEqual(msg['from_addr'], u'somëone')
+        self.assertEqual(msg['to_addr'], u'somëone_else')
+        self.assertEqual(msg['content'], u'hëllo')
+
+        self.assertEqual(
+            msg['transport_metadata'],
+            {'twitter': {'status_id': '2'}})
+
+        self.assertEqual(msg['helper_metadata'], {
+            'in_reply_to_status_id': '1',
+            'in_reply_to_screen_name': u'somëone_else',
+            'user_mentions': [{'screen_name': u'somëone_else'}]})
 
     @inlineCallbacks
     def test_inbound_user_message(self):
@@ -198,6 +215,34 @@ class TestTwitterTransport(VumiTestCase):
             'user_mentions': [{'screen_name': 'me'}]})
 
     @inlineCallbacks
+    def test_inbound_user_message_decoding(self):
+        self.transport.user_stream.respond_with({
+            'id_str': '2',
+            'text': 'hëllo',
+            'in_reply_to_status_id_str': '1',
+            'in_reply_to_screen_name': 'somëone_else',
+            'user': {'screen_name': 'somëone'},
+            'entities': {
+                'user_mentions': [{'screen_name': 'somëone_else'}]
+            }
+        })
+
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+
+        self.assertEqual(msg['from_addr'], u'somëone')
+        self.assertEqual(msg['to_addr'], u'somëone_else')
+        self.assertEqual(msg['content'], u'hëllo')
+
+        self.assertEqual(
+            msg['transport_metadata'],
+            {'twitter': {'status_id': '2'}})
+
+        self.assertEqual(msg['helper_metadata'], {
+            'in_reply_to_status_id': '1',
+            'in_reply_to_screen_name': u'somëone_else',
+            'user_mentions': [{'screen_name': u'somëone_else'}]})
+
+    @inlineCallbacks
     def test_sending(self):
         msg = yield self.tx_helper.make_dispatch_outbound('hello')
         [ack] = yield self.tx_helper.wait_for_dispatched_events(1)
@@ -220,6 +265,31 @@ class TestTwitterTransport(VumiTestCase):
         self.assertEqual(
             self.transport.client.get_status_updates(),
             [('goodbye', {'in_reply_to_status_id': '1'})])
+
+        self.assertEqual(ack['user_message_id'], msg['message_id'])
+        self.assertEqual(ack['sent_message_id'], msg['message_id'])
+
+    @inlineCallbacks
+    def test_sending_failure(self):
+        error = Exception(':(')
+        self.transport.client.set_status_update_to_fail(error)
+
+        msg = yield self.tx_helper.make_dispatch_outbound('hello')
+        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
+
+        self.assertEqual(self.transport.client.get_status_updates(), [])
+        self.assertEqual(nack['user_message_id'], msg['message_id'])
+        self.assertEqual(nack['sent_message_id'], msg['message_id'])
+        self.assertEqual(nack['nack_reason'], '%r' % (error,))
+
+    @inlineCallbacks
+    def test_sending_message_encoding(self):
+        msg = yield self.tx_helper.make_dispatch_outbound(u'hëllo')
+        [ack] = yield self.tx_helper.wait_for_dispatched_events(1)
+
+        self.assertEqual(
+            self.transport.client.get_status_updates(),
+            [('hëllo', {'in_reply_to_status_id': None})])
 
         self.assertEqual(ack['user_message_id'], msg['message_id'])
         self.assertEqual(ack['sent_message_id'], msg['message_id'])
