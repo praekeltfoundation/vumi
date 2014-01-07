@@ -6,16 +6,19 @@ from twisted.internet import reactor
 from twisted.internet.protocol import Protocol, ClientFactory
 from twisted.internet.task import LoopingCall
 from twisted.internet.defer import (
-    inlineCallbacks, returnValue, maybeDeferred)
+    inlineCallbacks, returnValue, maybeDeferred, succeed)
 
 import binascii
 from smpp.pdu import unpack_pdu
 from smpp.pdu_builder import (
     BindTransceiver, UnbindResp,
     DeliverSMResp,
-    EnquireLink, EnquireLinkResp)
+    EnquireLink, EnquireLinkResp,
+    SubmitSM)
 
 from vumi import log
+
+GSM_MAX_SMS_BYTES = 140
 
 
 def require_bind(func):
@@ -105,6 +108,10 @@ class EsmeTransceiver(Protocol):
     def get_next_seq(self):
         """TODO: refactor into proper sequence number generator"""
         return self.sequence_generator.next()
+
+    def push_unacked(self, sequence_number):
+        """TODO: refactor into something relevant"""
+        return succeed(sequence_number)
 
     def connectionMade(self):
         self.state = self.OPEN_STATE
@@ -259,6 +266,119 @@ class EsmeTransceiver(Protocol):
     def onEnquireLinkResp(self, sequence_number):
         """TODO: to be implemented"""
 
+    @require_bind
+    @inlineCallbacks
+    def submitSM(self, **kwargs):
+        pdu_params = self.getBindParams()
+        pdu_params.update(kwargs)
+        message = pdu_params['short_message']
+
+        # We use GSM_MAX_SMS_BYTES here because we may have already-encoded
+        # UCS-2 data to send and therefore can't use the 160 (7-bit) character
+        # limit everyone knows and loves. If we have some other encoding
+        # instead, this may result in unnecessarily short message parts. The
+        # SMSC is probably going to treat whatever we send it as whatever
+        # encoding it likes best and then encode (or mangle) it into a form it
+        # thinks should be in the GSM message payload. Basically, when we have
+        # to split messages up ourselves here we've already lost and the best
+        # we can hope for is not getting hurt too badly by the inevitable
+        # breakages.
+        if len(message) > GSM_MAX_SMS_BYTES:
+            if self.config.send_multipart_sar:
+                sequence_numbers = yield self._submit_multipart_sar(
+                    **pdu_params)
+                returnValue(sequence_numbers)
+            elif self.config.send_multipart_udh:
+                sequence_numbers = yield self._submit_multipart_udh(
+                    **pdu_params)
+                returnValue(sequence_numbers)
+
+        sequence_number = yield self._submit_sm(**pdu_params)
+        returnValue([sequence_number])
+
+    @inlineCallbacks
+    def _submit_sm(self, **pdu_params):
+        sequence_number = yield self.get_next_seq()
+        message = pdu_params['short_message']
+        sar_params = pdu_params.pop('sar_params', None)
+        message_type = pdu_params.pop('message_type', 'sms')
+        continue_session = pdu_params.pop('continue_session', True)
+        session_info = pdu_params.pop('session_info', None)
+
+        pdu = SubmitSM(sequence_number, **pdu_params)
+        if message_type == 'ussd':
+            update_ussd_pdu(pdu, continue_session, session_info)
+
+        if self.config.send_long_messages and len(message) > 254:
+            pdu.add_message_payload(''.join('%02x' % ord(c) for c in message))
+
+        if sar_params:
+            pdu.set_sar_msg_ref_num(sar_params['msg_ref_num'])
+            pdu.set_sar_total_segments(sar_params['total_segments'])
+            pdu.set_sar_segment_seqnum(sar_params['segment_seqnum'])
+
+        self.sendPDU(pdu)
+        yield self.push_unacked(sequence_number)
+        returnValue(sequence_number)
+
+    @inlineCallbacks
+    def _submit_multipart_sar(self, **pdu_params):
+        message = pdu_params['short_message']
+        split_msg = []
+        # We chop the message into 130 byte chunks to leave 10 bytes for the
+        # user data header the SMSC is presumably going to add for us. This is
+        # a guess based mostly on optimism and the hope that we'll never have
+        # to deal with this stuff in production.
+        # FIXME: If we have utf-8 encoded data, we might break in the
+        # middle of a multibyte character.
+        payload_length = GSM_MAX_SMS_BYTES - 10
+        while message:
+            split_msg.append(message[:payload_length])
+            message = message[payload_length:]
+        ref_num = randint(1, 255)
+        sequence_numbers = []
+        for i, msg in enumerate(split_msg):
+            params = pdu_params.copy()
+            params['short_message'] = msg
+            params['sar_params'] = {
+                'msg_ref_num': ref_num,
+                'total_segments': len(split_msg),
+                'segment_seqnum': i + 1,
+            }
+            sequence_number = yield self._submit_sm(**params)
+            sequence_numbers.append(sequence_number)
+        returnValue(sequence_numbers)
+
+    @inlineCallbacks
+    def _submit_multipart_udh(self, **pdu_params):
+        message = pdu_params['short_message']
+        split_msg = []
+        # We chop the message into 130 byte chunks to leave 10 bytes for the
+        # 6-byte user data header we add and a little extra space in case the
+        # SMSC does unexpected things with our message.
+        # FIXME: If we have utf-8 encoded data, we might break in the
+        # middle of a multibyte character.
+        payload_length = GSM_MAX_SMS_BYTES - 10
+        while message:
+            split_msg.append(message[:payload_length])
+            message = message[payload_length:]
+        ref_num = randint(1, 255)
+        sequence_numbers = []
+        for i, msg in enumerate(split_msg):
+            params = pdu_params.copy()
+            # 0x40 is the UDHI flag indicating that this payload contains a
+            # user data header.
+            params['esm_class'] = 0x40
+            # See http://en.wikipedia.org/wiki/User_Data_Header for an
+            # explanation of the magic numbers below. We should probably
+            # abstract this out into a class that makes it less magic and
+            # opaque.
+            udh = '\05\00\03%s%s%s' % (
+                chr(ref_num), chr(len(split_msg)), chr(i + 1))
+            params['short_message'] = udh + msg
+            sequence_number = yield self._submit_sm(**params)
+            sequence_numbers.append(sequence_number)
+        returnValue(sequence_numbers)
 
 class EsmeTransceiverFactory(ClientFactory):
 

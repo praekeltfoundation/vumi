@@ -186,3 +186,12 @@ class EsmeTestCase(VumiTestCase):
         protocol.dataReceived(pdu.get_bin())
         [(seq_number,)] = calls
         self.assertEqual(seq_number, 0)
+
+    @inlineCallbacks
+    def test_submit_sm(self):
+        transport, protocol = self.setup_bind()
+        yield protocol.submitSM(short_message='foo')
+        pdu = unpack_pdu(transport.value())
+        self.assertCommand(pdu, 'submit_sm', params={
+            'short_message': 'foo',
+        })
