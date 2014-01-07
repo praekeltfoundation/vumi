@@ -2,6 +2,7 @@
 
 from copy import deepcopy
 from urllib2 import urlparse
+import inspect
 import textwrap
 import re
 
@@ -327,12 +328,10 @@ class ConfigMetaClass(type):
         fields = []
         unified_class_dict = {}
         for base in bases:
-            unified_class_dict.update(base.__dict__)
+            unified_class_dict.update(inspect.getmembers(base))
         unified_class_dict.update(dict)
 
         for key, possible_field in unified_class_dict.items():
-            if key in fields:
-                continue
             if isinstance(possible_field, ConfigField):
                 fields.append(possible_field)
                 possible_field.setup(key)
