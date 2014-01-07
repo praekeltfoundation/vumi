@@ -21,17 +21,25 @@ def require_bind(func):
     def wrapper(self, *args, **kwargs):
         if not self.isBound():
             raise EsmeProtocolError('%s called in unbound state.' % (func,))
-        return func(*args, **kwargs)
+        return func(self, *args, **kwargs)
     return wrapper
 
 
 def pdu_ok(pdu):
-    return pdu['header']['command_status'] == 'ESME_ROK'
+    return command_status(pdu) == 'ESME_ROK'
 
 
 def pdu_reply(seq_number, reply_pdu):
     reply_pdu['header']['sequence_number'] = seq_number
     return reply_pdu
+
+
+def seq_no(pdu):
+    return pdu['header']['sequence_number']
+
+
+def command_status(pdu):
+    return pdu['header']['command_status']
 
 
 class EsmeProtocolError(Exception):
@@ -52,9 +60,10 @@ class EsmeTransceiver(Protocol):
         BOUND_STATE_TRX,
     ])
 
-    callLater = reactor.callLater
+    clock = reactor
 
     def __init__(self, config, sm_processor, dr_processor, sequence_generator):
+        self.buffer = b''
         self.state = self.CLOSED_STATE
         self.config = config
         self.sm_processor = sm_processor
@@ -97,7 +106,7 @@ class EsmeTransceiver(Protocol):
         bind_params = self.getBindParams()
         pdu = self.BIND_PDU(sequence_number, **bind_params)
         self.sendPDU(pdu)
-        self.drop_link_call = self.callLater(
+        self.drop_link_call = self.clock.callLater(
             self.config.smpp_bind_timeout, self.dropLink)
 
     def dropLink(self):
@@ -142,23 +151,23 @@ class EsmeTransceiver(Protocol):
             data = self.handleBuffer()
 
     def handleBuffer(self):
-        if len(self.datastream) < 16:
+        if len(self.buffer) < 16:
             return
 
-        bytes = binascii.b2a_hex(self.datastream[0:4])
+        bytes = binascii.b2a_hex(self.buffer[0:4])
         cmd_length = int(bytes, 16)
-        if len(self.data_stream) < cmd_length:
+        if len(self.buffer) < cmd_length:
             return
 
-        data, self.data_stream = (self.data_stream[0:cmd_length],
-                                  self.data_stream[cmd_length:])
+        data, self.buffer = (self.buffer[0:cmd_length],
+                             self.buffer[cmd_length:])
         return data
 
     def onPdu(self, pdu):
         command_id = pdu['header']['command_id']
         handler = getattr(self, 'handle_%s' % (command_id,),
                           self.onUnsupportedCommandId)
-        return maybeDeferred(handler(pdu))
+        return maybeDeferred(handler, pdu)
 
     def onUnsupportedCommandId(self, pdu):
         """
@@ -169,20 +178,22 @@ class EsmeTransceiver(Protocol):
         log.warning('Received unsupported SMPP command_id: %r' % (command_id,))
 
     def handle_bind_transceiver_resp(self, pdu):
-        if pdu_ok(pdu):
-            self.state = self.BOUND_STATE_TRX
-            return self.onSmppBind(self)
+        if not pdu_ok(pdu):
+            log.warning('Unable to bind: %r' % (command_status(pdu)))
+            self.transport.loseConnection()
 
-    def onBindTransceiverResp(self):
-        return self.onSmppBind()
+        self.state = self.BOUND_STATE_TRX
+        return self.onBindTransceiverResp(seq_no(pdu))
 
-    def onSmppBind(self):
+    def onBindTransceiverResp(self, sequence_number):
+        return self.onSmppBind(sequence_number)
+
+    def onSmppBind(self, sequence_number):
         """Called when the bind has been setup"""
         self.enquire_link_call.start(self.config.smpp_enquire_link_interval)
 
     def handle_unbind(self, pdu):
-        sequence_number = pdu['header']['sequence_number']
-        return self.onUnBind(sequence_number)
+        return self.onUnBind(seq_no(pdu))
 
     def onUnBind(self, sequence_number):
         return self.sendPDU(pdu_reply(sequence_number, UnbindResp()))
