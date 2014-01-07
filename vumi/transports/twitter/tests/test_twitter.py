@@ -40,11 +40,11 @@ class FakeTwitterClient(TwitterClient):
     def get_status_updates(self):
         return self.status_updates
 
-    def statuses_update(self, content):
+    def statuses_update(self, content, **kw):
         if self.status_update_error is not None:
             raise self.status_update_error
 
-        self.status_updates.append(content)
+        self.status_updates.append((content, kw))
         return succeed(self.status_update_response)
 
     def stream_filter(self, delegate, track=None):
@@ -73,25 +73,11 @@ class TestTwitterTransport(VumiTestCase):
         })
 
     @inlineCallbacks
-    def test_sending(self):
-        self.transport.client.set_status_update_response({'id_str': '1'})
-
-        msg = yield self.tx_helper.make_dispatch_outbound('adnap das')
-        [ack] = yield self.tx_helper.wait_for_dispatched_events(1)
-
-        self.assertEqual(
-            self.transport.client.get_status_updates(),
-            ['adnap das'])
-
-        self.assertEqual(ack['user_message_id'], msg['message_id'])
-        self.assertEqual(ack['sent_message_id'], msg['message_id'])
-
-    @inlineCallbacks
     def test_sending_failure(self):
         error = Exception(':(')
         self.transport.client.set_status_update_to_fail(error)
 
-        msg = yield self.tx_helper.make_dispatch_outbound('adnap das')
+        msg = yield self.tx_helper.make_dispatch_outbound('hello')
         [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
 
         self.assertEqual(self.transport.client.get_status_updates(), [])
@@ -210,6 +196,33 @@ class TestTwitterTransport(VumiTestCase):
             'in_reply_to_status_id': '1',
             'in_reply_to_screen_name': 'me',
             'user_mentions': [{'screen_name': 'me'}]})
+
+    @inlineCallbacks
+    def test_sending(self):
+        msg = yield self.tx_helper.make_dispatch_outbound('hello')
+        [ack] = yield self.tx_helper.wait_for_dispatched_events(1)
+
+        self.assertEqual(
+            self.transport.client.get_status_updates(),
+            [('hello', {'in_reply_to_status_id': None})])
+
+        self.assertEqual(ack['user_message_id'], msg['message_id'])
+        self.assertEqual(ack['sent_message_id'], msg['message_id'])
+
+    @inlineCallbacks
+    def test_reply_sending(self):
+        inbound_msg = yield self.tx_helper.make_dispatch_inbound(
+            'hello', transport_metadata={'twitter': {'status_id': '1'}})
+
+        msg = yield self.tx_helper.make_dispatch_reply(inbound_msg, "goodbye")
+        [ack] = yield self.tx_helper.wait_for_dispatched_events(1)
+
+        self.assertEqual(
+            self.transport.client.get_status_updates(),
+            [('goodbye', {'in_reply_to_status_id': '1'})])
+
+        self.assertEqual(ack['user_message_id'], msg['message_id'])
+        self.assertEqual(ack['sent_message_id'], msg['message_id'])
 
     def test_track_stream_for_non_tweet(self):
         with LogCatcher() as lc:

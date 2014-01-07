@@ -102,11 +102,15 @@ class TwitterTransport(Transport):
 
     @inlineCallbacks
     def handle_outbound_message(self, message):
-        # TODO Use in_reply_to_status_id once txTwitter supports it
         log.msg("Twitter transport sending %r" % (message,))
 
+        metadata = message['transport_metadata'].get(self.transport_type, {})
+        in_reply_to_status_id = metadata.get('status_id')
+
         try:
-            yield self.client.statuses_update(self.encode(message['content']))
+            yield self.client.statuses_update(
+                self.encode(message['content']),
+                in_reply_to_status_id=in_reply_to_status_id)
 
             yield self.publish_ack(
                 user_message_id=message['message_id'],
