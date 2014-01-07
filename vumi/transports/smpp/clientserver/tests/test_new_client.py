@@ -12,7 +12,7 @@ from vumi.transports.smpp.smpp_utils import unpacked_pdu_opts
 
 from smpp.pdu import unpack_pdu
 from smpp.pdu_builder import (
-    BindTransceiverResp, Unbind,
+    BindTransceiverResp, Unbind, UnbindResp,
     SubmitSMResp,
     DeliverSM,
     EnquireLink, EnquireLinkResp)
@@ -318,3 +318,13 @@ class EsmeTestCase(VumiTestCase):
             'message_id': 'foo',
             'source_addr': 'bar',
         })
+
+    @inlineCallbacks
+    def test_unbind(self):
+        calls = []
+        EsmeTransceiver.onUnbindResp = lambda p, sn: calls.append(sn)
+        transport, protocol = self.setup_bind()
+        yield protocol.unbind()
+        [unbind_pdu] = receive_pdus(transport)
+        protocol.dataReceived(UnbindResp(seq_no(unbind_pdu)).get_bin())
+        self.assertEqual(calls, [seq_no(unbind_pdu)])

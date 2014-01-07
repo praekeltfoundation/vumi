@@ -12,7 +12,7 @@ from twisted.internet.defer import (
 import binascii
 from smpp.pdu import unpack_pdu
 from smpp.pdu_builder import (
-    BindTransceiver, UnbindResp,
+    BindTransceiver, UnbindResp, Unbind,
     DeliverSMResp,
     EnquireLink, EnquireLinkResp,
     SubmitSM, QuerySM)
@@ -151,7 +151,7 @@ class EsmeTransceiver(Protocol):
         if self.isBound():
             return
 
-        self.disconnect(
+        return self.disconnect(
             'Dropping link due to binding delay. Current state: %s' % (
                 self.state))
 
@@ -409,6 +409,19 @@ class EsmeTransceiver(Protocol):
             **self.getBindParams())
         self.sendPDU(pdu)
         returnValue([sequence_number])
+
+    @require_bind
+    @inlineCallbacks
+    def unbind(self):
+        sequence_number = yield self.get_next_seq()
+        self.sendPDU(Unbind(sequence_number))
+        returnValue([sequence_number])
+
+    def handle_unbind_resp(self, pdu):
+        self.onUnbindResp(seq_no(pdu))
+
+    def onUnbindResp(self, sequence_number):
+        log.msg('Unbind successful.')
 
 
 class EsmeTransceiverFactory(ClientFactory):
