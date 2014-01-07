@@ -14,18 +14,10 @@ from smpp.pdu_builder import (
     EnquireLink, EnquireLinkResp, QuerySM, UnbindResp)
 
 from vumi import log
+from vumi.transports.smpp.smpp_utils import update_ussd_pdu
 
 
 GSM_MAX_SMS_BYTES = 140
-
-
-def update_ussd_pdu(sm_pdu, continue_session, session_info=None):
-    if session_info is None:
-        session_info = '0000'
-    session_info = "%04x" % (int(session_info, 16) + int(not continue_session))
-    sm_pdu._PDU__add_optional_parameter('ussd_service_op', '02')
-    sm_pdu._PDU__add_optional_parameter('its_session_info', session_info)
-    return sm_pdu
 
 
 class EsmeTransceiver(Protocol):

@@ -18,6 +18,7 @@ from smpp.pdu_builder import (
     SubmitSM, QuerySM)
 
 from vumi import log
+from vumi.transports.smpp.smpp_utils import update_ussd_pdu
 
 GSM_MAX_SMS_BYTES = 140
 
