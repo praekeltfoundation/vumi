@@ -15,7 +15,7 @@ from smpp.pdu_builder import (
     BindTransceiver, UnbindResp,
     DeliverSMResp,
     EnquireLink, EnquireLinkResp,
-    SubmitSM)
+    SubmitSM, QuerySM)
 
 from vumi import log
 
@@ -389,6 +389,17 @@ class EsmeTransceiver(Protocol):
             sequence_number = yield self._submit_sm(**params)
             sequence_numbers.append(sequence_number)
         returnValue(sequence_numbers)
+
+    @require_bind
+    @inlineCallbacks
+    def querySM(self, message_id, source_addr, **kwargs):
+        sequence_number = yield self.get_next_seq()
+        pdu = QuerySM(
+            sequence_number, message_id=message_id, source_addr=source_addr,
+            **self.getBindParams())
+        self.sendPDU(pdu)
+        returnValue([sequence_number])
+
 
 class EsmeTransceiverFactory(ClientFactory):
 

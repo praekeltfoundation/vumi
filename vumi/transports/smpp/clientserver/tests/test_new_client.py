@@ -287,3 +287,13 @@ class EsmeTestCase(VumiTestCase):
 
         self.assertEqual(long_message, ''.join(msg_parts))
         self.assertEqual(1, len(set(msg_refs)))
+
+    @inlineCallbacks
+    def test_query_sm(self):
+        transport, protocol = self.setup_bind()
+        yield protocol.querySM('foo', 'bar')
+        [pdu] = receive_pdus(transport)
+        self.assertCommand(pdu, 'query_sm', params={
+            'message_id': 'foo',
+            'source_addr': 'bar',
+        })
