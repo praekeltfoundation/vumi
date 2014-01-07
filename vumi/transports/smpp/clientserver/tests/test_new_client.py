@@ -2,6 +2,9 @@ from twisted.test import proto_helpers
 from twisted.internet.defer import succeed, inlineCallbacks
 from twisted.internet.error import ConnectionDone
 from twisted.internet.task import Clock
+from twisted.internet.base import DelayedCall
+
+DelayedCall.debug = True
 
 from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 from vumi.transports.smpp.transport import SmppTransport
@@ -52,9 +55,10 @@ def receive_pdus(transport):
 
 class EsmeTestCase(VumiTestCase):
 
+    @inlineCallbacks
     def setUp(self):
         self.persistence_helper = self.add_helper(PersistenceHelper())
-        self.redis = self.persistence_helper.get_redis_manager()
+        self.redis = yield self.persistence_helper.get_redis_manager()
         self.clock = Clock()
         self.patch(EsmeTransceiver, 'clock', self.clock)
 
@@ -141,7 +145,7 @@ class EsmeTestCase(VumiTestCase):
         self.assertCommand(enquire_link_pdu, 'enquire_link',
                            sequence_number=1, status='ESME_ROK')
 
-    def test_unbind(self):
+    def test_handle_unbind(self):
         transport, protocol = self.setup_bind()
         protocol.dataReceived(Unbind(sequence_number=0).get_bin())
         [pdu] = receive_pdus(transport)
