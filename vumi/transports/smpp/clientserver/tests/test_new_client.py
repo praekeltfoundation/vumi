@@ -2,9 +2,7 @@ from twisted.test import proto_helpers
 from twisted.internet.defer import succeed, inlineCallbacks
 from twisted.internet.error import ConnectionDone
 from twisted.internet.task import Clock
-from twisted.internet.base import DelayedCall
 
-DelayedCall.debug = True
 
 from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 from vumi.transports.smpp.transport import SmppTransport
@@ -13,6 +11,7 @@ from vumi.transports.smpp.clientserver.new_client import (
     EsmeTransmitterFactory, EsmeReceiverFactory,
     seq_no, command_status, command_id, chop_pdu_stream)
 from vumi.transports.smpp.smpp_utils import unpacked_pdu_opts
+from vumi.transports.smpp.clientserver.sequence import RedisSequence
 
 from smpp.pdu import unpack_pdu
 from smpp.pdu_builder import (
@@ -69,12 +68,14 @@ class DummySmppTransport(object):
 
 class EsmeTestCase(VumiTestCase):
 
+    @inlineCallbacks
     def setUp(self):
         self.persistence_helper = self.add_helper(PersistenceHelper())
+        self.redis = yield self.persistence_helper.get_redis_manager()
         self.clock = Clock()
         self.patch(EsmeTransceiver, 'clock', self.clock)
 
-    def get_protocol(self, config={}, redis=None,
+    def get_protocol(self, config={},
                      sm_processor=None, dr_processor=None,
                      factory_class=None):
 
@@ -93,16 +94,16 @@ class EsmeTestCase(VumiTestCase):
         cfg = SmppTransport.CONFIG_CLASS(default_config, static=True)
         if sm_processor is None:
             sm_processor = cfg.short_message_processor(
-                redis, None, cfg.short_message_processor_config)
+                self.redis, None, cfg.short_message_processor_config)
         if dr_processor is None:
             dr_processor = cfg.delivery_report_processor(
-                redis, None, cfg.delivery_report_processor_config)
+                self.redis, None, cfg.delivery_report_processor_config)
 
         dummy_smpp_transport = DummySmppTransport()
         dummy_smpp_transport.config = cfg
         dummy_smpp_transport.dr_processor = dr_processor
         dummy_smpp_transport.sm_processor = sm_processor
-        dummy_smpp_transport.sequence_generator = sequence_generator()
+        dummy_smpp_transport.sequence_generator = RedisSequence(self.redis)
 
         factory = factory_class(dummy_smpp_transport)
         proto = factory.buildProtocol(('127.0.0.1', 0))
@@ -140,7 +141,7 @@ class EsmeTestCase(VumiTestCase):
         self.assertCommand(
             bind_pdu,
             'bind_transceiver',
-            sequence_number=0,
+            sequence_number=1,
             params={
                 'system_id': 'system_id',
                 'password': 'password',
@@ -163,9 +164,9 @@ class EsmeTestCase(VumiTestCase):
         self.assertTrue(protocol.isBound())
         self.assertTrue(protocol.enquire_link_call.running)
         [bind_pdu, enquire_link_pdu] = receive_pdus(transport)
-        self.assertCommand(bind_pdu, 'bind_transceiver', sequence_number=0)
+        self.assertCommand(bind_pdu, 'bind_transceiver', sequence_number=1)
         self.assertCommand(enquire_link_pdu, 'enquire_link',
-                           sequence_number=1, status='ESME_ROK')
+                           sequence_number=2, status='ESME_ROK')
 
     def test_handle_unbind(self):
         transport, protocol = self.setup_bind()
@@ -316,7 +317,7 @@ class EsmeTestCase(VumiTestCase):
         long_message = 'This is a long message.' * 20
         seq_nums = yield protocol.submitSM(short_message=long_message)
         pdus = receive_pdus(transport)
-        self.assertEqual([2, 3, 4, 5], seq_nums)
+        self.assertEqual([3, 4, 5, 6], seq_nums)
         self.assertEqual(4, len(pdus))
         msg_parts = []
         msg_refs = []
