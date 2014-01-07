@@ -10,6 +10,7 @@ from vumi.transports.base import Transport
 from vumi.transports.smpp.clientserver.client import (
     EsmeTransceiverFactory, EsmeTransmitterFactory, EsmeReceiverFactory,
     EsmeCallbacks)
+from vumi.transports.smpp.clientserver.new_client_config import EsmeConfig
 from vumi.transports.failures import FailureMessage
 from vumi.message import Message, TransportUserMessage
 from vumi.persist.txredis_manager import TxRedisManager
@@ -102,12 +103,14 @@ class SmppTransport(Transport):
         log.msg("Starting the SmppTransport for %s" % (
             config.twisted_endpoint))
 
-        self.submit_sm_encoding = config.submit_sm_encoding
-        self.submit_sm_data_coding = config.submit_sm_data_coding
-        default_prefix = "%s@%s" % (config.system_id, config.transport_name)
+        self.smpp_config = EsmeConfig(config.smpp_config, static=True)
+        self.submit_sm_encoding = self.smpp_config.submit_sm_encoding
+        self.submit_sm_data_coding = self.smpp_config.submit_sm_data_coding
+        default_prefix = "%s@%s" % (self.smpp_config.system_id,
+                                    config.transport_name)
 
         r_config = config.redis_manager
-        r_prefix = config.split_bind_prefix or default_prefix
+        r_prefix = self.smpp_config.split_bind_prefix or default_prefix
 
         redis = yield TxRedisManager.from_config(r_config)
         self.redis = redis.sub_manager(r_prefix)
@@ -140,9 +143,8 @@ class SmppTransport(Transport):
         """Inspects the SmppTransportConfig and returns a dictionary
         that can be passed to an EsmeTransceiver (or subclass there of)
         to create a bind with"""
-        config = self.get_static_config()
-        return dict([(key, getattr(config, key))
-                    for key in self.SMPP_BIND_CONFIG_KEYS])
+        return dict([(key, getattr(self.smpp_config, key))
+                     for key in self.SMPP_BIND_CONFIG_KEYS])
 
     def make_factory(self):
         return EsmeTransceiverFactory(
@@ -185,8 +187,8 @@ class SmppTransport(Transport):
         message_id = message.payload['message_id']
         message_key = self.r_message_key(message_id)
         d = self.redis.set(message_key, message.to_json())
-        d.addCallback(lambda _: self.redis.expire(message_key,
-                                                  config.submit_sm_expiry))
+        d.addCallback(lambda _: self.redis.expire(
+            message_key, self.smpp_config.submit_sm_expiry))
         return d
 
     def r_get_message_json(self, message_id):
@@ -231,7 +233,7 @@ class SmppTransport(Transport):
         config = self.get_static_config()
         rkey = self.r_third_party_id_key(third_party_id)
         yield self.redis.set(rkey, id)
-        yield self.redis.expire(rkey, config.third_party_id_expiry)
+        yield self.redis.expire(rkey, self.smpp_config.third_party_id_expiry)
 
     def _start_throttling(self):
         if self.throttled:
