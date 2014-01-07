@@ -20,49 +20,6 @@ from vumi.transports.tests.helpers import TransportHelper
 from vumi.tests.helpers import VumiTestCase
 
 
-class TestSmppTransportConfig(VumiTestCase):
-    def required_config(self, config_params):
-        config = {
-            "transport_name": "my_transport",
-            "twisted_endpoint": "tcp:host=localhost:port=0",
-            "system_id": "vumitest-vumitest-vumitest",
-            "password": "password",
-        }
-        config.update(config_params)
-        return config
-
-    def get_config(self, config_dict):
-        return SmppTransport.CONFIG_CLASS(config_dict)
-
-    def assert_config_error(self, config_dict):
-        try:
-            self.get_config(config_dict)
-            self.fail("ConfigError not raised.")
-        except ConfigError as err:
-            return err.args[0]
-
-    def test_long_message_params(self):
-        self.get_config(self.required_config({}))
-        self.get_config(self.required_config({'send_long_messages': True}))
-        self.get_config(self.required_config({'send_multipart_sar': True}))
-        self.get_config(self.required_config({'send_multipart_udh': True}))
-        errmsg = self.assert_config_error(self.required_config({
-            'send_long_messages': True,
-            'send_multipart_sar': True,
-        }))
-        self.assertEqual(errmsg, (
-            "The following parameters are mutually exclusive: "
-            "send_long_messages, send_multipart_sar"))
-        errmsg = self.assert_config_error(self.required_config({
-            'send_long_messages': True,
-            'send_multipart_sar': True,
-            'send_multipart_udh': True,
-        }))
-        self.assertEqual(errmsg, (
-            "The following parameters are mutually exclusive: "
-            "send_long_messages, send_multipart_sar, send_multipart_udh"))
-
-
 class TestSmppTransport(VumiTestCase):
 
     @inlineCallbacks
@@ -70,10 +27,12 @@ class TestSmppTransport(VumiTestCase):
         config = {
             "system_id": "vumitest-vumitest-vumitest",
             "twisted_endpoint": "tcp:host=localhost:port=0",
-            "password": "password",
-            "smpp_bind_timeout": 12,
-            "smpp_enquire_link_interval": 123,
-            "third_party_id_expiry": 3600,  # just 1 hour
+            "smpp_config": {
+                "password": "password",
+                "smpp_bind_timeout": 12,
+                "smpp_enquire_link_interval": 123,
+                "third_party_id_expiry": 3600,  # just 1 hour
+            },
             'short_message_processor_config': {
                 'data_coding_overrides': {
                     0: 'utf-8'
@@ -362,10 +321,12 @@ class EsmeToSmscTestCase(VumiTestCase):
     @inlineCallbacks
     def setUp(self):
         server_config = {
-            "system_id": "VumiTestSMSC",
-            "password": "password",
             "twisted_endpoint": "tcp:0",
             "transport_type": "smpp",
+            'smpp_config': {
+                "system_id": "VumiTestSMSC",
+                "password": "password",
+            },
             'short_message_processor_config': {
                 'data_coding_overrides': {
                     0: 'utf-8'
@@ -843,8 +804,10 @@ class TestEsmeToSmscTx(VumiTestCase):
     @inlineCallbacks
     def setUp(self):
         self.config = {
-            "system_id": "VumiTestSMSC",
-            "password": "password",
+            'smpp_config': {
+                "system_id": "VumiTestSMSC",
+                "password": "password",
+            },
             "host": "localhost",
             "port": 0,
             "transport_type": "smpp",
@@ -907,12 +870,14 @@ class TestEsmeToSmscRx(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        from twisted.internet.base import DelayedCall
-        DelayedCall.debug = True
+        # from twisted.internet.base import DelayedCall
+        # DelayedCall.debug = True
 
         self.config = {
-            "system_id": "VumiTestSMSC",
-            "password": "password",
+            'smpp_config': {
+                "system_id": "VumiTestSMSC",
+                "password": "password",
+            },
             "host": "localhost",
             "port": 0,
             "transport_type": "smpp",

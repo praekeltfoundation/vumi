@@ -35,9 +35,6 @@ class EsmeConfig(Config):
         "being disconnected. Default is 5s. Some WASPs, e.g. Clickatell "
         "require a 30s delay before reconnecting. In these cases a 45s "
         "initial_reconnect_delay is recommended.", default=55, static=True)
-    initial_reconnect_delay = ConfigInt(
-        'How long to wait between reconnecting attempts', default=5,
-        static=True)
     third_party_id_expiry = ConfigInt(
         'How long (seconds) to keep 3rd party message IDs around to allow for '
         'matching submit_sm_resp and delivery report messages. Defaults to '

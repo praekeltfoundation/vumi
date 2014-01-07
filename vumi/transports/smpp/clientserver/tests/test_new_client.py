@@ -12,6 +12,7 @@ from vumi.transports.smpp.clientserver.new_client import (
     seq_no, command_status, command_id, chop_pdu_stream)
 from vumi.transports.smpp.smpp_utils import unpacked_pdu_opts
 from vumi.transports.smpp.clientserver.sequence import RedisSequence
+from vumi.config import ConfigError
 
 from smpp.pdu import unpack_pdu
 from smpp.pdu_builder import (
@@ -371,3 +372,45 @@ class EsmeTestCase(VumiTestCase):
         self.assertCommand(bind_pdu, 'bind_receiver')
         self.assertTrue(protocol.isBound())
         self.assertEqual(protocol.state, protocol.BOUND_STATE_RX)
+
+
+class TestSmppTransportConfig(VumiTestCase):
+
+    def required_config(self, config_params):
+        config = {
+            "system_id": "vumitest-vumitest-vumitest",
+            "password": "password",
+        }
+        config.update(config_params)
+        return config
+
+    def get_config(self, config_dict):
+        return EsmeTransceiver.CONFIG_CLASS(config_dict)
+
+    def assert_config_error(self, config_dict):
+        try:
+            self.get_config(config_dict)
+            self.fail("ConfigError not raised.")
+        except ConfigError as err:
+            return err.args[0]
+
+    def test_long_message_params(self):
+        self.get_config(self.required_config({}))
+        self.get_config(self.required_config({'send_long_messages': True}))
+        self.get_config(self.required_config({'send_multipart_sar': True}))
+        self.get_config(self.required_config({'send_multipart_udh': True}))
+        errmsg = self.assert_config_error(self.required_config({
+            'send_long_messages': True,
+            'send_multipart_sar': True,
+        }))
+        self.assertEqual(errmsg, (
+            "The following parameters are mutually exclusive: "
+            "send_long_messages, send_multipart_sar"))
+        errmsg = self.assert_config_error(self.required_config({
+            'send_long_messages': True,
+            'send_multipart_sar': True,
+            'send_multipart_udh': True,
+        }))
+        self.assertEqual(errmsg, (
+            "The following parameters are mutually exclusive: "
+            "send_long_messages, send_multipart_sar, send_multipart_udh"))

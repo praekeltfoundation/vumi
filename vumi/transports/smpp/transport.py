@@ -13,7 +13,7 @@ from vumi.transports.smpp.clientserver.client import (
 from vumi.transports.failures import FailureMessage
 from vumi.message import Message, TransportUserMessage
 from vumi.persist.txredis_manager import TxRedisManager
-from vumi.config import (ConfigText, ConfigDict,
+from vumi.config import (ConfigText, ConfigDict, ConfigInt,
                          ConfigFloat, ConfigClientEndpoint,
                          ConfigClassName)
 from vumi.transports.smpp.iprocessors import (IDeliveryReportProcessor,
@@ -28,6 +28,9 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
     smpp_config = ConfigDict(
         'Configuration options for SMPP 3.4 protocol. '
         'Validated by the protocol\'s CONFIG_CLASS.', required=True,
+        static=True)
+    initial_reconnect_delay = ConfigInt(
+        'How long to wait between reconnecting attempts', default=5,
         static=True)
     throttle_delay = ConfigFloat(
         "Delay (in seconds) before retrying a message after receiving "
