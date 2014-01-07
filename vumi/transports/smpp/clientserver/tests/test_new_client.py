@@ -9,7 +9,7 @@ from vumi.transports.smpp.clientserver.new_client import (
     EsmeTransceiver, EsmeTransceiverFactory, seq_no, command_status)
 
 from smpp.pdu import unpack_pdu
-from smpp.pdu_builder import BindTransceiverResp
+from smpp.pdu_builder import BindTransceiverResp, Unbind, UnbindResp
 
 
 def sequence_generator():
@@ -66,6 +66,21 @@ class EsmeTestCase(VumiTestCase):
         if status is not None:
             self.assertEqual(command_status(pdu), status)
 
+    def bind_protocol(self, transport, protocol):
+        bind_pdu = unpack_pdu(transport.value())
+        transport.clear()
+        protocol.dataReceived(
+            BindTransceiverResp(seq_no(bind_pdu)).get_bin())
+        return bind_pdu
+
+    def setup_bind(self, clear=True):
+        protocol = self.get_protocol()
+        transport = self.connect_transport(protocol)
+        self.bind_protocol(transport, protocol)
+        if clear:
+            transport.clear()
+        return transport, protocol
+
     def test_on_connection_made(self):
         protocol = self.get_protocol()
         self.assertEqual(protocol.state, EsmeTransceiver.CLOSED_STATE)
@@ -103,10 +118,7 @@ class EsmeTestCase(VumiTestCase):
     def test_on_smpp_bind(self):
         protocol = self.get_protocol()
         transport = self.connect_transport(protocol)
-        bind_pdu = unpack_pdu(transport.value())
-        transport.clear()
-        protocol.dataReceived(
-            BindTransceiverResp(seq_no(bind_pdu)).get_bin())
+        bind_pdu = self.bind_protocol(transport, protocol)
         self.assertEqual(protocol.state, EsmeTransceiver.BOUND_STATE_TRX)
         self.assertTrue(protocol.isBound())
         self.assertTrue(protocol.enquire_link_call.running)
@@ -114,3 +126,11 @@ class EsmeTestCase(VumiTestCase):
         self.assertCommand(enquire_link_pdu,
                            command_id='enquire_link', sequence_number=1,
                            status='ESME_ROK')
+
+    def test_unbind(self):
+        transport, protocol = self.setup_bind()
+        protocol.dataReceived(Unbind(sequence_number=0).get_bin())
+        pdu = unpack_pdu(transport.value())
+        self.assertCommand(
+            pdu, command_id='unbind_resp', status='ESME_ROK',
+            sequence_number=0)

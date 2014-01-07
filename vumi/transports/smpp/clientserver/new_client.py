@@ -193,10 +193,10 @@ class EsmeTransceiver(Protocol):
         self.enquire_link_call.start(self.config.smpp_enquire_link_interval)
 
     def handle_unbind(self, pdu):
-        return self.onUnBind(seq_no(pdu))
+        return self.onUnbind(seq_no(pdu))
 
-    def onUnBind(self, sequence_number):
-        return self.sendPDU(pdu_reply(sequence_number, UnbindResp()))
+    def onUnbind(self, sequence_number):
+        return self.sendPDU(UnbindResp(sequence_number))
 
     def handle_submit_sm_resp(self, pdu):
         sequence_number = pdu['header']['sequence_number']
