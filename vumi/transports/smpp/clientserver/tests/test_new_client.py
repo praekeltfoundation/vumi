@@ -55,14 +55,13 @@ def receive_pdus(transport):
 
 class EsmeTestCase(VumiTestCase):
 
-    @inlineCallbacks
     def setUp(self):
         self.persistence_helper = self.add_helper(PersistenceHelper())
-        self.redis = yield self.persistence_helper.get_redis_manager()
         self.clock = Clock()
         self.patch(EsmeTransceiver, 'clock', self.clock)
 
-    def get_protocol(self, config={}, sm_processor=None, dr_processor=None):
+    def get_protocol(self, config={}, redis=None,
+                     sm_processor=None, dr_processor=None):
 
         default_config = {
             'transport_name': 'sphex_transport',
@@ -75,10 +74,10 @@ class EsmeTestCase(VumiTestCase):
         cfg = SmppTransport.CONFIG_CLASS(default_config, static=True)
         if sm_processor is None:
             sm_processor = cfg.short_message_processor(
-                self.redis, None, cfg.short_message_processor_config)
+                redis, None, cfg.short_message_processor_config)
         if dr_processor is None:
             dr_processor = cfg.delivery_report_processor(
-                self.redis, None, cfg.delivery_report_processor_config)
+                redis, None, cfg.delivery_report_processor_config)
 
         factory = EsmeTransceiverFactory(
             cfg, sm_processor, dr_processor, sequence_generator())
