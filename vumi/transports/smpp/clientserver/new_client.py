@@ -11,7 +11,9 @@ from twisted.internet.defer import (
 import binascii
 from smpp.pdu import unpack_pdu
 from smpp.pdu_builder import (
-    BindTransceiver, EnquireLink, UnbindResp)
+    BindTransceiver, UnbindResp,
+    DeliverSMResp,
+    EnquireLink, EnquireLinkResp)
 
 from vumi import log
 
@@ -210,7 +212,46 @@ class EsmeTransceiver(Protocol):
             seq_no(pdu), message_id(pdu), command_status(pdu))
 
     def onSubmitSMResp(self, sequence_number, message_id, command_status):
-        pass
+        """TODO: to be implemented"""
+
+    @require_bind
+    @inlineCallbacks
+    def handle_deliver_sm(self, pdu):
+        command_status = yield self.onDeliverSM(seq_no(pdu), pdu)
+        self.sendPDU(DeliverSMResp(
+            seq_no(pdu), command_status=command_status or 'ESME_ROK',
+            **self.getBindParams()))
+
+    @inlineCallbacks
+    def onDeliverSM(self, sequence_number, pdu):
+        was_dr = yield self.dr_processor.handle_delivery_report_pdu(pdu)
+        if was_dr:
+            return
+
+        was_multipart = yield self.sm_processor.handle_multipart_pdu(pdu)
+        if was_multipart:
+            return
+
+        was_ussd = yield self.sm_processor.handle_ussd_pdu(pdu)
+        if was_ussd:
+            return
+
+        content_parts = self.sm_processor.decode_pdus([pdu])
+        if not all([isinstance(part, unicode) for part in content_parts]):
+            log.msg('Not all parts of the PDU were able to be decoded.',
+                    parts=content_parts)
+            returnValue('ESME_RDELIVERYFAILURE')
+
+        content = u''.join(content_parts)
+        was_cdr = yield self.dr_processor.handle_delivery_report_content(
+            content)
+        if was_cdr:
+            return
+
+        yield self.sm_processor.handle_short_message_pdu(pdu)
+
+    def handle_enquire_link(self, pdu):
+        return self.sendPDU(EnquireLinkResp(seq_no(pdu)))
 
 
 class EsmeTransceiverFactory(ClientFactory):

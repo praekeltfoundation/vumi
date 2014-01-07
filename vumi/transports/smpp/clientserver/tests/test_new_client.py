@@ -11,8 +11,10 @@ from vumi.transports.smpp.clientserver.new_client import (
 
 from smpp.pdu import unpack_pdu
 from smpp.pdu_builder import (
-    BindTransceiverResp, Unbind, UnbindResp,
-    SubmitSMResp)
+    BindTransceiverResp, Unbind,
+    SubmitSMResp,
+    DeliverSM,
+    EnquireLink)
 
 
 def sequence_generator():
@@ -139,3 +141,39 @@ class EsmeTestCase(VumiTestCase):
         pdu = SubmitSMResp(sequence_number=0, message_id='foo')
         protocol.dataReceived(pdu.get_bin())
         self.assertEqual(calls, [(0, 'foo', 'ESME_ROK')])
+
+    def test_deliver_sm(self):
+        calls = []
+        EsmeTransceiver.onDeliverSM = lambda p, *a: calls.append(a)
+        transport, protocol = self.setup_bind()
+        pdu = DeliverSM(
+            sequence_number=0, message_id='foo', short_message='bar')
+        protocol.dataReceived(pdu.get_bin())
+        [(seq_no, deliver_sm)] = calls
+        self.assertEqual(seq_no, 0)
+        self.assertCommand(deliver_sm, 'deliver_sm', sequence_number=0)
+
+        deliver_sm_resp = unpack_pdu(transport.value())
+        self.assertCommand(
+            deliver_sm_resp, 'deliver_sm_resp', sequence_number=0,
+            status='ESME_ROK')
+
+    def test_deliver_sm_fail(self):
+        EsmeTransceiver.onDeliverSM = lambda p, *a: 'ESME_RDELIVERYFAILURE'
+        transport, protocol = self.setup_bind()
+        pdu = DeliverSM(
+            sequence_number=0, message_id='foo', short_message='bar')
+        protocol.dataReceived(pdu.get_bin())
+        deliver_sm_resp = unpack_pdu(transport.value())
+        self.assertCommand(
+            deliver_sm_resp, 'deliver_sm_resp', sequence_number=0,
+            status='ESME_RDELIVERYFAILURE')
+
+    def test_on_enquire_link(self):
+        transport, protocol = self.setup_bind()
+        pdu = EnquireLink(sequence_number=0)
+        protocol.dataReceived(pdu.get_bin())
+        enquire_link_resp = unpack_pdu(transport.value())
+        self.assertCommand(
+            enquire_link_resp, 'enquire_link_resp', sequence_number=0,
+            status='ESME_ROK')
