@@ -11,6 +11,8 @@ from vumi.transports.smpp.smpp_transport import SmppTransport
 from vumi.transports.smpp.clientserver.tests.test_new_client import (
     bind_protocol, wait_for_pdus)
 
+from smpp.pdu_builder import DeliverSM
+
 
 class DummyService(Service):
 
@@ -25,6 +27,22 @@ class DummyService(Service):
         if self.protocol and self.protocol.transport:
             self.protocol.transport.loseConnection()
             self.protocol.connectionLost(reason=ConnectionDone)
+
+
+class SMPPHelper(object):
+    def __init__(self, string_transport, smpp_transport):
+        self.string_transport = string_transport
+        self.protocol = smpp_transport.service.protocol
+
+    def sendPDU(self, pdu):
+        self.protocol.dataReceived(pdu.get_bin())
+
+    def send_mo(self, sequence_number, short_message, **kwargs):
+        return self.sendPDU(
+            DeliverSM(sequence_number, short_message=short_message, **kwargs))
+
+    def wait_for_pdus(self, count):
+        return wait_for_pdus(self.string_transport, count)
 
 
 class TestSmppTransport(VumiTestCase):
@@ -68,7 +86,7 @@ class TestSmppTransport(VumiTestCase):
                 reactor.callLater(0, cb, smpp_transport)
                 return
 
-            if not protocol.isBound():
+            if not protocol.transport:
                 # Factory setup, needs bind pdus
                 protocol.makeConnection(self.string_transport)
                 bind_d = bind_protocol(self.string_transport, protocol)
@@ -81,13 +99,26 @@ class TestSmppTransport(VumiTestCase):
         cb(smpp_transport)
         return d
 
-    def sendPDU(self, pdu):
-        self.protocol.dataReceived(pdu.get_bin())
+    def sendPDU(self, transport, pdu):
+        protocol = transport.service.protocol
+        protocol.dataReceived(pdu.get_bin())
 
     def wait_for_pdus(self, count):
         return wait_for_pdus(self.string_transport, count)
 
     @inlineCallbacks
-    def test_something(self):
+    def get_smpp_helper(self, *args, **kwargs):
+        transport = yield self.get_transport(*args, **kwargs)
+        returnValue(SMPPHelper(self.string_transport, transport))
+
+    @inlineCallbacks
+    def test_setup_transport(self):
         transport = yield self.get_transport()
-        print transport
+        self.assertTrue(transport.service.protocol.isBound())
+
+    @inlineCallbacks
+    def test_mo_sms(self):
+        smpp_helper = yield self.get_smpp_helper()
+        smpp_helper.send_mo(sequence_number=1, short_message='foo')
+        [deliver_sm_resp] = yield smpp_helper.wait_for_pdus(1)
+        print deliver_sm_resp
