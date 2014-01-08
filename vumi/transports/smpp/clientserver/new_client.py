@@ -20,7 +20,7 @@ from smpp.pdu_builder import (
 
 from vumi import log
 from vumi.transports.smpp.smpp_utils import update_ussd_pdu
-from vumi.transports.smpp.clientserver.new_client_config import EsmeConfig
+from vumi.transports.smpp.config import EsmeConfig
 
 GSM_MAX_SMS_BYTES = 140
 
@@ -91,9 +91,8 @@ class EsmeTransceiver(Protocol):
     ])
 
     def __init__(self, transport):
-        self.transport = transport
         self.config = self.CONFIG_CLASS(
-            transport.config.smpp_config, static=True)
+            transport.get_static_config().smpp_config, static=True)
 
         self.buffer = b''
         self.state = self.CLOSED_STATE
@@ -172,6 +171,8 @@ class EsmeTransceiver(Protocol):
             self.enquire_link_call.stop()
         if self.drop_link_call is not None and self.drop_link_call.active():
             self.drop_link_call.cancel()
+        if self.disconnect_call.active():
+            self.disconnect_call.cancel()
 
     def isBound(self):
         return self.state in self.BOUND_STATES

@@ -10,65 +10,10 @@ from vumi.transports.base import Transport
 from vumi.transports.smpp.clientserver.client import (
     EsmeTransceiverFactory, EsmeTransmitterFactory, EsmeReceiverFactory,
     EsmeCallbacks)
-from vumi.transports.smpp.clientserver.new_client_config import EsmeConfig
+from vumi.transports.smpp.config import SmppTransportConfig, EsmeConfig
 from vumi.transports.failures import FailureMessage
 from vumi.message import Message, TransportUserMessage
 from vumi.persist.txredis_manager import TxRedisManager
-from vumi.config import (ConfigText, ConfigDict, ConfigInt,
-                         ConfigFloat, ConfigClientEndpoint,
-                         ConfigClassName)
-from vumi.transports.smpp.iprocessors import (IDeliveryReportProcessor,
-                                              IDeliverShortMessageProcessor)
-
-
-class SmppTransportConfig(Transport.CONFIG_CLASS):
-
-    twisted_endpoint = ConfigClientEndpoint(
-        'The SMPP endpoint to connect to.',
-        required=True, static=True)
-    smpp_config = ConfigDict(
-        'Configuration options for SMPP 3.4 protocol. '
-        'Validated by the protocol\'s CONFIG_CLASS.', required=True,
-        static=True)
-    initial_reconnect_delay = ConfigInt(
-        'How long to wait between reconnecting attempts', default=5,
-        static=True)
-    throttle_delay = ConfigFloat(
-        "Delay (in seconds) before retrying a message after receiving "
-        "`ESME_RTHROTTLED` or `ESME_RMSGQFUL`.", default=0.1, static=True)
-    COUNTRY_CODE = ConfigText(
-        "Used to translate a leading zero in a destination MSISDN into a "
-        "country code. Default ''", default="", static=True)
-    OPERATOR_PREFIX = ConfigDict(
-        "Nested dictionary of prefix to network name mappings. Default {} "
-        "(set network to 'UNKNOWN'). E.g. { '27': { '27761': 'NETWORK1' }} ",
-        default={}, static=True)
-    OPERATOR_NUMBER = ConfigDict(
-        "Dictionary of source MSISDN to use for each network listed in "
-        "OPERATOR_PREFIX. If a network is not listed, the source MSISDN "
-        "specified by the message sender is used. Default {} (always used the "
-        "from address specified by the message sender). "
-        "E.g. { 'NETWORK1': '27761234567'}", default={}, static=True)
-    redis_manager = ConfigDict(
-        'How to connect to Redis', default={}, static=True)
-    delivery_report_processor = ConfigClassName(
-        'Which delivery report processor to use. '
-        'Should implement `IDeliveryReportProcessor`.',
-        default=('vumi.transports.smpp.processors.'
-                 'EsmeCallbacksDeliveryReportProcessor'),
-        static=True, implements=IDeliveryReportProcessor)
-    delivery_report_processor_config = ConfigDict(
-        'The configuration for the ``delivery_report_processor``',
-        default={}, static=True)
-    short_message_processor = ConfigClassName(
-        'Which short message processor to use. '
-        'Should implement `IDeliverShortMessageProcessor`.',
-        default=('vumi.transports.smpp.processors.'
-                 'EsmeCallbacksDeliverShortMessageProcessor'),
-        static=True, implements=IDeliverShortMessageProcessor)
-    short_message_processor_config = ConfigDict(
-        'The configuration for the ``short_message_processor``',
-        default={}, static=True)
 
 
 class SmppTransport(Transport):
@@ -110,7 +55,7 @@ class SmppTransport(Transport):
                                     config.transport_name)
 
         r_config = config.redis_manager
-        r_prefix = self.smpp_config.split_bind_prefix or default_prefix
+        r_prefix = config.split_bind_prefix or default_prefix
 
         redis = yield TxRedisManager.from_config(r_config)
         self.redis = redis.sub_manager(r_prefix)

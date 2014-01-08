@@ -5,7 +5,6 @@ from twisted.internet.defer import Deferred, inlineCallbacks, succeed
 from twisted.internet.task import Clock
 from smpp.pdu_builder import SubmitSMResp, DeliverSM
 
-from vumi.config import ConfigError
 from vumi.message import TransportUserMessage
 from vumi.transports.smpp.clientserver.client import (
     EsmeTransceiver, EsmeCallbacks)

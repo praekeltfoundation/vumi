@@ -1,4 +1,69 @@
-from vumi.config import ConfigText, ConfigInt, ConfigBool, Config
+from vumi.config import (ConfigText, ConfigInt, ConfigBool, Config,
+                         ConfigClientEndpoint, ConfigDict, ConfigFloat,
+                         ConfigClassName)
+from vumi.transports.smpp.iprocessors import (IDeliveryReportProcessor,
+                                              IDeliverShortMessageProcessor)
+from vumi.transports.base import Transport
+
+
+class SmppTransportConfig(Transport.CONFIG_CLASS):
+
+    twisted_endpoint = ConfigClientEndpoint(
+        'The SMPP endpoint to connect to.',
+        required=True, static=True)
+    smpp_config = ConfigDict(
+        'Configuration options for SMPP 3.4 protocol. '
+        'Validated by the protocol\'s CONFIG_CLASS.', required=True,
+        static=True)
+    initial_reconnect_delay = ConfigInt(
+        'How long to wait between reconnecting attempts', default=5,
+        static=True)
+    throttle_delay = ConfigFloat(
+        "Delay (in seconds) before retrying a message after receiving "
+        "`ESME_RTHROTTLED` or `ESME_RMSGQFUL`.", default=0.1, static=True)
+    COUNTRY_CODE = ConfigText(
+        "Used to translate a leading zero in a destination MSISDN into a "
+        "country code. Default ''", default="", static=True)
+    OPERATOR_PREFIX = ConfigDict(
+        "Nested dictionary of prefix to network name mappings. Default {} "
+        "(set network to 'UNKNOWN'). E.g. { '27': { '27761': 'NETWORK1' }} ",
+        default={}, static=True)
+    OPERATOR_NUMBER = ConfigDict(
+        "Dictionary of source MSISDN to use for each network listed in "
+        "OPERATOR_PREFIX. If a network is not listed, the source MSISDN "
+        "specified by the message sender is used. Default {} (always used the "
+        "from address specified by the message sender). "
+        "E.g. { 'NETWORK1': '27761234567'}", default={}, static=True)
+    redis_manager = ConfigDict(
+        'How to connect to Redis', default={}, static=True)
+    split_bind_prefix = ConfigText(
+        "This is the Redis prefix to use for storing things like sequence "
+        "numbers and message ids for delivery report handling. It defaults "
+        "to `<system_id>@<transport_name>`. "
+        "*ONLY* if the connection is split into two separate binds for RX "
+        "and TX then make sure this is the same value for both binds. "
+        "This _only_ needs to be done for TX & RX since messages sent via "
+        "the TX bind are handled by the RX bind and they need to share the "
+        "same prefix for the lookup for message ids in delivery reports to "
+        "work.", default='', static=True)
+    delivery_report_processor = ConfigClassName(
+        'Which delivery report processor to use. '
+        'Should implement `IDeliveryReportProcessor`.',
+        default=('vumi.transports.smpp.processors.'
+                 'EsmeCallbacksDeliveryReportProcessor'),
+        static=True, implements=IDeliveryReportProcessor)
+    delivery_report_processor_config = ConfigDict(
+        'The configuration for the ``delivery_report_processor``',
+        default={}, static=True)
+    short_message_processor = ConfigClassName(
+        'Which short message processor to use. '
+        'Should implement `IDeliverShortMessageProcessor`.',
+        default=('vumi.transports.smpp.processors.'
+                 'EsmeCallbacksDeliverShortMessageProcessor'),
+        static=True, implements=IDeliverShortMessageProcessor)
+    short_message_processor_config = ConfigDict(
+        'The configuration for the ``short_message_processor``',
+        default={}, static=True)
 
 
 class EsmeConfig(Config):
@@ -63,16 +128,6 @@ class EsmeConfig(Config):
         "If `True`, messages longer than 140 bytes will be sent as a series "
         "of smaller messages with the user data headers. Default is `False`.",
         default=False, static=True)
-    split_bind_prefix = ConfigText(
-        "This is the Redis prefix to use for storing things like sequence "
-        "numbers and message ids for delivery report handling. It defaults "
-        "to `<system_id>@<host>:<port>`. "
-        "*ONLY* if the connection is split into two separate binds for RX "
-        "and TX then make sure this is the same value for both binds. "
-        "This _only_ needs to be done for TX & RX since messages sent via "
-        "the TX bind are handled by the RX bind and they need to share the "
-        "same prefix for the lookup for message ids in delivery reports to "
-        "work.", default='', static=True)
 
     def post_validate(self):
         long_message_params = (

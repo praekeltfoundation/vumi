@@ -1,7 +1,6 @@
 from twisted.test import proto_helpers
 from twisted.internet import reactor
-from twisted.internet.defer import (
-    succeed, inlineCallbacks, Deferred, returnValue)
+from twisted.internet.defer import inlineCallbacks, Deferred, returnValue
 from twisted.internet.error import ConnectionDone
 from twisted.internet.task import Clock
 
@@ -111,7 +110,7 @@ class EsmeTestCase(VumiTestCase):
                 self.redis, None, cfg.delivery_report_processor_config)
 
         dummy_smpp_transport = DummySmppTransport()
-        dummy_smpp_transport.config = cfg
+        dummy_smpp_transport.get_static_config = lambda: cfg
         dummy_smpp_transport.dr_processor = dr_processor
         dummy_smpp_transport.sm_processor = sm_processor
         dummy_smpp_transport.sequence_generator = RedisSequence(self.redis)
