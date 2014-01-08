@@ -82,7 +82,7 @@ class EsmeTransceiver(Protocol):
     OPEN_STATE = 'OPEN'
     CLOSED_STATE = 'CLOSED'
     BOUND_STATE_TRX = 'BOUND_TRX'
-    BOUND_STATE_TX = 'BOUND_TR'
+    BOUND_STATE_TX = 'BOUND_TX'
     BOUND_STATE_RX = 'BOUND_RX'
     BOUND_STATES = set([
         BOUND_STATE_RX,
@@ -267,7 +267,6 @@ class EsmeTransceiver(Protocol):
         log.warning(
             'onSubmitSMResp called but not implemented by ESME class.')
 
-    @require_bind
     @inlineCallbacks
     def handle_deliver_sm(self, pdu):
         command_status = yield self.onDeliverSM(seq_no(pdu), pdu)
