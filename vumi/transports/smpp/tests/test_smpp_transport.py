@@ -8,6 +8,7 @@ from vumi.tests.helpers import VumiTestCase
 from vumi.transports.tests.helpers import TransportHelper
 
 from vumi.transports.smpp.smpp_transport import SmppTransport
+from vumi.transports.smpp.clientserver.new_client import pdu_ok
 from vumi.transports.smpp.clientserver.tests.test_new_client import (
     bind_protocol, wait_for_pdus)
 
@@ -37,9 +38,13 @@ class SMPPHelper(object):
     def sendPDU(self, pdu):
         self.protocol.dataReceived(pdu.get_bin())
 
-    def send_mo(self, sequence_number, short_message, **kwargs):
+    def send_mo(self, sequence_number, short_message, data_coding=0, **kwargs):
+        """
+        data_coding=0 is set to utf-8 in the ``data_coding_overrides``
+        """
         return self.sendPDU(
-            DeliverSM(sequence_number, short_message=short_message, **kwargs))
+            DeliverSM(sequence_number, short_message=short_message,
+                      data_coding=data_coding, **kwargs))
 
     def wait_for_pdus(self, count):
         return wait_for_pdus(self.string_transport, count)
@@ -56,9 +61,18 @@ class TestSmppTransport(VumiTestCase):
         self.default_config = {
             'transport_name': self.tx_helper.transport_name,
             'twisted_endpoint': 'tcp:host=127.0.0.1:port=0',
+            'delivery_report_processor': 'vumi.transports.smpp.processors.'
+                                         'DeliveryReportProcessor',
+            'short_message_processor': 'vumi.transports.smpp.processors.'
+                                       'DeliverShortMessageProcessor',
             'smpp_config': {
                 'system_id': 'foo',
                 'password': 'bar',
+            },
+            'short_message_processor_config': {
+                'data_coding_overrides': {
+                    0: 'utf-8',
+                }
             }
         }
 
@@ -119,6 +133,13 @@ class TestSmppTransport(VumiTestCase):
     @inlineCallbacks
     def test_mo_sms(self):
         smpp_helper = yield self.get_smpp_helper()
-        smpp_helper.send_mo(sequence_number=1, short_message='foo')
+        smpp_helper.send_mo(
+            sequence_number=1, short_message='foo', source_addr='123',
+            destination_addr='456')
         [deliver_sm_resp] = yield smpp_helper.wait_for_pdus(1)
-        print deliver_sm_resp
+        self.assertTrue(pdu_ok(deliver_sm_resp))
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        self.assertEqual(msg['content'], 'foo')
+        self.assertEqual(msg['from_addr'], '123')
+        self.assertEqual(msg['to_addr'], '456')
+

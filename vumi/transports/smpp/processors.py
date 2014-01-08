@@ -7,7 +7,8 @@ from zope.interface import implements
 
 from vumi.transports.smpp.iprocessors import (IDeliveryReportProcessor,
                                               IDeliverShortMessageProcessor)
-from vumi.transports.smpp.smpp_utils import unpacked_pdu_opts, detect_ussd
+from vumi.transports.smpp.smpp_utils import (
+    unpacked_pdu_opts, detect_ussd, decode_message, decode_pdus)
 from vumi.config import Config, ConfigDict, ConfigRegex
 from vumi import log
 
@@ -121,6 +122,21 @@ class EsmeCallbacksDeliveryReportProcessor(object):
         return self.config.delivery_report_status_mapping.get(state, 'pending')
 
 
+class DeliveryReportProcessor(object):
+    implements(IDeliveryReportProcessor)
+    CONFIG_CLASS = DeliveryReportProcessorConfig
+
+    def __init__(self, transport, config):
+        self.transport = transport
+        self.config = self.CONFIG_CLASS(config, static=True)
+
+    def handle_delivery_report_pdu(self, pdu_data):
+        return succeed(False)
+
+    def handle_delivery_report_content(self, pdu_data):
+        return succeed(False)
+
+
 class DeliverShortMessageProcessorConfig(Config):
     data_coding_overrides = ConfigDict(
         "Overrides for data_coding character set mapping. This is useful for "
@@ -141,70 +157,11 @@ class EsmeCallbacksDeliverShortMessageProcessor(object):
         self.config = self.CONFIG_CLASS(config, static=True)
 
     def decode_message(self, message, data_coding):
-        """
-        Messages can arrive with one of a number of specified
-        encodings. We only handle a subset of these.
-
-        From the SMPP spec:
-
-        00000000 (0) SMSC Default Alphabet
-        00000001 (1) IA5(CCITTT.50)/ASCII(ANSIX3.4)
-        00000010 (2) Octet unspecified (8-bit binary)
-        00000011 (3) Latin1(ISO-8859-1)
-        00000100 (4) Octet unspecified (8-bit binary)
-        00000101 (5) JIS(X0208-1990)
-        00000110 (6) Cyrllic(ISO-8859-5)
-        00000111 (7) Latin/Hebrew (ISO-8859-8)
-        00001000 (8) UCS2(ISO/IEC-10646)
-        00001001 (9) PictogramEncoding
-        00001010 (10) ISO-2022-JP(MusicCodes)
-        00001011 (11) reserved
-        00001100 (12) reserved
-        00001101 (13) Extended Kanji JIS(X 0212-1990)
-        00001110 (14) KSC5601
-        00001111 (15) reserved
-
-        Particularly problematic are the "Octet unspecified" encodings.
-        """
-        codecs = {
-            1: 'ascii',
-            3: 'latin1',
-            8: 'utf-16be',  # Actually UCS-2, but close enough.
-        }
-        codecs.update(self.config.data_coding_overrides)
-        codec = codecs.get(data_coding, None)
-        if codec is None or message is None:
-            log.msg("WARNING: Not decoding message with data_coding=%s" % (
-                    data_coding,))
-        else:
-            try:
-                return message.decode(codec)
-            except Exception, e:
-                log.msg("Error decoding message with data_coding=%s" % (
-                    data_coding,))
-                log.err(e)
-
-        return message
+        return decode_message(
+            message, data_coding, self.config.data_coding_overrides)
 
     def decode_pdus(self, pdus):
-        content = []
-        for pdu in pdus:
-            pdu_params = pdu['body']['mandatory_parameters']
-            pdu_opts = unpacked_pdu_opts(pdu)
-
-            # We might have a `message_payload` optional field to worry about.
-            message_payload = pdu_opts.get('message_payload', None)
-            if message_payload is not None:
-                short_message = message_payload.decode('hex')
-            else:
-                short_message = pdu_params['short_message']
-
-            content.append(
-                self.decode_message(short_message, pdu_params['data_coding']))
-
-        if any(content):
-            return content
-        return None
+        return decode_pdus(pdus, self.config.data_coding_overrides)
 
     def handle_multipart_pdu(self, pdu):
         if not detect_multipart(pdu):
@@ -335,3 +292,42 @@ class EsmeCallbacksDeliverShortMessageProcessor(object):
     def save_multipart_message(self, redis_key, multipart_message):
         data_dict = self._hex_for_redis(multipart_message.get_array())
         return self.redis.set(redis_key, json.dumps(data_dict))
+
+
+class DeliverShortMessageProcessor(object):
+    implements(IDeliverShortMessageProcessor)
+    CONFIG_CLASS = DeliverShortMessageProcessorConfig
+
+    def __init__(self, transport, config):
+        self.transport = transport
+        self.config = self.CONFIG_CLASS(config, static=True)
+
+    def handle_short_message_content(self, source_addr, destination_addr,
+                                     short_message, **kw):
+        return self.transport.handle_raw_inbound_message(
+            source_addr=source_addr, destination_addr=destination_addr,
+            short_message=short_message, **kw)
+
+    def handle_short_message_pdu(self, pdu):
+        pdu_params = pdu['body']['mandatory_parameters']
+        content_parts = self.decode_pdus([pdu])
+        if content_parts is not None:
+            content = u''.join(content_parts)
+        else:
+            content = None
+
+        d = self.handle_short_message_content(
+            source_addr=pdu_params['source_addr'],
+            destination_addr=pdu_params['destination_addr'],
+            short_message=content)
+        d.addCallback(lambda _: True)
+        return d
+
+    def handle_multipart_pdu(self, pdu):
+        return succeed(False)
+
+    def handle_ussd_pdu(self, pdu):
+        return succeed(False)
+
+    def decode_pdus(self, pdus):
+        return decode_pdus(pdus, self.config.data_coding_overrides)
