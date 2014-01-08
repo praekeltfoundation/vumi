@@ -30,7 +30,6 @@ class TestTwitterTransport(VumiTestCase):
             'terms': ['some', 'trending', 'topic'],
         })
 
-    '''
     @inlineCallbacks
     def test_tracking_messages(self):
         self.transport.track_stream.respond_with({
@@ -278,7 +277,6 @@ class TestTwitterTransport(VumiTestCase):
             self.assertEqual(
                 lc.messages(),
                 ["Received own tweet on user stream: %r" % tweet])
-    '''
 
     @inlineCallbacks
     def test_sending(self):
