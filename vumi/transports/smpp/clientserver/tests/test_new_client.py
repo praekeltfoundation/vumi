@@ -27,13 +27,6 @@ from smpp.pdu_builder import (
     EnquireLink, EnquireLinkResp)
 
 
-def sequence_generator():
-    counter = 0
-    while True:
-        yield succeed(counter)
-        counter = counter + 1
-
-
 def connect_transport(protocol):
     transport = proto_helpers.StringTransport()
     protocol.makeConnection(transport)

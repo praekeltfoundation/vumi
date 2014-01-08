@@ -128,10 +128,6 @@ class EsmeTransceiver(Protocol):
         return dict([(key, getattr(self.config, key))
                      for key in bind_keys if hasattr(self.config, key)])
 
-    def get_next_seq(self):
-        """TODO: refactor into proper sequence number generator"""
-        return self.sequence_generator.next()
-
     def push_unacked(self, sequence_number):
         """TODO: refactor into something relevant"""
         return succeed(sequence_number)
@@ -145,7 +141,7 @@ class EsmeTransceiver(Protocol):
 
     @inlineCallbacks
     def bind(self):
-        sequence_number = yield self.get_next_seq()
+        sequence_number = yield self.sequence_generator.next()
         bind_params = self.getBindParams()
         pdu = self.bind_pdu(sequence_number, **bind_params)
         self.sendPDU(pdu)
@@ -184,7 +180,7 @@ class EsmeTransceiver(Protocol):
     @inlineCallbacks
     def enquireLink(self):
         """Ping the SMSC to see if they're still around"""
-        sequence_number = yield self.get_next_seq()
+        sequence_number = yield self.sequence_generator.next()
         self.sendPDU(EnquireLink(sequence_number))
         returnValue(sequence_number)
 
@@ -348,7 +344,7 @@ class EsmeTransceiver(Protocol):
 
     @inlineCallbacks
     def _submit_sm(self, **pdu_params):
-        sequence_number = yield self.get_next_seq()
+        sequence_number = yield self.sequence_generator.next()
         message = pdu_params['short_message']
         sar_params = pdu_params.pop('sar_params', None)
         message_type = pdu_params.pop('message_type', 'sms')
@@ -433,7 +429,7 @@ class EsmeTransceiver(Protocol):
     @require_bind
     @inlineCallbacks
     def querySM(self, message_id, source_addr, **kwargs):
-        sequence_number = yield self.get_next_seq()
+        sequence_number = yield self.sequence_generator.next()
         pdu = QuerySM(
             sequence_number, message_id=message_id, source_addr=source_addr,
             **self.getBindParams())
@@ -443,7 +439,7 @@ class EsmeTransceiver(Protocol):
     @require_bind
     @inlineCallbacks
     def unbind(self):
-        sequence_number = yield self.get_next_seq()
+        sequence_number = yield self.sequence_generator.next()
         self.sendPDU(Unbind(sequence_number))
         returnValue([sequence_number])
 
