@@ -10,6 +10,9 @@ from vumi.config import ConfigText, ConfigList
 
 
 class TwitterTransportConfig(Transport.CONFIG_CLASS):
+    screen_name = ConfigText(
+        "The screen name for the twitter account",
+        required=True, static=True)
     consumer_key = ConfigText(
         "The OAuth consumer key for the twitter account",
         required=True, static=True)
@@ -39,6 +42,7 @@ class TwitterTransport(Transport):
     def setup_transport(self):
         config = self.get_static_config()
         self.terms = config.terms
+        self.screen_name = config.screen_name
 
         self.client = self.CLIENT_CLS(
             config.access_token,
@@ -51,7 +55,8 @@ class TwitterTransport(Transport):
         if self.terms:
             self.track_stream.startService()
 
-        self.user_stream = self.client.userstream_user(self.handle_user_stream)
+        self.user_stream = self.client.userstream_user(
+            self.handle_user_stream, with_='user')
         self.user_stream.startService()
 
     @inlineCallbacks
@@ -79,6 +84,32 @@ class TwitterTransport(Transport):
 
         return value.encode(cls.ENCODING)
 
+    @inlineCallbacks
+    def handle_outbound_message(self, message):
+        log.msg("Twitter transport sending %r" % (message,))
+
+        metadata = message['transport_metadata'].get(self.transport_type, {})
+        in_reply_to_status_id = metadata.get('status_id')
+
+        try:
+            yield self.client.statuses_update(
+                self.encode(message['content']),
+                in_reply_to_status_id=in_reply_to_status_id)
+
+            yield self.publish_ack(
+                user_message_id=message['message_id'],
+                sent_message_id=message['message_id'])
+        except Exception, e:
+            yield self.publish_nack(
+                user_message_id=message['message_id'],
+                sent_message_id=message['message_id'],
+                reason='%r' % (e,))
+
+    def is_own_tweet(self, message):
+        user = messagetools.tweet_user(message)
+        screen_name = self.decode(messagetools.user_screen_name(user))
+        return self.screen_name == screen_name
+
     def publish_tweet_message(self, tweet):
         user = messagetools.tweet_user(tweet)
         in_reply_to_screen_name = (
@@ -104,37 +135,22 @@ class TwitterTransport(Transport):
                 }
             })
 
-    @inlineCallbacks
-    def handle_outbound_message(self, message):
-        log.msg("Twitter transport sending %r" % (message,))
-
-        metadata = message['transport_metadata'].get(self.transport_type, {})
-        in_reply_to_status_id = metadata.get('status_id')
-
-        try:
-            yield self.client.statuses_update(
-                self.encode(message['content']),
-                in_reply_to_status_id=in_reply_to_status_id)
-
-            yield self.publish_ack(
-                user_message_id=message['message_id'],
-                sent_message_id=message['message_id'])
-        except Exception, e:
-            yield self.publish_nack(
-                user_message_id=message['message_id'],
-                sent_message_id=message['message_id'],
-                reason='%r' % (e,))
-
     def handle_track_stream(self, message):
         if messagetools.is_tweet(message):
-            log.msg("Tracked a tweet: %r" % (message,))
-            self.publish_tweet_message(message)
+            if self.is_own_tweet(message):
+                log.msg("Tracked own tweet: %r" % (message,))
+            else:
+                log.msg("Tracked a tweet: %r" % (message,))
+                self.publish_tweet_message(message)
         else:
             log.msg("Received non-tweet from tracking stream: %r" % message)
 
     def handle_user_stream(self, message):
         if messagetools.is_tweet(message):
-            log.msg("Received tweet on user stream: %r" % (message,))
-            self.publish_tweet_message(message)
+            if self.is_own_tweet(message):
+                log.msg("Received own tweet on user stream: %r" % (message,))
+            else:
+                log.msg("Received tweet on user stream: %r" % (message,))
+                self.publish_tweet_message(message)
         else:
             log.msg("Received non-tweet from user stream: %r" % message)

@@ -67,6 +67,7 @@ class TestTwitterTransport(VumiTestCase):
             TransportHelper(StubbedTwitterTransport))
 
         self.transport = yield self.tx_helper.get_transport({
+            'screen_name': 'me',
             'consumer_key': 'consumer1',
             'consumer_secret': 'consumersecret1',
             'access_token': 'token1',
@@ -176,6 +177,28 @@ class TestTwitterTransport(VumiTestCase):
             }
         })
 
+    def test_tracking_own_messages(self):
+        tweet = {
+            'id_str': '1',
+            'text': 'hello',
+            'in_reply_to_status_id_str': None,
+            'in_reply_to_screen_name': None,
+            'user': {
+                'id_str': '0',
+                'screen_name': 'me'
+            },
+            'entities': {
+                'user_mentions': [{'screen_name': 'someone_else'}]
+            }
+        }
+
+        with LogCatcher() as lc:
+            self.transport.track_stream.respond_with(tweet)
+
+            self.assertEqual(
+                lc.messages(),
+                ["Tracked own tweet: %r" % tweet])
+
     @inlineCallbacks
     def test_inbound_user_message(self):
         self.transport.user_stream.respond_with({
@@ -277,6 +300,28 @@ class TestTwitterTransport(VumiTestCase):
                 'user_mentions': [{'screen_name': u'somëone_else'}]
             }
         })
+
+    def test_inbound_user_messages_own_messages(self):
+        tweet = {
+            'id_str': '1',
+            'text': 'hello',
+            'in_reply_to_status_id_str': None,
+            'in_reply_to_screen_name': None,
+            'user': {
+                'id_str': '0',
+                'screen_name': 'me'
+            },
+            'entities': {
+                'user_mentions': [{'screen_name': 'someone_else'}]
+            }
+        }
+
+        with LogCatcher() as lc:
+            self.transport.user_stream.respond_with(tweet)
+
+            self.assertEqual(
+                lc.messages(),
+                ["Received own tweet on user stream: %r" % tweet])
 
     @inlineCallbacks
     def test_sending(self):
