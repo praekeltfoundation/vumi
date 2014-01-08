@@ -1,5 +1,4 @@
 # -*- test-case-name: vumi.transports.twitter.tests.test_twitter -*-
-
 from twisted.python import log
 from twisted.internet.defer import inlineCallbacks
 from txtwitter.twitter import TwitterClient
@@ -37,14 +36,16 @@ class TwitterTransport(Transport):
 
     CONFIG_CLASS = TwitterTransportConfig
     ENCODING = 'utf8'
-    CLIENT_CLS = TwitterClient
+
+    def get_client(self, *a, **kw):
+        return TwitterClient(*a, **kw)
 
     def setup_transport(self):
         config = self.get_static_config()
         self.terms = config.terms
         self.screen_name = config.screen_name
 
-        self.client = self.CLIENT_CLS(
+        self.client = self.get_client(
             config.access_token,
             config.access_token_secret,
             config.consumer_key,
@@ -92,18 +93,18 @@ class TwitterTransport(Transport):
         in_reply_to_status_id = metadata.get('status_id')
 
         try:
-            yield self.client.statuses_update(
+            response = yield self.client.statuses_update(
                 self.encode(message['content']),
                 in_reply_to_status_id=in_reply_to_status_id)
 
             yield self.publish_ack(
                 user_message_id=message['message_id'],
-                sent_message_id=message['message_id'])
+                sent_message_id=response['id_str'])
         except Exception, e:
             yield self.publish_nack(
                 user_message_id=message['message_id'],
                 sent_message_id=message['message_id'],
-                reason='%r' % (e,))
+                reason='%s' % (e,))
 
     def is_own_tweet(self, message):
         user = messagetools.tweet_user(message)
