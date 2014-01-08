@@ -8,7 +8,7 @@ from vumi.tests.helpers import VumiTestCase
 from vumi.transports.tests.helpers import TransportHelper
 
 from vumi.transports.smpp.smpp_transport import SmppTransport
-from vumi.transports.smpp.clientserver.new_client import pdu_ok
+from vumi.transports.smpp.pdu_utils import pdu_ok, short_message, command_id
 from vumi.transports.smpp.clientserver.tests.test_new_client import (
     bind_protocol, wait_for_pdus)
 
@@ -51,6 +51,8 @@ class SMPPHelper(object):
 
 
 class TestSmppTransport(VumiTestCase):
+
+    timeout = 1
 
     def setUp(self):
         self.patch(SmppTransport, 'start_service', self.patched_start_service)
@@ -117,9 +119,6 @@ class TestSmppTransport(VumiTestCase):
         protocol = transport.service.protocol
         protocol.dataReceived(pdu.get_bin())
 
-    def wait_for_pdus(self, count):
-        return wait_for_pdus(self.string_transport, count)
-
     @inlineCallbacks
     def get_smpp_helper(self, *args, **kwargs):
         transport = yield self.get_transport(*args, **kwargs)
@@ -142,4 +141,13 @@ class TestSmppTransport(VumiTestCase):
         self.assertEqual(msg['content'], 'foo')
         self.assertEqual(msg['from_addr'], '123')
         self.assertEqual(msg['to_addr'], '456')
+        self.assertEqual(msg['transport_type'], 'sms')
 
+    @inlineCallbacks
+    def test_mt_sms(self):
+        smpp_helper = yield self.get_smpp_helper()
+        msg = self.tx_helper.make_outbound('hello world')
+        yield self.tx_helper.dispatch_outbound(msg)
+        [pdu] = yield smpp_helper.wait_for_pdus(1)
+        self.assertEqual(command_id(pdu), 'submit_sm')
+        self.assertEqual(short_message(pdu), 'hello world')

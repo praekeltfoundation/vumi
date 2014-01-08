@@ -20,6 +20,8 @@ from smpp.pdu_builder import (
 
 from vumi import log
 from vumi.transports.smpp.smpp_utils import update_ussd_pdu
+from vumi.transports.smpp.pdu_utils import (pdu_ok, seq_no, command_status,
+                                            command_id, message_id)
 from vumi.transports.smpp.config import EsmeConfig
 
 GSM_MAX_SMS_BYTES = 140
@@ -32,26 +34,6 @@ def require_bind(func):
             raise EsmeProtocolError('%s called in unbound state.' % (func,))
         return func(self, *args, **kwargs)
     return wrapper
-
-
-def pdu_ok(pdu):
-    return command_status(pdu) == 'ESME_ROK'
-
-
-def seq_no(pdu):
-    return pdu['header']['sequence_number']
-
-
-def command_status(pdu):
-    return pdu['header']['command_status']
-
-
-def command_id(pdu):
-    return pdu['header']['command_id']
-
-
-def message_id(pdu):
-    return pdu['body']['mandatory_parameters']['message_id']
 
 
 class EsmeProtocolError(Exception):
@@ -315,6 +297,8 @@ class EsmeTransceiver(Protocol):
     @require_bind
     @inlineCallbacks
     def submitSM(self, **kwargs):
+        # TODO: split out **kwargs into explicit params with
+        #       sensible defaults
         pdu_params = self.getBindParams()
         pdu_params.update(kwargs)
         message = pdu_params['short_message']

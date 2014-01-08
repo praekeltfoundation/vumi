@@ -8,6 +8,8 @@ from twisted.internet.defer import inlineCallbacks
 from vumi.reconnecting_client import ReconnectingClientService
 from vumi.transports.base import Transport
 
+from vumi.message import TransportUserMessage
+
 from vumi.transports.smpp.config import SmppTransportConfig, EsmeConfig
 from vumi.transports.smpp.clientserver.new_client import EsmeTransceiverFactory
 from vumi.transports.smpp.clientserver.sequence import RedisSequence
@@ -37,10 +39,10 @@ class SmppTransport(Transport):
     @inlineCallbacks
     def setup_transport(self):
         config = self.get_static_config()
-        smpp_config = EsmeConfig(config.smpp_config, static=True)
+        self.smpp_config = EsmeConfig(config.smpp_config, static=True)
         log.msg('Starting SMPP Transport for: %s' % (config.twisted_endpoint,))
 
-        default_prefix = '%s@%s' % (smpp_config.system_id,
+        default_prefix = '%s@%s' % (self.smpp_config.system_id,
                                     config.transport_name)
         redis_prefix = config.split_bind_prefix or default_prefix
         self.redis = (yield TxRedisManager.from_config(
@@ -53,6 +55,7 @@ class SmppTransport(Transport):
         self.sequence_generator = RedisSequence(self.redis)
         self.factory = self.factory_class(self)
         self.service = self.start_service(self.factory)
+        self.protocol = self.service.protocol
 
     def start_service(self, factory):
         config = self.get_static_config()
@@ -65,6 +68,35 @@ class SmppTransport(Transport):
         if self.service:
             yield self.service.stopService()
         yield self.redis._close()
+
+    def handle_outbound_message(self, message):
+
+        to_addr = message['to_addr']
+        from_addr = message['from_addr']
+        text = message['content']
+        session_info = message['transport_metadata'].get('session_info')
+        session_event = message['session_event']
+        transport_type = message['transport_type']
+
+        if session_event == TransportUserMessage.SESSION_CLOSE:
+            continue_session = False
+        else:
+            continue_session = True
+
+        config = self.get_static_config()
+
+        return self.protocol.submitSM(
+            # these end up in the PDU
+            short_message=text.encode(self.smpp_config.submit_sm_encoding),
+            data_coding=self.smpp_config.submit_sm_data_coding,
+            destination_addr=to_addr.encode('ascii'),
+            source_addr=from_addr.encode('ascii'),
+            session_info=(session_info.encode('ascii')
+                          if session_info is not None else None),
+            # these don't end up in the PDU
+            message_type=transport_type,
+            continue_session=continue_session,
+        )
 
     def handle_raw_inbound_message(self, **kwargs):
         # TODO: drop the kwargs, list the allowed key word arguments
