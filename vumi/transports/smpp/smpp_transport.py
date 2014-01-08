@@ -83,8 +83,6 @@ class SmppTransport(Transport):
         else:
             continue_session = True
 
-        config = self.get_static_config()
-
         return self.protocol.submitSM(
             # these end up in the PDU
             short_message=text.encode(self.smpp_config.submit_sm_encoding),

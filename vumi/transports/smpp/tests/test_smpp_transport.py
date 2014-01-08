@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 from twisted.test import proto_helpers
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
@@ -144,6 +146,15 @@ class TestSmppTransport(VumiTestCase):
         self.assertEqual(msg['transport_type'], 'sms')
 
     @inlineCallbacks
+    def test_mo_sms_unicode(self):
+        smpp_helper = yield self.get_smpp_helper()
+        smpp_helper.send_mo(sequence_number=1, short_message='Zo\xc3\xab')
+        [deliver_sm_resp] = yield smpp_helper.wait_for_pdus(1)
+        self.assertTrue(pdu_ok(deliver_sm_resp))
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        self.assertEqual(msg['content'], u'Zoë')
+
+    @inlineCallbacks
     def test_mt_sms(self):
         smpp_helper = yield self.get_smpp_helper()
         msg = self.tx_helper.make_outbound('hello world')
@@ -151,3 +162,12 @@ class TestSmppTransport(VumiTestCase):
         [pdu] = yield smpp_helper.wait_for_pdus(1)
         self.assertEqual(command_id(pdu), 'submit_sm')
         self.assertEqual(short_message(pdu), 'hello world')
+
+    @inlineCallbacks
+    def test_mt_sms_unicode(self):
+        smpp_helper = yield self.get_smpp_helper()
+        msg = self.tx_helper.make_outbound(u'Zoë')
+        yield self.tx_helper.dispatch_outbound(msg)
+        [pdu] = yield smpp_helper.wait_for_pdus(1)
+        self.assertEqual(command_id(pdu), 'submit_sm')
+        self.assertEqual(short_message(pdu), 'Zo\xc3\xab')
