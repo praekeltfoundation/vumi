@@ -52,9 +52,8 @@ class TwitterTransport(Transport):
             config.consumer_secret)
 
         self.track_stream = self.client.stream_filter(
-            self.handle_track_stream, self.terms)
-        if self.terms:
-            self.track_stream.startService()
+            self.handle_track_stream, track=self.terms)
+        self.track_stream.startService()
 
         self.user_stream = self.client.userstream_user(
             self.handle_user_stream, with_='user')
@@ -65,26 +64,6 @@ class TwitterTransport(Transport):
         yield self.user_stream.stopService()
         yield self.track_stream.stopService()
 
-    @classmethod
-    def decode(cls, value):
-        if value is None:
-            return value
-
-        if not isinstance(value, basestring):
-            value = str(value)
-
-        return value.decode(cls.ENCODING)
-
-    @classmethod
-    def encode(cls, value):
-        if value is None:
-            return value
-
-        if not isinstance(value, basestring):
-            value = str(value)
-
-        return value.encode(cls.ENCODING)
-
     @inlineCallbacks
     def handle_outbound_message(self, message):
         log.msg("Twitter transport sending %r" % (message,))
@@ -94,7 +73,7 @@ class TwitterTransport(Transport):
 
         try:
             response = yield self.client.statuses_update(
-                self.encode(message['content']),
+                message['content'],
                 in_reply_to_status_id=in_reply_to_status_id)
 
             yield self.publish_ack(
@@ -108,8 +87,7 @@ class TwitterTransport(Transport):
 
     def is_own_tweet(self, message):
         user = messagetools.tweet_user(message)
-        screen_name = self.decode(messagetools.user_screen_name(user))
-        return self.screen_name == screen_name
+        return self.screen_name == messagetools.user_screen_name(user)
 
     def publish_tweet_message(self, tweet):
         user = messagetools.tweet_user(tweet)
@@ -117,21 +95,20 @@ class TwitterTransport(Transport):
             messagetools.tweet_in_reply_to_screen_name(tweet))
 
         return self.publish_message(
-            content=self.decode(messagetools.tweet_text(tweet)),
-            to_addr=self.decode(in_reply_to_screen_name or ''),
-            from_addr=self.decode(messagetools.user_screen_name(user)),
+            content=messagetools.tweet_text(tweet),
+            to_addr=in_reply_to_screen_name or '',
+            from_addr=messagetools.user_screen_name(user),
             transport_type=self.transport_type,
             transport_metadata={
                 'twitter': {
-                    'status_id': self.decode(messagetools.tweet_id(tweet))
+                    'status_id': messagetools.tweet_id(tweet)
                 }
             },
             helper_metadata={
                 'twitter': {
-                    'in_reply_to_status_id': self.decode(
+                    'in_reply_to_status_id': (
                         messagetools.tweet_in_reply_to_id(tweet)),
-                    'in_reply_to_screen_name': self.decode(
-                        in_reply_to_screen_name),
+                    'in_reply_to_screen_name': in_reply_to_screen_name,
                     'user_mentions': messagetools.tweet_user_mentions(tweet),
                 }
             })
