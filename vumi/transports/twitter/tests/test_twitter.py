@@ -180,7 +180,7 @@ class TestTwitterTransport(VumiTestCase):
     def test_reply_sending(self):
         tweet1 = self.twitter.new_tweet('hello', self.user.id_str)
 
-        inbound_msg = yield self.tx_helper.make_dispatch_inbound(
+        inbound_msg = self.tx_helper.make_inbound(
             'hello', transport_metadata={
                 'twitter': {'status_id': tweet1.id_str}
             })
