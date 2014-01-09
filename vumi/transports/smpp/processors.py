@@ -300,6 +300,7 @@ class DeliverShortMessageProcessor(object):
 
     def __init__(self, transport, config):
         self.transport = transport
+        self.redis = transport.redis
         self.config = self.CONFIG_CLASS(config, static=True)
 
     def handle_short_message_content(self, source_addr, destination_addr,
@@ -324,10 +325,64 @@ class DeliverShortMessageProcessor(object):
         return d
 
     def handle_multipart_pdu(self, pdu):
-        return succeed(False)
+        if not detect_multipart(pdu):
+            return succeed(False)
+
+        # We have a multipart SMS.
+        pdu_params = pdu['body']['mandatory_parameters']
+        d = self.handle_deliver_sm_multipart(pdu, pdu_params)
+        d.addCallback(lambda _: True)
+        return d
+
+    @inlineCallbacks
+    def handle_deliver_sm_multipart(self, pdu, pdu_params):
+        redis_key = "multi_%s" % (multipart_key(detect_multipart(pdu)),)
+        log.debug("Redis multipart key: %s" % (redis_key))
+        multi = yield self.load_multipart_message(redis_key)
+        multi.add_pdu(pdu)
+        completed = multi.get_completed()
+        if completed:
+            yield self.redis.delete(redis_key)
+            log.msg("Reassembled Message: %s" % (completed['message']))
+            # We assume that all parts have the same data_coding here, because
+            # otherwise there's nothing sensible we can do.
+            decoded_msg = self.decode_message(completed['message'],
+                                              pdu_params['data_coding'])
+            # and we can finally pass the whole message on
+            yield self.handle_short_message_content(
+                source_addr=completed['from_msisdn'],
+                destination_addr=completed['to_msisdn'],
+                short_message=decoded_msg)
+        else:
+            yield self.save_multipart_message(redis_key, multi)
 
     def handle_ussd_pdu(self, pdu):
         return succeed(False)
 
     def decode_pdus(self, pdus):
         return decode_pdus(pdus, self.config.data_coding_overrides)
+
+    def decode_message(self, message, data_coding):
+        return decode_message(
+            message, data_coding, self.config.data_coding_overrides)
+
+    def _hex_for_redis(self, data_dict):
+        for index, part in data_dict.items():
+            part['part_message'] = part['part_message'].encode('hex')
+        return data_dict
+
+    def _unhex_from_redis(self, data_dict):
+        for index, part in data_dict.items():
+            part['part_message'] = part['part_message'].decode('hex')
+        return data_dict
+
+    @inlineCallbacks
+    def load_multipart_message(self, redis_key):
+        value = yield self.redis.get(redis_key)
+        value = json.loads(value) if value else {}
+        log.debug("Retrieved value: %s" % (repr(value)))
+        returnValue(MultipartMessage(self._unhex_from_redis(value)))
+
+    def save_multipart_message(self, redis_key, multipart_message):
+        data_dict = self._hex_for_redis(multipart_message.get_array())
+        return self.redis.set(redis_key, json.dumps(data_dict))

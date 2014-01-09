@@ -10,7 +10,8 @@ from vumi.tests.helpers import VumiTestCase
 from vumi.transports.tests.helpers import TransportHelper
 
 from vumi.transports.smpp.smpp_transport import SmppTransport
-from vumi.transports.smpp.pdu_utils import pdu_ok, short_message, command_id
+from vumi.transports.smpp.pdu_utils import (pdu_ok, short_message, command_id,
+                                            seq_no, pdu_tlv)
 from vumi.transports.smpp.clientserver.tests.test_new_client import (
     bind_protocol, wait_for_pdus)
 
@@ -40,10 +41,7 @@ class SMPPHelper(object):
     def sendPDU(self, pdu):
         self.protocol.dataReceived(pdu.get_bin())
 
-    def send_mo(self, sequence_number, short_message, data_coding=0, **kwargs):
-        """
-        data_coding=0 is set to utf-8 in the ``data_coding_overrides``
-        """
+    def send_mo(self, sequence_number, short_message, data_coding=1, **kwargs):
         return self.sendPDU(
             DeliverSM(sequence_number, short_message=short_message,
                       data_coding=data_coding, **kwargs))
@@ -86,9 +84,13 @@ class TestSmppTransport(VumiTestCase):
         return service
 
     @inlineCallbacks
-    def get_transport(self, config={}, bind=True):
+    def get_transport(self, config={}, smpp_config=None, bind=True):
         cfg = self.default_config.copy()
         cfg.update(config)
+
+        if smpp_config is not None:
+            cfg['smpp_config'].update(smpp_config)
+
         transport = yield self.tx_helper.get_transport(cfg)
         if bind:
             yield self.create_smpp_bind(transport)
@@ -148,11 +150,79 @@ class TestSmppTransport(VumiTestCase):
     @inlineCallbacks
     def test_mo_sms_unicode(self):
         smpp_helper = yield self.get_smpp_helper()
-        smpp_helper.send_mo(sequence_number=1, short_message='Zo\xc3\xab')
+        smpp_helper.send_mo(sequence_number=1, short_message='Zo\xc3\xab',
+                            data_coding=0)
         [deliver_sm_resp] = yield smpp_helper.wait_for_pdus(1)
         self.assertTrue(pdu_ok(deliver_sm_resp))
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assertEqual(msg['content'], u'Zoë')
+
+    @inlineCallbacks
+    def test_mo_sms_multipart_long(self):
+        smpp_helper = yield self.get_smpp_helper()
+        content = '1' * 255
+
+        pdu = DeliverSM(sequence_number=1)
+        pdu.add_optional_parameter('message_payload', content.encode('hex'))
+        smpp_helper.sendPDU(pdu)
+
+        [deliver_sm_resp] = yield smpp_helper.wait_for_pdus(1)
+        self.assertEqual(1, seq_no(deliver_sm_resp))
+        self.assertTrue(pdu_ok(deliver_sm_resp))
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        self.assertEqual(msg['content'], content)
+
+    @inlineCallbacks
+    def test_mo_sms_multipart_udh(self):
+        smpp_helper = yield self.get_smpp_helper()
+        deliver_sm_resps = []
+        smpp_helper.send_mo(sequence_number=1,
+                            short_message="\x05\x00\x03\xff\x03\x01back")
+        deliver_sm_resps.append((yield smpp_helper.wait_for_pdus(1))[0])
+        smpp_helper.send_mo(sequence_number=2,
+                            short_message="\x05\x00\x03\xff\x03\x02 at")
+        deliver_sm_resps.append((yield smpp_helper.wait_for_pdus(1))[0])
+        smpp_helper.send_mo(sequence_number=3,
+                            short_message="\x05\x00\x03\xff\x03\x03 you")
+        deliver_sm_resps.append((yield smpp_helper.wait_for_pdus(1))[0])
+        self.assertEqual([1, 2, 3], map(seq_no, deliver_sm_resps))
+        self.assertTrue(all(map(pdu_ok, deliver_sm_resps)))
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        self.assertEqual(msg['content'], u'back at you')
+
+    @inlineCallbacks
+    def test_mo_sms_multipart_sar(self):
+        smpp_helper = yield self.get_smpp_helper()
+        deliver_sm_resps = []
+
+        pdu1 = DeliverSM(sequence_number=1, short_message='back')
+        pdu1.add_optional_parameter('sar_msg_ref_num', 1)
+        pdu1.add_optional_parameter('sar_total_segments', 3)
+        pdu1.add_optional_parameter('sar_segment_seqnum', 1)
+
+        smpp_helper.sendPDU(pdu1)
+        deliver_sm_resps.append((yield smpp_helper.wait_for_pdus(1))[0])
+
+        pdu2 = DeliverSM(sequence_number=2, short_message=' at')
+        pdu2.add_optional_parameter('sar_msg_ref_num', 1)
+        pdu2.add_optional_parameter('sar_total_segments', 3)
+        pdu2.add_optional_parameter('sar_segment_seqnum', 2)
+
+        smpp_helper.sendPDU(pdu2)
+        deliver_sm_resps.append((yield smpp_helper.wait_for_pdus(1))[0])
+
+        pdu3 = DeliverSM(sequence_number=3, short_message=' you')
+        pdu3.add_optional_parameter('sar_msg_ref_num', 1)
+        pdu3.add_optional_parameter('sar_total_segments', 3)
+        pdu3.add_optional_parameter('sar_segment_seqnum', 3)
+
+        smpp_helper.sendPDU(pdu3)
+        deliver_sm_resps.append((yield smpp_helper.wait_for_pdus(1))[0])
+
+        self.assertEqual([1, 2, 3], map(seq_no, deliver_sm_resps))
+        self.assertTrue(all(map(pdu_ok, deliver_sm_resps)))
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        self.assertEqual(msg['content'], u'back at you')
 
     @inlineCallbacks
     def test_mt_sms(self):
@@ -171,3 +241,62 @@ class TestSmppTransport(VumiTestCase):
         [pdu] = yield smpp_helper.wait_for_pdus(1)
         self.assertEqual(command_id(pdu), 'submit_sm')
         self.assertEqual(short_message(pdu), 'Zo\xc3\xab')
+
+    @inlineCallbacks
+    def test_mt_sms_multipart_long(self):
+        smpp_helper = yield self.get_smpp_helper(smpp_config={
+            'send_long_messages': True,
+        })
+        # SMPP specifies that messages longer than 254 bytes should
+        # be put in the message_payload field using TLVs
+        content = '1' * 255
+        msg = self.tx_helper.make_outbound(content)
+        yield self.tx_helper.dispatch_outbound(msg)
+        [submit_sm] = yield smpp_helper.wait_for_pdus(1)
+        self.assertEqual(pdu_tlv(submit_sm, 'message_payload').decode('hex'),
+                         content)
+
+    @inlineCallbacks
+    def test_mt_sms_multipart_udh(self):
+        smpp_helper = yield self.get_smpp_helper(smpp_config={
+            'send_multipart_udh': True,
+        })
+        # SMPP specifies that messages longer than 254 bytes should
+        # be put in the message_payload field using TLVs
+        content = '1' * 161
+        msg = self.tx_helper.make_outbound(content)
+        yield self.tx_helper.dispatch_outbound(msg)
+        [submit_sm1, submit_sm2] = yield smpp_helper.wait_for_pdus(2)
+
+        udh_hlen, udh_tag, udh_len, udh_ref, udh_tot, udh_seq = [
+            ord(octet) for octet in short_message(submit_sm1)[:6]]
+        self.assertEqual(5, udh_hlen)
+        self.assertEqual(0, udh_tag)
+        self.assertEqual(3, udh_len)
+        self.assertEqual(udh_tot, 2)
+        self.assertEqual(udh_seq, 1)
+
+        _, _, _, ref_to_udh_ref, _, udh_seq = [
+            ord(octet) for octet in short_message(submit_sm2)[:6]]
+        self.assertEqual(ref_to_udh_ref, udh_ref)
+        self.assertEqual(udh_seq, 2)
+
+    @inlineCallbacks
+    def test_mt_sms_multipart_sar(self):
+        smpp_helper = yield self.get_smpp_helper(smpp_config={
+            'send_multipart_sar': True,
+        })
+        # SMPP specifies that messages longer than 254 bytes should
+        # be put in the message_payload field using TLVs
+        content = '1' * 161
+        msg = self.tx_helper.make_outbound(content)
+        yield self.tx_helper.dispatch_outbound(msg)
+        [submit_sm1, submit_sm2] = yield smpp_helper.wait_for_pdus(2)
+
+        ref_num = pdu_tlv(submit_sm1, 'sar_msg_ref_num')
+        self.assertEqual(pdu_tlv(submit_sm1, 'sar_total_segments'), 2)
+        self.assertEqual(pdu_tlv(submit_sm1, 'sar_segment_seqnum'), 1)
+
+        self.assertEqual(pdu_tlv(submit_sm2, 'sar_msg_ref_num'), ref_num)
+        self.assertEqual(pdu_tlv(submit_sm2, 'sar_total_segments'), 2)
+        self.assertEqual(pdu_tlv(submit_sm2, 'sar_segment_seqnum'), 2)
