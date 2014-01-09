@@ -167,13 +167,14 @@ class TestTwitterTransport(VumiTestCase):
 
     @inlineCallbacks
     def test_sending(self):
-        msg = yield self.tx_helper.make_dispatch_outbound('hello')
+        msg = yield self.tx_helper.make_dispatch_outbound(
+            'hello', to_addr='someone')
         [ack] = yield self.tx_helper.wait_for_dispatched_events(1)
 
         self.assertEqual(ack['user_message_id'], msg['message_id'])
 
         tweet = self.twitter.get_tweet(ack['sent_message_id'])
-        self.assertEqual(tweet.text, 'hello')
+        self.assertEqual(tweet.text, '@someone hello')
         self.assertEqual(tweet.reply_to, None)
 
     @inlineCallbacks
@@ -181,7 +182,9 @@ class TestTwitterTransport(VumiTestCase):
         tweet1 = self.twitter.new_tweet('hello', self.user.id_str)
 
         inbound_msg = self.tx_helper.make_inbound(
-            'hello', transport_metadata={
+            'hello',
+            from_addr='someone',
+            transport_metadata={
                 'twitter': {'status_id': tweet1.id_str}
             })
 
@@ -191,7 +194,7 @@ class TestTwitterTransport(VumiTestCase):
         self.assertEqual(ack['user_message_id'], msg['message_id'])
 
         tweet2 = self.twitter.get_tweet(ack['sent_message_id'])
-        self.assertEqual(tweet2.text, 'goodbye')
+        self.assertEqual(tweet2.text, '@someone goodbye')
         self.assertEqual(tweet2.reply_to, tweet1.id_str)
 
     @inlineCallbacks

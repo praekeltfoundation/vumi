@@ -71,9 +71,12 @@ class TwitterTransport(Transport):
         in_reply_to_status_id = metadata.get('status_id')
 
         try:
+            content = message['content']
+            if message['to_addr']:
+                content = "@%s %s" % (message['to_addr'], content)
+
             response = yield self.client.statuses_update(
-                message['content'],
-                in_reply_to_status_id=in_reply_to_status_id)
+                content, in_reply_to_status_id=in_reply_to_status_id)
 
             yield self.publish_ack(
                 user_message_id=message['message_id'],
