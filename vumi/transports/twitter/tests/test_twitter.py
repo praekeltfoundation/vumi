@@ -57,7 +57,7 @@ class TestTwitterTransport(VumiTestCase):
         someone_else = self.twitter.new_user('someone_else', 'someone_else')
         tweet1 = self.twitter.new_tweet('@someone_else hello', someone.id_str)
         tweet2 = self.twitter.new_tweet(
-            '@someone arnold', someone_else.id_str, tweet1.id_str)
+            '@someone arnold', someone_else.id_str, reply_to=tweet1.id_str)
 
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
 
@@ -128,7 +128,7 @@ class TestTwitterTransport(VumiTestCase):
         someone = self.twitter.new_user('someone', 'someone')
         tweet1 = self.twitter.new_tweet('@someone hello', self.user.id_str)
         tweet2 = self.twitter.new_tweet(
-            '@me goodbye', someone.id_str, tweet1.id_str)
+            '@me goodbye', someone.id_str, reply_to=tweet1.id_str)
 
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
 
