@@ -42,7 +42,6 @@ class TwitterTransport(Transport):
 
     def setup_transport(self):
         config = self.get_static_config()
-        self.terms = config.terms
         self.screen_name = config.screen_name
 
         self.client = self.get_client(
@@ -52,7 +51,7 @@ class TwitterTransport(Transport):
             config.consumer_secret)
 
         self.track_stream = self.client.stream_filter(
-            self.handle_track_stream, track=self.terms)
+            self.handle_track_stream, track=config.terms)
         self.track_stream.startService()
 
         self.user_stream = self.client.userstream_user(
