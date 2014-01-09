@@ -8,8 +8,6 @@ from vumi.transports.tests.helpers import TransportHelper
 
 
 class TestTwitterTransport(VumiTestCase):
-    timeout = 1
-
     @inlineCallbacks
     def setUp(self):
         self.twitter = FakeTwitter()
