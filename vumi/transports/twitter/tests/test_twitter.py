@@ -145,7 +145,7 @@ class TestTwitterTransport(VumiTestCase):
         self.assertEqual(msg['helper_metadata'], {
             'twitter': {
                 'in_reply_to_status_id': tweet1.id_str,
-                'in_reply_to_screen_name': 'me' ,
+                'in_reply_to_screen_name': 'me',
                 'user_mentions': [{
                     'id_str': self.user.id_str,
                     'id': int(self.user.id_str),
