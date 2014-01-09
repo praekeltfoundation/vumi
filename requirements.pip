@@ -15,4 +15,4 @@ pytz==2013b
 riakasaurus>=1.1.1
 riak==1.5.2
 txJSON-RPC==0.3.1
-https://github.com/jerith/txTwitter/tarball/develop#egg=txtwitter
+txTwitter>=0.1.0a
