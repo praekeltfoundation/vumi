@@ -12,7 +12,7 @@ from vumi.transports.base import Transport
 from vumi.message import TransportUserMessage
 
 from vumi.transports.smpp.config import SmppTransportConfig, EsmeConfig
-from vumi.transports.smpp.clientserver.new_client import EsmeTransceiverFactory
+from vumi.transports.smpp.protocol import EsmeTransceiverFactory
 from vumi.transports.smpp.clientserver.sequence import RedisSequence
 from vumi.transports.failures import FailureMessage
 

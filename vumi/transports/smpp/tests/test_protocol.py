@@ -7,7 +7,7 @@ from twisted.internet.task import Clock
 
 from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 from vumi.transports.smpp.transport import SmppTransport
-from vumi.transports.smpp.clientserver.new_client import (
+from vumi.transports.smpp.protocol import (
     EsmeTransceiver, EsmeTransceiverFactory,
     EsmeTransmitterFactory, EsmeReceiverFactory)
 from vumi.transports.smpp.pdu_utils import (

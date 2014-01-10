@@ -18,7 +18,7 @@ from vumi.transports.smpp.smpp_transport import (
     message_key, remote_message_key)
 from vumi.transports.smpp.pdu_utils import (
     pdu_ok, short_message, command_id, seq_no, pdu_tlv)
-from vumi.transports.smpp.clientserver.tests.test_new_client import (
+from vumi.transports.smpp.tests.test_protocol import (
     bind_protocol, wait_for_pdus)
 
 from vumi.message import TransportUserMessage

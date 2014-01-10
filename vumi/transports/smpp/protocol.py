@@ -1,4 +1,4 @@
-# -*- test-case-name: vumi.transports.smpp.clientserver.tests.test_new_client -*-
+# -*- test-case-name: vumi.transports.smpp.tests.test_protocol -*-
 
 from functools import wraps
 from random import randint
