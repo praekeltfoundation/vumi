@@ -374,7 +374,58 @@ class DeliverShortMessageProcessor(object):
             yield self.save_multipart_message(redis_key, multi)
 
     def handle_ussd_pdu(self, pdu):
-        return succeed(False)
+        pdu_params = pdu['body']['mandatory_parameters']
+        pdu_opts = unpacked_pdu_opts(pdu)
+
+        if not detect_ussd(pdu_opts):
+            return succeed(False)
+
+        # We have a USSD message.
+        d = self.handle_deliver_sm_ussd(pdu, pdu_params, pdu_opts)
+        d.addCallback(lambda _: True)
+        return d
+
+    def handle_deliver_sm_ussd(self, pdu, pdu_params, pdu_opts):
+        # Some of this stuff might be specific to Tata's setup.
+
+        service_op = pdu_opts['ussd_service_op']
+
+        session_event = 'close'
+        if service_op == '01':
+            # PSSR request. Let's assume it means a new session.
+            session_event = 'new'
+        elif service_op == '11':
+            # PSSR response. This means session end.
+            session_event = 'close'
+        elif service_op in ('02', '12'):
+            # USSR request or response. I *think* we only get the latter.
+            session_event = 'continue'
+
+        # According to the spec, the first octet is the session id and the
+        # second is the client dialog id (first 7 bits) and end session flag
+        # (last bit).
+
+        # Since we don't use the client dialog id and the spec says it's
+        # ESME-defined, treat the whole thing as opaque "session info" that
+        # gets passed back in reply messages.
+
+        its_session_number = int(pdu_opts['its_session_info'], 16)
+        end_session = bool(its_session_number % 2)
+        session_info = "%04x" % (its_session_number & 0xfffe)
+
+        if end_session:
+            # We have an explicit "end session" flag.
+            session_event = 'close'
+
+        decoded_msg = self.decode_message(pdu_params['short_message'],
+                                          pdu_params['data_coding'])
+        return self.handle_short_message_content(
+            source_addr=pdu_params['source_addr'],
+            destination_addr=pdu_params['destination_addr'],
+            short_message=decoded_msg,
+            message_type='ussd',
+            session_event=session_event,
+            session_info=session_info)
 
     def decode_pdus(self, pdus):
         return decode_pdus(pdus, self.config.data_coding_overrides)
