@@ -29,7 +29,7 @@ class MessageStoreCacheTestCase(VumiTestCase):
         self.cache = self.store.cache
         self.batch_id = 'a-batch-id'
         if self.start_batch:
-            self.cache.batch_start(self.batch_id)
+            yield self.cache.batch_start(self.batch_id)
         self.msg_helper = self.add_helper(MessageHelper())
 
     @inlineCallbacks
