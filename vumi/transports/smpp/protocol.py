@@ -60,7 +60,7 @@ class EsmeTransceiver(Protocol):
 
     def __init__(self, vumi_transport):
         """
-        An ESME protocol suitable for use by a Vumi Transport.
+        An SMPP 3.4 client suitable for use by a Vumi Transport.
 
         :param SmppTransceiverProtocol vumi_transport:
             The transport that is using this protocol to communicate
@@ -102,10 +102,6 @@ class EsmeTransceiver(Protocol):
         ]
         return dict([(key, getattr(self.config, key))
                      for key in bind_keys if hasattr(self.config, key)])
-
-    def push_unacked(self, sequence_number):
-        """TODO: refactor into something relevant"""
-        return succeed(sequence_number)
 
     def connectionMade(self):
         self.state = self.OPEN_STATE
@@ -342,7 +338,6 @@ class EsmeTransceiver(Protocol):
             pdu.set_sar_segment_seqnum(sar_params['segment_seqnum'])
 
         self.sendPDU(pdu)
-        yield self.push_unacked(sequence_number)
         returnValue(sequence_number)
 
     @inlineCallbacks
