@@ -30,7 +30,7 @@ from smpp.pdu_builder import (
 def connect_transport(protocol):
     transport = proto_helpers.StringTransport()
     protocol.makeConnection(transport)
-    d = protocol.bind()
+    d = protocol.bind(system_id='', password='', system_type='')
     d.addCallback(lambda _: transport)
     return d
 

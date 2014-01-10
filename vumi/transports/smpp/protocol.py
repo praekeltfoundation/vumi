@@ -111,10 +111,41 @@ class EsmeTransceiver(Protocol):
         log.msg('Connection Made')
 
     @inlineCallbacks
-    def bind(self):
+    def bind(self,
+             system_id,
+             password,
+             system_type,
+             interface_version='34',
+             addr_ton='',
+             addr_npi='',
+             address_range=''):
+        """
+        Send the `bind_transmitter`, `bind_transceiver` or `bind_receiver`
+        PDU to the SMSC in order to establish the connection.
+
+        :param str system_id:
+            Identifies the ESME system requesting to bind.
+        :param str password:
+            The password may be used by the SMSC to authenticate the
+            ESME requesting to bind.
+        :param str system_type:
+            Identifies the type of ESME system requesting to bind
+            with the SMSC.
+        :param str interface_version:
+            Indicates the version of the SMPP protocol supported by the
+            ESME.
+        :param str addr_ton:
+            Indicates Type of Number of the ESME address.
+        :param str addr_npi:
+            Numbering Plan Indicator for ESME address.
+        :param str address_range:
+            The ESME address.
+        """
         sequence_number = yield self.sequence_generator.next()
-        bind_params = self.getBindParams()
-        pdu = self.bind_pdu(sequence_number, **bind_params)
+        pdu = self.bind_pdu(
+            sequence_number, system_id=system_id, password=password,
+            system_type=system_type, interface_version=interface_version,
+            addr_ton=addr_ton, addr_npi=addr_npi, address_range=address_range)
         self.sendPDU(pdu)
         self.drop_link_call = self.clock.callLater(
             self.config.smpp_bind_timeout, self.dropLink)

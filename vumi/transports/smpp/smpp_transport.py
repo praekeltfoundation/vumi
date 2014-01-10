@@ -40,8 +40,14 @@ class SmppTransceiverProtocol(EsmeTransceiverFactory.protocol):
 
     def onConnectionMade(self):
         # TODO: create a processor for bind / unbind message processing
+        # TODO: rethink whether the transport config / smpp config split
+        #       was a good idea.
         d = maybeDeferred(self.vumi_transport.unpause_connectors)
-        d.addCallback(lambda _: self.bind())
+        d.addCallback(
+            lambda _: self.bind(
+                self.vumi_transport.smpp_config.system_id,
+                self.vumi_transport.smpp_config.password,
+                self.vumi_transport.smpp_config.system_type))
         d.addCallback(log.msg)
         return d
 
