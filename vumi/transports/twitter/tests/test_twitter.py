@@ -35,8 +35,8 @@ class TestTwitterTransport(VumiTestCase):
 
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
 
-        self.assertEqual(msg['from_addr'], 'someone')
-        self.assertEqual(msg['to_addr'], '')
+        self.assertEqual(msg['from_addr'], '@someone')
+        self.assertEqual(msg['to_addr'], 'NO_USER')
         self.assertEqual(msg['content'], 'arnold')
 
         self.assertEqual(
@@ -61,8 +61,8 @@ class TestTwitterTransport(VumiTestCase):
 
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
 
-        self.assertEqual(msg['from_addr'], 'someone_else')
-        self.assertEqual(msg['to_addr'], 'someone')
+        self.assertEqual(msg['from_addr'], '@someone_else')
+        self.assertEqual(msg['to_addr'], '@someone')
         self.assertEqual(msg['content'], '@someone arnold')
 
         self.assertEqual(
@@ -101,8 +101,8 @@ class TestTwitterTransport(VumiTestCase):
 
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
 
-        self.assertEqual(msg['from_addr'], 'someone')
-        self.assertEqual(msg['to_addr'], '')
+        self.assertEqual(msg['from_addr'], '@someone')
+        self.assertEqual(msg['to_addr'], 'NO_USER')
         self.assertEqual(msg['content'], '@me hello')
 
         self.assertEqual(
@@ -132,8 +132,8 @@ class TestTwitterTransport(VumiTestCase):
 
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
 
-        self.assertEqual(msg['from_addr'], 'someone')
-        self.assertEqual(msg['to_addr'], 'me')
+        self.assertEqual(msg['from_addr'], '@someone')
+        self.assertEqual(msg['to_addr'], '@me')
         self.assertEqual(msg['content'], '@me goodbye')
 
         self.assertEqual(
@@ -168,7 +168,7 @@ class TestTwitterTransport(VumiTestCase):
     @inlineCallbacks
     def test_sending(self):
         msg = yield self.tx_helper.make_dispatch_outbound(
-            'hello', to_addr='someone')
+            'hello', to_addr='@someone')
         [ack] = yield self.tx_helper.wait_for_dispatched_events(1)
 
         self.assertEqual(ack['user_message_id'], msg['message_id'])
@@ -183,7 +183,7 @@ class TestTwitterTransport(VumiTestCase):
 
         inbound_msg = self.tx_helper.make_inbound(
             'hello',
-            from_addr='someone',
+            from_addr='@someone',
             transport_metadata={
                 'twitter': {'status_id': tweet1.id_str}
             })
