@@ -1,18 +1,2 @@
-zope.interface
-Twisted
-# txAMQP prior to 0.5 does not support modern rabbitMQ versions.
-txAMQP>=0.5
-PyYAML
-iso8601
-supervisor
-pyOpenSSL
-python-ssmi>=0.0.5
-wokkel
-redis
-txredis
-python-smpp>=0.1.1
-pytz==2013b
-riakasaurus>=1.1.1
-riak==1.5.2
-txJSON-RPC==0.3.1
-txTwitter>=0.1.0a
+# Our dependencies are all specified in setup.py.
+-e .
