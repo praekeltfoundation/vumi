@@ -619,10 +619,10 @@ class UssdSmppTransportTestCase(SmppTransportTestCase):
         self.assertEqual(pdu_tlv(submit_sm_pdu, 'ussd_service_op'), '02')
         self.assertEqual(pdu_tlv(submit_sm_pdu, 'its_session_info'), '0001')
 
-        smpp_helper.sendPDU(
+        yield smpp_helper.handlePDU(
             SubmitSMResp(sequence_number=seq_no(submit_sm_pdu),
                          message_id='foo'))
-        smpp_helper.sendPDU(
+        yield smpp_helper.handlePDU(
             DeliverSM(sequence_number=seq_no(submit_sm_pdu) + 1,
                       short_message=self.DR_TEMPLATE % ('foo',)))
 
@@ -641,7 +641,7 @@ class UssdSmppTransportTestCase(SmppTransportTestCase):
         pdu.add_optional_parameter('ussd_service_op', '02')
         pdu.add_optional_parameter('its_session_info', '0001')
 
-        smpp_helper.sendPDU(pdu)
+        yield smpp_helper.handlePDU(pdu)
 
         [mess] = yield self.tx_helper.wait_for_dispatched_inbound(1)
 
