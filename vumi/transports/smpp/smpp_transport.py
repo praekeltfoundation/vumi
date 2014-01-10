@@ -3,7 +3,8 @@
 from uuid import uuid4
 
 from twisted.internet import reactor
-from twisted.internet.defer import inlineCallbacks, DeferredQueue
+from twisted.internet.defer import (inlineCallbacks, DeferredQueue,
+                                    maybeDeferred)
 
 from vumi.reconnecting_client import ReconnectingClientService
 from vumi.transports.base import Transport
@@ -36,7 +37,17 @@ class SmppTransceiverProtocol(EsmeTransceiverFactory.protocol):
 
     def onConnectionMade(self):
         # TODO: create a processor for bind / unbind message processing
-        return self.bind()
+        d = maybeDeferred(self.vumi_transport.unpause_connectors)
+        d.addCallback(lambda _: self.bind())
+        d.addCallback(log.msg)
+        return d
+
+    def onConnectionLost(self, reason):
+        d = maybeDeferred(self.vumi_transport.pause_connectors)
+        d.addCallback(
+            lambda _: EsmeTransceiverFactory.protocol.onConnectionLost(
+                self, reason))
+        return d
 
     def onSubmitSMResp(self, sequence_number, smpp_message_id, command_status):
         cb = {
@@ -182,6 +193,7 @@ class SmppTransport(Transport):
     def handle_submit_sm_failure(self, message_id, smpp_message_id,
                                  command_status):
         error_message = yield self.get_cached_message(message_id)
+        command_status = command_status or 'Unspecified'
         if error_message is None:
             log.err("Could not retrieve failed message:%s" % (
                 message_id))
@@ -252,3 +264,17 @@ class SmppTransport(Transport):
         #       remove the try-except once we handle such messages
         #       better.
         return self.publish_message(**message).addErrback(log.err)
+
+    @inlineCallbacks
+    def handle_delivery_report(self, receipted_message_id, delivery_status):
+        message_id = yield self.get_internal_message_id(receipted_message_id)
+        if message_id is None:
+            log.warning("Failed to retrieve message id for delivery report."
+                        " Delivery report from %s discarded."
+                        % self.transport_name)
+            return
+
+        dr = yield self.publish_delivery_report(
+            user_message_id=message_id,
+            delivery_status=delivery_status)
+        returnValue(dr)

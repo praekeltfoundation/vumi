@@ -147,9 +147,9 @@ class EsmeTransceiver(Protocol):
 
     def connectionLost(self, reason):
         self.state = self.CLOSED_STATE
-        self.onConnectionLost()
+        self.onConnectionLost(reason)
 
-    def onConnectionLost(self):
+    def onConnectionLost(self, reason):
         if self.enquire_link_call.running:
             self.enquire_link_call.stop()
         if self.drop_link_call is not None and self.drop_link_call.active():

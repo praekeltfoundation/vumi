@@ -3,18 +3,19 @@
 from twisted.test import proto_helpers
 from twisted.internet import reactor
 from twisted.internet.defer import (inlineCallbacks, returnValue, Deferred,
-                                    maybeDeferred)
+                                    maybeDeferred, succeed)
 from twisted.internet.error import ConnectionDone
 from twisted.internet.task import Clock
 from twisted.application.service import Service
 
 from vumi.tests.helpers import VumiTestCase
+from vumi.tests.utils import LogCatcher
 from vumi.transports.tests.helpers import TransportHelper
 
 from vumi.transports.smpp.smpp_transport import (
-    SmppTransport, message_key, remote_message_key)
-from vumi.transports.smpp.pdu_utils import (pdu_ok, short_message, command_id,
-                                            seq_no, pdu_tlv)
+    SmppTransport, SmppTransceiverProtocol, message_key, remote_message_key)
+from vumi.transports.smpp.pdu_utils import (
+    pdu_ok, short_message, command_id, seq_no, pdu_tlv)
 from vumi.transports.smpp.clientserver.tests.test_new_client import (
     bind_protocol, wait_for_pdus)
 
@@ -51,8 +52,9 @@ class SMPPHelper(object):
 
     def handlePDU(self, pdu):
         """short circuit the wire so we get a deferred so we know
-        when it's been handled"""
-        return self.protocol.onPdu(unpack_pdu(pdu.get_bin()))
+        when it's been handled, also allows us to test PDUs that are invalid
+        because we're skipping the encode/decode step."""
+        return self.protocol.onPdu(pdu.obj)
 
     def send_mo(self, sequence_number, short_message, data_coding=1, **kwargs):
         return self.sendPDU(
@@ -282,7 +284,7 @@ class TestSmppTransport(VumiTestCase):
         self.assertEqual(event['nack_reason'], 'ESME_RINVDSTADR')
 
     @inlineCallbacks
-    def test_mt_sms_failure_publishing(self):
+    def test_mt_sms_failure(self):
         smpp_helper = yield self.get_smpp_helper()
         message = yield self.tx_helper.make_dispatch_outbound(
             "message", message_id='446')
@@ -297,6 +299,27 @@ class TestSmppTransport(VumiTestCase):
         [failure] = yield self.tx_helper.get_dispatched_failures()
         self.assertEqual(failure['reason'], 'ESME_RSUBMITFAIL')
         self.assertEqual(failure['message'], message.payload)
+
+    @inlineCallbacks
+    def test_mt_sms_failure_with_no_reason(self):
+
+        smpp_helper = yield self.get_smpp_helper()
+        message = yield self.tx_helper.make_dispatch_outbound(
+            "message", message_id='446')
+        [submit_sm] = yield smpp_helper.wait_for_pdus(1)
+
+        yield smpp_helper.handlePDU(
+            SubmitSMResp(sequence_number=seq_no(submit_sm),
+                         message_id='foo',
+                         command_status=None))
+
+        # There should be a nack
+        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
+        self.assertEqual(nack['user_message_id'], message['message_id'])
+        self.assertEqual(nack['nack_reason'], 'Unspecified')
+
+        [failure] = yield self.tx_helper.get_dispatched_failures()
+        self.assertEqual(failure['reason'], 'Unspecified')
 
     @inlineCallbacks
     def test_mt_sms_throttled(self):
@@ -479,7 +502,6 @@ class TestSmppTransport(VumiTestCase):
 
     @inlineCallbacks
     def test_out_of_order_responses(self):
-        # Sequence numbers are hardcoded, assuming we start fresh from 0.
         smpp_helper = yield self.get_smpp_helper()
         yield self.tx_helper.make_dispatch_outbound("msg 1", message_id='444')
         [submit_sm1] = yield smpp_helper.wait_for_pdus(1)
@@ -498,3 +520,35 @@ class TestSmppTransport(VumiTestCase):
         self.assertEqual(ack1['sent_message_id'], '3rd_party_id_2')
         self.assertEqual(ack2['user_message_id'], '444')
         self.assertEqual(ack2['sent_message_id'], '3rd_party_id_1')
+
+    @inlineCallbacks
+    def test_delivery_report_for_unknown_message(self):
+        dr = ("id:123 sub:... dlvrd:... submit date:200101010030"
+              " done date:200101020030 stat:DELIVRD err:... text:Meep")
+        deliver = DeliverSM(1, short_message=dr)
+        smpp_helper = yield self.get_smpp_helper()
+        with LogCatcher(message="Failed to retrieve message id") as lc:
+            yield smpp_helper.handlePDU(deliver)
+            [warning] = lc.logs
+            self.assertEqual(warning['message'],
+                             ("Failed to retrieve message id for delivery "
+                              "report. Delivery report from %s "
+                              "discarded." % self.tx_helper.transport_name,))
+
+    @inlineCallbacks
+    def test_reconnect(self):
+        self.patch(SmppTransceiverProtocol, 'bind', lambda *a: succeed(True))
+        smpp_helper = yield self.get_smpp_helper(bind=False)
+        transport = smpp_helper.transport
+        protocol = smpp_helper.protocol
+        connector = transport.connectors[transport.transport_name]
+        self.assertFalse(connector._consumers['outbound'].paused)
+        yield protocol.onConnectionLost(ConnectionDone)
+        self.assertTrue(connector._consumers['outbound'].paused)
+        yield protocol.onConnectionLost(ConnectionDone)
+        self.assertTrue(connector._consumers['outbound'].paused)
+
+        yield protocol.onConnectionMade()
+        self.assertFalse(connector._consumers['outbound'].paused)
+        yield protocol.onConnectionMade()
+        self.assertFalse(connector._consumers['outbound'].paused)

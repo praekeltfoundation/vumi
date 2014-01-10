@@ -133,8 +133,25 @@ class DeliveryReportProcessor(object):
     def handle_delivery_report_pdu(self, pdu_data):
         return succeed(False)
 
-    def handle_delivery_report_content(self, pdu_data):
-        return succeed(False)
+    def handle_delivery_report_content(self, content):
+        delivery_report = self.config.delivery_report_regex.search(
+            content or '')
+
+        if not delivery_report:
+            return succeed(False)
+
+        # We have a delivery report.
+        fields = delivery_report.groupdict()
+        receipted_message_id = fields['id']
+        message_state = fields['stat']
+        d = self.transport.handle_delivery_report(
+            receipted_message_id=receipted_message_id,
+            delivery_status=self.delivery_status(message_state))
+        d.addCallback(lambda _: True)
+        return d
+
+    def delivery_status(self, state):
+        return self.config.delivery_report_status_mapping.get(state, 'pending')
 
 
 class DeliverShortMessageProcessorConfig(Config):
