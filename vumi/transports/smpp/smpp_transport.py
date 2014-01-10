@@ -295,7 +295,7 @@ class SmppReceiverClientFactory(EsmeTransceiverFactory):
     protocol = SmppReceiverProtocol
 
 
-class SmppReceiverTransport(Transport):
+class SmppReceiverTransport(SmppTransceiverTransport):
     factory_class = SmppReceiverClientFactory
 
 
@@ -303,5 +303,5 @@ class SmppTransmitterClientFactory(EsmeTransceiverFactory):
     protocol = SmppTransmitterProtocol
 
 
-class SmppTransmitterTransport(Transport):
+class SmppTransmitterTransport(SmppTransceiverTransport):
     factory_class = SmppTransmitterClientFactory

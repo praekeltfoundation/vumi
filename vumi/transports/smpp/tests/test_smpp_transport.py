@@ -79,9 +79,9 @@ class SmppTransportTestCase(VumiTestCase):
     def setUp(self):
 
         self.clock = Clock()
-        self.patch(SmppTransceiverTransport, 'start_service',
+        self.patch(self.transport_class, 'start_service',
                    self.patched_start_service)
-        self.patch(SmppTransceiverTransport, 'clock', self.clock)
+        self.patch(self.transport_class, 'clock', self.clock)
 
         self.string_transport = proto_helpers.StringTransport()
 
@@ -275,6 +275,40 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.assertTrue(all(map(pdu_ok, deliver_sm_resps)))
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assertEqual(msg['content'], u'back at you')
+
+    @inlineCallbacks
+    def test_mo_bad_encoding(self):
+        smpp_helper = yield self.get_smpp_helper()
+
+        bad_pdu = DeliverSM(555,
+                            short_message="SMS from server containing \xa7",
+                            destination_addr="2772222222",
+                            source_addr="2772000000",
+                            data_coding=1)
+
+        good_pdu = DeliverSM(555,
+                             short_message="Next message",
+                             destination_addr="2772222222",
+                             source_addr="2772000000",
+                             data_coding=1)
+
+        yield smpp_helper.handlePDU(bad_pdu)
+        yield smpp_helper.handlePDU(good_pdu)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+
+        self.assertEqual(msg['message_type'], 'user_message')
+        self.assertEqual(msg['transport_name'], self.tx_helper.transport_name)
+        self.assertEqual(msg['content'], "Next message")
+
+        dispatched_failures = self.tx_helper.get_dispatched_failures()
+        self.assertEqual(dispatched_failures, [])
+
+        [failure] = self.flushLoggedErrors(UnicodeDecodeError)
+        message = failure.getErrorMessage()
+        codec, rest = message.split(' ', 1)
+        self.assertEqual(codec, "'ascii'")
+        self.assertTrue(
+            rest.startswith("codec can't decode byte 0xa7 in position 27"))
 
     @inlineCallbacks
     def test_mo_sms_failed_remote_id_lookup(self):
@@ -621,11 +655,11 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.assertFalse(connector._consumers['outbound'].paused)
 
 
-class SmppTransmitterTransportTestCase(SmppTransportTestCase):
+class SmppTransmitterTransportTestCase(SmppTransceiverTransportTestCase):
     transport_class = SmppTransmitterTransport
 
 
-class SmppReceiverTransportTestCase(SmppTransportTestCase):
+class SmppReceiverTransportTestCase(SmppTransceiverTransportTestCase):
     transport_class = SmppReceiverTransport
 
 
