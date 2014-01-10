@@ -288,11 +288,12 @@ class RapidSMSRelay(ApplicationWorker):
     @inlineCallbacks
     def _call_rapidsms(self, message):
         config = yield self.get_config(message)
+        http_method = config.rapidsms_http_method.encode("utf-8")
         headers = self.get_auth_headers(config)
         yield self._store_message(message, config.vumi_reply_timeout)
         response = http_request_full(config.rapidsms_url.geturl(),
                                      message.to_json(),
-                                     headers, config.rapidsms_http_method)
+                                     headers, http_method)
         response.addCallback(lambda response: log.info(response.code))
         response.addErrback(lambda failure: log.err(failure))
         yield response
