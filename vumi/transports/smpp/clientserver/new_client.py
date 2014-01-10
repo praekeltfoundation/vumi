@@ -9,7 +9,6 @@ from twisted.internet.task import LoopingCall
 from twisted.internet.defer import (
     inlineCallbacks, returnValue, maybeDeferred, succeed)
 
-import binascii
 from smpp.pdu import unpack_pdu
 from smpp.pdu_builder import (
     BindTransceiver, BindReceiver, BindTransmitter,
@@ -21,7 +20,8 @@ from smpp.pdu_builder import (
 from vumi import log
 from vumi.transports.smpp.smpp_utils import update_ussd_pdu
 from vumi.transports.smpp.pdu_utils import (pdu_ok, seq_no, command_status,
-                                            command_id, message_id)
+                                            command_id, message_id,
+                                            chop_pdu_stream)
 from vumi.transports.smpp.config import EsmeConfig
 
 GSM_MAX_SMS_BYTES = 140
@@ -38,20 +38,6 @@ def require_bind(func):
 
 class EsmeProtocolError(Exception):
     pass
-
-
-def chop_pdu_stream(data):
-    if len(data) < 16:
-        return
-
-    bytes = binascii.b2a_hex(data[0:4])
-    cmd_length = int(bytes, 16)
-    if len(data) < cmd_length:
-        return
-
-    pdu, data = (data[0:cmd_length],
-                 data[cmd_length:])
-    return pdu, data
 
 
 class EsmeTransceiver(Protocol):
@@ -73,6 +59,13 @@ class EsmeTransceiver(Protocol):
     ])
 
     def __init__(self, vumi_transport):
+        """
+        An ESME protocol suitable for use by a Vumi Transport.
+
+        :param SmppTransceiverProtocol vumi_transport:
+            The transport that is using this protocol to communicate
+            with an SMSC.
+        """
         self.vumi_transport = vumi_transport
         self.config = self.CONFIG_CLASS(
             self.vumi_transport.get_static_config().smpp_config, static=True)

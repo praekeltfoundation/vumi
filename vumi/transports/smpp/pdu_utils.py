@@ -1,3 +1,5 @@
+import binascii
+
 from vumi.transports.smpp.smpp_utils import unpacked_pdu_opts
 
 
@@ -27,3 +29,17 @@ def short_message(pdu):
 
 def pdu_tlv(pdu, tag):
     return unpacked_pdu_opts(pdu)[tag]
+
+
+def chop_pdu_stream(data):
+    if len(data) < 16:
+        return
+
+    bytes = binascii.b2a_hex(data[0:4])
+    cmd_length = int(bytes, 16)
+    if len(data) < cmd_length:
+        return
+
+    pdu, data = (data[0:cmd_length],
+                 data[cmd_length:])
+    return pdu, data
