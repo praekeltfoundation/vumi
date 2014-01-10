@@ -282,6 +282,23 @@ class TestSmppTransport(VumiTestCase):
         self.assertEqual(event['nack_reason'], 'ESME_RINVDSTADR')
 
     @inlineCallbacks
+    def test_mt_sms_failure_publishing(self):
+        smpp_helper = yield self.get_smpp_helper()
+        message = yield self.tx_helper.make_dispatch_outbound(
+            "message", message_id='446')
+        [submit_sm] = yield smpp_helper.wait_for_pdus(1)
+        response = SubmitSMResp(seq_no(submit_sm), "3rd_party_id_3",
+                                command_status="ESME_RSUBMITFAIL")
+        smpp_helper.sendPDU(response)
+
+        # There should be a nack
+        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
+
+        [failure] = yield self.tx_helper.get_dispatched_failures()
+        self.assertEqual(failure['reason'], 'ESME_RSUBMITFAIL')
+        self.assertEqual(failure['message'], message.payload)
+
+    @inlineCallbacks
     def test_mt_sms_throttled(self):
         smpp_helper = yield self.get_smpp_helper()
         transport_config = smpp_helper.transport.get_static_config()
@@ -459,3 +476,25 @@ class TestSmppTransport(VumiTestCase):
 
         ttl = yield transport.redis.ttl(remote_message_key('foo'))
         self.assertTrue(0 < ttl <= config.third_party_id_expiry)
+
+    @inlineCallbacks
+    def test_out_of_order_responses(self):
+        # Sequence numbers are hardcoded, assuming we start fresh from 0.
+        smpp_helper = yield self.get_smpp_helper()
+        yield self.tx_helper.make_dispatch_outbound("msg 1", message_id='444')
+        [submit_sm1] = yield smpp_helper.wait_for_pdus(1)
+        response1 = SubmitSMResp(seq_no(submit_sm1), "3rd_party_id_1")
+
+        yield self.tx_helper.make_dispatch_outbound("msg 2", message_id='445')
+        [submit_sm2] = yield smpp_helper.wait_for_pdus(1)
+        response2 = SubmitSMResp(seq_no(submit_sm2), "3rd_party_id_2")
+
+        # respond out of order - just to keep things interesting
+        yield smpp_helper.handlePDU(response2)
+        yield smpp_helper.handlePDU(response1)
+
+        [ack1, ack2] = yield self.tx_helper.wait_for_dispatched_events(2)
+        self.assertEqual(ack1['user_message_id'], '445')
+        self.assertEqual(ack1['sent_message_id'], '3rd_party_id_2')
+        self.assertEqual(ack2['user_message_id'], '444')
+        self.assertEqual(ack2['sent_message_id'], '3rd_party_id_1')

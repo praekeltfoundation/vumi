@@ -13,6 +13,7 @@ from vumi.message import TransportUserMessage
 from vumi.transports.smpp.config import SmppTransportConfig, EsmeConfig
 from vumi.transports.smpp.clientserver.new_client import EsmeTransceiverFactory
 from vumi.transports.smpp.clientserver.sequence import RedisSequence
+from vumi.transports.failures import FailureMessage
 
 from vumi.persist.txredis_manager import TxRedisManager
 
@@ -177,9 +178,20 @@ class SmppTransport(Transport):
         d.addCallback(lambda _: self.delete_cached_message(message_id))
         return d
 
+    @inlineCallbacks
     def handle_submit_sm_failure(self, message_id, smpp_message_id,
                                  command_status):
-        return self.publish_nack(message_id, command_status)
+        error_message = yield self.get_cached_message(message_id)
+        if error_message is None:
+            log.err("Could not retrieve failed message:%s" % (
+                message_id))
+        else:
+            yield self.delete_cached_message(message_id)
+            yield self.publish_nack(message_id, command_status)
+            yield self.failure_publisher.publish_message(
+                FailureMessage(message=error_message.payload,
+                               failure_code=None,
+                               reason=command_status))
 
     @inlineCallbacks
     def handle_submit_sm_throttled(self, message_id, smpp_message_id,
