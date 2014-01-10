@@ -212,6 +212,27 @@ class TestSmppTransport(VumiTestCase):
         self.assertEqual(msg['content'], u'back at you')
 
     @inlineCallbacks
+    def test_mo_sms_multipart_udh_out_of_order(self):
+        smpp_helper = yield self.get_smpp_helper()
+        deliver_sm_resps = []
+        smpp_helper.send_mo(sequence_number=1,
+                            short_message="\x05\x00\x03\xff\x03\x01back")
+        deliver_sm_resps.append((yield smpp_helper.wait_for_pdus(1))[0])
+
+        smpp_helper.send_mo(sequence_number=3,
+                            short_message="\x05\x00\x03\xff\x03\x03 you")
+        deliver_sm_resps.append((yield smpp_helper.wait_for_pdus(1))[0])
+
+        smpp_helper.send_mo(sequence_number=2,
+                            short_message="\x05\x00\x03\xff\x03\x02 at")
+        deliver_sm_resps.append((yield smpp_helper.wait_for_pdus(1))[0])
+
+        self.assertEqual([1, 3, 2], map(seq_no, deliver_sm_resps))
+        self.assertTrue(all(map(pdu_ok, deliver_sm_resps)))
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        self.assertEqual(msg['content'], u'back at you')
+
+    @inlineCallbacks
     def test_mo_sms_multipart_sar(self):
         smpp_helper = yield self.get_smpp_helper()
         deliver_sm_resps = []
@@ -254,6 +275,27 @@ class TestSmppTransport(VumiTestCase):
         [pdu] = yield smpp_helper.wait_for_pdus(1)
         self.assertEqual(command_id(pdu), 'submit_sm')
         self.assertEqual(short_message(pdu), 'hello world')
+
+    @inlineCallbacks
+    def test_mt_sms_submit_sm_encoding(self):
+        smpp_helper = yield self.get_smpp_helper(smpp_config={
+            'submit_sm_encoding': 'latin1',
+        })
+        yield self.tx_helper.make_dispatch_outbound(u'Zoë destroyer of Ascii!')
+        [submit_sm_pdu] = yield smpp_helper.wait_for_pdus(1)
+        self.assertEqual(
+            short_message(submit_sm_pdu),
+            u'Zoë destroyer of Ascii!'.encode('latin-1'))
+
+    @inlineCallbacks
+    def test_submit_sm_data_coding(self):
+        smpp_helper = yield self.get_smpp_helper(smpp_config={
+            'submit_sm_data_coding': 8
+            })
+        yield self.tx_helper.make_dispatch_outbound("hello world")
+        [submit_sm_pdu] = yield smpp_helper.wait_for_pdus(1)
+        params = submit_sm_pdu['body']['mandatory_parameters']
+        self.assertEqual(params['data_coding'], 8)
 
     @inlineCallbacks
     def test_mt_sms_ack(self):
