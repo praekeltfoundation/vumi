@@ -27,6 +27,10 @@ def message_key(message_id):
     return 'message:%s' % (message_id,)
 
 
+def remote_message_key(message_id):
+    return 'remote_message:%s' % (message_id,)
+
+
 class SmppTransceiverProtocol(EsmeTransceiverFactory.protocol):
 
     def onConnectionMade(self):
@@ -40,6 +44,8 @@ class SmppTransceiverProtocol(EsmeTransceiverFactory.protocol):
             'ESME_RMSGQFUL': self.vumi_transport.handle_submit_sm_throttled,
         }.get(command_status, self.vumi_transport.handle_submit_sm_failure)
         d = self.vumi_transport.get_sequence_number_message_id(sequence_number)
+        d.addCallback(
+            self.vumi_transport.set_remote_message_id, smpp_message_id)
         d.addCallback(
             lambda message_id: cb(message_id, smpp_message_id, command_status))
         return d
@@ -131,6 +137,9 @@ class SmppTransport(Transport):
         d.addCallback(lambda _: self.redis.expire(key, expiry))
         return d
 
+    def get_sequence_number_message_id(self, sequence_number):
+        return self.redis.get(sequence_number_key(sequence_number))
+
     def cache_message(self, message):
         key = message_key(message['message_id'])
         expire = self.get_static_config().submit_sm_expiry
@@ -145,14 +154,28 @@ class SmppTransport(Transport):
             if json_data else None))
         return d
 
-    def get_sequence_number_message_id(self, sequence_number):
-        return self.redis.get(sequence_number_key(sequence_number))
+    def delete_cached_message(self, message_id):
+        return self.redis.delete(message_key(message_id))
+
+    def set_remote_message_id(self, message_id, smpp_message_id):
+        key = remote_message_key(smpp_message_id)
+        config = self.get_static_config()
+        d = self.redis.set(key, message_id)
+        d.addCallback(
+            lambda _: self.redis.expire(key, config.third_party_id_expiry))
+        d.addCallback(lambda _: message_id)
+        return d
+
+    def get_internal_message_id(self, smpp_message_id):
+        return self.redis.get(remote_message_key(smpp_message_id))
 
     def handle_submit_sm_success(self, message_id, smpp_message_id,
                                  command_status):
         if self.throttled:
             self.stop_throttling()
-        return self.publish_ack(message_id, smpp_message_id)
+        d = self.publish_ack(message_id, smpp_message_id)
+        d.addCallback(lambda _: self.delete_cached_message(message_id))
+        return d
 
     def handle_submit_sm_failure(self, message_id, smpp_message_id,
                                  command_status):

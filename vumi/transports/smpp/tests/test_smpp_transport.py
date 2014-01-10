@@ -11,7 +11,8 @@ from twisted.application.service import Service
 from vumi.tests.helpers import VumiTestCase
 from vumi.transports.tests.helpers import TransportHelper
 
-from vumi.transports.smpp.smpp_transport import SmppTransport
+from vumi.transports.smpp.smpp_transport import (
+    SmppTransport, message_key, remote_message_key)
 from vumi.transports.smpp.pdu_utils import (pdu_ok, short_message, command_id,
                                             seq_no, pdu_tlv)
 from vumi.transports.smpp.clientserver.tests.test_new_client import (
@@ -245,6 +246,7 @@ class TestSmppTransport(VumiTestCase):
     @inlineCallbacks
     def test_mt_sms(self):
         smpp_helper = yield self.get_smpp_helper()
+        transport = smpp_helper.transport
         msg = self.tx_helper.make_outbound('hello world')
         yield self.tx_helper.dispatch_outbound(msg)
         [pdu] = yield smpp_helper.wait_for_pdus(1)
@@ -402,3 +404,58 @@ class TestSmppTransport(VumiTestCase):
         self.assertEqual(pdu_tlv(submit_sm2, 'sar_msg_ref_num'), ref_num)
         self.assertEqual(pdu_tlv(submit_sm2, 'sar_total_segments'), 2)
         self.assertEqual(pdu_tlv(submit_sm2, 'sar_segment_seqnum'), 2)
+
+    @inlineCallbacks
+    def test_message_persistence(self):
+        smpp_helper = yield self.get_smpp_helper()
+        transport = smpp_helper.transport
+        config = transport.get_static_config()
+
+        msg = self.tx_helper.make_outbound("hello world")
+        yield transport.cache_message(msg)
+
+        ttl = yield transport.redis.ttl(message_key(msg['message_id']))
+        self.assertTrue(0 < ttl <= config.submit_sm_expiry)
+
+        retrieved_msg = yield smpp_helper.transport.get_cached_message(
+            msg['message_id'])
+        self.assertEqual(msg, retrieved_msg)
+        yield smpp_helper.transport.delete_cached_message(msg['message_id'])
+        self.assertEqual(
+            (yield smpp_helper.transport.get_cached_message(msg['message_id'])),
+            None)
+
+    @inlineCallbacks
+    def test_message_clearing(self):
+        smpp_helper = yield self.get_smpp_helper()
+        transport = smpp_helper.transport
+        msg = self.tx_helper.make_outbound('hello world')
+        yield transport.set_sequence_number_message_id(3, msg['message_id'])
+        yield transport.cache_message(msg)
+        yield smpp_helper.handlePDU(SubmitSMResp(sequence_number=3,
+                                                 message_id='foo',
+                                                 command_status='ESME_ROK'))
+        self.assertEqual(
+            None,
+            (yield transport.get_cached_message(msg['message_id'])))
+
+    @inlineCallbacks
+    def test_link_remote_message_id(self):
+        smpp_helper = yield self.get_smpp_helper()
+        transport = smpp_helper.transport
+        config = transport.get_static_config()
+
+        msg = self.tx_helper.make_outbound('hello world')
+        yield self.tx_helper.dispatch_outbound(msg)
+
+        [pdu] = yield smpp_helper.wait_for_pdus(1)
+        yield smpp_helper.handlePDU(
+            SubmitSMResp(sequence_number=seq_no(pdu),
+                         message_id='foo',
+                         command_status='ESME_ROK'))
+        self.assertEqual(
+            msg['message_id'],
+            (yield transport.get_internal_message_id('foo')))
+
+        ttl = yield transport.redis.ttl(remote_message_key('foo'))
+        self.assertTrue(0 < ttl <= config.third_party_id_expiry)
