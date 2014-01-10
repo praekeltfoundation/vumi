@@ -21,6 +21,15 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
     throttle_delay = ConfigFloat(
         "Delay (in seconds) before retrying a message after receiving "
         "`ESME_RTHROTTLED` or `ESME_RMSGQFUL`.", default=0.1, static=True)
+    submit_sm_expiry = ConfigInt(
+        'How long (seconds) to wait for the SMSC to return with a '
+        '`submit_sm_resp`. Defaults to 24 hours',
+        default=(60 * 60 * 24), static=True)
+    third_party_id_expiry = ConfigInt(
+        'How long (seconds) to keep 3rd party message IDs around to allow for '
+        'matching submit_sm_resp and delivery report messages. Defaults to '
+        '1 week',
+        default=(60 * 60 * 24 * 7), static=True)
     COUNTRY_CODE = ConfigText(
         "Used to translate a leading zero in a destination MSISDN into a "
         "country code. Default ''", default="", static=True)
@@ -100,15 +109,6 @@ class EsmeConfig(Config):
         "being disconnected. Default is 5s. Some WASPs, e.g. Clickatell "
         "require a 30s delay before reconnecting. In these cases a 45s "
         "initial_reconnect_delay is recommended.", default=55, static=True)
-    third_party_id_expiry = ConfigInt(
-        'How long (seconds) to keep 3rd party message IDs around to allow for '
-        'matching submit_sm_resp and delivery report messages. Defaults to '
-        '1 week',
-        default=(60 * 60 * 24 * 7), static=True)
-    submit_sm_expiry = ConfigInt(
-        'How long (seconds) to wait for the SMSC to return with a '
-        '`submit_sm_resp`. Defaults to 24 hours',
-        default=(60 * 60 * 24), static=True)
     submit_sm_encoding = ConfigText(
         'How to encode the SMS before putting on the wire', static=True,
         default='utf-8')

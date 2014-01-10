@@ -2,8 +2,10 @@
 
 from twisted.test import proto_helpers
 from twisted.internet import reactor
-from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
+from twisted.internet.defer import (inlineCallbacks, returnValue, Deferred,
+                                    maybeDeferred)
 from twisted.internet.error import ConnectionDone
+from twisted.internet.task import Clock
 from twisted.application.service import Service
 
 from vumi.tests.helpers import VumiTestCase
@@ -15,7 +17,10 @@ from vumi.transports.smpp.pdu_utils import (pdu_ok, short_message, command_id,
 from vumi.transports.smpp.clientserver.tests.test_new_client import (
     bind_protocol, wait_for_pdus)
 
-from smpp.pdu_builder import DeliverSM
+from smpp.pdu_builder import DeliverSM, SubmitSMResp
+from smpp.pdu import unpack_pdu
+
+from vumi import log
 
 
 class DummyService(Service):
@@ -36,10 +41,17 @@ class DummyService(Service):
 class SMPPHelper(object):
     def __init__(self, string_transport, smpp_transport):
         self.string_transport = string_transport
+        self.transport = smpp_transport
         self.protocol = smpp_transport.service.protocol
 
     def sendPDU(self, pdu):
+        """put it on the wire and don't wait for a response"""
         self.protocol.dataReceived(pdu.get_bin())
+
+    def handlePDU(self, pdu):
+        """short circuit the wire so we get a deferred so we know
+        when it's been handled"""
+        return self.protocol.onPdu(unpack_pdu(pdu.get_bin()))
 
     def send_mo(self, sequence_number, short_message, data_coding=1, **kwargs):
         return self.sendPDU(
@@ -49,13 +61,19 @@ class SMPPHelper(object):
     def wait_for_pdus(self, count):
         return wait_for_pdus(self.string_transport, count)
 
+    def no_pdus(self):
+        return self.string_transport.value() == ''
+
 
 class TestSmppTransport(VumiTestCase):
 
     timeout = 1
 
     def setUp(self):
+
+        self.clock = Clock()
         self.patch(SmppTransport, 'start_service', self.patched_start_service)
+        self.patch(SmppTransport, 'clock', self.clock)
 
         self.string_transport = proto_helpers.StringTransport()
 
@@ -232,6 +250,90 @@ class TestSmppTransport(VumiTestCase):
         [pdu] = yield smpp_helper.wait_for_pdus(1)
         self.assertEqual(command_id(pdu), 'submit_sm')
         self.assertEqual(short_message(pdu), 'hello world')
+
+    @inlineCallbacks
+    def test_mt_sms_ack(self):
+        smpp_helper = yield self.get_smpp_helper()
+        msg = self.tx_helper.make_outbound('hello world')
+        yield self.tx_helper.dispatch_outbound(msg)
+        [submit_sm_pdu] = yield smpp_helper.wait_for_pdus(1)
+        smpp_helper.sendPDU(
+            SubmitSMResp(sequence_number=seq_no(submit_sm_pdu),
+                         message_id='foo'))
+        [event] = yield self.tx_helper.wait_for_dispatched_events(1)
+        self.assertEqual(event['event_type'], 'ack')
+        self.assertEqual(event['user_message_id'], msg['message_id'])
+        self.assertEqual(event['sent_message_id'], 'foo')
+
+    @inlineCallbacks
+    def test_mt_sms_nack(self):
+        smpp_helper = yield self.get_smpp_helper()
+        msg = self.tx_helper.make_outbound('hello world')
+        yield self.tx_helper.dispatch_outbound(msg)
+        [submit_sm_pdu] = yield smpp_helper.wait_for_pdus(1)
+        smpp_helper.sendPDU(
+            SubmitSMResp(sequence_number=seq_no(submit_sm_pdu),
+                         message_id='foo', command_status='ESME_RINVDSTADR'))
+        [event] = yield self.tx_helper.wait_for_dispatched_events(1)
+        self.assertEqual(event['event_type'], 'nack')
+        self.assertEqual(event['user_message_id'], msg['message_id'])
+        self.assertEqual(event['nack_reason'], 'ESME_RINVDSTADR')
+
+    @inlineCallbacks
+    def test_mt_sms_throttled(self):
+        smpp_helper = yield self.get_smpp_helper()
+        transport_config = smpp_helper.transport.get_static_config()
+        msg = self.tx_helper.make_outbound('hello world')
+
+        yield self.tx_helper.dispatch_outbound(msg)
+        [submit_sm_pdu] = yield smpp_helper.wait_for_pdus(1)
+        yield smpp_helper.handlePDU(
+            SubmitSMResp(sequence_number=seq_no(submit_sm_pdu),
+                         message_id='foo',
+                         command_status='ESME_RTHROTTLED'))
+
+        self.clock.advance(transport_config.throttle_delay)
+
+        [submit_sm_pdu_retry] = yield smpp_helper.wait_for_pdus(1)
+        yield smpp_helper.handlePDU(
+            SubmitSMResp(sequence_number=seq_no(submit_sm_pdu_retry),
+                         message_id='bar',
+                         command_status='ESME_ROK'))
+
+        self.assertTrue(seq_no(submit_sm_pdu_retry) > seq_no(submit_sm_pdu))
+        self.assertEqual(short_message(submit_sm_pdu), 'hello world')
+        self.assertEqual(short_message(submit_sm_pdu_retry), 'hello world')
+        [event] = yield self.tx_helper.wait_for_dispatched_events(1)
+        self.assertEqual(event['event_type'], 'ack')
+        self.assertEqual(event['user_message_id'], msg['message_id'])
+
+    @inlineCallbacks
+    def test_mt_sms_queue_full(self):
+        smpp_helper = yield self.get_smpp_helper()
+        transport_config = smpp_helper.transport.get_static_config()
+        msg = self.tx_helper.make_outbound('hello world')
+
+        yield self.tx_helper.dispatch_outbound(msg)
+        [submit_sm_pdu] = yield smpp_helper.wait_for_pdus(1)
+        yield smpp_helper.handlePDU(
+            SubmitSMResp(sequence_number=seq_no(submit_sm_pdu),
+                         message_id='foo',
+                         command_status='ESME_RMSGQFUL'))
+
+        self.clock.advance(transport_config.throttle_delay)
+
+        [submit_sm_pdu_retry] = yield smpp_helper.wait_for_pdus(1)
+        yield smpp_helper.handlePDU(
+            SubmitSMResp(sequence_number=seq_no(submit_sm_pdu_retry),
+                         message_id='bar',
+                         command_status='ESME_ROK'))
+
+        self.assertTrue(seq_no(submit_sm_pdu_retry) > seq_no(submit_sm_pdu))
+        self.assertEqual(short_message(submit_sm_pdu), 'hello world')
+        self.assertEqual(short_message(submit_sm_pdu_retry), 'hello world')
+        [event] = yield self.tx_helper.wait_for_dispatched_events(1)
+        self.assertEqual(event['event_type'], 'ack')
+        self.assertEqual(event['user_message_id'], msg['message_id'])
 
     @inlineCallbacks
     def test_mt_sms_unicode(self):

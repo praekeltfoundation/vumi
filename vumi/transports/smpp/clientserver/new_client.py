@@ -72,16 +72,17 @@ class EsmeTransceiver(Protocol):
         BOUND_STATE_TRX,
     ])
 
-    def __init__(self, transport):
+    def __init__(self, vumi_transport):
+        self.vumi_transport = vumi_transport
         self.config = self.CONFIG_CLASS(
-            transport.get_static_config().smpp_config, static=True)
+            self.vumi_transport.get_static_config().smpp_config, static=True)
 
         self.buffer = b''
         self.state = self.CLOSED_STATE
 
-        self.sm_processor = transport.sm_processor
-        self.dr_processor = transport.dr_processor
-        self.sequence_generator = transport.sequence_generator
+        self.sm_processor = self.vumi_transport.sm_processor
+        self.dr_processor = self.vumi_transport.dr_processor
+        self.sequence_generator = self.vumi_transport.sequence_generator
         self.enquire_link_call = LoopingCall(self.enquireLink)
         self.drop_link_call = None
         self.disconnect_call = self.clock.callLater(

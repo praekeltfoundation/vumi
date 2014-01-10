@@ -30,8 +30,8 @@ class TestSmppTransport(VumiTestCase):
                 "system_id": "vumitest-vumitest-vumitest",
                 "smpp_bind_timeout": 12,
                 "smpp_enquire_link_interval": 123,
-                "third_party_id_expiry": 3600,  # just 1 hour
             },
+            "third_party_id_expiry": 3600,  # just 1 hour
             'short_message_processor_config': {
                 'data_coding_overrides': {
                     0: 'utf-8'
@@ -99,7 +99,7 @@ class TestSmppTransport(VumiTestCase):
         smpp_config = EsmeTransceiver.CONFIG_CLASS(
             config.smpp_config, static=True)
         ttl = yield self.transport.redis.ttl(message_key)
-        self.assertTrue(0 < ttl <= smpp_config.submit_sm_expiry)
+        self.assertTrue(0 < ttl <= config.submit_sm_expiry)
 
     @inlineCallbacks
     def test_redis_third_party_id_persistence(self):
@@ -107,8 +107,7 @@ class TestSmppTransport(VumiTestCase):
         config = self.transport.get_static_config()
         smpp_config = EsmeTransceiver.CONFIG_CLASS(
             config.smpp_config, static=True)
-        self.assertEqual(
-            smpp_config.third_party_id_expiry, 3600)
+        self.assertEqual(config.third_party_id_expiry, 3600)
         our_id = "blergh34534545433454354"
         their_id = "omghesvomitingnumbers"
         yield self.transport.r_set_id_for_third_party_id(their_id, our_id)

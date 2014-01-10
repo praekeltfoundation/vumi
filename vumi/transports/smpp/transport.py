@@ -133,7 +133,7 @@ class SmppTransport(Transport):
         message_key = self.r_message_key(message_id)
         d = self.redis.set(message_key, message.to_json())
         d.addCallback(lambda _: self.redis.expire(
-            message_key, self.smpp_config.submit_sm_expiry))
+            message_key, config.submit_sm_expiry))
         return d
 
     def r_get_message_json(self, message_id):
@@ -178,7 +178,7 @@ class SmppTransport(Transport):
         config = self.get_static_config()
         rkey = self.r_third_party_id_key(third_party_id)
         yield self.redis.set(rkey, id)
-        yield self.redis.expire(rkey, self.smpp_config.third_party_id_expiry)
+        yield self.redis.expire(rkey, config.third_party_id_expiry)
 
     def _start_throttling(self):
         if self.throttled:
