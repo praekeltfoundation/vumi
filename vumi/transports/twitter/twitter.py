@@ -93,14 +93,14 @@ class TwitterTransport(Transport):
         return self.screen_name == messagetools.user_screen_name(user)
 
     @classmethod
-    def format_addr(cls, addr):
+    def screen_name_as_addr(cls, addr):
         return u'@%s' % (addr,)
 
     @classmethod
     def tweet_to_addr(cls, tweet):
         if messagetools.tweet_is_reply(tweet):
             to_screen_name = messagetools.tweet_in_reply_to_screen_name(tweet)
-            to_addr = cls.format_addr(to_screen_name)
+            to_addr = cls.screen_name_as_addr(to_screen_name)
         else:
             to_addr = cls.NO_USER_ADDR
 
@@ -109,7 +109,7 @@ class TwitterTransport(Transport):
     @classmethod
     def tweet_from_addr(cls, tweet):
         user = messagetools.tweet_user(tweet)
-        return cls.format_addr(messagetools.user_screen_name(user))
+        return cls.screen_name_as_addr(messagetools.user_screen_name(user))
 
     def publish_tweet_message(self, tweet):
         return self.publish_message(
