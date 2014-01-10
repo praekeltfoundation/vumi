@@ -3,7 +3,7 @@
 from twisted.test import proto_helpers
 from twisted.internet import reactor
 from twisted.internet.defer import (inlineCallbacks, returnValue, Deferred,
-                                    maybeDeferred, succeed)
+                                    succeed)
 from twisted.internet.error import ConnectionDone
 from twisted.internet.task import Clock
 from twisted.application.service import Service
@@ -13,16 +13,16 @@ from vumi.tests.utils import LogCatcher
 
 from vumi.transports.tests.helpers import TransportHelper
 from vumi.transports.smpp.smpp_transport import (
-    SmppTransport, SmppTransceiverProtocol, message_key, remote_message_key)
-from vumi.transports.smpp.smpp_utils import unpacked_pdu_opts
+    SmppTransceiverTransport, SmppTransceiverProtocol,
+    SmppTransmitterTransport, SmppTransmitterProtocol,
+    SmppReceiverTransport, SmppReceiverProtocol,
+    message_key, remote_message_key)
 from vumi.transports.smpp.pdu_utils import (
     pdu_ok, short_message, command_id, seq_no, pdu_tlv)
 from vumi.transports.smpp.clientserver.tests.test_new_client import (
     bind_protocol, wait_for_pdus)
 
 from vumi.message import TransportUserMessage
-
-from vumi import log
 
 from smpp.pdu_builder import DeliverSM, SubmitSMResp
 
@@ -72,17 +72,20 @@ class SMPPHelper(object):
 
 class SmppTransportTestCase(VumiTestCase):
 
-    timeout = 1
+    DR_TEMPLATE = ("id:%s sub:... dlvrd:... submit date:200101010030"
+                   " done date:200101020030 stat:DELIVRD err:... text:Meep")
+    transport_class = None
 
     def setUp(self):
 
         self.clock = Clock()
-        self.patch(SmppTransport, 'start_service', self.patched_start_service)
-        self.patch(SmppTransport, 'clock', self.clock)
+        self.patch(SmppTransceiverTransport, 'start_service',
+                   self.patched_start_service)
+        self.patch(SmppTransceiverTransport, 'clock', self.clock)
 
         self.string_transport = proto_helpers.StringTransport()
 
-        self.tx_helper = self.add_helper(TransportHelper(SmppTransport))
+        self.tx_helper = self.add_helper(TransportHelper(self.transport_class))
         self.default_config = {
             'transport_name': self.tx_helper.transport_name,
             'twisted_endpoint': 'tcp:host=127.0.0.1:port=0',
@@ -152,7 +155,9 @@ class SmppTransportTestCase(VumiTestCase):
         returnValue(SMPPHelper(self.string_transport, transport))
 
 
-class SmsSmppTransportTestCase(SmppTransportTestCase):
+class SmppTransceiverTransportTestCase(SmppTransportTestCase):
+
+    transport_class = SmppTransceiverTransport
 
     @inlineCallbacks
     def test_setup_transport(self):
@@ -272,9 +277,25 @@ class SmsSmppTransportTestCase(SmppTransportTestCase):
         self.assertEqual(msg['content'], u'back at you')
 
     @inlineCallbacks
+    def test_mo_sms_failed_remote_id_lookup(self):
+        smpp_helper = yield self.get_smpp_helper()
+
+        lc = LogCatcher(message="Failed to retrieve message id")
+        with lc:
+            yield smpp_helper.handlePDU(
+                DeliverSM(sequence_number=1,
+                          short_message=self.DR_TEMPLATE % ('foo',)))
+
+        # check that failure to send delivery report was logged
+        [warning] = lc.logs
+        expected_msg = (
+            "Failed to retrieve message id for delivery report. Delivery"
+            " report from %s discarded.") % (self.tx_helper.transport_name,)
+        self.assertEqual(warning['message'], (expected_msg,))
+
+    @inlineCallbacks
     def test_mt_sms(self):
         smpp_helper = yield self.get_smpp_helper()
-        transport = smpp_helper.transport
         msg = self.tx_helper.make_outbound('hello world')
         yield self.tx_helper.dispatch_outbound(msg)
         [pdu] = yield smpp_helper.wait_for_pdus(1)
@@ -296,7 +317,7 @@ class SmsSmppTransportTestCase(SmppTransportTestCase):
     def test_submit_sm_data_coding(self):
         smpp_helper = yield self.get_smpp_helper(smpp_config={
             'submit_sm_data_coding': 8
-            })
+        })
         yield self.tx_helper.make_dispatch_outbound("hello world")
         [submit_sm_pdu] = yield smpp_helper.wait_for_pdus(1)
         params = submit_sm_pdu['body']['mandatory_parameters']
@@ -504,12 +525,12 @@ class SmsSmppTransportTestCase(SmppTransportTestCase):
         ttl = yield transport.redis.ttl(message_key(msg['message_id']))
         self.assertTrue(0 < ttl <= config.submit_sm_expiry)
 
-        retrieved_msg = yield smpp_helper.transport.get_cached_message(
+        retrieved_msg = yield transport.get_cached_message(
             msg['message_id'])
         self.assertEqual(msg, retrieved_msg)
-        yield smpp_helper.transport.delete_cached_message(msg['message_id'])
+        yield transport.delete_cached_message(msg['message_id'])
         self.assertEqual(
-            (yield smpp_helper.transport.get_cached_message(msg['message_id'])),
+            (yield transport.get_cached_message(msg['message_id'])),
             None)
 
     @inlineCallbacks
@@ -570,8 +591,7 @@ class SmsSmppTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_delivery_report_for_unknown_message(self):
-        dr = ("id:123 sub:... dlvrd:... submit date:200101010030"
-              " done date:200101020030 stat:DELIVRD err:... text:Meep")
+        dr = self.DR_TEMPLATE % ('foo',)
         deliver = DeliverSM(1, short_message=dr)
         smpp_helper = yield self.get_smpp_helper()
         with LogCatcher(message="Failed to retrieve message id") as lc:
@@ -601,16 +621,49 @@ class SmsSmppTransportTestCase(SmppTransportTestCase):
         self.assertFalse(connector._consumers['outbound'].paused)
 
 
-class UssdSmppTransportTestCase(SmppTransportTestCase):
+class SmppTransmitterTransportTestCase(SmppTransportTestCase):
+    transport_class = SmppTransmitterTransport
 
-    DR_TEMPLATE = ("id:%s sub:... dlvrd:... submit date:200101010030"
-                   " done date:200101020030 stat:DELIVRD err:... text:Meep")
+
+class SmppReceiverTransportTestCase(SmppTransportTestCase):
+    transport_class = SmppReceiverTransport
+
+
+class TataUssdSmppTransportTestCase(SmppTransportTestCase):
+
+    transport_class = SmppTransceiverTransport
+
+    @inlineCallbacks
+    def test_submit_and_deliver_ussd_continue(self):
+        smpp_helper = yield self.get_smpp_helper()
+
+        yield self.tx_helper.make_dispatch_outbound(
+            "hello world", transport_type="ussd")
+
+        [submit_sm_pdu] = yield smpp_helper.wait_for_pdus(1)
+        self.assertEqual(command_id(submit_sm_pdu), 'submit_sm')
+        self.assertEqual(pdu_tlv(submit_sm_pdu, 'ussd_service_op'), '02')
+        self.assertEqual(pdu_tlv(submit_sm_pdu, 'its_session_info'), '0000')
+
+        # Server delivers a USSD message to the Client
+        pdu = DeliverSM(seq_no(submit_sm_pdu) + 1, short_message="reply!")
+        pdu.add_optional_parameter('ussd_service_op', '02')
+        pdu.add_optional_parameter('its_session_info', '0000')
+
+        yield smpp_helper.handlePDU(pdu)
+
+        [mess] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+
+        self.assertEqual(mess['content'], "reply!")
+        self.assertEqual(mess['transport_type'], "ussd")
+        self.assertEqual(mess['session_event'],
+                         TransportUserMessage.SESSION_RESUME)
 
     @inlineCallbacks
     def test_submit_and_deliver_ussd_close(self):
         smpp_helper = yield self.get_smpp_helper()
 
-        msg = yield self.tx_helper.make_dispatch_outbound(
+        yield self.tx_helper.make_dispatch_outbound(
             "hello world", transport_type="ussd",
             session_event=TransportUserMessage.SESSION_CLOSE)
 
@@ -619,25 +672,8 @@ class UssdSmppTransportTestCase(SmppTransportTestCase):
         self.assertEqual(pdu_tlv(submit_sm_pdu, 'ussd_service_op'), '02')
         self.assertEqual(pdu_tlv(submit_sm_pdu, 'its_session_info'), '0001')
 
-        yield smpp_helper.handlePDU(
-            SubmitSMResp(sequence_number=seq_no(submit_sm_pdu),
-                         message_id='foo'))
-        yield smpp_helper.handlePDU(
-            DeliverSM(sequence_number=seq_no(submit_sm_pdu) + 1,
-                      short_message=self.DR_TEMPLATE % ('foo',)))
-
-        [ack, delv] = yield self.tx_helper.wait_for_dispatched_events(2)
-
-        self.assertEqual(ack['event_type'], 'ack')
-        self.assertEqual(ack['user_message_id'], msg['message_id'])
-        self.assertEqual(ack['sent_message_id'], 'foo')
-
-        self.assertEqual(delv['event_type'], 'delivery_report')
-        self.assertEqual(delv['user_message_id'], msg['message_id'])
-        self.assertEqual(delv['delivery_status'], 'delivered')
-
-        # Finally the Server delivers a USSD message to the Client
-        pdu = DeliverSM(555, short_message="reply!")
+        # Server delivers a USSD message to the Client
+        pdu = DeliverSM(seq_no(submit_sm_pdu) + 1, short_message="reply!")
         pdu.add_optional_parameter('ussd_service_op', '02')
         pdu.add_optional_parameter('its_session_info', '0001')
 
@@ -649,5 +685,3 @@ class UssdSmppTransportTestCase(SmppTransportTestCase):
         self.assertEqual(mess['transport_type'], "ussd")
         self.assertEqual(mess['session_event'],
                          TransportUserMessage.SESSION_CLOSE)
-
-        self.assertEqual([], self.tx_helper.get_dispatched_failures())

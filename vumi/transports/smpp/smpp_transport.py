@@ -18,6 +18,8 @@ from vumi.transports.failures import FailureMessage
 
 from vumi.persist.txredis_manager import TxRedisManager
 
+from smpp.pdu_builder import BindTransceiver, BindReceiver, BindTransmitter
+
 from vumi import log
 
 
@@ -34,6 +36,7 @@ def remote_message_key(message_id):
 
 
 class SmppTransceiverProtocol(EsmeTransceiverFactory.protocol):
+    bind_pdu = BindTransceiver
 
     def onConnectionMade(self):
         # TODO: create a processor for bind / unbind message processing
@@ -63,15 +66,23 @@ class SmppTransceiverProtocol(EsmeTransceiverFactory.protocol):
         return d
 
 
-class SmppTransportClientFactory(EsmeTransceiverFactory):
+class SmppReceiverProtocol(SmppTransceiverProtocol):
+    bind_pdu = BindReceiver
+
+
+class SmppTransmitterProtocol(SmppTransceiverProtocol):
+    bind_pdu = BindTransmitter
+
+
+class SmppTransceiverClientFactory(EsmeTransceiverFactory):
     protocol = SmppTransceiverProtocol
 
 
-class SmppTransport(Transport):
+class SmppTransceiverTransport(Transport):
 
     CONFIG_CLASS = SmppTransportConfig
 
-    factory_class = SmppTransportClientFactory
+    factory_class = SmppTransceiverClientFactory
     clock = reactor
 
     @inlineCallbacks
@@ -278,3 +289,19 @@ class SmppTransport(Transport):
             user_message_id=message_id,
             delivery_status=delivery_status)
         returnValue(dr)
+
+
+class SmppReceiverClientFactory(EsmeTransceiverFactory):
+    protocol = SmppReceiverProtocol
+
+
+class SmppReceiverTransport(Transport):
+    factory_class = SmppReceiverClientFactory
+
+
+class SmppTransmitterClientFactory(EsmeTransceiverFactory):
+    protocol = SmppTransmitterProtocol
+
+
+class SmppTransmitterTransport(Transport):
+    factory_class = SmppTransmitterClientFactory
