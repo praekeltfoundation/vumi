@@ -158,7 +158,8 @@ class MessageStoreCache(object):
         yield self.redis.sadd(self.batch_key(), batch_id)
         yield self.init_status(batch_id)
         if use_counters:
-            yield self.switch_to_counters(batch_id)
+            yield self.redis.set(self.inbound_count_key(batch_id), 0)
+            yield self.redis.set(self.outbound_count_key(batch_id), 0)
 
     @Manager.calls_manager
     def init_status(self, batch_id):
