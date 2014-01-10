@@ -36,6 +36,7 @@ class TwitterTransport(Transport):
 
     CONFIG_CLASS = TwitterTransportConfig
     ENCODING = 'utf8'
+    NO_USER_ADDR = 'NO_USER'
 
     def get_client(self, *a, **kw):
         return TwitterClient(*a, **kw)
@@ -72,8 +73,8 @@ class TwitterTransport(Transport):
 
         try:
             content = message['content']
-            if message['to_addr']:
-                content = "@%s %s" % (message['to_addr'], content)
+            if message['to_addr'] != self.NO_USER_ADDR:
+                content = "%s %s" % (message['to_addr'], content)
 
             response = yield self.client.statuses_update(
                 content, in_reply_to_status_id=in_reply_to_status_id)
@@ -91,15 +92,30 @@ class TwitterTransport(Transport):
         user = messagetools.tweet_user(message)
         return self.screen_name == messagetools.user_screen_name(user)
 
-    def publish_tweet_message(self, tweet):
-        user = messagetools.tweet_user(tweet)
-        in_reply_to_screen_name = (
-            messagetools.tweet_in_reply_to_screen_name(tweet))
+    @classmethod
+    def format_addr(cls, addr):
+        return u'@%s' % (addr,)
 
+    @classmethod
+    def tweet_to_addr(cls, tweet):
+        if messagetools.tweet_is_reply(tweet):
+            to_screen_name = messagetools.tweet_in_reply_to_screen_name(tweet)
+            to_addr = cls.format_addr(to_screen_name)
+        else:
+            to_addr = cls.NO_USER_ADDR
+
+        return to_addr
+
+    @classmethod
+    def tweet_from_addr(cls, tweet):
+        user = messagetools.tweet_user(tweet)
+        return cls.format_addr(messagetools.user_screen_name(user))
+
+    def publish_tweet_message(self, tweet):
         return self.publish_message(
             content=messagetools.tweet_text(tweet),
-            to_addr=in_reply_to_screen_name or '',
-            from_addr=messagetools.user_screen_name(user),
+            to_addr=self.tweet_to_addr(tweet),
+            from_addr=self.tweet_from_addr(tweet),
             transport_type=self.transport_type,
             transport_metadata={
                 'twitter': {
@@ -110,7 +126,8 @@ class TwitterTransport(Transport):
                 'twitter': {
                     'in_reply_to_status_id': (
                         messagetools.tweet_in_reply_to_id(tweet)),
-                    'in_reply_to_screen_name': in_reply_to_screen_name,
+                    'in_reply_to_screen_name': (
+                        messagetools.tweet_in_reply_to_screen_name(tweet)),
                     'user_mentions': messagetools.tweet_user_mentions(tweet),
                 }
             })
