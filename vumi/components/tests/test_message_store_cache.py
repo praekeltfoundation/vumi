@@ -374,8 +374,8 @@ class TestMessageStoreCacheWithCounters(MessageStoreCacheTestCase):
         yield self.add_messages(
             self.batch_id, self.cache.add_inbound_message, count=10)
         count = yield self.cache.truncate_inbound_message_keys(
-            self.batch_id, truncate_at=5)
-        self.assertEqual(count, 5)
+            self.batch_id, truncate_at=7)
+        self.assertEqual(count, 3)
 
     @inlineCallbacks
     def test_outbound_truncate_at_within_limits(self):
@@ -390,5 +390,5 @@ class TestMessageStoreCacheWithCounters(MessageStoreCacheTestCase):
         yield self.add_messages(
             self.batch_id, self.cache.add_outbound_message, count=10)
         count = yield self.cache.truncate_outbound_message_keys(
-            self.batch_id, truncate_at=5)
-        self.assertEqual(count, 5)
+            self.batch_id, truncate_at=7)
+        self.assertEqual(count, 3)
