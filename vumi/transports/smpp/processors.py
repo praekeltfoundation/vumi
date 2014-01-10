@@ -60,13 +60,23 @@ class DeliveryReportProcessorConfig(Config):
         static=True, default=DELIVERY_REPORT_STATUS_MAPPING)
 
 
-class EsmeCallbacksDeliveryReportProcessor(object):
+class DeliveryReportProcessor(object):
     implements(IDeliveryReportProcessor)
     CONFIG_CLASS = DeliveryReportProcessorConfig
 
-    def __init__(self, redis, esme_callbacks, config):
-        self.redis = redis
-        self.esme_callbacks = esme_callbacks
+    status_map = {
+        1: 'ENROUTE',
+        2: 'DELIVERED',
+        3: 'EXPIRED',
+        4: 'DELETED',
+        5: 'UNDELIVERABLE',
+        6: 'ACCEPTED',
+        7: 'UNKNOWN',
+        8: 'REJECTED',
+    }
+
+    def __init__(self, transport, config):
+        self.transport = transport
         self.config = self.CONFIG_CLASS(config, static=True)
 
     def handle_delivery_report_pdu(self, pdu):
@@ -84,54 +94,13 @@ class EsmeCallbacksDeliveryReportProcessor(object):
         if receipted_message_id is None or message_state is None:
             return succeed(False)
 
-        status = {
-            1: 'ENROUTE',
-            2: 'DELIVERED',
-            3: 'EXPIRED',
-            4: 'DELETED',
-            5: 'UNDELIVERABLE',
-            6: 'ACCEPTED',
-            7: 'UNKNOWN',
-            8: 'REJECTED',
-        }.get(message_state, 'UNKNOWN')
+        status = self.status_map.get(message_state, 'UNKNOWN')
 
-        d = self.esme_callbacks.delivery_report(
-            message_id=receipted_message_id,
-            delivery_status=self.delivery_status(status))
+        d = self.transport.handle_delivery_report(
+            receipted_message_id=receipted_message_id,
+            delivery_status=status)
         d.addCallback(lambda _: True)
         return d
-
-    def handle_delivery_report_content(self, content):
-        delivery_report = self.config.delivery_report_regex.search(
-            content or '')
-
-        if not delivery_report:
-            return succeed(False)
-
-        # We have a delivery report.
-        fields = delivery_report.groupdict()
-        receipted_message_id = fields['id']
-        message_state = fields['stat']
-        d = self.esme_callbacks.delivery_report(
-            message_id=receipted_message_id,
-            delivery_status=self.delivery_status(message_state))
-        d.addCallback(lambda _: True)
-        return d
-
-    def delivery_status(self, state):
-        return self.config.delivery_report_status_mapping.get(state, 'pending')
-
-
-class DeliveryReportProcessor(object):
-    implements(IDeliveryReportProcessor)
-    CONFIG_CLASS = DeliveryReportProcessorConfig
-
-    def __init__(self, transport, config):
-        self.transport = transport
-        self.config = self.CONFIG_CLASS(config, static=True)
-
-    def handle_delivery_report_pdu(self, pdu_data):
-        return succeed(False)
 
     def handle_delivery_report_content(self, content):
         delivery_report = self.config.delivery_report_regex.search(
@@ -154,6 +123,57 @@ class DeliveryReportProcessor(object):
         return self.config.delivery_report_status_mapping.get(state, 'pending')
 
 
+class EsmeCallbacksDeliveryReportProcessor(DeliveryReportProcessor):
+
+    def __init__(self, transport, config):
+        self.esme_callbacks = transport.esme_callbacks
+        self.config = self.CONFIG_CLASS(config, static=True)
+
+    def handle_delivery_report_pdu(self, pdu):
+        """
+        Check if this might be a delivery receipt with PDU parameters.
+
+        There's a chance we'll get a delivery receipt without these
+        parameters, if that happens we'll try a regex match in
+        ``inspect_delivery_report_content`` once the message
+        has (potentially) been reassembled and decoded.
+        """
+        pdu_opts = unpacked_pdu_opts(pdu)
+        receipted_message_id = pdu_opts.get('receipted_message_id', None)
+        message_state = pdu_opts.get('message_state', None)
+        if receipted_message_id is None or message_state is None:
+            return succeed(False)
+
+        status = self.status_map.get(message_state, 'UNKNOWN')
+
+        d = self.esme_callbacks.delivery_report(
+            message_id=receipted_message_id,
+            delivery_status=status)
+        d.addCallback(lambda _: True)
+        return d
+
+    def handle_delivery_report_content(self, content):
+        delivery_report = self.config.delivery_report_regex.search(
+            content or '')
+
+        if not delivery_report:
+            return succeed(False)
+
+        # We have a delivery report.
+        fields = delivery_report.groupdict()
+        receipted_message_id = fields['id']
+        message_state = fields['stat']
+        d = self.esme_callbacks.delivery_report(
+            message_id=receipted_message_id,
+            delivery_status=self.delivery_status(message_state))
+        d.addCallback(lambda _: True)
+        return d
+
+    def delivery_status(self, state):
+        return self.config.delivery_report_status_mapping.get(state, 'pending')
+
+
+
 class DeliverShortMessageProcessorConfig(Config):
     data_coding_overrides = ConfigDict(
         "Overrides for data_coding character set mapping. This is useful for "
@@ -168,9 +188,9 @@ class EsmeCallbacksDeliverShortMessageProcessor(object):
     implements(IDeliverShortMessageProcessor)
     CONFIG_CLASS = DeliverShortMessageProcessorConfig
 
-    def __init__(self, redis, esme_callbacks, config):
-        self.redis = redis
-        self.esme_callbacks = esme_callbacks
+    def __init__(self, transport, config):
+        self.redis = transport.redis
+        self.esme_callbacks = transport.esme_callbacks
         self.config = self.CONFIG_CLASS(config, static=True)
 
     def decode_message(self, message, data_coding):

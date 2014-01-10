@@ -97,6 +97,10 @@ class EsmeTestCase(VumiTestCase):
         default_config = {
             'transport_name': 'sphex_transport',
             'twisted_endpoint': 'tcp:host=localhost:port=0',
+            'short_message_processor': ('vumi.transports.smpp.processors.'
+                                        'DeliverShortMessageProcessor'),
+            'delivery_report_processor': ('vumi.transports.smpp.processors.'
+                                          'DeliveryReportProcessor'),
             'smpp_config': {
                 'system_id': 'system_id',
                 'password': 'password',
@@ -104,16 +108,19 @@ class EsmeTestCase(VumiTestCase):
             }
         }
         default_config['smpp_config'].update(config)
-        cfg = SmppTransport.CONFIG_CLASS(default_config, static=True)
-        if sm_processor is None:
-            sm_processor = cfg.short_message_processor(
-                self.redis, None, cfg.short_message_processor_config)
-        if dr_processor is None:
-            dr_processor = cfg.delivery_report_processor(
-                self.redis, None, cfg.delivery_report_processor_config)
 
         dummy_smpp_transport = DummySmppTransport()
         dummy_smpp_transport.get_static_config = lambda: cfg
+        dummy_smpp_transport.redis = self.redis
+
+        cfg = SmppTransport.CONFIG_CLASS(default_config, static=True)
+        if sm_processor is None:
+            sm_processor = cfg.short_message_processor(
+                dummy_smpp_transport, cfg.short_message_processor_config)
+        if dr_processor is None:
+            dr_processor = cfg.delivery_report_processor(
+                dummy_smpp_transport, cfg.delivery_report_processor_config)
+
         dummy_smpp_transport.dr_processor = dr_processor
         dummy_smpp_transport.sm_processor = sm_processor
         dummy_smpp_transport.sequence_generator = RedisSequence(self.redis)

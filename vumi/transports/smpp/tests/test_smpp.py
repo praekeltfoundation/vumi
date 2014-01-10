@@ -56,10 +56,7 @@ class TestSmppTransport(VumiTestCase):
             submit_sm_resp=self.transport.submit_sm_resp,
             delivery_report=self.transport.delivery_report,
             deliver_sm=lambda: None)
-        self.esme = EsmeTransceiver(
-            self.transport.get_static_config(),
-            self.transport.get_smpp_bind_params(),
-            self.transport.redis, self.esme_callbacks)
+        self.esme = EsmeTransceiver(self.transport)
         self.esme.sent_pdus = []
         self.esme.send_pdu = self.esme.sent_pdus.append
         self.esme.state = 'BOUND_TRX'

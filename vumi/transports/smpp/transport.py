@@ -92,9 +92,7 @@ class SmppTransport(Transport):
                      for key in self.SMPP_BIND_CONFIG_KEYS])
 
     def make_factory(self):
-        return EsmeTransceiverFactory(
-            self.get_static_config(), self.get_smpp_bind_params(),
-            self.redis, self.esme_callbacks)
+        return EsmeTransceiverFactory(self)
 
     def esme_connected(self, client):
         log.msg("ESME Connected, adding handlers")
@@ -342,14 +340,10 @@ class SmppTransport(Transport):
 class SmppTxTransport(SmppTransport):
     """An Smpp Transmitter Transport"""
     def make_factory(self):
-        return EsmeTransmitterFactory(
-            self.get_static_config(), self.get_smpp_bind_params(),
-            self.redis, self.esme_callbacks)
+        return EsmeTransmitterFactory(self)
 
 
 class SmppRxTransport(SmppTransport):
     """An Smpp Receiver Transport"""
     def make_factory(self):
-        return EsmeReceiverFactory(
-            self.get_static_config(), self.get_smpp_bind_params(),
-            self.redis, self.esme_callbacks)
+        return EsmeReceiverFactory(self)

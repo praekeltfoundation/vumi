@@ -8,6 +8,7 @@ from vumi.transports.smpp.clientserver.client import (
     EsmeTransceiver, EsmeReceiver, EsmeTransmitter, EsmeCallbacks, ESME)
 from vumi.transports.smpp.smpp_utils import unpacked_pdu_opts
 from vumi.transports.smpp.transport import SmppTransportConfig
+from vumi.transports.smpp.clientserver.sequence import RedisSequence
 from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 
 
@@ -69,6 +70,7 @@ class EsmeTestCaseBase(VumiTestCase):
             self.assertEqual, self._expected_callbacks, [],
             "Uncalled callbacks.")
 
+    @inlineCallbacks
     def get_unbound_esme(self, host="127.0.0.1", port="0",
                          system_id="1234", password="password",
                          callbacks={}, extra_config={}):
@@ -91,20 +93,27 @@ class EsmeTestCaseBase(VumiTestCase):
         config_data['smpp_config'].update(smpp_config)
         config_data.update(extra_config)
         config = SmppTransportConfig(config_data)
-        esme_callbacks = EsmeCallbacks(**callbacks)
 
-        def purge_manager(redis_manager):
-            d = redis_manager._purge_all()  # just in case
-            d.addCallback(lambda result: redis_manager)
-            return d
+        redis = yield self.persistence_helper.get_redis_manager()
+        fake_transport = FakeTransport(FakeEsmeMixin())
+        fake_transport.get_static_config = lambda: config
+        fake_transport.redis = redis
+        fake_transport.esme_callbacks = EsmeCallbacks(**callbacks)
+        fake_transport.sequence_generator = RedisSequence(redis)
+        fake_transport.get_smpp_bind_params = lambda: {
+            'system_id': system_id,
+            'password': password,
+        }
 
-        redis_d = self.persistence_helper.get_redis_manager()
-        redis_d.addCallback(purge_manager)
-        return redis_d.addCallback(
-            lambda r: self.ESME_CLASS(config, {
-                'system_id': system_id,
-                'password': password
-            }, r, esme_callbacks))
+        sm_processor = config.short_message_processor(
+            fake_transport, config.short_message_processor_config)
+        dr_processor = config.delivery_report_processor(
+            fake_transport, config.delivery_report_processor_config)
+
+        fake_transport.dr_processor = dr_processor
+        fake_transport.sm_processor = sm_processor
+
+        returnValue(self.ESME_CLASS(fake_transport))
 
     @inlineCallbacks
     def get_esme(self, config={}, **callbacks):
@@ -424,7 +433,7 @@ class EsmeReceiverMixin(EsmeGenericMixin):
     def test_deliver_sm_delivery_report_delivered(self):
         esme = yield self.get_esme(delivery_report=self.assertion_cb({
             'message_id': '1b1720be-5f48-41c4-b3f8-6e59dbf45366',
-            'delivery_status': 'delivered',
+            'delivery_status': 'DELIVERED',
         }))
 
         sm = DeliverSM(1, short_message='delivery report')
@@ -439,7 +448,7 @@ class EsmeReceiverMixin(EsmeGenericMixin):
     def test_deliver_sm_delivery_report_rejected(self):
         esme = yield self.get_esme(delivery_report=self.assertion_cb({
             'message_id': '1b1720be-5f48-41c4-b3f8-6e59dbf45366',
-            'delivery_status': 'failed',
+            'delivery_status': 'REJECTED',
         }))
 
         sm = DeliverSM(1, short_message='delivery report')
@@ -580,28 +589,3 @@ class TestEsmeReceiver(EsmeTestCaseBase, EsmeReceiverMixin):
             [error] = log.errors
             self.assertTrue(('submit_sm in wrong state' in
                              error['message'][0]))
-
-
-class TestESME(VumiTestCase):
-
-    def setUp(self):
-        config = SmppTransportConfig({
-            "transport_name": "transport_name",
-            "host": 'localhost',
-            "port": 2775,
-            'smpp_config': {
-                "system_id": 'test_system',
-                "password": 'password',
-            }
-        })
-        self.kvs = None
-        self.esme_callbacks = None
-        self.esme = ESME(config, {
-            'smpp_config': {
-                'system_id': 'test_system',
-                'password': 'password',
-            }
-        }, self.kvs, self.esme_callbacks)
-
-    def test_bind_as_transceiver(self):
-        return self.esme.bindTransciever()

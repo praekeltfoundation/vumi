@@ -14,8 +14,7 @@ from vumi.tests.utils import LogCatcher
 from vumi.transports.tests.helpers import TransportHelper
 from vumi.transports.smpp.smpp_transport import (
     SmppTransceiverTransport, SmppTransceiverProtocol,
-    SmppTransmitterTransport, SmppTransmitterProtocol,
-    SmppReceiverTransport, SmppReceiverProtocol,
+    SmppTransmitterTransport, SmppReceiverTransport,
     message_key, remote_message_key)
 from vumi.transports.smpp.pdu_utils import (
     pdu_ok, short_message, command_id, seq_no, pdu_tlv)

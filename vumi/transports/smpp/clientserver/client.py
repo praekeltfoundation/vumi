@@ -29,26 +29,28 @@ class EsmeTransceiver(Protocol):
 
     callLater = reactor.callLater
 
-    def __init__(self, config, bind_params, redis, esme_callbacks):
-        self.config = config
-        self.smpp_config = self.CONFIG_CLASS(config.smpp_config, static=True)
-        self.bind_params = bind_params
-        self.esme_callbacks = esme_callbacks
+    def __init__(self, vumi_transport):
+        self.vumi_transport = vumi_transport
+        self.config = self.vumi_transport.get_static_config()
+        self.smpp_config = self.CONFIG_CLASS(self.config.smpp_config,
+                                             static=True)
+        self.bind_params = self.vumi_transport.get_smpp_bind_params()
+        self.esme_callbacks = self.vumi_transport.esme_callbacks
         self.state = 'CLOSED'
         log.msg('STATE: %s' % (self.state,))
         self.smpp_bind_timeout = self.smpp_config.smpp_bind_timeout
         self.smpp_enquire_link_interval = \
                 self.smpp_config.smpp_enquire_link_interval
         self.datastream = ''
-        self.redis = redis
+        self.redis = self.vumi_transport.redis
         self.sequence_generator = RedisSequence(self.redis)
         self._lose_conn = None
 
-        self.dr_processor = config.delivery_report_processor(
-            redis, esme_callbacks,
+        self.dr_processor = self.config.delivery_report_processor(
+            self.vumi_transport,
             self.config.delivery_report_processor_config)
-        self.sm_processor = config.short_message_processor(
-            redis, esme_callbacks,
+        self.sm_processor = self.config.short_message_processor(
+            self.vumi_transport,
             self.config.short_message_processor_config)
 
         # The PDU queue ensures that PDUs are processed in the order
@@ -415,13 +417,11 @@ class EsmeReceiver(EsmeTransceiver):
 
 class EsmeTransceiverFactory(ClientFactory):
 
-    def __init__(self, config, bind_params, redis, esme_callbacks):
-        self.config = config
-        self.bind_params = bind_params
-        self.redis = redis
+    def __init__(self, transport):
+        config = transport.get_static_config()
         self.esme = None
-        self.esme_callbacks = esme_callbacks
-        self.initialDelay = self.config.initial_reconnect_delay
+        self.transport = transport
+        self.initialDelay = config.initial_reconnect_delay
         self.maxDelay = max(45, self.initialDelay)
 
     def startedConnecting(self, connector):
@@ -429,8 +429,7 @@ class EsmeTransceiverFactory(ClientFactory):
 
     def buildProtocol(self, addr):
         log.msg('Connected')
-        self.esme = EsmeTransceiver(
-            self.config, self.bind_params, self.redis, self.esme_callbacks)
+        self.esme = EsmeTransceiver(self.transport)
         return self.esme
 
     @inlineCallbacks
@@ -447,8 +446,7 @@ class EsmeTransmitterFactory(EsmeTransceiverFactory):
 
     def buildProtocol(self, addr):
         log.msg('Connected')
-        self.esme = EsmeTransmitter(
-            self.config, self.bind_params, self.redis, self.esme_callbacks)
+        self.esme = EsmeTransmitter(self.transport)
         return self.esme
 
 
@@ -456,8 +454,7 @@ class EsmeReceiverFactory(EsmeTransceiverFactory):
 
     def buildProtocol(self, addr):
         log.msg('Connected')
-        self.esme = EsmeReceiver(
-            self.config, self.bind_params, self.redis, self.esme_callbacks)
+        self.esme = EsmeReceiver(self.transport)
         return self.esme
 
 
