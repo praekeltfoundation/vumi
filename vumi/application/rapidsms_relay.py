@@ -256,12 +256,21 @@ class RapidSMSRelay(ApplicationWorker):
         reply = yield self.reply_to(orig_msg, content)
         returnValue([reply])
 
+    def send_rapidsms_nonreply(self, to_addr, content, config, endpoint):
+        """Call .send_to() for a message from RapidSMS that is not a reply.
+
+        This is for overriding by sub-classes that need to add additional
+        message options.
+        """
+        return self.send_to(to_addr, content, endpoint=endpoint)
+
     def _handle_send_to(self, config, content, to_addrs, endpoint):
         sends = []
         try:
             self.check_endpoint(config.allowed_endpoints, endpoint)
             for to_addr in to_addrs:
-                sends.append(self.send_to(to_addr, content, endpoint=endpoint))
+                sends.append(self.send_rapidsms_nonreply(
+                    to_addr, content, config, endpoint))
         except InvalidEndpoint, e:
             raise BadRequestError(e)
         d = DeferredList(sends, consumeErrors=True)
