@@ -1,6 +1,6 @@
 from twisted.test import proto_helpers
 from twisted.internet import reactor
-from twisted.internet.defer import inlineCallbacks, Deferred, returnValue
+from twisted.internet.defer import inlineCallbacks, Deferred, returnValue, succeed
 from twisted.internet.error import ConnectionDone
 from twisted.internet.task import Clock
 
@@ -10,14 +10,16 @@ from vumi.transports.smpp.transport import SmppTransport
 from vumi.transports.smpp.protocol import (
     EsmeTransceiver, EsmeTransceiverFactory,
     EsmeTransmitterFactory, EsmeReceiverFactory)
+from vumi.transports.smpp.processors import DeliverShortMessageProcessor
 from vumi.transports.smpp.pdu_utils import (
-    seq_no, command_status, command_id, chop_pdu_stream)
+    seq_no, command_status, command_id, chop_pdu_stream, short_message)
 from vumi.transports.smpp.smpp_utils import unpacked_pdu_opts
 from vumi.transports.smpp.clientserver.sequence import RedisSequence
 from vumi.config import ConfigError
 
 from smpp.pdu import unpack_pdu
 from smpp.pdu_builder import (
+    PDU,
     Unbind, UnbindResp,
     BindTransceiver, BindTransceiverResp,
     BindTransmitter, BindTransmitterResp,
@@ -209,7 +211,7 @@ class EsmeTestCase(VumiTestCase):
     def test_deliver_sm(self):
         calls = []
         self.patch(EsmeTransceiver, 'onDeliverSM',
-                   lambda p, *a: calls.append(a))
+                   lambda p, *a: succeed(calls.append(a)))
         transport, protocol = yield self.setup_bind()
         pdu = DeliverSM(
             sequence_number=0, message_id='foo', short_message='bar')
@@ -218,15 +220,10 @@ class EsmeTestCase(VumiTestCase):
         self.assertEqual(seq_no, 0)
         self.assertCommand(deliver_sm, 'deliver_sm', sequence_number=0)
 
-        [deliver_sm_resp] = yield wait_for_pdus(transport, 1)
-        self.assertCommand(
-            deliver_sm_resp, 'deliver_sm_resp', sequence_number=0,
-            status='ESME_ROK')
-
     @inlineCallbacks
     def test_deliver_sm_fail(self):
-        self.patch(EsmeTransceiver, 'onDeliverSM',
-                   lambda p, *a: 'ESME_RDELIVERYFAILURE')
+        self.patch(DeliverShortMessageProcessor, 'decode_pdus',
+                   lambda *a: [str('not a unicode string')])
         transport, protocol = yield self.setup_bind()
         pdu = DeliverSM(
             sequence_number=0, message_id='foo', short_message='bar')
@@ -397,6 +394,38 @@ class EsmeTestCase(VumiTestCase):
             factory_class=EsmeReceiverFactory)
         self.assertTrue(protocol.isBound())
         self.assertEqual(protocol.state, protocol.BOUND_STATE_RX)
+
+    @inlineCallbacks
+    def test_partial_pdu_data_received(self):
+        calls = []
+        self.patch(EsmeTransceiver, 'onDeliverSM',
+                   lambda p, sequence_number, pdu: calls.append(pdu))
+        transport, protocol = yield self.setup_bind()
+        deliver_sm = DeliverSM(sequence_number=1, short_message='foo')
+        pdu = deliver_sm.get_bin()
+        half = len(pdu) / 2
+        pdu_part1, pdu_part2 = pdu[:half], pdu[half:]
+        protocol.dataReceived(pdu_part1)
+        self.assertEqual([], calls)
+        protocol.dataReceived(pdu_part2)
+        [handled_pdu] = calls
+        self.assertEqual(command_id(handled_pdu), 'deliver_sm')
+        self.assertEqual(seq_no(handled_pdu), 1)
+        self.assertEqual(short_message(handled_pdu), 'foo')
+
+    @inlineCallbacks
+    def test_unsupported_command_id(self):
+        calls = []
+        self.patch(EsmeTransceiver, 'onUnsupportedCommandId',
+                   lambda p, pdu: calls.append(pdu))
+        invalid_pdu = {
+            'header': {
+                'command_id': 'foo',
+            }
+        }
+        transport, protocol = yield self.setup_bind()
+        protocol.onPdu(invalid_pdu)
+        self.assertEqual(calls, [invalid_pdu])
 
 
 class TestSmppTransportConfig(VumiTestCase):
