@@ -84,9 +84,9 @@ class MatchResource(resource.Resource):
         then it will only return with a response when the keys are actually
         available for collecting.
         """
-        ttl = int(request.headers.get(self.REQ_TTL_HEADER, 0))
         query = json.loads(request.content.read())
         headers = request.requestHeaders
+        ttl = int((headers.getRawHeaders(self.REQ_TTL_HEADER) or [0])[0])
         if headers.hasHeader(self.REQ_WAIT_HEADER):
             wait = bool(int(headers.getRawHeaders(self.REQ_WAIT_HEADER)[0]))
         else:
