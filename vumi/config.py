@@ -2,6 +2,7 @@
 
 from copy import deepcopy
 from urllib2 import urlparse
+import inspect
 import textwrap
 import re
 
@@ -9,6 +10,7 @@ from zope.interface import Interface
 from twisted.python.components import Adapter, registerAdapter
 
 from vumi.errors import ConfigError
+from vumi.utils import load_class_by_string
 
 
 class IConfigData(Interface):
@@ -97,6 +99,8 @@ class ConfigField(object):
         return self.clean(value) if value is not None else None
 
     def __get__(self, obj, cls):
+        if obj is None:
+            return self
         if obj.static and not self.static:
             self.raise_config_error("is not marked as static.")
         return self.get_value(obj)
@@ -188,6 +192,27 @@ class ConfigRegex(ConfigText):
     def clean(self, value):
         value = super(ConfigRegex, self).clean(value)
         return re.compile(value)
+
+
+class ConfigClassName(ConfigText):
+    field_type = 'Class'
+
+    def __init__(self, doc, required=False, default=None, static=False,
+                 implements=None):
+        super(ConfigClassName, self).__init__(doc, required, default, static)
+        self.interface = implements
+
+    def clean(self, value):
+        try:
+            cls = load_class_by_string(value)
+        except (ValueError, ImportError), e:
+            # ValueError for empty module name
+            self.raise_config_error(str(e))
+
+        if self.interface and not self.interface.implementedBy(cls):
+            self.raise_config_error('does not implement %r.' % (
+                self.interface,))
+        return cls
 
 
 class ConfigServerEndpoint(ConfigText):
@@ -303,12 +328,10 @@ class ConfigMetaClass(type):
         fields = []
         unified_class_dict = {}
         for base in bases:
-            unified_class_dict.update(base.__dict__)
+            unified_class_dict.update(inspect.getmembers(base))
         unified_class_dict.update(dict)
 
         for key, possible_field in unified_class_dict.items():
-            if key in fields:
-                continue
             if isinstance(possible_field, ConfigField):
                 fields.append(possible_field)
                 possible_field.setup(key)

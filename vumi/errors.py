@@ -24,3 +24,7 @@ class ConfigError(VumiError):
 
 class DuplicateConnectorError(VumiError):
     pass
+
+
+class InvalidEndpoint(VumiError):
+    """Raised when attempting to send a message to an invalid endpoint."""
