@@ -98,8 +98,9 @@ class TwitterTransport(Transport):
 
     @classmethod
     def tweet_to_addr(cls, tweet):
-        if messagetools.tweet_is_reply(tweet):
-            to_screen_name = messagetools.tweet_in_reply_to_screen_name(tweet)
+        to_screen_name = messagetools.tweet_in_reply_to_screen_name(tweet)
+
+        if to_screen_name is not None:
             to_addr = cls.screen_name_as_addr(to_screen_name)
         else:
             to_addr = cls.NO_USER_ADDR
