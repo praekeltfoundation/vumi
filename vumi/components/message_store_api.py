@@ -86,7 +86,7 @@ class MatchResource(resource.Resource):
         """
         query = json.loads(request.content.read())
         headers = request.requestHeaders
-        ttl = int((headers.getRawHeaders(self.REQ_TTL_HEADER) or [0])[0])
+        ttl = int(headers.getRawHeaders(self.REQ_TTL_HEADER, [0])[0])
         if headers.hasHeader(self.REQ_WAIT_HEADER):
             wait = bool(int(headers.getRawHeaders(self.REQ_WAIT_HEADER)[0]))
         else:
