@@ -272,3 +272,17 @@ class TestRapidSMSRelay(VumiTestCase):
                          "Endpoint u'bar' not defined in list of allowed"
                          " endpoints ['default', '10010', '10020']")
         [err] = self.flushLoggedErrors(BadRequestError)
+
+    @inlineCallbacks
+    def test_rapidsms_relay_outbound_on_invalid_to_addr(self):
+        yield self.setup_resource()
+        response = yield self._call_relay({
+            'to_addr': '+123456',
+            'content': u'foo',
+            'endpoint': u'bar',
+        })
+        self.assertEqual([], self.app_helper.get_dispatched_outbound())
+        self.assertEqual(response.code, 400)
+        self.assertEqual(response.delivered_body,
+                         "Supplied `to_addr` (u'+123456') was not a list.")
+        [err] = self.flushLoggedErrors(BadRequestError)

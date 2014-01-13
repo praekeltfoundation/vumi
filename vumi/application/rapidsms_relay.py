@@ -284,6 +284,9 @@ class RapidSMSRelay(ApplicationWorker):
         data = json.loads(request.content.read())
         content = data['content']
         to_addrs = data['to_addr']
+        if not isinstance(to_addrs, list):
+            raise BadRequestError(
+                "Supplied `to_addr` (%r) was not a list." % (to_addrs,))
         in_reply_to = data.get('in_reply_to')
         endpoint = data.get('endpoint')
         if in_reply_to is not None:
