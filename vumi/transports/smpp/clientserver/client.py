@@ -187,36 +187,47 @@ class EsmeTransceiver(Protocol):
         if pdu['header']['command_status'] != 'ESME_ROK':
             return
 
-        # TODO: Only ACK messages once we've processed them?
         sequence_number = pdu['header']['sequence_number']
-        pdu_resp = DeliverSMResp(sequence_number, **self.bind_params)
-        yield self.send_pdu(pdu_resp)
+        # pdu_resp = DeliverSMResp(sequence_number, **self.bind_params)
+        # yield self.send_pdu(pdu_resp)
 
-        was_dr = yield self.dr_processor.handle_delivery_report_pdu(pdu)
-        if was_dr:
-            return
-
-        was_multipart = yield self.sm_processor.handle_multipart_pdu(pdu)
-        if was_multipart:
-            return
-
-        was_ussd = yield self.sm_processor.handle_ussd_pdu(pdu)
-        if was_ussd:
-            return
+        pdu_handler_chain = [
+            # NOTE: this one still needs a test
+            self.dr_processor.handle_delivery_report_pdu,
+            self.sm_processor.handle_multipart_pdu,
+            self.sm_processor.handle_ussd_pdu,
+        ]
+        for handler in pdu_handler_chain:
+            handled = yield handler(pdu)
+            if handled:
+                yield self.send_pdu(DeliverSMResp(
+                    sequence_number, command_status='ESME_ROK',
+                    **self.bind_params))
+                return
 
         content_parts = self.sm_processor.decode_pdus([pdu])
         if not all([isinstance(part, unicode) for part in content_parts]):
             log.msg('Not all parts of the PDU were able to be decoded.',
                     parts=content_parts)
+            yield self.send_pdu(DeliverSMResp(
+                sequence_number, command_status='ESME_RDELIVERYFAILURE',
+                **self.bind_params))
             return
 
         content = u''.join(content_parts)
         was_cdr = yield self.dr_processor.handle_delivery_report_content(
             content)
         if was_cdr:
+            yield self.send_pdu(DeliverSMResp(
+                sequence_number, command_status='ESME_ROK',
+                **self.bind_params))
             return
 
-        yield self.sm_processor.handle_short_message_pdu(pdu)
+        handled = yield self.sm_processor.handle_short_message_pdu(pdu)
+        command_status = 'ESME_ROK' if handled else 'ESME_RDELIVERYFAILURE'
+        yield self.send_pdu(DeliverSMResp(
+            sequence_number, command_status=command_status,
+            **self.bind_params))
 
     def handle_enquire_link(self, pdu):
         if pdu['header']['command_status'] == 'ESME_ROK':
