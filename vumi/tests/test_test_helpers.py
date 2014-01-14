@@ -1,5 +1,8 @@
+from datetime import datetime
+
 from twisted.trial.unittest import TestCase
 
+from vumi.message import TransportUserMessage
 from vumi.tests.helpers import (
     proxyable, generate_proxies, IHelper, MessageHelper)
 
@@ -250,3 +253,58 @@ class TestMessageHelper(TestCase):
             },
             'transport_metadata': {},
         })
+
+    def test_make_user_message_defaults(self):
+        """
+        .make_user_message() should build a message with expected values.
+        """
+        msg_helper = MessageHelper()
+        msg = msg_helper.make_user_message('outbound message', 'from', 'to')
+        expected_msg = TransportUserMessage(
+            content='outbound message', from_addr='from', to_addr='to',
+            transport_type=msg_helper.transport_type,
+            transport_name=msg_helper.transport_name,
+            transport_metadata={}, helper_metadata={},
+            # These fields are generated in both messages, so copy them.
+            message_id=msg['message_id'], timestamp=msg['timestamp'])
+        self.assertEqual(expected_msg, msg)
+
+    def test_make_user_message_all_fields(self):
+        """
+        .make_user_message() should build a message with all provided fields.
+        """
+        msg_helper = MessageHelper()
+        msg_fields = {
+            'content': 'outbound message',
+            'from_addr': 'from',
+            'to_addr': 'to',
+            'group': '#channel',
+            'session_event': TransportUserMessage.SESSION_NEW,
+            'transport_type': 'irc',
+            'transport_name': 'vuminet',
+            'transport_metadata': {'foo': 'bar'},
+            'helper_metadata': {'foo': {}},
+            'in_reply_to': 'ccf9c2b9b1e94433be20d157e82786fe',
+            'timestamp': datetime.utcnow(),
+            'message_id': 'bbf9c2b9b1e94433be20d157e82786ed',
+            'endpoint': 'foo_ep',
+        }
+        msg = msg_helper.make_user_message(**msg_fields)
+        expected_fields = msg_fields.copy()
+        expected_fields.update({
+            'message_type': TransportUserMessage.MESSAGE_TYPE,
+            'message_version': TransportUserMessage.MESSAGE_VERSION,
+            'routing_metadata': {
+                'endpoint_name': expected_fields.pop('endpoint'),
+            }
+        })
+        self.assertEqual(expected_fields, msg.payload)
+
+    def test_make_user_message_extra_fields(self):
+        """
+        .make_user_message() should build a message with extra fields.
+        """
+        msg_helper = MessageHelper()
+        msg = msg_helper.make_user_message(
+            'outbound message', 'from', 'to', foo='bar', baz='quux')
+        self.assert_message_fields(msg, {'foo': 'bar', 'baz': 'quux'})
