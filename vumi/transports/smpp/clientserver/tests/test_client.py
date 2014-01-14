@@ -8,7 +8,7 @@ from vumi.transports.smpp.clientserver.client import (
     EsmeTransceiver, EsmeReceiver, EsmeTransmitter, EsmeCallbacks, ESME)
 from vumi.transports.smpp.smpp_utils import unpacked_pdu_opts
 from vumi.transports.smpp.transport import SmppTransportConfig
-from vumi.transports.smpp.clientserver.sequence import RedisSequence
+from vumi.transports.smpp.sequence import RedisSequence
 from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 
 

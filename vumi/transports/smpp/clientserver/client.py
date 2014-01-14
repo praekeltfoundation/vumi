@@ -15,7 +15,7 @@ from smpp.pdu_builder import (
 
 from vumi import log
 from vumi.transports.smpp.smpp_utils import update_ussd_pdu
-from vumi.transports.smpp.clientserver.sequence import RedisSequence
+from vumi.transports.smpp.sequence import RedisSequence
 
 
 GSM_MAX_SMS_BYTES = 140

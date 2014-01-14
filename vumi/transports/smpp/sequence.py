@@ -1,3 +1,4 @@
+# -*- test-case-name: vumi.transports.smpp.tests.test_sequence -*-
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 
@@ -33,7 +34,7 @@ class RedisSequence(object):
         """
         seq = yield self.redis.incr('smpp_last_sequence_number')
 
-        if seq >= 0xFFFF0000:
+        if seq >= self.rollover_at:
             # We're close to the upper limit, so try to reset. It doesn't
             # matter if we actually succeed or not, since we're going to return
             # `seq` anyway.
