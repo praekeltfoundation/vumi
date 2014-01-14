@@ -304,7 +304,7 @@ class SmppTransceiverTransport(Transport):
                 'new': TransportUserMessage.SESSION_NEW,
                 'continue': TransportUserMessage.SESSION_RESUME,
                 'close': TransportUserMessage.SESSION_CLOSE,
-                }[kwargs['session_event']]
+            }[kwargs['session_event']]
             message['session_event'] = session_event
             session_info = kwargs.get('session_info')
             message['transport_metadata']['session_info'] = session_info

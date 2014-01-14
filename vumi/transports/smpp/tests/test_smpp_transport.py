@@ -179,6 +179,37 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.assertEqual(msg['transport_type'], 'sms')
 
     @inlineCallbacks
+    def test_mo_delivery_report_pdu(self):
+        smpp_helper = yield self.get_smpp_helper()
+        transport = smpp_helper.transport
+        yield transport.set_remote_message_id('bar', 'foo')
+
+        pdu = DeliverSM(sequence_number=1)
+        pdu.add_optional_parameter('receipted_message_id', 'foo')
+        pdu.add_optional_parameter('message_state', 2)
+        yield smpp_helper.handlePDU(pdu)
+
+        [event] = yield self.tx_helper.wait_for_dispatched_events(1)
+        self.assertEqual(event['event_type'], 'delivery_report')
+        self.assertEqual(event['delivery_status'], 'delivered')
+        self.assertEqual(event['user_message_id'], 'bar')
+
+    @inlineCallbacks
+    def test_mo_delivery_report_content(self):
+        smpp_helper = yield self.get_smpp_helper()
+        transport = smpp_helper.transport
+        yield transport.set_remote_message_id('bar', 'foo')
+
+        smpp_helper.send_mo(
+            sequence_number=1, short_message=self.DR_TEMPLATE % ('foo',),
+            source_addr='123', destination_addr='456')
+
+        [event] = yield self.tx_helper.wait_for_dispatched_events(1)
+        self.assertEqual(event['event_type'], 'delivery_report')
+        self.assertEqual(event['delivery_status'], 'delivered')
+        self.assertEqual(event['user_message_id'], 'bar')
+
+    @inlineCallbacks
     def test_mo_sms_unicode(self):
         smpp_helper = yield self.get_smpp_helper()
         smpp_helper.send_mo(sequence_number=1, short_message='Zo\xc3\xab',

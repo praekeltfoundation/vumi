@@ -98,7 +98,7 @@ class DeliveryReportProcessor(object):
 
         d = self.transport.handle_delivery_report(
             receipted_message_id=receipted_message_id,
-            delivery_status=status)
+            delivery_status=self.delivery_status(status))
         d.addCallback(lambda _: True)
         return d
 
