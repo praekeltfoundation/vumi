@@ -80,26 +80,6 @@ class EsmeTransceiver(Protocol):
             'Disconnecting, no response from SMSC for longer '
             'than %s seconds' % (self.config.smpp_enquire_link_interval,))
 
-    def getBindParams(self):
-        # TODO: validate these bind params somewhere as a config option
-        #
-        # Which of the keys in SmppTransportConfig are keys that are to
-        # be passed on to the ESMETransceiver base class to create a bind with.
-        bind_keys = [
-            'system_id',
-            'password',
-            'system_type',
-            'interface_version',
-            'service_type',
-            'dest_addr_ton',
-            'dest_addr_npi',
-            'source_addr_ton',
-            'source_addr_npi',
-            'registered_delivery',
-        ]
-        return dict([(key, getattr(self.config, key))
-                     for key in bind_keys if hasattr(self.config, key)])
-
     def connectionMade(self):
         self.state = self.OPEN_STATE
         return self.onConnectionMade()
