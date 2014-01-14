@@ -45,9 +45,10 @@ class EsmeTransceiver(Protocol):
         self.dr_processor = self.config.delivery_report_processor(
             self.vumi_transport,
             self.config.delivery_report_processor_config)
-        self.sm_processor = self.config.short_message_processor(
-            self.vumi_transport,
-            self.config.short_message_processor_config)
+        self.deliver_sm_processor = \
+            self.config.deliver_short_message_processor(
+                self.vumi_transport,
+                self.config.deliver_short_message_processor_config)
 
         # The PDU queue ensures that PDUs are processed in the order
         # they arrive. `self._process_pdu_queue()` loops forever
@@ -193,8 +194,8 @@ class EsmeTransceiver(Protocol):
         # NOTE: order is important!
         pdu_handler_chain = [
             self.dr_processor.handle_delivery_report_pdu,
-            self.sm_processor.handle_multipart_pdu,
-            self.sm_processor.handle_ussd_pdu,
+            self.deliver_sm_processor.handle_multipart_pdu,
+            self.deliver_sm_processor.handle_ussd_pdu,
         ]
         for handler in pdu_handler_chain:
             handled = yield handler(pdu)
@@ -204,7 +205,7 @@ class EsmeTransceiver(Protocol):
                     **self.bind_params))
                 return
 
-        content_parts = self.sm_processor.decode_pdus([pdu])
+        content_parts = self.deliver_sm_processor.decode_pdus([pdu])
         if not all([isinstance(part, unicode) for part in content_parts]):
             log.msg('Not all parts of the PDU were able to be decoded.',
                     parts=content_parts)
@@ -222,7 +223,7 @@ class EsmeTransceiver(Protocol):
                 **self.bind_params))
             return
 
-        handled = yield self.sm_processor.handle_short_message_pdu(pdu)
+        handled = yield self.deliver_sm_processor.handle_short_message_pdu(pdu)
         command_status = 'ESME_ROK' if handled else 'ESME_RDELIVERYFAILURE'
         yield self.send_pdu(DeliverSMResp(
             sequence_number, command_status=command_status,

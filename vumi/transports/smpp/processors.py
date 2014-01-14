@@ -6,9 +6,12 @@ from twisted.internet.defer import inlineCallbacks, returnValue, succeed
 from zope.interface import implements
 
 from vumi.transports.smpp.iprocessors import (IDeliveryReportProcessor,
-                                              IDeliverShortMessageProcessor)
+                                              IDeliverShortMessageProcessor,
+                                              ISubmitShortMessageProcessor)
 from vumi.transports.smpp.smpp_utils import (
     unpacked_pdu_opts, detect_ussd, decode_message, decode_pdus)
+
+from vumi.message import TransportUserMessage
 from vumi.config import Config, ConfigDict, ConfigRegex
 from vumi import log
 
@@ -338,3 +341,75 @@ class EsmeCallbacksDeliverShortMessageProcessor(DeliverShortMessageProcessor):
             source_addr=source_addr, destination_addr=destination_addr,
             short_message=short_message, message_id=uuid4().hex,
             **kw)
+
+
+class SubmitShortMessageProcessorConfig(Config):
+    pass
+
+
+class SubmitShortMessageProcessor(object):
+    implements(ISubmitShortMessageProcessor)
+    CONFIG_CLASS = SubmitShortMessageProcessorConfig
+
+    def __init__(self, transport, config):
+        self.transport = transport
+        self.config = config
+
+    def handle_outbound_message(self, message, protocol):
+        config = self.transport.get_static_config()
+        message_id = message['message_id']
+        to_addr = message['to_addr']
+        from_addr = message['from_addr']
+        text = message['content']
+
+        # TODO: this should probably be handled by a processor as these
+        #       USSD fields & params are TATA (India) specific
+        session_event = message['session_event']
+        transport_type = message['transport_type']
+        optional_parameters = {}
+
+        if transport_type == 'ussd':
+            continue_session = (
+                session_event != TransportUserMessage.SESSION_CLOSE)
+            session_info = message['transport_metadata'].get(
+                'session_info', '0000')
+            optional_parameters.update({
+                'ussd_service_op': '02',
+                'its_session_info': "%04x" % (
+                    int(session_info, 16) + int(not continue_session))
+            })
+
+        if config.send_long_messages:
+            return protocol.submit_sm_long(
+                to_addr.encode('ascii'),
+                long_message=text.encode(config.submit_sm_encoding),
+                data_coding=config.submit_sm_data_coding,
+                source_addr=from_addr.encode('ascii'),
+                optional_parameters=optional_parameters,
+            )
+
+        elif config.send_multipart_sar:
+            return protocol.submit_csm_sar(
+                to_addr.encode('ascii'),
+                short_message=text.encode(config.submit_sm_encoding),
+                data_coding=config.submit_sm_data_coding,
+                source_addr=from_addr.encode('ascii'),
+                optional_parameters=optional_parameters,
+            )
+
+        elif config.send_multipart_udh:
+            return protocol.submit_csm_udh(
+                to_addr.encode('ascii'),
+                short_message=text.encode(config.submit_sm_encoding),
+                data_coding=config.submit_sm_data_coding,
+                source_addr=from_addr.encode('ascii'),
+                optional_parameters=optional_parameters,
+            )
+
+        return protocol.submit_sm(
+            to_addr.encode('ascii'),
+            short_message=text.encode(config.submit_sm_encoding),
+            data_coding=config.submit_sm_data_coding,
+            source_addr=from_addr.encode('ascii'),
+            optional_parameters=optional_parameters,
+        )

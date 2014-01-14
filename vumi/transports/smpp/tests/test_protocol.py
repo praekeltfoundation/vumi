@@ -91,7 +91,7 @@ class EsmeTestCase(VumiTestCase):
         self.patch(EsmeTransceiver, 'clock', self.clock)
 
     def get_protocol(self, config={},
-                     sm_processor=None, dr_processor=None,
+                     deliver_sm_processor=None, dr_processor=None,
                      factory_class=None):
 
         factory_class = factory_class or EsmeTransceiverFactory
@@ -99,8 +99,9 @@ class EsmeTestCase(VumiTestCase):
         default_config = {
             'transport_name': 'sphex_transport',
             'twisted_endpoint': 'tcp:host=localhost:port=0',
-            'short_message_processor': ('vumi.transports.smpp.processors.'
-                                        'DeliverShortMessageProcessor'),
+            'deliver_short_message_processor': (
+                'vumi.transports.smpp.processors.'
+                'DeliverShortMessageProcessor'),
             'delivery_report_processor': ('vumi.transports.smpp.processors.'
                                           'DeliveryReportProcessor'),
             'system_id': 'system_id',
@@ -114,15 +115,15 @@ class EsmeTestCase(VumiTestCase):
         dummy_smpp_transport.redis = self.redis
 
         cfg = SmppTransport.CONFIG_CLASS(default_config, static=True)
-        if sm_processor is None:
-            sm_processor = cfg.short_message_processor(
-                dummy_smpp_transport, cfg.short_message_processor_config)
+        if deliver_sm_processor is None:
+            deliver_sm_processor = cfg.deliver_short_message_processor(
+                dummy_smpp_transport, cfg.deliver_short_message_processor_config)
         if dr_processor is None:
             dr_processor = cfg.delivery_report_processor(
                 dummy_smpp_transport, cfg.delivery_report_processor_config)
 
         dummy_smpp_transport.dr_processor = dr_processor
-        dummy_smpp_transport.sm_processor = sm_processor
+        dummy_smpp_transport.deliver_sm_processor = deliver_sm_processor
         dummy_smpp_transport.sequence_generator = RedisSequence(self.redis)
 
         factory = factory_class(dummy_smpp_transport)

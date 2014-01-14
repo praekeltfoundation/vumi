@@ -104,8 +104,10 @@ class SmppTransceiverTransport(Transport):
 
         self.dr_processor = config.delivery_report_processor(
             self, config.delivery_report_processor_config)
-        self.sm_processor = config.short_message_processor(
-            self, config.short_message_processor_config)
+        self.deliver_sm_processor = config.deliver_short_message_processor(
+            self, config.deliver_short_message_processor_config)
+        self.submit_sm_processor = config.submit_short_message_processor(
+            self, config.submit_short_message_processor_config)
         self.sequence_generator = RedisSequence(self.redis)
         self.throttled = None
         self.factory = self.factory_class(self)
@@ -125,68 +127,11 @@ class SmppTransceiverTransport(Transport):
         yield self.redis._close()
 
     def handle_outbound_message(self, message):
-        config = self.get_static_config()
-        message_id = message['message_id']
-        to_addr = message['to_addr']
-        from_addr = message['from_addr']
-        text = message['content']
-
-        # TODO: this should probably be handled by a processor as these
-        #       USSD fields & params are TATA (India) specific
-        session_event = message['session_event']
-        transport_type = message['transport_type']
-        optional_parameters = {}
-
-        if transport_type == 'ussd':
-            continue_session = (
-                session_event != TransportUserMessage.SESSION_CLOSE)
-            session_info = message['transport_metadata'].get(
-                'session_info', '0000')
-            optional_parameters.update({
-                'ussd_service_op': '02',
-                'its_session_info': "%04x" % (
-                    int(session_info, 16) + int(not continue_session))
-            })
-
-        if config.send_long_messages:
-            d = self.protocol.submit_sm_long(
-                to_addr.encode('ascii'),
-                long_message=text.encode(config.submit_sm_encoding),
-                data_coding=config.submit_sm_data_coding,
-                source_addr=from_addr.encode('ascii'),
-                optional_parameters=optional_parameters,
-            )
-
-        elif config.send_multipart_sar:
-            d = self.protocol.submit_csm_sar(
-                to_addr.encode('ascii'),
-                short_message=text.encode(config.submit_sm_encoding),
-                data_coding=config.submit_sm_data_coding,
-                source_addr=from_addr.encode('ascii'),
-                optional_parameters=optional_parameters,
-            )
-
-        elif config.send_multipart_udh:
-            d = self.protocol.submit_csm_udh(
-                to_addr.encode('ascii'),
-                short_message=text.encode(config.submit_sm_encoding),
-                data_coding=config.submit_sm_data_coding,
-                source_addr=from_addr.encode('ascii'),
-                optional_parameters=optional_parameters,
-            )
-
-        else:
-            d = self.protocol.submit_sm(
-                to_addr.encode('ascii'),
-                short_message=text.encode(config.submit_sm_encoding),
-                data_coding=config.submit_sm_data_coding,
-                source_addr=from_addr.encode('ascii'),
-                optional_parameters=optional_parameters,
-            )
-
+        d = self.submit_sm_processor.handle_outbound_message(
+            message, self.protocol)
         d.addCallback(
             lambda sequence_numbers: DeferredQueue([
-                self.set_sequence_number_message_id(sqn, message_id)
+                self.set_sequence_number_message_id(sqn, message['message_id'])
                 for sqn in sequence_numbers]))
         d.addCallback(lambda _: self.cache_message(message))
         d.addErrback(log.err)

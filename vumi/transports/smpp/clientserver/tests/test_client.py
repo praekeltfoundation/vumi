@@ -80,7 +80,7 @@ class EsmeTestCaseBase(VumiTestCase):
             "port": port,
             "system_id": system_id,
             "password": password,
-            'short_message_processor_config': {
+            'deliver_short_message_processor_config': {
                 'data_coding_overrides': {
                     0: 'utf-8'
                 }
@@ -100,13 +100,13 @@ class EsmeTestCaseBase(VumiTestCase):
             'password': password,
         }
 
-        sm_processor = config.short_message_processor(
-            fake_transport, config.short_message_processor_config)
+        deliver_sm_processor = config.deliver_short_message_processor(
+            fake_transport, config.deliver_short_message_processor_config)
         dr_processor = config.delivery_report_processor(
             fake_transport, config.delivery_report_processor_config)
 
         fake_transport.dr_processor = dr_processor
-        fake_transport.sm_processor = sm_processor
+        fake_transport.deliver_sm_processor = deliver_sm_processor
 
         returnValue(self.ESME_CLASS(fake_transport))
 
@@ -378,7 +378,7 @@ class EsmeReceiverMixin(EsmeGenericMixin):
     def test_deliver_sm_data_coding_override(self):
         """A simple message should be delivered."""
         esme = yield self.get_esme(config={
-            'short_message_processor_config': {
+            'deliver_short_message_processor_config': {
                 'data_coding_overrides': {
                     0: 'utf-16be'
                 }
@@ -389,7 +389,7 @@ class EsmeReceiverMixin(EsmeGenericMixin):
             self.get_sm('\x00h\x00e\x00l\x00l\x00o', 0))
 
         esme = yield self.get_esme(config={
-            'short_message_processor_config': {
+            'deliver_short_message_processor_config': {
                 'data_coding_overrides': {
                     0: 'ascii'
                 }
@@ -513,7 +513,7 @@ class EsmeReceiverMixin(EsmeGenericMixin):
                 ('\xd8\xa7\xd9\x84\xd9\x84\xd9\x87 '
                  '\xd9\x85\xd8\xb9\xd9\x83').decode('utf-8'), 'short_message'),
             config={
-                'short_message_processor_config': {
+                'deliver_short_message_processor_config': {
                     'data_coding_overrides': {
                         8: 'utf-8'
                     }

@@ -2,7 +2,8 @@ from vumi.config import (ConfigText, ConfigInt, ConfigBool,
                          ConfigClientEndpoint, ConfigDict, ConfigFloat,
                          ConfigClassName)
 from vumi.transports.smpp.iprocessors import (IDeliveryReportProcessor,
-                                              IDeliverShortMessageProcessor)
+                                              IDeliverShortMessageProcessor,
+                                              ISubmitShortMessageProcessor)
 from vumi.transports.base import Transport
 
 
@@ -60,14 +61,23 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
     delivery_report_processor_config = ConfigDict(
         'The configuration for the ``delivery_report_processor``',
         default={}, static=True)
-    short_message_processor = ConfigClassName(
-        'Which short message processor to use. '
+    deliver_short_message_processor = ConfigClassName(
+        'Which deliver short message processor to use. '
         'Should implement `IDeliverShortMessageProcessor`.',
         default=('vumi.transports.smpp.processors.'
                  'EsmeCallbacksDeliverShortMessageProcessor'),
         static=True, implements=IDeliverShortMessageProcessor)
-    short_message_processor_config = ConfigDict(
-        'The configuration for the ``short_message_processor``',
+    deliver_short_message_processor_config = ConfigDict(
+        'The configuration for the ``deliver_short_message_processor``',
+        default={}, static=True)
+    submit_short_message_processor = ConfigClassName(
+        'Which submit short message processor to use. '
+        'Should implements `ISubmitShortMessageProcessor`.',
+        default=('vumi.transports.smpp.processors.'
+                 'SubmitShortMessageProcessor'),
+        static=True, implements=ISubmitShortMessageProcessor)
+    submit_short_message_processor_config = ConfigDict(
+        'The configuration for the ``submit_short_message_processor``',
         default={}, static=True)
     send_long_messages = ConfigBool(
         "If `True`, messages longer than 254 characters will be sent in the "

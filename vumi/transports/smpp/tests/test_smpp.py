@@ -30,7 +30,7 @@ class TestSmppTransport(VumiTestCase):
             "smpp_bind_timeout": 12,
             "smpp_enquire_link_interval": 123,
             "third_party_id_expiry": 3600,  # just 1 hour
-            'short_message_processor_config': {
+            'deliver_short_message_processor_config': {
                 'data_coding_overrides': {
                     0: 'utf-8'
                 }
@@ -321,7 +321,7 @@ class EsmeToSmscTestCase(VumiTestCase):
             "transport_type": "smpp",
             "system_id": "VumiTestSMSC",
             "password": "password",
-            'short_message_processor_config': {
+            'deliver_short_message_processor_config': {
                 'data_coding_overrides': {
                     0: 'utf-8'
                 }
@@ -873,7 +873,7 @@ class TestEsmeToSmscRx(VumiTestCase):
             "port": 0,
             "transport_type": "smpp",
             "transport_name": self.tx_helper.transport_name,
-            'short_message_processor_config': {
+            'deliver_short_message_processor_config': {
                 'data_coding_overrides': {
                     0: 'utf-8'
                 }

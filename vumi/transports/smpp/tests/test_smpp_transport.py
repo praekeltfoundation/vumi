@@ -91,11 +91,12 @@ class SmppTransportTestCase(VumiTestCase):
             'twisted_endpoint': 'tcp:host=127.0.0.1:port=0',
             'delivery_report_processor': 'vumi.transports.smpp.processors.'
                                          'DeliveryReportProcessor',
-            'short_message_processor': 'vumi.transports.smpp.processors.'
-                                       'DeliverShortMessageProcessor',
+            'deliver_short_message_processor': (
+                'vumi.transports.smpp.processors.'
+                'DeliverShortMessageProcessor'),
             'system_id': 'foo',
             'password': 'bar',
-            'short_message_processor_config': {
+            'deliver_short_message_processor_config': {
                 'data_coding_overrides': {
                     0: 'utf-8',
                 }

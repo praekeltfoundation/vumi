@@ -66,3 +66,17 @@ class IDeliverShortMessageProcessor(Interface):
         """Decode a list of PDUs and return the contents for each PDUs
         ``short_message`` field.
         """
+
+
+class ISubmitShortMessageProcessor(Interface):
+
+    def handle_raw_outbound_message(vumi_message, esme_protocol):
+        """Handle an outbound message from Vumi by calling the
+        appropriate functions on the protocol with the appropriate
+        parameters.
+
+        These parameters and values can differ per MNO.
+
+        Should return a Deferred that fires with a the list of
+        sequence_numbers returning from the submit_sm calls.
+        """
