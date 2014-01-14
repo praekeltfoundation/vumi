@@ -126,31 +126,65 @@ class SmppTransceiverTransport(Transport):
         yield self.redis._close()
 
     def handle_outbound_message(self, message):
+        config = self.get_static_config()
         message_id = message['message_id']
         to_addr = message['to_addr']
         from_addr = message['from_addr']
         text = message['content']
-        session_info = message['transport_metadata'].get('session_info')
+
+        # TODO: this should probably be handled by a processor as these
+        #       USSD fields & params are TATA (India) specific
         session_event = message['session_event']
         transport_type = message['transport_type']
+        optional_parameters = {}
 
-        if session_event == TransportUserMessage.SESSION_CLOSE:
-            continue_session = False
+        if transport_type == 'ussd':
+            continue_session = (
+                session_event != TransportUserMessage.SESSION_CLOSE)
+            session_info = message['transport_metadata'].get(
+                'session_info', '0000')
+            optional_parameters.update({
+                'ussd_service_op': '02',
+                'its_session_info': "%04x" % (
+                    int(session_info, 16) + int(not continue_session))
+            })
+
+        if config.send_long_messages:
+            d = self.protocol.submit_sm_long(
+                to_addr.encode('ascii'),
+                long_message=text.encode(self.smpp_config.submit_sm_encoding),
+                data_coding=self.smpp_config.submit_sm_data_coding,
+                source_addr=from_addr.encode('ascii'),
+                optional_parameters=optional_parameters,
+            )
+
+        elif config.send_multipart_sar:
+            d = self.protocol.submit_csm_sar(
+                to_addr.encode('ascii'),
+                short_message=text.encode(self.smpp_config.submit_sm_encoding),
+                data_coding=self.smpp_config.submit_sm_data_coding,
+                source_addr=from_addr.encode('ascii'),
+                optional_parameters=optional_parameters,
+            )
+
+        elif config.send_multipart_udh:
+            d = self.protocol.submit_csm_udh(
+                to_addr.encode('ascii'),
+                short_message=text.encode(self.smpp_config.submit_sm_encoding),
+                data_coding=self.smpp_config.submit_sm_data_coding,
+                source_addr=from_addr.encode('ascii'),
+                optional_parameters=optional_parameters,
+            )
+
         else:
-            continue_session = True
+            d = self.protocol.submit_sm(
+                to_addr.encode('ascii'),
+                short_message=text.encode(self.smpp_config.submit_sm_encoding),
+                data_coding=self.smpp_config.submit_sm_data_coding,
+                source_addr=from_addr.encode('ascii'),
+                optional_parameters=optional_parameters,
+            )
 
-        d = self.protocol.submitSM(
-            # these end up in the PDU
-            short_message=text.encode(self.smpp_config.submit_sm_encoding),
-            data_coding=self.smpp_config.submit_sm_data_coding,
-            destination_addr=to_addr.encode('ascii'),
-            source_addr=from_addr.encode('ascii'),
-            session_info=(session_info.encode('ascii')
-                          if session_info is not None else None),
-            # these don't end up in the PDU
-            message_type=transport_type,
-            continue_session=continue_session,
-        )
         d.addCallback(
             lambda sequence_numbers: DeferredQueue([
                 self.set_sequence_number_message_id(sqn, message_id)

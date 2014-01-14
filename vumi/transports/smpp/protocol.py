@@ -526,31 +526,71 @@ class EsmeTransceiver(Protocol):
                 pdu.add_optional_parameter(key, value)
 
         self.sendPDU(pdu)
-        returnValue(sequence_number)
+        returnValue([sequence_number])
 
-    @inlineCallbacks
-    def _submit_sm(self, **pdu_params):
-        sequence_number = yield self.sequence_generator.next()
-        message = pdu_params['short_message']
-        sar_params = pdu_params.pop('sar_params', None)
-        message_type = pdu_params.pop('message_type', 'sms')
-        continue_session = pdu_params.pop('continue_session', True)
-        session_info = pdu_params.pop('session_info', None)
+    # @inlineCallbacks
+    # def _submit_sm(self, **pdu_params):
+    #     sequence_number = yield self.sequence_generator.next()
+    #     message = pdu_params['short_message']
+    #     sar_params = pdu_params.pop('sar_params', None)
+    #     message_type = pdu_params.pop('message_type', 'sms')
+    #     continue_session = pdu_params.pop('continue_session', True)
+    #     session_info = pdu_params.pop('session_info', None)
 
-        pdu = SubmitSM(sequence_number, **pdu_params)
-        if message_type == 'ussd':
-            update_ussd_pdu(pdu, continue_session, session_info)
+    #     pdu = SubmitSM(sequence_number, **pdu_params)
+    #     if message_type == 'ussd':
+    #         update_ussd_pdu(pdu, continue_session, session_info)
 
-        if self.config.send_long_messages and len(message) > 254:
-            pdu.add_message_payload(''.join('%02x' % ord(c) for c in message))
+    #     if self.config.send_long_messages and len(message) > 254:
+    #         pdu.add_message_payload(''.join('%02x' % ord(c) for c in message))
 
-        if sar_params:
-            pdu.set_sar_msg_ref_num(sar_params['msg_ref_num'])
-            pdu.set_sar_total_segments(sar_params['total_segments'])
-            pdu.set_sar_segment_seqnum(sar_params['segment_seqnum'])
+    #     if sar_params:
+    #         pdu.set_sar_msg_ref_num(sar_params['msg_ref_num'])
+    #         pdu.set_sar_total_segments(sar_params['total_segments'])
+    #         pdu.set_sar_segment_seqnum(sar_params['segment_seqnum'])
 
-        self.sendPDU(pdu)
-        returnValue(sequence_number)
+    #     self.sendPDU(pdu)
+    #     returnValue(sequence_number)
+
+    def submit_sm_long(self, destination_addr, long_message, **pdu_params):
+        if 'short_message' in pdu_params:
+            raise EsmeProtocolError(
+                'short_message not allowed when sending a long message'
+                'in the message_payload')
+
+        optional_parameters = pdu_params.pop('optional_parameters', {}).copy()
+        optional_parameters.update({
+            'message_payload': (
+                ''.join('%02x' % ord(c) for c in long_message))
+        })
+        return self.submit_sm(
+            destination_addr, short_message='', sm_length=0,
+            optional_parameters=optional_parameters, **pdu_params)
+
+    def csm_split_message(self, message):
+        """
+        Chop the message into 130 byte chunks to leave 10 bytes for the
+        user data header the SMSC is presumably going to add for us. This is
+        a guess based mostly on optimism and the hope that we'll never have
+        to deal with this stuff in production.
+
+        NOTE: If we have utf-8 encoded data, we might break in the
+              middle of a multibyte character. This should be ok since
+              the message is only decoded after re-assembly of all
+              individual segments.
+
+        :param str message:
+            The message to split
+        :returns: list of strings
+        :rtype: list
+
+        """
+        payload_length = GSM_MAX_SMS_BYTES - 10
+        split_msg = []
+        while message:
+            split_msg.append(message[:payload_length])
+            message = message[payload_length:]
+        return split_msg
 
     @inlineCallbacks
     def submit_csm_sar(self, destination_addr, **pdu_params):
@@ -562,31 +602,12 @@ class EsmeTransceiver(Protocol):
         :rtype: list
         """
 
-        # We chop the message into 130 byte chunks to leave 10 bytes for the
-        # user data header the SMSC is presumably going to add for us. This is
-        # a guess based mostly on optimism and the hope that we'll never have
-        # to deal with this stuff in production.
-
-        # NOTE: If we have utf-8 encoded data, we might break in the
-        #       middle of a multibyte character. This should be ok since
-        #       the message is only decoded after re-assembly of all
-        #       individual segments.
-
-        payload_length = GSM_MAX_SMS_BYTES - 10
-
-        message = pdu_params.pop('short_message')
-        optional_parameters = pdu_params.pop('optional_parameters', {})
-
-        split_msg = []
-        while message:
-            split_msg.append(message[:payload_length])
-            message = message[payload_length:]
-
+        optional_parameters = pdu_params.pop('optional_parameters', {}).copy()
+        split_msg = self.csm_split_message(pdu_params.pop('short_message'))
         ref_num = yield self.sequence_generator.next()
         sequence_numbers = []
         for i, msg in enumerate(split_msg):
             pdu_params = pdu_params.copy()
-            optional_parameters = optional_parameters.copy()
             optional_parameters.update({
                 'sar_msg_ref_num': ref_num,
                 'sar_total_segments': len(split_msg),
@@ -595,7 +616,7 @@ class EsmeTransceiver(Protocol):
             sequence_number = yield self.submit_sm(
                 destination_addr, short_message=msg,
                 optional_parameters=optional_parameters, **pdu_params)
-            sequence_numbers.append(sequence_number)
+            sequence_numbers.extend(sequence_number)
         returnValue(sequence_numbers)
 
     @inlineCallbacks
@@ -607,31 +628,14 @@ class EsmeTransceiver(Protocol):
         :returns: List of sequence numbers (int)
         :rtype: list
         """
-        # We chop the message into 130 byte chunks to leave 10 bytes for the
-        # user data header the SMSC is presumably going to add for us. This is
-        # a guess based mostly on optimism and the hope that we'll never have
-        # to deal with this stuff in production.
-
-        # NOTE: If we have utf-8 encoded data, we might break in the
-        #       middle of a multibyte character. This should be ok since
-        #       the message is only decoded after re-assembly of all
-        #       individual segments.
-
-        payload_length = GSM_MAX_SMS_BYTES - 10
-
-        pdu_params = pdu_params.copy()
-        message = pdu_params.pop('short_message')
 
         if 'esm_class' in pdu_params:
             raise EsmeProtocolError(
                 'Cannot specify esm_class, GSM spec sets this at 0x40 '
                 'for concatenated messages using UDH.')
 
-        split_msg = []
-        while message:
-            split_msg.append(message[:payload_length])
-            message = message[payload_length:]
-
+        pdu_params = pdu_params.copy()
+        split_msg = self.csm_split_message(pdu_params.pop('short_message'))
         ref_num = yield self.sequence_generator.next()
         sequence_numbers = []
         for i, msg in enumerate(split_msg):
@@ -642,16 +646,23 @@ class EsmeTransceiver(Protocol):
             #       for this anywhere.
             pdu_params['esm_class'] = 0x40
 
-            # See http://en.wikipedia.org/wiki/User_Data_Header for an
+            # See http://en.wikipedia.org/wiki/User_Data_Header and
+            # http://en.wikipedia.org/wiki/Concatenated_SMS for an
             # explanation of the magic numbers below. We should probably
             # abstract this out into a class that makes it less magic and
             # opaque.
-            udh = '\05\00\03%s%s%s' % (
-                chr(ref_num), chr(len(split_msg)), chr(i + 1))
+            udh = ''.join([
+                '\05',  # Full UDH header length
+                '\00',  # Information Element Identifier for Concatenated SMS
+                '\03',  # header length
+                chr(ref_num),
+                chr(len(split_msg)),
+                chr(i + 1),
+            ])
             short_message = udh + msg
             sequence_number = yield self.submit_sm(
                 destination_addr, short_message=short_message, **pdu_params)
-            sequence_numbers.append(sequence_number)
+            sequence_numbers.extend(sequence_number)
         returnValue(sequence_numbers)
 
     # @inlineCallbacks

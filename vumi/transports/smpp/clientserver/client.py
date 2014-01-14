@@ -272,11 +272,11 @@ class EsmeTransceiver(Protocol):
         # we can hope for is not getting hurt too badly by the inevitable
         # breakages.
         if len(message) > GSM_MAX_SMS_BYTES:
-            if self.smpp_config.send_multipart_sar:
+            if self.config.send_multipart_sar:
                 sequence_numbers = yield self._submit_multipart_sar(
                     **pdu_params)
                 returnValue(sequence_numbers)
-            elif self.smpp_config.send_multipart_udh:
+            elif self.config.send_multipart_udh:
                 sequence_numbers = yield self._submit_multipart_udh(
                     **pdu_params)
                 returnValue(sequence_numbers)
@@ -297,7 +297,7 @@ class EsmeTransceiver(Protocol):
         if message_type == 'ussd':
             update_ussd_pdu(pdu, continue_session, session_info)
 
-        if self.smpp_config.send_long_messages and len(message) > 254:
+        if self.config.send_long_messages and len(message) > 254:
             pdu.add_message_payload(''.join('%02x' % ord(c) for c in message))
 
         if sar_params:

@@ -250,9 +250,7 @@ class EsmeTransmitterMixin(EsmeGenericMixin):
     def test_submit_sm_sms_long(self):
         """Submit a USSD message with a session continue flag."""
         esme = yield self.get_esme(config={
-            'smpp_config': {
-                'send_long_messages': True,
-            }
+            'send_long_messages': True,
         })
         long_message = 'This is a long message.' * 20
         yield esme.submit_sm(short_message=long_message)
@@ -270,9 +268,7 @@ class EsmeTransmitterMixin(EsmeGenericMixin):
     def test_submit_sm_sms_multipart_sar(self):
         """Submit a long SMS message using multipart sar fields."""
         esme = yield self.get_esme(config={
-            'smpp_config': {
-                'send_multipart_sar': True,
-            }
+            'send_multipart_sar': True,
         })
         long_message = 'This is a long message.' * 20
         seq_nums = yield esme.submit_sm(short_message=long_message)
@@ -300,9 +296,7 @@ class EsmeTransmitterMixin(EsmeGenericMixin):
     def test_submit_sm_sms_multipart_udh(self):
         """Submit a long SMS message using multipart user data headers."""
         esme = yield self.get_esme(config={
-            'smpp_config': {
-                'send_multipart_udh': True,
-            }
+            'send_multipart_udh': True,
         })
         long_message = 'This is a long message.' * 20
         seq_nums = yield esme.submit_sm(short_message=long_message)

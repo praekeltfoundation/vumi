@@ -22,6 +22,7 @@ from vumi.transports.smpp.tests.test_protocol import (
     bind_protocol, wait_for_pdus)
 
 from vumi.message import TransportUserMessage
+from vumi.config import ConfigError
 
 from smpp.pdu_builder import DeliverSM, SubmitSMResp
 
@@ -489,7 +490,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_mt_sms_multipart_long(self):
-        smpp_helper = yield self.get_smpp_helper(smpp_config={
+        smpp_helper = yield self.get_smpp_helper(config={
             'send_long_messages': True,
         })
         # SMPP specifies that messages longer than 254 bytes should
@@ -503,7 +504,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_mt_sms_multipart_udh(self):
-        smpp_helper = yield self.get_smpp_helper(smpp_config={
+        smpp_helper = yield self.get_smpp_helper(config={
             'send_multipart_udh': True,
         })
         # SMPP specifies that messages longer than 254 bytes should
@@ -528,7 +529,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_mt_sms_multipart_sar(self):
-        smpp_helper = yield self.get_smpp_helper(smpp_config={
+        smpp_helper = yield self.get_smpp_helper(config={
             'send_multipart_sar': True,
         })
         # SMPP specifies that messages longer than 254 bytes should
@@ -718,3 +719,48 @@ class TataUssdSmppTransportTestCase(SmppTransportTestCase):
         self.assertEqual(mess['transport_type'], "ussd")
         self.assertEqual(mess['session_event'],
                          TransportUserMessage.SESSION_CLOSE)
+
+
+class TestSmppTransportConfig(VumiTestCase):
+
+    def required_config(self, config_params):
+        config = {
+            "system_id": "vumitest-vumitest-vumitest",
+            "password": "password",
+            "transport_name": "foo",
+            "twisted_endpoint": "tcp:host=127.0.0.1:port=0",
+            "smpp_config": {},
+        }
+        config.update(config_params)
+        return config
+
+    def get_config(self, config_dict):
+        return SmppTransceiverTransport.CONFIG_CLASS(config_dict)
+
+    def assert_config_error(self, config_dict):
+        try:
+            self.get_config(config_dict)
+            self.fail("ConfigError not raised.")
+        except ConfigError as err:
+            return err.args[0]
+
+    def test_long_message_params(self):
+        self.get_config(self.required_config({}))
+        self.get_config(self.required_config({'send_long_messages': True}))
+        self.get_config(self.required_config({'send_multipart_sar': True}))
+        self.get_config(self.required_config({'send_multipart_udh': True}))
+        errmsg = self.assert_config_error(self.required_config({
+            'send_long_messages': True,
+            'send_multipart_sar': True,
+        }))
+        self.assertEqual(errmsg, (
+            "The following parameters are mutually exclusive: "
+            "send_long_messages, send_multipart_sar"))
+        errmsg = self.assert_config_error(self.required_config({
+            'send_long_messages': True,
+            'send_multipart_sar': True,
+            'send_multipart_udh': True,
+        }))
+        self.assertEqual(errmsg, (
+            "The following parameters are mutually exclusive: "
+            "send_long_messages, send_multipart_sar, send_multipart_udh"))

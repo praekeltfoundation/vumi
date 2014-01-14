@@ -1,6 +1,7 @@
 from twisted.test import proto_helpers
 from twisted.internet import reactor
-from twisted.internet.defer import inlineCallbacks, Deferred, returnValue, succeed
+from twisted.internet.defer import (inlineCallbacks, Deferred, returnValue,
+                                    succeed)
 from twisted.internet.error import ConnectionDone
 from twisted.internet.task import Clock
 
@@ -15,11 +16,9 @@ from vumi.transports.smpp.pdu_utils import (
     seq_no, command_status, command_id, chop_pdu_stream, short_message)
 from vumi.transports.smpp.smpp_utils import unpacked_pdu_opts
 from vumi.transports.smpp.clientserver.sequence import RedisSequence
-from vumi.config import ConfigError
 
 from smpp.pdu import unpack_pdu
 from smpp.pdu_builder import (
-    PDU,
     Unbind, UnbindResp,
     BindTransceiver, BindTransceiverResp,
     BindTransmitter, BindTransmitterResp,
@@ -277,7 +276,7 @@ class EsmeTestCase(VumiTestCase):
     @inlineCallbacks
     def test_submit_sm(self):
         transport, protocol = yield self.setup_bind()
-        yield protocol.submitSM(short_message='foo')
+        yield protocol.submit_sm('dest_addr', short_message='foo')
         [submit_sm] = yield wait_for_pdus(transport, 1)
         self.assertCommand(submit_sm, 'submit_sm', params={
             'short_message': 'foo',
@@ -285,12 +284,9 @@ class EsmeTestCase(VumiTestCase):
 
     @inlineCallbacks
     def test_submit_sm_long(self):
-        transport, protocol = yield self.setup_bind(config={
-            'send_long_messages': True,
-        })
-
+        transport, protocol = yield self.setup_bind()
         long_message = 'This is a long message.' * 20
-        yield protocol.submitSM(short_message=long_message)
+        yield protocol.submit_sm_long('dest_addr', long_message)
         [submit_sm] = yield wait_for_pdus(transport, 1)
         pdu_opts = unpacked_pdu_opts(submit_sm)
 
@@ -428,45 +424,3 @@ class EsmeTestCase(VumiTestCase):
         transport, protocol = yield self.setup_bind()
         protocol.onPdu(invalid_pdu)
         self.assertEqual(calls, [invalid_pdu])
-
-
-class TestSmppTransportConfig(VumiTestCase):
-
-    def required_config(self, config_params):
-        config = {
-            "system_id": "vumitest-vumitest-vumitest",
-            "password": "password",
-        }
-        config.update(config_params)
-        return config
-
-    def get_config(self, config_dict):
-        return EsmeTransceiver.CONFIG_CLASS(config_dict)
-
-    def assert_config_error(self, config_dict):
-        try:
-            self.get_config(config_dict)
-            self.fail("ConfigError not raised.")
-        except ConfigError as err:
-            return err.args[0]
-
-    def test_long_message_params(self):
-        self.get_config(self.required_config({}))
-        self.get_config(self.required_config({'send_long_messages': True}))
-        self.get_config(self.required_config({'send_multipart_sar': True}))
-        self.get_config(self.required_config({'send_multipart_udh': True}))
-        errmsg = self.assert_config_error(self.required_config({
-            'send_long_messages': True,
-            'send_multipart_sar': True,
-        }))
-        self.assertEqual(errmsg, (
-            "The following parameters are mutually exclusive: "
-            "send_long_messages, send_multipart_sar"))
-        errmsg = self.assert_config_error(self.required_config({
-            'send_long_messages': True,
-            'send_multipart_sar': True,
-            'send_multipart_udh': True,
-        }))
-        self.assertEqual(errmsg, (
-            "The following parameters are mutually exclusive: "
-            "send_long_messages, send_multipart_sar, send_multipart_udh"))

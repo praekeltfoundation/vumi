@@ -73,6 +73,28 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
     short_message_processor_config = ConfigDict(
         'The configuration for the ``short_message_processor``',
         default={}, static=True)
+    send_long_messages = ConfigBool(
+        "If `True`, messages longer than 254 characters will be sent in the "
+        "`message_payload` optional field instead of the `short_message` "
+        "field. Default is `False`, simply because that maintains previous "
+        "behaviour.", default=False, static=True)
+    send_multipart_sar = ConfigBool(
+        "If `True`, messages longer than 140 bytes will be sent as a series "
+        "of smaller messages with the sar_* parameters set. Default is "
+        "`False`.", default=False, static=True)
+    send_multipart_udh = ConfigBool(
+        "If `True`, messages longer than 140 bytes will be sent as a series "
+        "of smaller messages with the user data headers. Default is `False`.",
+        default=False, static=True)
+
+    def post_validate(self):
+        long_message_params = (
+            'send_long_messages', 'send_multipart_sar', 'send_multipart_udh')
+        set_params = [p for p in long_message_params if getattr(self, p)]
+        if len(set_params) > 1:
+            params = ', '.join(set_params)
+            self.raise_config_error(
+                "The following parameters are mutually exclusive: %s" % params)
 
 
 class EsmeConfig(Config):
@@ -115,25 +137,3 @@ class EsmeConfig(Config):
     submit_sm_data_coding = ConfigInt(
         'What data_coding value to tell the SMSC we\'re using when putting'
         'an SMS on the wire', static=True, default=0)
-    send_long_messages = ConfigBool(
-        "If `True`, messages longer than 254 characters will be sent in the "
-        "`message_payload` optional field instead of the `short_message` "
-        "field. Default is `False`, simply because that maintains previous "
-        "behaviour.", default=False, static=True)
-    send_multipart_sar = ConfigBool(
-        "If `True`, messages longer than 140 bytes will be sent as a series "
-        "of smaller messages with the sar_* parameters set. Default is "
-        "`False`.", default=False, static=True)
-    send_multipart_udh = ConfigBool(
-        "If `True`, messages longer than 140 bytes will be sent as a series "
-        "of smaller messages with the user data headers. Default is `False`.",
-        default=False, static=True)
-
-    def post_validate(self):
-        long_message_params = (
-            'send_long_messages', 'send_multipart_sar', 'send_multipart_udh')
-        set_params = [p for p in long_message_params if getattr(self, p)]
-        if len(set_params) > 1:
-            params = ', '.join(set_params)
-            self.raise_config_error(
-                "The following parameters are mutually exclusive: %s" % params)
