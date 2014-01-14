@@ -93,10 +93,8 @@ class SmppTransportTestCase(VumiTestCase):
                                          'DeliveryReportProcessor',
             'short_message_processor': 'vumi.transports.smpp.processors.'
                                        'DeliverShortMessageProcessor',
-            'smpp_config': {
-                'system_id': 'foo',
-                'password': 'bar',
-            },
+            'system_id': 'foo',
+            'password': 'bar',
             'short_message_processor_config': {
                 'data_coding_overrides': {
                     0: 'utf-8',
@@ -110,13 +108,9 @@ class SmppTransportTestCase(VumiTestCase):
         return service
 
     @inlineCallbacks
-    def get_transport(self, config={}, smpp_config=None, bind=True):
+    def get_transport(self, config={}, bind=True):
         cfg = self.default_config.copy()
         cfg.update(config)
-
-        if smpp_config is not None:
-            cfg['smpp_config'].update(smpp_config)
-
         transport = yield self.tx_helper.get_transport(cfg)
         if bind:
             yield self.create_smpp_bind(transport)
@@ -369,7 +363,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_mt_sms_submit_sm_encoding(self):
-        smpp_helper = yield self.get_smpp_helper(smpp_config={
+        smpp_helper = yield self.get_smpp_helper(config={
             'submit_sm_encoding': 'latin1',
         })
         yield self.tx_helper.make_dispatch_outbound(u'Zoë destroyer of Ascii!')
@@ -380,7 +374,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_submit_sm_data_coding(self):
-        smpp_helper = yield self.get_smpp_helper(smpp_config={
+        smpp_helper = yield self.get_smpp_helper(config={
             'submit_sm_data_coding': 8
         })
         yield self.tx_helper.make_dispatch_outbound("hello world")
@@ -760,7 +754,6 @@ class TestSmppTransportConfig(VumiTestCase):
             "password": "password",
             "transport_name": "foo",
             "twisted_endpoint": "tcp:host=127.0.0.1:port=0",
-            "smpp_config": {},
         }
         config.update(config_params)
         return config

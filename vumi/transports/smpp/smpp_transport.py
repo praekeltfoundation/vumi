@@ -11,7 +11,7 @@ from vumi.transports.base import Transport
 
 from vumi.message import TransportUserMessage
 
-from vumi.transports.smpp.config import SmppTransportConfig, EsmeConfig
+from vumi.transports.smpp.config import SmppTransportConfig
 from vumi.transports.smpp.protocol import EsmeTransceiverFactory
 from vumi.transports.smpp.clientserver.sequence import RedisSequence
 from vumi.transports.failures import FailureMessage
@@ -42,12 +42,12 @@ class SmppTransceiverProtocol(EsmeTransceiverFactory.protocol):
         # TODO: create a processor for bind / unbind message processing
         # TODO: rethink whether the transport config / smpp config split
         #       was a good idea.
+        config = self.vumi_transport.get_static_config()
         d = maybeDeferred(self.vumi_transport.unpause_connectors)
         d.addCallback(
-            lambda _: self.bind(
-                self.vumi_transport.smpp_config.system_id,
-                self.vumi_transport.smpp_config.password,
-                self.vumi_transport.smpp_config.system_type))
+            lambda _: self.bind(config.system_id,
+                                config.password,
+                                config.system_type))
         d.addCallback(log.msg)
         return d
 
@@ -94,10 +94,9 @@ class SmppTransceiverTransport(Transport):
     @inlineCallbacks
     def setup_transport(self):
         config = self.get_static_config()
-        self.smpp_config = EsmeConfig(config.smpp_config, static=True)
         log.msg('Starting SMPP Transport for: %s' % (config.twisted_endpoint,))
 
-        default_prefix = '%s@%s' % (self.smpp_config.system_id,
+        default_prefix = '%s@%s' % (config.system_id,
                                     config.transport_name)
         redis_prefix = config.split_bind_prefix or default_prefix
         self.redis = (yield TxRedisManager.from_config(
@@ -152,8 +151,8 @@ class SmppTransceiverTransport(Transport):
         if config.send_long_messages:
             d = self.protocol.submit_sm_long(
                 to_addr.encode('ascii'),
-                long_message=text.encode(self.smpp_config.submit_sm_encoding),
-                data_coding=self.smpp_config.submit_sm_data_coding,
+                long_message=text.encode(config.submit_sm_encoding),
+                data_coding=config.submit_sm_data_coding,
                 source_addr=from_addr.encode('ascii'),
                 optional_parameters=optional_parameters,
             )
@@ -161,8 +160,8 @@ class SmppTransceiverTransport(Transport):
         elif config.send_multipart_sar:
             d = self.protocol.submit_csm_sar(
                 to_addr.encode('ascii'),
-                short_message=text.encode(self.smpp_config.submit_sm_encoding),
-                data_coding=self.smpp_config.submit_sm_data_coding,
+                short_message=text.encode(config.submit_sm_encoding),
+                data_coding=config.submit_sm_data_coding,
                 source_addr=from_addr.encode('ascii'),
                 optional_parameters=optional_parameters,
             )
@@ -170,8 +169,8 @@ class SmppTransceiverTransport(Transport):
         elif config.send_multipart_udh:
             d = self.protocol.submit_csm_udh(
                 to_addr.encode('ascii'),
-                short_message=text.encode(self.smpp_config.submit_sm_encoding),
-                data_coding=self.smpp_config.submit_sm_data_coding,
+                short_message=text.encode(config.submit_sm_encoding),
+                data_coding=config.submit_sm_data_coding,
                 source_addr=from_addr.encode('ascii'),
                 optional_parameters=optional_parameters,
             )
@@ -179,8 +178,8 @@ class SmppTransceiverTransport(Transport):
         else:
             d = self.protocol.submit_sm(
                 to_addr.encode('ascii'),
-                short_message=text.encode(self.smpp_config.submit_sm_encoding),
-                data_coding=self.smpp_config.submit_sm_data_coding,
+                short_message=text.encode(config.submit_sm_encoding),
+                data_coding=config.submit_sm_data_coding,
                 source_addr=from_addr.encode('ascii'),
                 optional_parameters=optional_parameters,
             )

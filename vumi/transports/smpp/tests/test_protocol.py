@@ -103,13 +103,11 @@ class EsmeTestCase(VumiTestCase):
                                         'DeliverShortMessageProcessor'),
             'delivery_report_processor': ('vumi.transports.smpp.processors.'
                                           'DeliveryReportProcessor'),
-            'smpp_config': {
-                'system_id': 'system_id',
-                'password': 'password',
-                'smpp_bind_timeout': 30,
-            }
+            'system_id': 'system_id',
+            'password': 'password',
+            'smpp_bind_timeout': 30,
         }
-        default_config['smpp_config'].update(config)
+        default_config.update(config)
 
         dummy_smpp_transport = DummySmppTransport()
         dummy_smpp_transport.get_static_config = lambda: cfg

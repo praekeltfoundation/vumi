@@ -1,4 +1,4 @@
-from vumi.config import (ConfigText, ConfigInt, ConfigBool, Config,
+from vumi.config import (ConfigText, ConfigInt, ConfigBool,
                          ConfigClientEndpoint, ConfigDict, ConfigFloat,
                          ConfigClassName)
 from vumi.transports.smpp.iprocessors import (IDeliveryReportProcessor,
@@ -11,10 +11,6 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
     twisted_endpoint = ConfigClientEndpoint(
         'The SMPP endpoint to connect to.',
         required=True, static=True)
-    smpp_config = ConfigDict(
-        'Configuration options for SMPP 3.4 protocol. '
-        'Validated by the protocol\'s CONFIG_CLASS.', required=True,
-        static=True)
     initial_reconnect_delay = ConfigInt(
         'How long to wait between reconnecting attempts', default=5,
         static=True)
@@ -86,19 +82,6 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
         "If `True`, messages longer than 140 bytes will be sent as a series "
         "of smaller messages with the user data headers. Default is `False`.",
         default=False, static=True)
-
-    def post_validate(self):
-        long_message_params = (
-            'send_long_messages', 'send_multipart_sar', 'send_multipart_udh')
-        set_params = [p for p in long_message_params if getattr(self, p)]
-        if len(set_params) > 1:
-            params = ', '.join(set_params)
-            self.raise_config_error(
-                "The following parameters are mutually exclusive: %s" % params)
-
-
-class EsmeConfig(Config):
-
     system_id = ConfigText(
         'User id used to connect to the SMPP server.', required=True,
         static=True)
@@ -137,3 +120,12 @@ class EsmeConfig(Config):
     submit_sm_data_coding = ConfigInt(
         'What data_coding value to tell the SMSC we\'re using when putting'
         'an SMS on the wire', static=True, default=0)
+
+    def post_validate(self):
+        long_message_params = (
+            'send_long_messages', 'send_multipart_sar', 'send_multipart_udh')
+        set_params = [p for p in long_message_params if getattr(self, p)]
+        if len(set_params) > 1:
+            params = ', '.join(set_params)
+            self.raise_config_error(
+                "The following parameters are mutually exclusive: %s" % params)

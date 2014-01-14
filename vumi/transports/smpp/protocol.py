@@ -19,7 +19,6 @@ from vumi import log
 from vumi.transports.smpp.pdu_utils import (pdu_ok, seq_no, command_status,
                                             command_id, message_id,
                                             chop_pdu_stream)
-from vumi.transports.smpp.config import EsmeConfig
 
 GSM_MAX_SMS_BYTES = 140
 
@@ -42,8 +41,6 @@ class EsmeTransceiver(Protocol):
     bind_pdu = BindTransceiver
     clock = reactor
 
-    CONFIG_CLASS = EsmeConfig
-
     OPEN_STATE = 'OPEN'
     CLOSED_STATE = 'CLOSED'
     BOUND_STATE_TRX = 'BOUND_TRX'
@@ -64,8 +61,7 @@ class EsmeTransceiver(Protocol):
             with an SMSC.
         """
         self.vumi_transport = vumi_transport
-        self.config = self.CONFIG_CLASS(
-            self.vumi_transport.get_static_config().smpp_config, static=True)
+        self.config = self.vumi_transport.get_static_config()
 
         self.buffer = b''
         self.state = self.CLOSED_STATE

@@ -10,7 +10,7 @@ from vumi.transports.base import Transport
 from vumi.transports.smpp.clientserver.client import (
     EsmeTransceiverFactory, EsmeTransmitterFactory, EsmeReceiverFactory,
     EsmeCallbacks)
-from vumi.transports.smpp.config import SmppTransportConfig, EsmeConfig
+from vumi.transports.smpp.config import SmppTransportConfig
 from vumi.transports.failures import FailureMessage
 from vumi.message import Message, TransportUserMessage
 from vumi.persist.txredis_manager import TxRedisManager
@@ -48,10 +48,9 @@ class SmppTransport(Transport):
         log.msg("Starting the SmppTransport for %s" % (
             config.twisted_endpoint))
 
-        self.smpp_config = EsmeConfig(config.smpp_config, static=True)
-        self.submit_sm_encoding = self.smpp_config.submit_sm_encoding
-        self.submit_sm_data_coding = self.smpp_config.submit_sm_data_coding
-        default_prefix = "%s@%s" % (self.smpp_config.system_id,
+        self.submit_sm_encoding = config.submit_sm_encoding
+        self.submit_sm_data_coding = config.submit_sm_data_coding
+        default_prefix = "%s@%s" % (config.system_id,
                                     config.transport_name)
 
         r_config = config.redis_manager
@@ -88,7 +87,8 @@ class SmppTransport(Transport):
         """Inspects the SmppTransportConfig and returns a dictionary
         that can be passed to an EsmeTransceiver (or subclass there of)
         to create a bind with"""
-        return dict([(key, getattr(self.smpp_config, key))
+        config = self.get_static_config()
+        return dict([(key, getattr(config, key))
                      for key in self.SMPP_BIND_CONFIG_KEYS])
 
     def make_factory(self):

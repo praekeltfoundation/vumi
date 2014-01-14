@@ -78,19 +78,14 @@ class EsmeTestCaseBase(VumiTestCase):
             "transport_name": "transport_name",
             "host": host,
             "port": port,
-            'smpp_config': {
-                "system_id": system_id,
-                "password": password,
-            },
+            "system_id": system_id,
+            "password": password,
             'short_message_processor_config': {
                 'data_coding_overrides': {
                     0: 'utf-8'
                 }
             }
         }
-        # NOTE: smpp_config is a sub-dictionary, we update it separately
-        smpp_config = extra_config.pop('smpp_config', {})
-        config_data['smpp_config'].update(smpp_config)
         config_data.update(extra_config)
         config = SmppTransportConfig(config_data)
 

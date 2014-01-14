@@ -16,7 +16,6 @@ from smpp.pdu_builder import (
 from vumi import log
 from vumi.transports.smpp.smpp_utils import update_ussd_pdu
 from vumi.transports.smpp.clientserver.sequence import RedisSequence
-from vumi.transports.smpp.config import EsmeConfig
 
 
 GSM_MAX_SMS_BYTES = 140
@@ -25,22 +24,19 @@ GSM_MAX_SMS_BYTES = 140
 class EsmeTransceiver(Protocol):
     BIND_PDU = BindTransceiver
     CONNECTED_STATE = 'BOUND_TRX'
-    CONFIG_CLASS = EsmeConfig
 
     callLater = reactor.callLater
 
     def __init__(self, vumi_transport):
         self.vumi_transport = vumi_transport
         self.config = self.vumi_transport.get_static_config()
-        self.smpp_config = self.CONFIG_CLASS(self.config.smpp_config,
-                                             static=True)
         self.bind_params = self.vumi_transport.get_smpp_bind_params()
         self.esme_callbacks = self.vumi_transport.esme_callbacks
         self.state = 'CLOSED'
         log.msg('STATE: %s' % (self.state,))
-        self.smpp_bind_timeout = self.smpp_config.smpp_bind_timeout
+        self.smpp_bind_timeout = self.config.smpp_bind_timeout
         self.smpp_enquire_link_interval = \
-                self.smpp_config.smpp_enquire_link_interval
+                self.config.smpp_enquire_link_interval
         self.datastream = ''
         self.redis = self.vumi_transport.redis
         self.sequence_generator = RedisSequence(self.redis)
