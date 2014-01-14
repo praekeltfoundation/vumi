@@ -27,19 +27,6 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
         'matching submit_sm_resp and delivery report messages. Defaults to '
         '1 week',
         default=(60 * 60 * 24 * 7), static=True)
-    COUNTRY_CODE = ConfigText(
-        "Used to translate a leading zero in a destination MSISDN into a "
-        "country code. Default ''", default="", static=True)
-    OPERATOR_PREFIX = ConfigDict(
-        "Nested dictionary of prefix to network name mappings. Default {} "
-        "(set network to 'UNKNOWN'). E.g. { '27': { '27761': 'NETWORK1' }} ",
-        default={}, static=True)
-    OPERATOR_NUMBER = ConfigDict(
-        "Dictionary of source MSISDN to use for each network listed in "
-        "OPERATOR_PREFIX. If a network is not listed, the source MSISDN "
-        "specified by the message sender is used. Default {} (always used the "
-        "from address specified by the message sender). "
-        "E.g. { 'NETWORK1': '27761234567'}", default={}, static=True)
     redis_manager = ConfigDict(
         'How to connect to Redis', default={}, static=True)
     split_bind_prefix = ConfigText(
@@ -79,19 +66,6 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
     submit_short_message_processor_config = ConfigDict(
         'The configuration for the ``submit_short_message_processor``',
         default={}, static=True)
-    send_long_messages = ConfigBool(
-        "If `True`, messages longer than 254 characters will be sent in the "
-        "`message_payload` optional field instead of the `short_message` "
-        "field. Default is `False`, simply because that maintains previous "
-        "behaviour.", default=False, static=True)
-    send_multipart_sar = ConfigBool(
-        "If `True`, messages longer than 140 bytes will be sent as a series "
-        "of smaller messages with the sar_* parameters set. Default is "
-        "`False`.", default=False, static=True)
-    send_multipart_udh = ConfigBool(
-        "If `True`, messages longer than 140 bytes will be sent as a series "
-        "of smaller messages with the user data headers. Default is `False`.",
-        default=False, static=True)
     system_id = ConfigText(
         'User id used to connect to the SMPP server.', required=True,
         static=True)
@@ -124,18 +98,3 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
         "being disconnected. Default is 5s. Some WASPs, e.g. Clickatell "
         "require a 30s delay before reconnecting. In these cases a 45s "
         "initial_reconnect_delay is recommended.", default=55, static=True)
-    submit_sm_encoding = ConfigText(
-        'How to encode the SMS before putting on the wire', static=True,
-        default='utf-8')
-    submit_sm_data_coding = ConfigInt(
-        'What data_coding value to tell the SMSC we\'re using when putting'
-        'an SMS on the wire', static=True, default=0)
-
-    def post_validate(self):
-        long_message_params = (
-            'send_long_messages', 'send_multipart_sar', 'send_multipart_udh')
-        set_params = [p for p in long_message_params if getattr(self, p)]
-        if len(set_params) > 1:
-            params = ', '.join(set_params)
-            self.raise_config_error(
-                "The following parameters are mutually exclusive: %s" % params)

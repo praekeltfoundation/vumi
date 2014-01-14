@@ -20,6 +20,7 @@ from vumi.transports.smpp.pdu_utils import (
     pdu_ok, short_message, command_id, seq_no, pdu_tlv)
 from vumi.transports.smpp.tests.test_protocol import (
     bind_protocol, wait_for_pdus)
+from vumi.transports.smpp.processors import SubmitShortMessageProcessor
 
 from vumi.message import TransportUserMessage
 from vumi.config import ConfigError
@@ -365,7 +366,9 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
     @inlineCallbacks
     def test_mt_sms_submit_sm_encoding(self):
         smpp_helper = yield self.get_smpp_helper(config={
-            'submit_sm_encoding': 'latin1',
+            'submit_short_message_processor_config': {
+                'submit_sm_encoding': 'latin1',
+            }
         })
         yield self.tx_helper.make_dispatch_outbound(u'Zoë destroyer of Ascii!')
         [submit_sm_pdu] = yield smpp_helper.wait_for_pdus(1)
@@ -376,7 +379,9 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
     @inlineCallbacks
     def test_submit_sm_data_coding(self):
         smpp_helper = yield self.get_smpp_helper(config={
-            'submit_sm_data_coding': 8
+            'submit_short_message_processor_config': {
+                'submit_sm_data_coding': 8
+            }
         })
         yield self.tx_helper.make_dispatch_outbound("hello world")
         [submit_sm_pdu] = yield smpp_helper.wait_for_pdus(1)
@@ -517,7 +522,9 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
     @inlineCallbacks
     def test_mt_sms_multipart_long(self):
         smpp_helper = yield self.get_smpp_helper(config={
-            'send_long_messages': True,
+            'submit_short_message_processor_config': {
+                'send_long_messages': True,
+            }
         })
         # SMPP specifies that messages longer than 254 bytes should
         # be put in the message_payload field using TLVs
@@ -531,7 +538,9 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
     @inlineCallbacks
     def test_mt_sms_multipart_udh(self):
         smpp_helper = yield self.get_smpp_helper(config={
-            'send_multipart_udh': True,
+            'submit_short_message_processor_config': {
+                'send_multipart_udh': True,
+            }
         })
         # SMPP specifies that messages longer than 254 bytes should
         # be put in the message_payload field using TLVs
@@ -556,7 +565,9 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
     @inlineCallbacks
     def test_mt_sms_multipart_sar(self):
         smpp_helper = yield self.get_smpp_helper(config={
-            'send_multipart_sar': True,
+            'submit_short_message_processor_config': {
+                'send_multipart_sar': True,
+            }
         })
         # SMPP specifies that messages longer than 254 bytes should
         # be put in the message_payload field using TLVs
@@ -751,16 +762,16 @@ class TestSmppTransportConfig(VumiTestCase):
 
     def required_config(self, config_params):
         config = {
-            "system_id": "vumitest-vumitest-vumitest",
-            "password": "password",
-            "transport_name": "foo",
-            "twisted_endpoint": "tcp:host=127.0.0.1:port=0",
+            # "system_id": "vumitest-vumitest-vumitest",
+            # "password": "password",
+            # "transport_name": "foo",
+            # "twisted_endpoint": "tcp:host=127.0.0.1:port=0",
         }
         config.update(config_params)
         return config
 
     def get_config(self, config_dict):
-        return SmppTransceiverTransport.CONFIG_CLASS(config_dict)
+        return SubmitShortMessageProcessor.CONFIG_CLASS(config_dict)
 
     def assert_config_error(self, config_dict):
         try:

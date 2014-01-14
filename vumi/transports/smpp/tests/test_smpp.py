@@ -30,6 +30,10 @@ class TestSmppTransport(VumiTestCase):
             "smpp_bind_timeout": 12,
             "smpp_enquire_link_interval": 123,
             "third_party_id_expiry": 3600,  # just 1 hour
+            'submit_short_message_processor': (
+                'vumi.transports.smpp.processors.'
+                'EsmeCallbacksSubmitShortMessageProcessor'
+            ),
             'deliver_short_message_processor': (
                 'vumi.transports.smpp.processors.'
                 'EsmeCallbacksDeliverShortMessageProcessor'
@@ -329,6 +333,10 @@ class EsmeToSmscTestCase(VumiTestCase):
             "transport_type": "smpp",
             "system_id": "VumiTestSMSC",
             "password": "password",
+            'submit_short_message_processor': (
+                'vumi.transports.smpp.processors.'
+                'EsmeCallbacksSubmitShortMessageProcessor'
+            ),
             'deliver_short_message_processor': (
                 'vumi.transports.smpp.processors.'
                 'EsmeCallbacksDeliverShortMessageProcessor'
@@ -383,8 +391,9 @@ class EsmeToSmscTestCase(VumiTestCase):
             self.assert_server_pdu(expected, pdu)
 
     @inlineCallbacks
-    def startTransport(self):
+    def startTransport(self, config={}):
         self.transport._block_till_bind = Deferred()
+        self.transport.config.update(config)
         yield self.transport.startWorker()
 
     @inlineCallbacks
@@ -561,8 +570,12 @@ class EsmeToSmscTestCase(VumiTestCase):
     @inlineCallbacks
     def test_submit_sm_encoding(self):
         # Startup
-        yield self.startTransport()
-        self.transport.submit_sm_encoding = 'latin-1'
+        yield self.startTransport({
+            'submit_short_message_processor_config': {
+                'submit_sm_encoding': 'latin-1',
+            }
+        })
+        # self.transport.submit_sm_encoding = 'latin-1'
         yield self.transport._block_till_bind
         yield self.clear_link_pdus()
 
@@ -582,8 +595,12 @@ class EsmeToSmscTestCase(VumiTestCase):
     @inlineCallbacks
     def test_submit_sm_data_coding(self):
         # Startup
-        yield self.startTransport()
-        self.transport.submit_sm_data_coding = 8
+        yield self.startTransport({
+            'submit_short_message_processor_config': {
+                'submit_sm_data_coding': 8,
+            }
+        })
+        # self.transport.submit_sm_data_coding = 8
         yield self.transport._block_till_bind
         yield self.clear_link_pdus()
 
@@ -820,6 +837,10 @@ class TestEsmeToSmscTx(VumiTestCase):
             "port": 0,
             "transport_type": "smpp",
             "transport_name": self.tx_helper.transport_name,
+            'submit_short_message_processor': (
+                'vumi.transports.smpp.processors.'
+                'EsmeCallbacksSubmitShortMessageProcessor'
+            ),
             'deliver_short_message_processor': (
                 'vumi.transports.smpp.processors.'
                 'EsmeCallbacksDeliverShortMessageProcessor'
@@ -897,6 +918,10 @@ class TestEsmeToSmscRx(VumiTestCase):
             "port": 0,
             "transport_type": "smpp",
             "transport_name": self.tx_helper.transport_name,
+            'submit_short_message_processor': (
+                'vumi.transports.smpp.processors.'
+                'EsmeCallbacksSubmitShortMessageProcessor'
+            ),
             'deliver_short_message_processor': (
                 'vumi.transports.smpp.processors.'
                 'EsmeCallbacksDeliverShortMessageProcessor'

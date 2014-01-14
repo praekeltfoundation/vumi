@@ -12,8 +12,10 @@ from vumi.transports.smpp.smpp_utils import (
     unpacked_pdu_opts, detect_ussd, decode_message, decode_pdus)
 
 from vumi.message import TransportUserMessage
-from vumi.config import Config, ConfigDict, ConfigRegex
+from vumi.config import (Config, ConfigDict, ConfigRegex, ConfigText,
+                         ConfigInt, ConfigBool)
 from vumi import log
+from vumi.utils import get_operator_number
 
 from smpp.pdu_inspector import (detect_multipart, multipart_key,
                                 MultipartMessage)
@@ -344,7 +346,34 @@ class EsmeCallbacksDeliverShortMessageProcessor(DeliverShortMessageProcessor):
 
 
 class SubmitShortMessageProcessorConfig(Config):
-    pass
+    submit_sm_encoding = ConfigText(
+        'How to encode the SMS before putting on the wire', static=True,
+        default='utf-8')
+    submit_sm_data_coding = ConfigInt(
+        'What data_coding value to tell the SMSC we\'re using when putting'
+        'an SMS on the wire', static=True, default=0)
+    send_long_messages = ConfigBool(
+        "If `True`, messages longer than 254 characters will be sent in the "
+        "`message_payload` optional field instead of the `short_message` "
+        "field. Default is `False`, simply because that maintains previous "
+        "behaviour.", default=False, static=True)
+    send_multipart_sar = ConfigBool(
+        "If `True`, messages longer than 140 bytes will be sent as a series "
+        "of smaller messages with the sar_* parameters set. Default is "
+        "`False`.", default=False, static=True)
+    send_multipart_udh = ConfigBool(
+        "If `True`, messages longer than 140 bytes will be sent as a series "
+        "of smaller messages with the user data headers. Default is `False`.",
+        default=False, static=True)
+
+    def post_validate(self):
+        long_message_params = (
+            'send_long_messages', 'send_multipart_sar', 'send_multipart_udh')
+        set_params = [p for p in long_message_params if getattr(self, p)]
+        if len(set_params) > 1:
+            params = ', '.join(set_params)
+            self.raise_config_error(
+                "The following parameters are mutually exclusive: %s" % params)
 
 
 class SubmitShortMessageProcessor(object):
@@ -353,11 +382,9 @@ class SubmitShortMessageProcessor(object):
 
     def __init__(self, transport, config):
         self.transport = transport
-        self.config = config
+        self.config = self.CONFIG_CLASS(config, static=True)
 
     def handle_outbound_message(self, message, protocol):
-        config = self.transport.get_static_config()
-        message_id = message['message_id']
         to_addr = message['to_addr']
         from_addr = message['from_addr']
         text = message['content']
@@ -379,37 +406,88 @@ class SubmitShortMessageProcessor(object):
                     int(session_info, 16) + int(not continue_session))
             })
 
-        if config.send_long_messages:
+        if self.config.send_long_messages:
             return protocol.submit_sm_long(
                 to_addr.encode('ascii'),
-                long_message=text.encode(config.submit_sm_encoding),
-                data_coding=config.submit_sm_data_coding,
+                long_message=text.encode(self.config.submit_sm_encoding),
+                data_coding=self.config.submit_sm_data_coding,
                 source_addr=from_addr.encode('ascii'),
                 optional_parameters=optional_parameters,
             )
 
-        elif config.send_multipart_sar:
+        elif self.config.send_multipart_sar:
             return protocol.submit_csm_sar(
                 to_addr.encode('ascii'),
-                short_message=text.encode(config.submit_sm_encoding),
-                data_coding=config.submit_sm_data_coding,
+                short_message=text.encode(self.config.submit_sm_encoding),
+                data_coding=self.config.submit_sm_data_coding,
                 source_addr=from_addr.encode('ascii'),
                 optional_parameters=optional_parameters,
             )
 
-        elif config.send_multipart_udh:
+        elif self.config.send_multipart_udh:
             return protocol.submit_csm_udh(
                 to_addr.encode('ascii'),
-                short_message=text.encode(config.submit_sm_encoding),
-                data_coding=config.submit_sm_data_coding,
+                short_message=text.encode(self.config.submit_sm_encoding),
+                data_coding=self.config.submit_sm_data_coding,
                 source_addr=from_addr.encode('ascii'),
                 optional_parameters=optional_parameters,
             )
 
         return protocol.submit_sm(
             to_addr.encode('ascii'),
-            short_message=text.encode(config.submit_sm_encoding),
-            data_coding=config.submit_sm_data_coding,
+            short_message=text.encode(self.config.submit_sm_encoding),
+            data_coding=self.config.submit_sm_data_coding,
             source_addr=from_addr.encode('ascii'),
             optional_parameters=optional_parameters,
+        )
+
+
+class EsmeCallbacksSubmitShortMessageProcessorConfig(
+        SubmitShortMessageProcessorConfig):
+
+    COUNTRY_CODE = ConfigText(
+        "Used to translate a leading zero in a destination MSISDN into a "
+        "country code. Default ''", default="", static=True)
+    OPERATOR_PREFIX = ConfigDict(
+        "Nested dictionary of prefix to network name mappings. Default {} "
+        "(set network to 'UNKNOWN'). E.g. { '27': { '27761': 'NETWORK1' }} ",
+        default={}, static=True)
+    OPERATOR_NUMBER = ConfigDict(
+        "Dictionary of source MSISDN to use for each network listed in "
+        "OPERATOR_PREFIX. If a network is not listed, the source MSISDN "
+        "specified by the message sender is used. Default {} (always used the "
+        "from address specified by the message sender). "
+        "E.g. { 'NETWORK1': '27761234567'}", default={}, static=True)
+
+
+class EsmeCallbacksSubmitShortMessageProcessor(SubmitShortMessageProcessor):
+
+    CONFIG_CLASS = EsmeCallbacksSubmitShortMessageProcessorConfig
+
+    def handle_outbound_message(self, message, esme_client):
+        log.debug("Sending SMPP message: %s" % (message))
+        # first do a lookup in our YAML to see if we've got a source_addr
+        # defined for the given MT number, if not, trust the from_addr
+        # in the message
+        to_addr = message['to_addr']
+        from_addr = message['from_addr']
+        text = message['content']
+        continue_session = (
+            message['session_event'] != TransportUserMessage.SESSION_CLOSE)
+        route = get_operator_number(to_addr, self.config.COUNTRY_CODE,
+                                    self.config.OPERATOR_PREFIX,
+                                    self.config.OPERATOR_NUMBER)
+        source_addr = route or from_addr
+        session_info = message['transport_metadata'].get('session_info')
+        return esme_client.submit_sm(
+            # these end up in the PDU
+            short_message=text.encode(self.config.submit_sm_encoding),
+            data_coding=self.config.submit_sm_data_coding,
+            destination_addr=to_addr.encode('ascii'),
+            source_addr=source_addr.encode('ascii'),
+            session_info=session_info.encode('ascii')
+                if session_info is not None else None,
+            # these don't end up in the PDU
+            message_type=message['transport_type'],
+            continue_session=continue_session,
         )

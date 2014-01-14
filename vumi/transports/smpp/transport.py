@@ -5,7 +5,6 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi import log
 from vumi.reconnecting_client import ReconnectingClientService
-from vumi.utils import get_operator_number
 from vumi.transports.base import Transport
 from vumi.transports.smpp.clientserver.client import (
     EsmeTransceiverFactory, EsmeTransmitterFactory, EsmeReceiverFactory,
@@ -48,8 +47,6 @@ class SmppTransport(Transport):
         log.msg("Starting the SmppTransport for %s" % (
             config.twisted_endpoint))
 
-        self.submit_sm_encoding = config.submit_sm_encoding
-        self.submit_sm_data_coding = config.submit_sm_data_coding
         default_prefix = "%s@%s" % (config.system_id,
                                     config.transport_name)
 
@@ -298,33 +295,8 @@ class SmppTransport(Transport):
         return self.publish_message(**message).addErrback(log.err)
 
     def send_smpp(self, message):
-        log.debug("Sending SMPP message: %s" % (message))
-        # first do a lookup in our YAML to see if we've got a source_addr
-        # defined for the given MT number, if not, trust the from_addr
-        # in the message
-        to_addr = message['to_addr']
-        from_addr = message['from_addr']
-        text = message['content']
-        continue_session = (
-            message['session_event'] != TransportUserMessage.SESSION_CLOSE)
-        config = self.get_static_config()
-        route = get_operator_number(to_addr, config.COUNTRY_CODE,
-                                    config.OPERATOR_PREFIX,
-                                    config.OPERATOR_NUMBER)
-        source_addr = route or from_addr
-        session_info = message['transport_metadata'].get('session_info')
-        return self.esme_client.submit_sm(
-            # these end up in the PDU
-            short_message=text.encode(self.submit_sm_encoding),
-            data_coding=self.submit_sm_data_coding,
-            destination_addr=to_addr.encode('ascii'),
-            source_addr=source_addr.encode('ascii'),
-            session_info=session_info.encode('ascii')
-                if session_info is not None else None,
-            # these don't end up in the PDU
-            message_type=message['transport_type'],
-            continue_session=continue_session,
-        )
+        return self.esme_client.submit_sm_processor.handle_outbound_message(
+            message, self.esme_client)
 
     def stopWorker(self):
         log.msg("Stopping the SMPPTransport")
