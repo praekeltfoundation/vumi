@@ -361,7 +361,7 @@ class EsmeTestCase(VumiTestCase):
     @inlineCallbacks
     def test_query_sm(self):
         transport, protocol = yield self.setup_bind()
-        yield protocol.querySM('foo', 'bar')
+        yield protocol.query_sm('foo', source_addr='bar')
         [query_sm] = yield wait_for_pdus(transport, 1)
         self.assertCommand(query_sm, 'query_sm', params={
             'message_id': 'foo',

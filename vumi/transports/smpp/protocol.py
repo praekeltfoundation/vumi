@@ -1,7 +1,6 @@
 # -*- test-case-name: vumi.transports.smpp.tests.test_protocol -*-
 
 from functools import wraps
-from random import randint
 
 from twisted.internet import reactor
 from twisted.internet.protocol import Protocol, ClientFactory
@@ -17,7 +16,6 @@ from smpp.pdu_builder import (
     SubmitSM, QuerySM)
 
 from vumi import log
-from vumi.transports.smpp.smpp_utils import update_ussd_pdu
 from vumi.transports.smpp.pdu_utils import (pdu_ok, seq_no, command_status,
                                             command_id, message_id,
                                             chop_pdu_stream)
@@ -503,6 +501,18 @@ class EsmeTransceiver(Protocol):
         returnValue([sequence_number])
 
     def submit_sm_long(self, destination_addr, long_message, **pdu_params):
+        """
+        Send a `submit_sm` command with the message encoded in the
+        ``message_payload`` optional parameter.
+
+        Same parameters apply as for ``submit_sm`` with the exception
+        that the ``short_message`` keyword argument is disallowed
+        because it conflicts with the ``long_message`` field.
+
+        :returns: list of 1 sequence number, int.
+        :rtype: list
+
+        """
         if 'short_message' in pdu_params:
             raise EsmeProtocolError(
                 'short_message not allowed when sending a long message'
@@ -548,7 +558,7 @@ class EsmeTransceiver(Protocol):
         Submit a concatenated SMS to the SMSC using the optional
         SAR parameter names in the various PDUS.
 
-        :returns: List of sequence numbers (int)
+        :returns: List of sequence numbers (int) for each of the segments.
         :rtype: list
         """
 
@@ -575,7 +585,11 @@ class EsmeTransceiver(Protocol):
         Submit a concatenated SMS to the SMSC using UDH headers
         in the message content.
 
-        :returns: List of sequence numbers (int)
+        Same parameters apply as for ``submit_sm`` with the exception
+        that the ``esm_class`` keyword argument is disallowed
+        because the SMPP spec mandates a value that is to be set for UDH.
+
+        :returns: List of sequence numbers (int) for each of the segments.
         :rtype: list
         """
 
@@ -617,11 +631,41 @@ class EsmeTransceiver(Protocol):
 
     @require_bind
     @inlineCallbacks
-    def querySM(self, message_id, source_addr, **kwargs):
+    def query_sm(self,
+                 message_id,
+                 source_addr_ton=0,
+                 source_addr_npi=0,
+                 source_addr=''
+                 ):
+        """
+        Query the SMSC for the status of an earlier sent message.
+
+        :param str message_id:
+            Message ID of the message whose state is to be queried.
+            This must be the SMSC assigned Message ID allocated to the
+            original short message when submitted to the SMSC by the
+            submit_sm, data_sm or submit_multi command, and returned
+            in the response PDU by the SMSC.
+        :param int source_addr_ton:
+            Type of Number of message originator. This is used for
+            verification purposes, and must match that supplied in the
+            original request PDU (e.g. submit_sm).
+        :param int source_addr_npi:
+            Numbering Plan Identity of message originator. This is used
+            for verification purposes, and must match that supplied in
+            the original request PDU (e.g. submit_sm).
+        :param str source_addr:
+            Address of message originator.
+            This is used for verification purposes, and must match that
+            supplied in the original request PDU (e.g. submit_sm).
+        """
         sequence_number = yield self.sequence_generator.next()
         pdu = QuerySM(
-            sequence_number, message_id=message_id, source_addr=source_addr,
-            **self.getBindParams())
+            sequence_number=sequence_number,
+            message_id=message_id,
+            source_addr=source_addr,
+            source_addr_npi=source_addr_npi,
+            source_addr_ton=source_addr_ton)
         self.sendPDU(pdu)
         returnValue([sequence_number])
 
