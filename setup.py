@@ -28,7 +28,7 @@ setup(
         'wokkel',
         'redis',
         'txredis',
-        'python-smpp>=0.1.1',
+        'python-smpp>=0.1.2',
         'pytz==2013b',
         'riakasaurus>=1.1.1',
         'riak==1.5.2',
