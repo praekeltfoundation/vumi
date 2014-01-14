@@ -188,11 +188,10 @@ class EsmeTransceiver(Protocol):
             return
 
         sequence_number = pdu['header']['sequence_number']
-        # pdu_resp = DeliverSMResp(sequence_number, **self.bind_params)
-        # yield self.send_pdu(pdu_resp)
-
+        # These operate before the PDUs ``short_message`` or
+        # ``message_payload`` fields have been string decoded.
+        # NOTE: order is important!
         pdu_handler_chain = [
-            # NOTE: this one still needs a test
             self.dr_processor.handle_delivery_report_pdu,
             self.sm_processor.handle_multipart_pdu,
             self.sm_processor.handle_ussd_pdu,
