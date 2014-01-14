@@ -80,6 +80,14 @@ class EsmeTestCaseBase(VumiTestCase):
             "port": port,
             "system_id": system_id,
             "password": password,
+            'deliver_short_message_processor': (
+                'vumi.transports.smpp.processors.'
+                'EsmeCallbacksDeliverShortMessageProcessor'
+            ),
+            'delivery_report_processor': (
+                'vumi.transports.smpp.processors.'
+                'EsmeCallbacksDeliveryReportProcessor'
+            ),
             'deliver_short_message_processor_config': {
                 'data_coding_overrides': {
                     0: 'utf-8'

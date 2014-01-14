@@ -56,7 +56,7 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
         'Which delivery report processor to use. '
         'Should implement `IDeliveryReportProcessor`.',
         default=('vumi.transports.smpp.processors.'
-                 'EsmeCallbacksDeliveryReportProcessor'),
+                 'DeliveryReportProcessor'),
         static=True, implements=IDeliveryReportProcessor)
     delivery_report_processor_config = ConfigDict(
         'The configuration for the ``delivery_report_processor``',
@@ -65,7 +65,7 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
         'Which deliver short message processor to use. '
         'Should implement `IDeliverShortMessageProcessor`.',
         default=('vumi.transports.smpp.processors.'
-                 'EsmeCallbacksDeliverShortMessageProcessor'),
+                 'DeliverShortMessageProcessor'),
         static=True, implements=IDeliverShortMessageProcessor)
     deliver_short_message_processor_config = ConfigDict(
         'The configuration for the ``deliver_short_message_processor``',

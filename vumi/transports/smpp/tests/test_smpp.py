@@ -30,6 +30,14 @@ class TestSmppTransport(VumiTestCase):
             "smpp_bind_timeout": 12,
             "smpp_enquire_link_interval": 123,
             "third_party_id_expiry": 3600,  # just 1 hour
+            'deliver_short_message_processor': (
+                'vumi.transports.smpp.processors.'
+                'EsmeCallbacksDeliverShortMessageProcessor'
+            ),
+            'delivery_report_processor': (
+                'vumi.transports.smpp.processors.'
+                'EsmeCallbacksDeliveryReportProcessor'
+            ),
             'deliver_short_message_processor_config': {
                 'data_coding_overrides': {
                     0: 'utf-8'
@@ -321,6 +329,14 @@ class EsmeToSmscTestCase(VumiTestCase):
             "transport_type": "smpp",
             "system_id": "VumiTestSMSC",
             "password": "password",
+            'deliver_short_message_processor': (
+                'vumi.transports.smpp.processors.'
+                'EsmeCallbacksDeliverShortMessageProcessor'
+            ),
+            'delivery_report_processor': (
+                'vumi.transports.smpp.processors.'
+                'EsmeCallbacksDeliveryReportProcessor'
+            ),
             'deliver_short_message_processor_config': {
                 'data_coding_overrides': {
                     0: 'utf-8'
@@ -804,6 +820,14 @@ class TestEsmeToSmscTx(VumiTestCase):
             "port": 0,
             "transport_type": "smpp",
             "transport_name": self.tx_helper.transport_name,
+            'deliver_short_message_processor': (
+                'vumi.transports.smpp.processors.'
+                'EsmeCallbacksDeliverShortMessageProcessor'
+            ),
+            'delivery_report_processor': (
+                'vumi.transports.smpp.processors.'
+                'EsmeCallbacksDeliveryReportProcessor'
+            ),
         }
         self.service = SmppService(None, config=self.config)
         self.add_cleanup(self.cleanup_service)
@@ -873,6 +897,14 @@ class TestEsmeToSmscRx(VumiTestCase):
             "port": 0,
             "transport_type": "smpp",
             "transport_name": self.tx_helper.transport_name,
+            'deliver_short_message_processor': (
+                'vumi.transports.smpp.processors.'
+                'EsmeCallbacksDeliverShortMessageProcessor'
+            ),
+            'delivery_report_processor': (
+                'vumi.transports.smpp.processors.'
+                'EsmeCallbacksDeliveryReportProcessor'
+            ),
             'deliver_short_message_processor_config': {
                 'data_coding_overrides': {
                     0: 'utf-8'
