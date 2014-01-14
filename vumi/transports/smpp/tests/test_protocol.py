@@ -306,7 +306,8 @@ class EsmeTestCase(VumiTestCase):
             'send_multipart_udh': True,
         })
         long_message = 'This is a long message.' * 20
-        seq_numbers = yield protocol.submitSM(short_message=long_message)
+        seq_numbers = yield protocol.submit_csm_udh(
+            'dest_addr', short_message=long_message)
         pdus = yield wait_for_pdus(transport, 4)
         self.assertEqual(len(seq_numbers), 4)
 
@@ -339,10 +340,11 @@ class EsmeTestCase(VumiTestCase):
             'send_multipart_sar': True,
         })
         long_message = 'This is a long message.' * 20
-        seq_nums = yield protocol.submitSM(short_message=long_message)
+        seq_nums = yield protocol.submit_csm_sar(
+            'dest_addr', short_message=long_message)
         pdus = yield wait_for_pdus(transport, 4)
-        # seq no 1 == bind_transceiver, 2 == enquire_link
-        self.assertEqual([3, 4, 5, 6], seq_nums)
+        # seq no 1 == bind_transceiver, 2 == enquire_link, 3 == sar_msg_ref_num
+        self.assertEqual([4, 5, 6, 7], seq_nums)
         msg_parts = []
         msg_refs = []
 
@@ -358,7 +360,7 @@ class EsmeTestCase(VumiTestCase):
             self.assertEqual(4, pdu_opts['sar_total_segments'])
 
         self.assertEqual(long_message, ''.join(msg_parts))
-        self.assertEqual(1, len(set(msg_refs)))
+        self.assertEqual([3, 3, 3, 3], msg_refs)
 
     @inlineCallbacks
     def test_query_sm(self):
