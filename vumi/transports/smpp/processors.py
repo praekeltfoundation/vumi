@@ -1,24 +1,21 @@
 import json
 from uuid import uuid4
 
+from smpp.pdu_inspector import (detect_multipart, multipart_key,
+                                MultipartMessage)
 from twisted.internet.defer import inlineCallbacks, returnValue, succeed
-
 from zope.interface import implements
 
+from vumi import log
+from vumi.config import (Config, ConfigDict, ConfigRegex, ConfigText,
+                         ConfigInt, ConfigBool)
+from vumi.message import TransportUserMessage
 from vumi.transports.smpp.iprocessors import (
     IDeliveryReportProcessor, IDeliverShortMessageProcessor,
     ISubmitShortMessageProcessor)
 from vumi.transports.smpp.smpp_utils import (
     unpacked_pdu_opts, detect_ussd, decode_message, decode_pdus)
-
-from vumi.message import TransportUserMessage
-from vumi.config import (Config, ConfigDict, ConfigRegex, ConfigText,
-                         ConfigInt, ConfigBool)
-from vumi import log
 from vumi.utils import get_operator_number
-
-from smpp.pdu_inspector import (detect_multipart, multipart_key,
-                                MultipartMessage)
 
 
 class DeliveryReportProcessorConfig(Config):
