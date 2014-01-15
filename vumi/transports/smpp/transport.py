@@ -178,14 +178,14 @@ class SmppTransport(Transport):
     def _start_throttling(self):
         if self.throttled:
             return
-        log.err("Throttling outbound messages.")
+        log.warning("Throttling outbound messages.")
         self.throttled = True
         self.pause_connectors()
 
     def _stop_throttling(self):
         if not self.throttled:
             return
-        log.err("No longer throttling outbound messages.")
+        log.warning("No longer throttling outbound messages.")
         self.throttled = False
         self.unpause_connectors()
 
