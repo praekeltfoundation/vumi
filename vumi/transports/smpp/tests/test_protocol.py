@@ -174,6 +174,7 @@ class EsmeTestCase(VumiTestCase):
                 'password': 'password',
             })
 
+    @inlineCallbacks
     def test_drop_link(self):
         protocol = self.get_protocol()
         transport = yield connect_transport(protocol)
