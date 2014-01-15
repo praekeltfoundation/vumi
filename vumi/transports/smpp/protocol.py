@@ -233,6 +233,7 @@ class EsmeTransceiver(Protocol):
         if not pdu_ok(pdu):
             log.warning('Unable to bind: %r' % (command_status(pdu),))
             self.transport.loseConnection()
+            return
 
         self.state = self.BOUND_STATE_TRX
         return self.onBindTransceiverResp(seq_no(pdu))
@@ -244,6 +245,7 @@ class EsmeTransceiver(Protocol):
         if not pdu_ok(pdu):
             log.warning('Unable to bind: %r' % (command_status(pdu),))
             self.transport.loseConnection()
+            return
 
         self.state = self.BOUND_STATE_TX
         return self.onBindTransmitterResp(seq_no(pdu))
@@ -255,6 +257,7 @@ class EsmeTransceiver(Protocol):
         if not pdu_ok(pdu):
             log.warning('Unable to bind: %r' % (command_status(pdu),))
             self.transport.loseConnection()
+            return
 
         self.state = self.BOUND_STATE_RX
         return self.onBindReceiverResp(seq_no(pdu))
