@@ -25,7 +25,7 @@ GSM_MAX_SMS_BYTES = 140
 def require_bind(func):
     @wraps(func)
     def wrapper(self, *args, **kwargs):
-        if not self.isBound():
+        if not self.is_bound():
             raise EsmeProtocolError('%s called in unbound state.' % (func,))
         return func(self, *args, **kwargs)
     return wrapper
@@ -68,7 +68,7 @@ class EsmeTransceiver(Protocol):
         self.deliver_sm_processor = self.vumi_transport.deliver_sm_processor
         self.dr_processor = self.vumi_transport.dr_processor
         self.sequence_generator = self.vumi_transport.sequence_generator
-        self.enquire_link_call = LoopingCall(self.enquireLink)
+        self.enquire_link_call = LoopingCall(self.enquire_link)
         self.drop_link_call = None
         self.disconnect_call = self.clock.callLater(
             self.config.smpp_enquire_link_interval, self.disconnect,
@@ -77,10 +77,6 @@ class EsmeTransceiver(Protocol):
 
     def connectionMade(self):
         self.state = self.OPEN_STATE
-        return self.onConnectionMade()
-
-    def onConnectionMade(self):
-        """Called immediately after connectionMade()"""
         log.msg('Connection made, current state: %s' % (self.state,))
 
     @inlineCallbacks
@@ -119,16 +115,16 @@ class EsmeTransceiver(Protocol):
             sequence_number, system_id=system_id, password=password,
             system_type=system_type, interface_version=interface_version,
             addr_ton=addr_ton, addr_npi=addr_npi, address_range=address_range)
-        self.sendPDU(pdu)
+        self.send_pdu(pdu)
         self.drop_link_call = self.clock.callLater(
-            self.config.smpp_bind_timeout, self.dropLink)
+            self.config.smpp_bind_timeout, self.drop_link)
 
-    def dropLink(self):
+    def drop_link(self):
         """
         Called if the SMPP connection is not bound within
         ``smpp_bind_timeout`` amount of seconds
         """
-        if self.isBound():
+        if self.is_bound():
             return
 
         return self.disconnect(
@@ -147,15 +143,12 @@ class EsmeTransceiver(Protocol):
         self.transport.loseConnection()
 
     def connectionLost(self, reason):
-        self.state = self.CLOSED_STATE
-        self.onConnectionLost(reason)
-
-    def onConnectionLost(self, reason):
         """
         :param Exception reason:
             The reason for the connection closed, generally a
             ``ConnectionDone``
         """
+        self.state = self.CLOSED_STATE
         if self.enquire_link_call.running:
             self.enquire_link_call.stop()
         if self.drop_link_call is not None and self.drop_link_call.active():
@@ -163,7 +156,7 @@ class EsmeTransceiver(Protocol):
         if self.disconnect_call.active():
             self.disconnect_call.cancel()
 
-    def isBound(self):
+    def is_bound(self):
         """
         Returns ``True`` if the connection is in one of the known
         values of ``self.BOUND_STATES``
@@ -172,15 +165,15 @@ class EsmeTransceiver(Protocol):
 
     @require_bind
     @inlineCallbacks
-    def enquireLink(self):
+    def enquire_link(self):
         """
         Ping the SMSC to see if they're still around.
         """
         sequence_number = yield self.sequence_generator.next()
-        self.sendPDU(EnquireLink(sequence_number))
+        self.send_pdu(EnquireLink(sequence_number))
         returnValue(sequence_number)
 
-    def sendPDU(self, pdu):
+    def send_pdu(self, pdu):
         """
         Send a PDU to the SMSC
 
@@ -191,12 +184,12 @@ class EsmeTransceiver(Protocol):
 
     def dataReceived(self, data):
         self.buffer += data
-        data = self.handleBuffer()
+        data = self.handle_buffer()
         while data is not None:
-            self.onPdu(unpack_pdu(data))
-            data = self.handleBuffer()
+            self.on_pdu(unpack_pdu(data))
+            data = self.handle_buffer()
 
-    def handleBuffer(self):
+    def handle_buffer(self):
         pdu_found = chop_pdu_stream(self.buffer)
         if pdu_found is None:
             return
@@ -204,7 +197,7 @@ class EsmeTransceiver(Protocol):
         data, self.buffer = pdu_found
         return data
 
-    def onPdu(self, pdu):
+    def on_pdu(self, pdu):
         """
         Handle a PDU that was received & decoded.
 
@@ -213,11 +206,11 @@ class EsmeTransceiver(Protocol):
             on the received PDU
         """
         handler = getattr(self, 'handle_%s' % (command_id(pdu),),
-                          self.onUnsupportedCommandId)
+                          self.on_unsupported_command_id)
         self.disconnect_call.reset(self.config.smpp_enquire_link_interval)
         return maybeDeferred(handler, pdu)
 
-    def onUnsupportedCommandId(self, pdu):
+    def on_unsupported_command_id(self, pdu):
         """
         Called when an SMPP PDU is received for which no handler function has
         been defined.
@@ -236,10 +229,7 @@ class EsmeTransceiver(Protocol):
             return
 
         self.state = self.BOUND_STATE_TRX
-        return self.onBindTransceiverResp(seq_no(pdu))
-
-    def onBindTransceiverResp(self, sequence_number):
-        return self.onSmppBind(sequence_number)
+        return self.on_smpp_bind(seq_no(pdu))
 
     def handle_bind_transmitter_resp(self, pdu):
         if not pdu_ok(pdu):
@@ -248,10 +238,7 @@ class EsmeTransceiver(Protocol):
             return
 
         self.state = self.BOUND_STATE_TX
-        return self.onBindTransmitterResp(seq_no(pdu))
-
-    def onBindTransmitterResp(self, sequence_number):
-        return self.onSmppBind(sequence_number)
+        return self.on_smpp_bind(seq_no(pdu))
 
     def handle_bind_receiver_resp(self, pdu):
         if not pdu_ok(pdu):
@@ -260,26 +247,21 @@ class EsmeTransceiver(Protocol):
             return
 
         self.state = self.BOUND_STATE_RX
-        return self.onBindReceiverResp(seq_no(pdu))
+        return self.on_smpp_bind(seq_no(pdu))
 
-    def onBindReceiverResp(self, sequence_number):
-        return self.onSmppBind(sequence_number)
-
-    def onSmppBind(self, sequence_number):
+    def on_smpp_bind(self, sequence_number):
         """Called when the bind has been setup"""
         self.enquire_link_call.start(self.config.smpp_enquire_link_interval)
 
     def handle_unbind(self, pdu):
-        return self.onUnbind(seq_no(pdu))
-
-    def onUnbind(self, sequence_number):
-        return self.sendPDU(UnbindResp(sequence_number))
+        return self.send_pdu(UnbindResp(seq_no(pdu)))
 
     def handle_submit_sm_resp(self, pdu):
-        return self.onSubmitSMResp(
+        return self.on_submit_sm_resp(
             seq_no(pdu), message_id(pdu), command_status(pdu))
 
-    def onSubmitSMResp(self, sequence_number, smpp_message_id, command_status):
+    def on_submit_sm_resp(self, sequence_number, smpp_message_id,
+                          command_status):
         """
         Called when a ``submit_sm_resp`` command was received.
 
@@ -299,12 +281,8 @@ class EsmeTransceiver(Protocol):
         log.warning(
             'onSubmitSMResp called but not implemented by ESME class.')
 
-    def handle_deliver_sm(self, pdu):
-        return self.onDeliverSM(seq_no(pdu), pdu)
-
     @inlineCallbacks
-    def onDeliverSM(self, sequence_number, pdu):
-
+    def handle_deliver_sm(self, pdu):
         # These operate before the PDUs ``short_message`` or
         # ``message_payload`` fields have been string decoded.
         # NOTE: order is important!
@@ -316,8 +294,8 @@ class EsmeTransceiver(Protocol):
         for handler in pdu_handler_chain:
             handled = yield handler(pdu)
             if handled:
-                self.sendPDU(DeliverSMResp(seq_no(pdu),
-                             command_status='ESME_ROK'))
+                self.send_pdu(DeliverSMResp(seq_no(pdu),
+                              command_status='ESME_ROK'))
                 return
 
         # At this point we either have a DR in the message payload
@@ -327,46 +305,36 @@ class EsmeTransceiver(Protocol):
             log.msg('Not all parts of the PDU were able to be decoded. '
                     'Responding wtih ESME_RDELIVERYFAILURE.',
                     parts=content_parts)
-            self.sendPDU(DeliverSMResp(seq_no(pdu),
-                         command_status='ESME_RDELIVERYFAILURE'))
+            self.send_pdu(DeliverSMResp(seq_no(pdu),
+                          command_status='ESME_RDELIVERYFAILURE'))
             return
 
         content = u''.join(content_parts)
         was_cdr = yield self.dr_processor.handle_delivery_report_content(
             content)
         if was_cdr:
-            self.sendPDU(DeliverSMResp(seq_no(pdu),
-                         command_status='ESME_ROK'))
+            self.send_pdu(DeliverSMResp(seq_no(pdu),
+                          command_status='ESME_ROK'))
             return
 
         handled = yield self.deliver_sm_processor.handle_short_message_pdu(pdu)
         if handled:
-            self.sendPDU(DeliverSMResp(seq_no(pdu),
-                         command_status="ESME_ROK"))
+            self.send_pdu(DeliverSMResp(seq_no(pdu),
+                          command_status="ESME_ROK"))
             return
 
         log.warning('Unable to process message. '
                     'Responding with ESME_RDELIVERYFAILURE.',
                     content=content, pdu=pdu.get_obj())
 
-        self.sendPDU(DeliverSMResp(seq_no(pdu),
-                     command_status="ESME_RDELIVERYFAILURE"))
+        self.send_pdu(DeliverSMResp(seq_no(pdu),
+                      command_status="ESME_RDELIVERYFAILURE"))
 
     def handle_enquire_link(self, pdu):
-        return self.sendPDU(EnquireLinkResp(seq_no(pdu)))
+        return self.send_pdu(EnquireLinkResp(seq_no(pdu)))
 
     def handle_enquire_link_resp(self, pdu):
-        return self.onEnquireLinkResp(seq_no(pdu))
-
-    def onEnquireLinkResp(self, sequence_number):
-        """
-        Called when an ``enquire_link_resp`` command was received.
-
-        :param int sequence_number:
-            The sequence_number of the received command. Should correlate
-            with the sequence_number of the original ``enquire_link``
-            command that was sent to the SMSC.
-        """
+        log.msg('enquire_link_resp received.')
 
     @require_bind
     @inlineCallbacks
@@ -483,7 +451,7 @@ class EsmeTransceiver(Protocol):
             for key, value in optional_parameters.items():
                 pdu.add_optional_parameter(key, value)
 
-        self.sendPDU(pdu)
+        self.send_pdu(pdu)
         returnValue([sequence_number])
 
     def submit_sm_long(self, destination_addr, long_message, **pdu_params):
@@ -652,20 +620,17 @@ class EsmeTransceiver(Protocol):
             source_addr=source_addr,
             source_addr_npi=source_addr_npi,
             source_addr_ton=source_addr_ton)
-        self.sendPDU(pdu)
+        self.send_pdu(pdu)
         returnValue([sequence_number])
 
     @require_bind
     @inlineCallbacks
     def unbind(self):
         sequence_number = yield self.sequence_generator.next()
-        self.sendPDU(Unbind(sequence_number))
+        self.send_pdu(Unbind(sequence_number))
         returnValue([sequence_number])
 
     def handle_unbind_resp(self, pdu):
-        self.onUnbindResp(seq_no(pdu))
-
-    def onUnbindResp(self, sequence_number):
         log.msg('Unbind successful.')
 
 

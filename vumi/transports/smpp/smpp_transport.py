@@ -38,7 +38,7 @@ def remote_message_key(message_id):
 class SmppTransceiverProtocol(EsmeTransceiverFactory.protocol):
     bind_pdu = BindTransceiver
 
-    def onConnectionMade(self):
+    def connectionMade(self):
         # TODO: create a processor for bind / unbind message processing
         # TODO: rethink whether the transport config / smpp config split
         #       was a good idea.
@@ -51,14 +51,15 @@ class SmppTransceiverProtocol(EsmeTransceiverFactory.protocol):
         d.addCallback(log.msg)
         return d
 
-    def onConnectionLost(self, reason):
+    def connectionLost(self, reason):
         d = maybeDeferred(self.vumi_transport.pause_connectors)
         d.addCallback(
-            lambda _: EsmeTransceiverFactory.protocol.onConnectionLost(
+            lambda _: EsmeTransceiverFactory.protocol.connectionLost(
                 self, reason))
         return d
 
-    def onSubmitSMResp(self, sequence_number, smpp_message_id, command_status):
+    def on_submit_sm_resp(self, sequence_number, smpp_message_id,
+                          command_status):
         cb = {
             'ESME_ROK': self.vumi_transport.handle_submit_sm_success,
             'ESME_RTHROTTLED': self.vumi_transport.handle_submit_sm_throttled,

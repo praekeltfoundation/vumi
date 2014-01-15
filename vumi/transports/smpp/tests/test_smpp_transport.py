@@ -49,18 +49,18 @@ class SMPPHelper(object):
         self.transport = smpp_transport
         self.protocol = smpp_transport.service.protocol
 
-    def sendPDU(self, pdu):
+    def send_pdu(self, pdu):
         """put it on the wire and don't wait for a response"""
         self.protocol.dataReceived(pdu.get_bin())
 
-    def handlePDU(self, pdu):
+    def handle_pdu(self, pdu):
         """short circuit the wire so we get a deferred so we know
         when it's been handled, also allows us to test PDUs that are invalid
         because we're skipping the encode/decode step."""
-        return self.protocol.onPdu(pdu.obj)
+        return self.protocol.on_pdu(pdu.obj)
 
     def send_mo(self, sequence_number, short_message, data_coding=1, **kwargs):
-        return self.sendPDU(
+        return self.send_pdu(
             DeliverSM(sequence_number, short_message=short_message,
                       data_coding=data_coding, **kwargs))
 
@@ -141,7 +141,7 @@ class SmppTransportTestCase(VumiTestCase):
         cb(smpp_transport)
         return d
 
-    def sendPDU(self, transport, pdu):
+    def send_pdu(self, transport, pdu):
         protocol = transport.service.protocol
         protocol.dataReceived(pdu.get_bin())
 
@@ -158,7 +158,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
     @inlineCallbacks
     def test_setup_transport(self):
         transport = yield self.get_transport()
-        self.assertTrue(transport.service.protocol.isBound())
+        self.assertTrue(transport.service.protocol.is_bound())
 
     @inlineCallbacks
     def test_mo_sms(self):
@@ -183,7 +183,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         pdu = DeliverSM(sequence_number=1)
         pdu.add_optional_parameter('receipted_message_id', 'foo')
         pdu.add_optional_parameter('message_state', 2)
-        yield smpp_helper.handlePDU(pdu)
+        yield smpp_helper.handle_pdu(pdu)
 
         [event] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(event['event_type'], 'delivery_report')
@@ -222,7 +222,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
         pdu = DeliverSM(sequence_number=1)
         pdu.add_optional_parameter('message_payload', content.encode('hex'))
-        smpp_helper.sendPDU(pdu)
+        smpp_helper.send_pdu(pdu)
 
         [deliver_sm_resp] = yield smpp_helper.wait_for_pdus(1)
         self.assertEqual(1, seq_no(deliver_sm_resp))
@@ -279,7 +279,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         pdu1.add_optional_parameter('sar_total_segments', 3)
         pdu1.add_optional_parameter('sar_segment_seqnum', 1)
 
-        smpp_helper.sendPDU(pdu1)
+        smpp_helper.send_pdu(pdu1)
         deliver_sm_resps.append((yield smpp_helper.wait_for_pdus(1))[0])
 
         pdu2 = DeliverSM(sequence_number=2, short_message=' at')
@@ -287,7 +287,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         pdu2.add_optional_parameter('sar_total_segments', 3)
         pdu2.add_optional_parameter('sar_segment_seqnum', 2)
 
-        smpp_helper.sendPDU(pdu2)
+        smpp_helper.send_pdu(pdu2)
         deliver_sm_resps.append((yield smpp_helper.wait_for_pdus(1))[0])
 
         pdu3 = DeliverSM(sequence_number=3, short_message=' you')
@@ -295,7 +295,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         pdu3.add_optional_parameter('sar_total_segments', 3)
         pdu3.add_optional_parameter('sar_segment_seqnum', 3)
 
-        smpp_helper.sendPDU(pdu3)
+        smpp_helper.send_pdu(pdu3)
         deliver_sm_resps.append((yield smpp_helper.wait_for_pdus(1))[0])
 
         self.assertEqual([1, 2, 3], map(seq_no, deliver_sm_resps))
@@ -319,8 +319,8 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
                              source_addr="2772000000",
                              data_coding=1)
 
-        yield smpp_helper.handlePDU(bad_pdu)
-        yield smpp_helper.handlePDU(good_pdu)
+        yield smpp_helper.handle_pdu(bad_pdu)
+        yield smpp_helper.handle_pdu(good_pdu)
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
 
         self.assertEqual(msg['message_type'], 'user_message')
@@ -343,7 +343,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
         lc = LogCatcher(message="Failed to retrieve message id")
         with lc:
-            yield smpp_helper.handlePDU(
+            yield smpp_helper.handle_pdu(
                 DeliverSM(sequence_number=1,
                           short_message=self.DR_TEMPLATE % ('foo',)))
 
@@ -394,7 +394,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         msg = self.tx_helper.make_outbound('hello world')
         yield self.tx_helper.dispatch_outbound(msg)
         [submit_sm_pdu] = yield smpp_helper.wait_for_pdus(1)
-        smpp_helper.sendPDU(
+        smpp_helper.send_pdu(
             SubmitSMResp(sequence_number=seq_no(submit_sm_pdu),
                          message_id='foo'))
         [event] = yield self.tx_helper.wait_for_dispatched_events(1)
@@ -408,7 +408,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         msg = self.tx_helper.make_outbound('hello world')
         yield self.tx_helper.dispatch_outbound(msg)
         [submit_sm_pdu] = yield smpp_helper.wait_for_pdus(1)
-        smpp_helper.sendPDU(
+        smpp_helper.send_pdu(
             SubmitSMResp(sequence_number=seq_no(submit_sm_pdu),
                          message_id='foo', command_status='ESME_RINVDSTADR'))
         [event] = yield self.tx_helper.wait_for_dispatched_events(1)
@@ -424,7 +424,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         [submit_sm] = yield smpp_helper.wait_for_pdus(1)
         response = SubmitSMResp(seq_no(submit_sm), "3rd_party_id_3",
                                 command_status="ESME_RSUBMITFAIL")
-        smpp_helper.sendPDU(response)
+        smpp_helper.send_pdu(response)
 
         # There should be a nack
         [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
@@ -441,7 +441,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
             "message", message_id='446')
         [submit_sm] = yield smpp_helper.wait_for_pdus(1)
 
-        yield smpp_helper.handlePDU(
+        yield smpp_helper.handle_pdu(
             SubmitSMResp(sequence_number=seq_no(submit_sm),
                          message_id='foo',
                          command_status=None))
@@ -462,7 +462,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
         yield self.tx_helper.dispatch_outbound(msg)
         [submit_sm_pdu] = yield smpp_helper.wait_for_pdus(1)
-        yield smpp_helper.handlePDU(
+        yield smpp_helper.handle_pdu(
             SubmitSMResp(sequence_number=seq_no(submit_sm_pdu),
                          message_id='foo',
                          command_status='ESME_RTHROTTLED'))
@@ -470,7 +470,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.clock.advance(transport_config.throttle_delay)
 
         [submit_sm_pdu_retry] = yield smpp_helper.wait_for_pdus(1)
-        yield smpp_helper.handlePDU(
+        yield smpp_helper.handle_pdu(
             SubmitSMResp(sequence_number=seq_no(submit_sm_pdu_retry),
                          message_id='bar',
                          command_status='ESME_ROK'))
@@ -490,7 +490,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
         yield self.tx_helper.dispatch_outbound(msg)
         [submit_sm_pdu] = yield smpp_helper.wait_for_pdus(1)
-        yield smpp_helper.handlePDU(
+        yield smpp_helper.handle_pdu(
             SubmitSMResp(sequence_number=seq_no(submit_sm_pdu),
                          message_id='foo',
                          command_status='ESME_RMSGQFUL'))
@@ -498,7 +498,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.clock.advance(transport_config.throttle_delay)
 
         [submit_sm_pdu_retry] = yield smpp_helper.wait_for_pdus(1)
-        yield smpp_helper.handlePDU(
+        yield smpp_helper.handle_pdu(
             SubmitSMResp(sequence_number=seq_no(submit_sm_pdu_retry),
                          message_id='bar',
                          command_status='ESME_ROK'))
@@ -611,7 +611,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         msg = self.tx_helper.make_outbound('hello world')
         yield transport.set_sequence_number_message_id(3, msg['message_id'])
         yield transport.cache_message(msg)
-        yield smpp_helper.handlePDU(SubmitSMResp(sequence_number=3,
+        yield smpp_helper.handle_pdu(SubmitSMResp(sequence_number=3,
                                                  message_id='foo',
                                                  command_status='ESME_ROK'))
         self.assertEqual(
@@ -628,7 +628,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         yield self.tx_helper.dispatch_outbound(msg)
 
         [pdu] = yield smpp_helper.wait_for_pdus(1)
-        yield smpp_helper.handlePDU(
+        yield smpp_helper.handle_pdu(
             SubmitSMResp(sequence_number=seq_no(pdu),
                          message_id='foo',
                          command_status='ESME_ROK'))
@@ -651,8 +651,8 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         response2 = SubmitSMResp(seq_no(submit_sm2), "3rd_party_id_2")
 
         # respond out of order - just to keep things interesting
-        yield smpp_helper.handlePDU(response2)
-        yield smpp_helper.handlePDU(response1)
+        yield smpp_helper.handle_pdu(response2)
+        yield smpp_helper.handle_pdu(response1)
 
         [ack1, ack2] = yield self.tx_helper.wait_for_dispatched_events(2)
         self.assertEqual(ack1['user_message_id'], '445')
@@ -666,7 +666,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         deliver = DeliverSM(1, short_message=dr)
         smpp_helper = yield self.get_smpp_helper()
         with LogCatcher(message="Failed to retrieve message id") as lc:
-            yield smpp_helper.handlePDU(deliver)
+            yield smpp_helper.handle_pdu(deliver)
             [warning] = lc.logs
             self.assertEqual(warning['message'],
                              ("Failed to retrieve message id for delivery "
@@ -681,14 +681,14 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         protocol = smpp_helper.protocol
         connector = transport.connectors[transport.transport_name]
         self.assertFalse(connector._consumers['outbound'].paused)
-        yield protocol.onConnectionLost(ConnectionDone)
+        yield protocol.connectionLost(ConnectionDone)
         self.assertTrue(connector._consumers['outbound'].paused)
-        yield protocol.onConnectionLost(ConnectionDone)
+        yield protocol.connectionLost(ConnectionDone)
         self.assertTrue(connector._consumers['outbound'].paused)
 
-        yield protocol.onConnectionMade()
+        yield protocol.connectionMade()
         self.assertFalse(connector._consumers['outbound'].paused)
-        yield protocol.onConnectionMade()
+        yield protocol.connectionMade()
         self.assertFalse(connector._consumers['outbound'].paused)
 
 
@@ -721,7 +721,7 @@ class TataUssdSmppTransportTestCase(SmppTransportTestCase):
         pdu.add_optional_parameter('ussd_service_op', '02')
         pdu.add_optional_parameter('its_session_info', '0000')
 
-        yield smpp_helper.handlePDU(pdu)
+        yield smpp_helper.handle_pdu(pdu)
 
         [mess] = yield self.tx_helper.wait_for_dispatched_inbound(1)
 
@@ -748,7 +748,7 @@ class TataUssdSmppTransportTestCase(SmppTransportTestCase):
         pdu.add_optional_parameter('ussd_service_op', '02')
         pdu.add_optional_parameter('its_session_info', '0001')
 
-        yield smpp_helper.handlePDU(pdu)
+        yield smpp_helper.handle_pdu(pdu)
 
         [mess] = yield self.tx_helper.wait_for_dispatched_inbound(1)
 
