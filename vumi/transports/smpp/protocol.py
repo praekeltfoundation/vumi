@@ -324,7 +324,8 @@ class EsmeTransceiver(Protocol):
         # or have a normal SMS that needs to be decoded and handled.
         content_parts = self.deliver_sm_processor.decode_pdus([pdu])
         if not all([isinstance(part, unicode) for part in content_parts]):
-            log.msg('Not all parts of the PDU were able to be decoded.',
+            log.msg('Not all parts of the PDU were able to be decoded. '
+                    'Responding wtih ESME_RDELIVERYFAILURE.',
                     parts=content_parts)
             self.sendPDU(DeliverSMResp(seq_no(pdu),
                          command_status='ESME_RDELIVERYFAILURE'))
@@ -339,9 +340,17 @@ class EsmeTransceiver(Protocol):
             return
 
         handled = yield self.deliver_sm_processor.handle_short_message_pdu(pdu)
-        command_status = 'ESME_ROK' if handled else 'ESME_RDELIVERYFAILURE'
+        if handled:
+            self.sendPDU(DeliverSMResp(seq_no(pdu),
+                         command_status="ESME_ROK"))
+            return
+
+        log.warning('Unable to process message. '
+                    'Responding with ESME_RDELIVERYFAILURE.',
+                    content=content, pdu=pdu.get_obj())
+
         self.sendPDU(DeliverSMResp(seq_no(pdu),
-                     command_status=command_status))
+                     command_status="ESME_RDELIVERYFAILURE"))
 
     def handle_enquire_link(self, pdu):
         return self.sendPDU(EnquireLinkResp(seq_no(pdu)))
