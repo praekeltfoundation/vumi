@@ -2,8 +2,8 @@
 
 from twisted.test import proto_helpers
 from twisted.internet import reactor
-from twisted.internet.defer import (inlineCallbacks, returnValue, Deferred,
-                                    succeed)
+from twisted.internet.defer import (
+    inlineCallbacks, returnValue, Deferred, succeed)
 from twisted.internet.error import ConnectionDone
 from twisted.internet.task import Clock
 from twisted.application.service import Service

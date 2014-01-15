@@ -1,9 +1,9 @@
-from vumi.config import (ConfigText, ConfigInt, ConfigBool,
-                         ConfigClientEndpoint, ConfigDict, ConfigFloat,
-                         ConfigClassName)
-from vumi.transports.smpp.iprocessors import (IDeliveryReportProcessor,
-                                              IDeliverShortMessageProcessor,
-                                              ISubmitShortMessageProcessor)
+from vumi.config import (
+    ConfigText, ConfigInt, ConfigBool, ConfigClientEndpoint, ConfigDict,
+    ConfigFloat, ConfigClassName)
+from vumi.transports.smpp.iprocessors import (
+    IDeliveryReportProcessor, IDeliverShortMessageProcessor,
+    ISubmitShortMessageProcessor)
 from vumi.transports.base import Transport
 
 

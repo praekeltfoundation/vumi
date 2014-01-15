@@ -5,9 +5,9 @@ from twisted.internet.defer import inlineCallbacks, returnValue, succeed
 
 from zope.interface import implements
 
-from vumi.transports.smpp.iprocessors import (IDeliveryReportProcessor,
-                                              IDeliverShortMessageProcessor,
-                                              ISubmitShortMessageProcessor)
+from vumi.transports.smpp.iprocessors import (
+    IDeliveryReportProcessor, IDeliverShortMessageProcessor,
+    ISubmitShortMessageProcessor)
 from vumi.transports.smpp.smpp_utils import (
     unpacked_pdu_opts, detect_ussd, decode_message, decode_pdus)
 
