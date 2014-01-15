@@ -6,13 +6,14 @@ from twisted.internet.task import Clock
 from smpp.pdu_builder import SubmitSMResp, DeliverSM
 
 from vumi.message import TransportUserMessage
-from vumi.transports.smpp.clientserver.client import (
+from vumi.transports.smpp.deprecated.clientserver.client import (
     EsmeTransceiver, EsmeCallbacks)
-from vumi.transports.smpp.transport import (
+from vumi.transports.smpp.deprecated.transport import (
     SmppTransport, SmppTxTransport, SmppRxTransport)
-from vumi.transports.smpp.service import SmppService
+from vumi.transports.smpp.deprecated.service import SmppService
 from vumi.transports.smpp.smpp_utils import unpacked_pdu_opts
-from vumi.transports.smpp.clientserver.tests.utils import SmscTestServer
+from vumi.transports.smpp.deprecated.clientserver.tests.utils import (
+    SmscTestServer,)
 from vumi.tests.utils import LogCatcher
 from vumi.transports.tests.helpers import TransportHelper
 from vumi.tests.helpers import VumiTestCase
@@ -30,15 +31,15 @@ class TestSmppTransport(VumiTestCase):
             "smpp_enquire_link_interval": 123,
             "third_party_id_expiry": 3600,  # just 1 hour
             'submit_short_message_processor': (
-                'vumi.transports.smpp.processors.'
+                'vumi.transports.smpp.deprecated.processors.'
                 'EsmeCallbacksSubmitShortMessageProcessor'
             ),
             'deliver_short_message_processor': (
-                'vumi.transports.smpp.processors.'
+                'vumi.transports.smpp.deprecated.processors.'
                 'EsmeCallbacksDeliverShortMessageProcessor'
             ),
             'delivery_report_processor': (
-                'vumi.transports.smpp.processors.'
+                'vumi.transports.smpp.deprecated.processors.'
                 'EsmeCallbacksDeliveryReportProcessor'
             ),
             'deliver_short_message_processor_config': {
@@ -333,15 +334,15 @@ class EsmeToSmscTestCase(VumiTestCase):
             "system_id": "VumiTestSMSC",
             "password": "password",
             'submit_short_message_processor': (
-                'vumi.transports.smpp.processors.'
+                'vumi.transports.smpp.deprecated.processors.'
                 'EsmeCallbacksSubmitShortMessageProcessor'
             ),
             'deliver_short_message_processor': (
-                'vumi.transports.smpp.processors.'
+                'vumi.transports.smpp.deprecated.processors.'
                 'EsmeCallbacksDeliverShortMessageProcessor'
             ),
             'delivery_report_processor': (
-                'vumi.transports.smpp.processors.'
+                'vumi.transports.smpp.deprecated.processors.'
                 'EsmeCallbacksDeliveryReportProcessor'
             ),
             'deliver_short_message_processor_config': {
@@ -837,15 +838,15 @@ class TestEsmeToSmscTx(VumiTestCase):
             "transport_type": "smpp",
             "transport_name": self.tx_helper.transport_name,
             'submit_short_message_processor': (
-                'vumi.transports.smpp.processors.'
+                'vumi.transports.smpp.deprecated.processors.'
                 'EsmeCallbacksSubmitShortMessageProcessor'
             ),
             'deliver_short_message_processor': (
-                'vumi.transports.smpp.processors.'
+                'vumi.transports.smpp.deprecated.processors.'
                 'EsmeCallbacksDeliverShortMessageProcessor'
             ),
             'delivery_report_processor': (
-                'vumi.transports.smpp.processors.'
+                'vumi.transports.smpp.deprecated.processors.'
                 'EsmeCallbacksDeliveryReportProcessor'
             ),
         }
@@ -918,15 +919,15 @@ class TestEsmeToSmscRx(VumiTestCase):
             "transport_type": "smpp",
             "transport_name": self.tx_helper.transport_name,
             'submit_short_message_processor': (
-                'vumi.transports.smpp.processors.'
+                'vumi.transports.smpp.deprecated.processors.'
                 'EsmeCallbacksSubmitShortMessageProcessor'
             ),
             'deliver_short_message_processor': (
-                'vumi.transports.smpp.processors.'
+                'vumi.transports.smpp.deprecated.processors.'
                 'EsmeCallbacksDeliverShortMessageProcessor'
             ),
             'delivery_report_processor': (
-                'vumi.transports.smpp.processors.'
+                'vumi.transports.smpp.deprecated.processors.'
                 'EsmeCallbacksDeliveryReportProcessor'
             ),
             'deliver_short_message_processor_config': {

@@ -1,4 +1,4 @@
-# -*- test-case-name: vumi.transports.smpp.tests.test_smpp -*-
+# -*- test-case-name: vumi.transports.smpp.deprecated.tests.test_smpp -*-
 
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, returnValue
@@ -6,7 +6,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from vumi import log
 from vumi.reconnecting_client import ReconnectingClientService
 from vumi.transports.base import Transport
-from vumi.transports.smpp.clientserver.client import (
+from vumi.transports.smpp.deprecated.clientserver.client import (
     EsmeTransceiverFactory, EsmeTransmitterFactory, EsmeReceiverFactory,
     EsmeCallbacks)
 from vumi.transports.smpp.config import SmppTransportConfig

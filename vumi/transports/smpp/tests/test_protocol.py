@@ -7,7 +7,7 @@ from twisted.internet.task import Clock
 
 
 from vumi.tests.helpers import VumiTestCase, PersistenceHelper
-from vumi.transports.smpp.transport import SmppTransport
+from vumi.transports.smpp.smpp_transport import SmppTransceiverTransport
 from vumi.transports.smpp.protocol import (
     EsmeTransceiver, EsmeTransceiverFactory,
     EsmeTransmitterFactory, EsmeReceiverFactory)
@@ -111,7 +111,8 @@ class EsmeTestCase(VumiTestCase):
         }
         default_config.update(config)
 
-        cfg = SmppTransport.CONFIG_CLASS(default_config, static=True)
+        cfg = SmppTransceiverTransport.CONFIG_CLASS(
+            default_config, static=True)
 
         dummy_smpp_transport = DummySmppTransport()
         dummy_smpp_transport.get_static_config = lambda: cfg

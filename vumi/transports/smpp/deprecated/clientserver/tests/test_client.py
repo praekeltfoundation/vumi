@@ -4,10 +4,10 @@ from smpp.pdu_builder import DeliverSM, BindTransceiverResp, Unbind
 from smpp.pdu import unpack_pdu
 
 from vumi.tests.utils import LogCatcher
-from vumi.transports.smpp.clientserver.client import (
-    EsmeTransceiver, EsmeReceiver, EsmeTransmitter, EsmeCallbacks, ESME)
+from vumi.transports.smpp.deprecated.clientserver.client import (
+    EsmeTransceiver, EsmeReceiver, EsmeTransmitter, EsmeCallbacks)
 from vumi.transports.smpp.smpp_utils import unpacked_pdu_opts
-from vumi.transports.smpp.transport import SmppTransportConfig
+from vumi.transports.smpp.config import SmppTransportConfig
 from vumi.transports.smpp.sequence import RedisSequence
 from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 
@@ -81,15 +81,15 @@ class EsmeTestCaseBase(VumiTestCase):
             "system_id": system_id,
             "password": password,
             'submit_short_message_processor': (
-                'vumi.transports.smpp.processors.'
+                'vumi.transports.smpp.deprecated.processors.'
                 'EsmeCallbacksSubmitShortMessageProcessor'
             ),
             'deliver_short_message_processor': (
-                'vumi.transports.smpp.processors.'
+                'vumi.transports.smpp.deprecated.processors.'
                 'EsmeCallbacksDeliverShortMessageProcessor'
             ),
             'delivery_report_processor': (
-                'vumi.transports.smpp.processors.'
+                'vumi.transports.smpp.deprecated.processors.'
                 'EsmeCallbacksDeliveryReportProcessor'
             ),
             'deliver_short_message_processor_config': {
