@@ -28,10 +28,11 @@ from smpp.pdu_builder import (
     EnquireLink, EnquireLinkResp)
 
 
-def connect_transport(protocol):
+def connect_transport(protocol, system_id='', password='', system_type=''):
     transport = proto_helpers.StringTransport()
     protocol.makeConnection(transport)
-    d = protocol.bind(system_id='', password='', system_type='')
+    d = protocol.bind(system_id=system_id, password=password,
+                      system_type=system_type)
     d.addCallback(lambda _: transport)
     return d
 
@@ -110,14 +111,16 @@ class EsmeTestCase(VumiTestCase):
         }
         default_config.update(config)
 
+        cfg = SmppTransport.CONFIG_CLASS(default_config, static=True)
+
         dummy_smpp_transport = DummySmppTransport()
         dummy_smpp_transport.get_static_config = lambda: cfg
         dummy_smpp_transport.redis = self.redis
 
-        cfg = SmppTransport.CONFIG_CLASS(default_config, static=True)
         if deliver_sm_processor is None:
             deliver_sm_processor = cfg.deliver_short_message_processor(
-                dummy_smpp_transport, cfg.deliver_short_message_processor_config)
+                dummy_smpp_transport,
+                cfg.deliver_short_message_processor_config)
         if dr_processor is None:
             dr_processor = cfg.delivery_report_processor(
                 dummy_smpp_transport, cfg.delivery_report_processor_config)
@@ -154,10 +157,12 @@ class EsmeTestCase(VumiTestCase):
         yield bind_protocol(transport, protocol, clear=clear)
         returnValue((transport, protocol))
 
+    @inlineCallbacks
     def test_on_connection_made(self):
         protocol = self.get_protocol()
         self.assertEqual(protocol.state, EsmeTransceiver.CLOSED_STATE)
-        transport = yield connect_transport(protocol)
+        transport = yield connect_transport(
+            protocol, system_id='system_id', password='password')
         self.assertEqual(protocol.state, EsmeTransceiver.OPEN_STATE)
         [bind_pdu] = yield wait_for_pdus(transport, 1)
         self.assertCommand(
