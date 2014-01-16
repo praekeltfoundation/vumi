@@ -6,7 +6,8 @@ from twisted.internet import reactor
 from twisted.internet.protocol import Protocol, ClientFactory
 from twisted.internet.task import LoopingCall
 from twisted.internet.defer import (
-    inlineCallbacks, returnValue, maybeDeferred, DeferredQueue, succeed)
+    inlineCallbacks, returnValue, maybeDeferred, DeferredQueue, succeed,
+    TimeoutError)
 
 from smpp.pdu import unpack_pdu
 from smpp.pdu_builder import (
@@ -40,7 +41,8 @@ class EsmeTransceiver(Protocol):
 
     bind_pdu = BindTransceiver
     clock = reactor
-    noisy = False
+    noisy = True
+    unbind_timeout = 2
 
     OPEN_STATE = 'OPEN'
     CLOSED_STATE = 'CLOSED'
@@ -156,8 +158,15 @@ class EsmeTransceiver(Protocol):
         d.addCallback(
             lambda sequence_numbers: self.unbind_resp_queue.get())
         d.addBoth(lambda *a: self.transport.loseConnection())
-        # Give the SMSC 2 seconds to respond with an unbind_resp
-        reactor.callLater(2, lambda: d.errback())
+        # Give the SMSC a few seconds to respond with an unbind_resp
+
+        def cb():
+            # errback on the Deferred waiting for the `unbind_resp` command
+            d.result.errback(
+                TimeoutError('SMSC took longer than %s to unbind. '
+                             'Dropping connection.' % (self.unbind_timeout,)))
+
+        self.clock.callLater(self.unbind_timeout, cb)
         return d
 
     def connectionLost(self, reason):
@@ -227,7 +236,6 @@ class EsmeTransceiver(Protocol):
         self.emit('>> %r' % (pdu,))
         handler = getattr(self, 'handle_%s' % (command_id(pdu),),
                           self.on_unsupported_command_id)
-        self.disconnect_call.reset(self.idle_timeout)
         return maybeDeferred(handler, pdu)
 
     def on_unsupported_command_id(self, pdu):
@@ -355,7 +363,7 @@ class EsmeTransceiver(Protocol):
         return self.send_pdu(EnquireLinkResp(seq_no(pdu)))
 
     def handle_enquire_link_resp(self, pdu):
-        pass
+        self.disconnect_call.reset(self.idle_timeout)
 
     @require_bind
     @inlineCallbacks

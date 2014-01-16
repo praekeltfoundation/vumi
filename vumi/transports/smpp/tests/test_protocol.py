@@ -187,6 +187,8 @@ class EsmeTestCase(VumiTestCase):
         self.clock.advance(protocol.config.smpp_bind_timeout + 1)
         [unbind_pdu] = yield wait_for_pdus(transport, 1)
         self.assertCommand(unbind_pdu, 'unbind')
+        unbind_resp_pdu = UnbindResp(sequence_number=seq_no(unbind_pdu))
+        yield protocol.on_pdu(unpack_pdu(unbind_resp_pdu.get_bin()))
         self.assertTrue(transport.disconnecting)
 
     @inlineCallbacks
@@ -268,6 +270,7 @@ class EsmeTestCase(VumiTestCase):
         protocol.clock.advance(protocol.idle_timeout)
         [unbind_pdu] = yield wait_for_pdus(transport, 1)
         self.assertCommand(unbind_pdu, 'unbind')
+        self.clock.advance(protocol.unbind_timeout)
         self.assertTrue(transport.disconnecting)
 
     @inlineCallbacks
@@ -284,6 +287,8 @@ class EsmeTestCase(VumiTestCase):
 
         [unbind_pdu] = yield wait_for_pdus(transport, 1)
         self.assertCommand(unbind_pdu, 'unbind')
+        unbind_resp_pdu = UnbindResp(sequence_number=seq_no(unbind_pdu))
+        yield protocol.on_pdu(unpack_pdu(unbind_resp_pdu.get_bin()))
         self.assertTrue(transport.disconnecting)
 
     @inlineCallbacks
