@@ -2,7 +2,7 @@
 
 import json
 
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.web import http
 
 from vumi import log
@@ -99,19 +99,20 @@ class DmarkUssdTransport(HttpRpcTransport):
             session_event = TransportUserMessage.SESSION_NEW
             yield self.session_manager.create_session(
                 session_id, transaction_id=transaction_id)
-        return session_event
+        returnValue(session_event)
 
+    @inlineCallbacks
     def handle_raw_inbound_message(self, request_id, request):
         values, errors = self.get_field_values(request, self.EXPECTED_FIELDS)
         if errors:
-            log.msg('Unhappy incoming message: %s' % (errors,))
-            yield self.finish_request(
+            log.msg('Unhappy incoming message: %r' % (errors,))
+            self.finish_request(
                 request_id, json.dumps(errors), code=http.BAD_REQUEST)
             return
 
         to_addr = values["ussdServiceCode"]
         from_addr = values["msisdn"]
-        session_event = self.session_event_for_transaction(
+        session_event = yield self.session_event_for_transaction(
             values["transactionId"])
 
         yield self.publish_message(
@@ -131,7 +132,7 @@ class DmarkUssdTransport(HttpRpcTransport):
             })
 
     def handle_outbound_message(self, message):
-        self.emit("DmarkUssdTransport consuming %s" % (message))
+        self.emit("DmarkUssdTransport consuming %r" % (message,))
         missing_fields = self.ensure_message_values(message,
                             ['in_reply_to', 'content'])
         if missing_fields:
