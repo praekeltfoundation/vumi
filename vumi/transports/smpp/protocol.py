@@ -155,14 +155,16 @@ class EsmeTransceiver(Protocol):
             return succeed(self.transport.loseConnection())
 
         d = self.unbind()
-        d.addCallback(
-            lambda sequence_numbers: self.unbind_resp_queue.get())
+        unbind_resp_d = self.unbind_resp_queue.get()
+        d.addCallback(lambda _: unbind_resp_d)
         d.addBoth(lambda *a: self.transport.loseConnection())
         # Give the SMSC a few seconds to respond with an unbind_resp
 
         def cb():
-            # errback on the Deferred waiting for the `unbind_resp` command
-            d.result.errback(
+            if unbind_resp_d.called:
+                return
+
+            unbind_resp_d.errback(
                 TimeoutError('SMSC took longer than %s to unbind. '
                              'Dropping connection.' % (self.unbind_timeout,)))
 
