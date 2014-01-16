@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 import binascii
 
-from twisted.internet.defer import Deferred, inlineCallbacks, succeed
+from twisted.internet.defer import (
+    Deferred, inlineCallbacks, succeed, returnValue)
 from twisted.internet.task import Clock
 from smpp.pdu_builder import SubmitSMResp, DeliverSM
 
@@ -9,7 +10,8 @@ from vumi.message import TransportUserMessage
 from vumi.transports.smpp.deprecated.clientserver.client import (
     EsmeTransceiver, EsmeCallbacks)
 from vumi.transports.smpp.deprecated.transport import (
-    SmppTransport, SmppTxTransport, SmppRxTransport)
+    SmppTransport, SmppTxTransport, SmppRxTransport,
+    SmppTransportWithOldConfig)
 from vumi.transports.smpp.deprecated.service import SmppService
 from vumi.transports.smpp.smpp_utils import unpacked_pdu_opts
 from vumi.transports.smpp.deprecated.clientserver.tests.utils import (
@@ -1037,3 +1039,32 @@ class TestEsmeToSmscRx(VumiTestCase):
 
         dispatched_failures = self.tx_helper.get_dispatched_failures()
         self.assertEqual(dispatched_failures, [])
+
+
+class TestSmppTransportWithOldConfig(TestSmppTransport):
+
+    @inlineCallbacks
+    def setUp(self):
+        config = {
+            "twisted_endpoint": "tcp:host=localhost:port=0",
+            "password": "password",
+            "system_id": "vumitest-vumitest-vumitest",
+            "smpp_bind_timeout": 12,
+            "smpp_enquire_link_interval": 123,
+            "third_party_id_expiry": 3600,  # just 1 hour
+            "data_coding_overrides": {
+                0: 'utf-8'
+            }
+        }
+
+        # hack a lot of transport setup
+        self.tx_helper = self.add_helper(
+            TransportHelper(SmppTransportWithOldConfig))
+        self.transport = yield self.tx_helper.get_transport(
+            config, start=False)
+        self.transport.esme_client = None
+        yield self.transport.startWorker()
+
+        self._make_esme()
+        self.transport.esme_client = self.esme
+        self.transport.esme_connected(self.esme)

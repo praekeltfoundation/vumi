@@ -12,6 +12,9 @@ from vumi.transports.base import Transport
 from vumi.message import TransportUserMessage
 
 from vumi.transports.smpp.config import SmppTransportConfig
+from vumi.transports.smpp.deprecated.config import (
+    SmppTransportConfig as OldSmppTransportConfig)
+from vumi.transports.smpp.deprecated.utils import convert_to_new_config
 from vumi.transports.smpp.protocol import EsmeTransceiverFactory
 from vumi.transports.smpp.sequence import RedisSequence
 from vumi.transports.failures import FailureMessage
@@ -308,3 +311,28 @@ class SmppTransmitterClientFactory(EsmeTransceiverFactory):
 
 class SmppTransmitterTransport(SmppTransceiverTransport):
     factory_class = SmppTransmitterClientFactory
+
+
+class SmppTransceiverTransportWithOldConfig(SmppTransceiverTransport):
+
+    CONFIG_CLASS = OldSmppTransportConfig
+    NEW_CONFIG_CLASS = SmppTransportConfig
+
+    def get_static_config(self):
+        # return if cached
+        if hasattr(self, '_converted_static_config'):
+            return self._converted_static_config
+
+        cfg = super(
+            SmppTransceiverTransportWithOldConfig, self).get_static_config()
+        original = cfg._config_data.original.copy()
+        config = convert_to_new_config(
+            original,
+            'vumi.transports.smpp.processors.DeliveryReportProcessor',
+            'vumi.transports.smpp.processors.SubmitShortMessageProcessor',
+            'vumi.transports.smpp.processors.DeliverShortMessageProcessor'
+        )
+
+        self._converted_static_config = self.NEW_CONFIG_CLASS(
+            config, static=True)
+        return self._converted_static_config

@@ -14,6 +14,7 @@ from vumi.tests.utils import LogCatcher
 from vumi.transports.tests.helpers import TransportHelper
 from vumi.transports.smpp.smpp_transport import (
     SmppTransceiverTransport, SmppTransceiverProtocol,
+    SmppTransceiverTransportWithOldConfig,
     SmppTransmitterTransport, SmppReceiverTransport,
     message_key, remote_message_key)
 from vumi.transports.smpp.pdu_utils import (
@@ -694,6 +695,59 @@ class SmppReceiverTransportTestCase(SmppTransceiverTransportTestCase):
     transport_class = SmppReceiverTransport
 
 
+class SmppTransceiverTransportWithOldConfigTestCase(
+        SmppTransceiverTransportTestCase):
+
+    transport_class = SmppTransceiverTransportWithOldConfig
+
+    def setUp(self):
+
+        self.clock = Clock()
+        self.patch(self.transport_class, 'service_class', DummyService)
+        self.patch(self.transport_class, 'clock', self.clock)
+
+        self.string_transport = proto_helpers.StringTransport()
+
+        self.tx_helper = self.add_helper(TransportHelper(self.transport_class))
+        self.default_config = {
+            'transport_name': self.tx_helper.transport_name,
+            'twisted_endpoint': 'tcp:host=127.0.0.1:port=0',
+            'system_id': 'foo',
+            'password': 'bar',
+            'data_coding_overrides': {
+                0: 'utf-8',
+            }
+        }
+
+    @inlineCallbacks
+    def get_transport(self, config={}, bind=True):
+        """
+        The test cases assume the new config, this flattens the
+        config key word arguments value to match an old config
+        layout without the processor configs.
+        """
+
+        cfg = self.default_config.copy()
+
+        processor_config_keys = [
+            'submit_short_message_processor_config',
+            'deliver_short_message_processor_config',
+            'delivery_report_processor_config',
+        ]
+
+        for config_key in processor_config_keys:
+            processor_config = config.pop(config_key, {})
+            for name, value in processor_config.items():
+                cfg[name] = value
+
+        # Update with all remaining (non-processor) config values
+        cfg.update(config)
+        transport = yield self.tx_helper.get_transport(cfg)
+        if bind:
+            yield self.create_smpp_bind(transport)
+        returnValue(transport)
+
+
 class TataUssdSmppTransportTestCase(SmppTransportTestCase):
 
     transport_class = SmppTransceiverTransport
@@ -752,17 +806,7 @@ class TataUssdSmppTransportTestCase(SmppTransportTestCase):
                          TransportUserMessage.SESSION_CLOSE)
 
 
-class TestSmppTransportConfig(VumiTestCase):
-
-    def required_config(self, config_params):
-        config = {
-            # "system_id": "vumitest-vumitest-vumitest",
-            # "password": "password",
-            # "transport_name": "foo",
-            # "twisted_endpoint": "tcp:host=127.0.0.1:port=0",
-        }
-        config.update(config_params)
-        return config
+class TestSubmitShortMessageProcessorConfig(VumiTestCase):
 
     def get_config(self, config_dict):
         return SubmitShortMessageProcessor.CONFIG_CLASS(config_dict)
@@ -775,22 +819,22 @@ class TestSmppTransportConfig(VumiTestCase):
             return err.args[0]
 
     def test_long_message_params(self):
-        self.get_config(self.required_config({}))
-        self.get_config(self.required_config({'send_long_messages': True}))
-        self.get_config(self.required_config({'send_multipart_sar': True}))
-        self.get_config(self.required_config({'send_multipart_udh': True}))
-        errmsg = self.assert_config_error(self.required_config({
+        self.get_config({})
+        self.get_config({'send_long_messages': True})
+        self.get_config({'send_multipart_sar': True})
+        self.get_config({'send_multipart_udh': True})
+        errmsg = self.assert_config_error({
             'send_long_messages': True,
             'send_multipart_sar': True,
-        }))
+        })
         self.assertEqual(errmsg, (
             "The following parameters are mutually exclusive: "
             "send_long_messages, send_multipart_sar"))
-        errmsg = self.assert_config_error(self.required_config({
+        errmsg = self.assert_config_error({
             'send_long_messages': True,
             'send_multipart_sar': True,
             'send_multipart_udh': True,
-        }))
+        })
         self.assertEqual(errmsg, (
             "The following parameters are mutually exclusive: "
             "send_long_messages, send_multipart_sar, send_multipart_udh"))

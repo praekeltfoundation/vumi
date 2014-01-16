@@ -5,15 +5,21 @@ from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi import log
+from vumi.message import Message, TransportUserMessage
+from vumi.persist.txredis_manager import TxRedisManager
 from vumi.reconnecting_client import ReconnectingClientService
 from vumi.transports.base import Transport
+from vumi.transports.failures import FailureMessage
+from vumi.transports.smpp.deprecated.utils import convert_to_new_config
 from vumi.transports.smpp.deprecated.clientserver.client import (
     EsmeTransceiverFactory, EsmeTransmitterFactory, EsmeReceiverFactory,
     EsmeCallbacks)
 from vumi.transports.smpp.config import SmppTransportConfig
-from vumi.transports.failures import FailureMessage
-from vumi.message import Message, TransportUserMessage
-from vumi.persist.txredis_manager import TxRedisManager
+from vumi.transports.smpp.deprecated.config import (
+    SmppTransportConfig as OldSmppTransportConfig)
+from vumi.transports.smpp.processors import (
+    DeliveryReportProcessorConfig, SubmitShortMessageProcessorConfig,
+    DeliverShortMessageProcessorConfig)
 
 
 class SmppTransport(Transport):
@@ -324,3 +330,29 @@ class SmppRxTransport(SmppTransport):
     """An Smpp Receiver Transport"""
     def make_factory(self):
         return EsmeReceiverFactory(self)
+
+
+class SmppTransportWithOldConfig(SmppTransport):
+
+    CONFIG_CLASS = OldSmppTransportConfig
+    NEW_CONFIG_CLASS = SmppTransportConfig
+
+    def get_static_config(self):
+        # return if cached
+        if hasattr(self, '_converted_static_config'):
+            return self._converted_static_config
+
+        cfg = super(SmppTransportWithOldConfig, self).get_static_config()
+        original = cfg._config_data.original.copy()
+        config = convert_to_new_config(
+            original,
+            ('vumi.transports.smpp.deprecated.processors.'
+             'EsmeCallbacksDeliveryReportProcessor'),
+            ('vumi.transports.smpp.deprecated.processors.'
+             'EsmeCallbacksSubmitShortMessageProcessor'),
+            ('vumi.transports.smpp.deprecated.processors.'
+             'EsmeCallbacksDeliverShortMessageProcessor')
+        )
+        self._converted_static_config = self.NEW_CONFIG_CLASS(
+            config, static=True)
+        return self._converted_static_config
