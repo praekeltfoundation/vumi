@@ -5,7 +5,8 @@ from functools import wraps
 from twisted.internet import reactor
 from twisted.internet.protocol import Protocol, ClientFactory
 from twisted.internet.task import LoopingCall
-from twisted.internet.defer import inlineCallbacks, returnValue, maybeDeferred
+from twisted.internet.defer import (
+    inlineCallbacks, returnValue, maybeDeferred, DeferredQueue, succeed)
 
 from smpp.pdu import unpack_pdu
 from smpp.pdu_builder import (
@@ -39,7 +40,7 @@ class EsmeTransceiver(Protocol):
 
     bind_pdu = BindTransceiver
     clock = reactor
-    debug = False
+    noisy = False
 
     OPEN_STATE = 'OPEN'
     CLOSED_STATE = 'CLOSED'
@@ -76,9 +77,10 @@ class EsmeTransceiver(Protocol):
             self.idle_timeout, self.disconnect,
             'Disconnecting, no response from SMSC for longer '
             'than %s seconds' % (self.idle_timeout,))
+        self.unbind_resp_queue = DeferredQueue()
 
     def emit(self, msg):
-        if self.debug:
+        if self.noisy:
             log.debug(msg)
 
     def connectionMade(self):
@@ -147,8 +149,15 @@ class EsmeTransceiver(Protocol):
         if log_msg is not None:
             log.warning(log_msg)
 
+        if not self.connected:
+            return succeed(self.transport.loseConnection())
+
         d = self.unbind()
-        d.addCallback(lambda _: self.transport.loseConnection())
+        d.addCallback(
+            lambda sequence_numbers: self.unbind_resp_queue.get())
+        d.addBoth(lambda *a: self.transport.loseConnection())
+        # Give the SMSC 2 seconds to respond with an unbind_resp
+        reactor.callLater(2, lambda: d.errback())
         return d
 
     def connectionLost(self, reason):
@@ -642,7 +651,7 @@ class EsmeTransceiver(Protocol):
         returnValue([sequence_number])
 
     def handle_unbind_resp(self, pdu):
-        log.msg('Unbind successful.')
+        self.unbind_resp_queue.put(pdu)
 
 
 class EsmeTransceiverFactory(ClientFactory):
