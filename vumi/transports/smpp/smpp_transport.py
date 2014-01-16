@@ -1,5 +1,6 @@
 # -*- test-case-name: vumi.transports.smpp.tests.test_smpp_transport -*-
 
+import warnings
 from uuid import uuid4
 
 from twisted.internet import reactor
@@ -317,6 +318,16 @@ class SmppTransceiverTransportWithOldConfig(SmppTransceiverTransport):
 
     CONFIG_CLASS = OldSmppTransportConfig
     NEW_CONFIG_CLASS = SmppTransportConfig
+
+    def __init__(self, *args, **kwargs):
+        super(SmppTransceiverTransportWithOldConfig, self).__init__(*args,
+                                                                    **kwargs)
+        warnings.warn(
+            'This is a transport using a deprecated config file. '
+            'Please use the new SmppTransceiverTransport, '
+            'SmppTransmitterTransport or SmppReceiverTransport '
+            'with the new processor aware SmppTransportConfig.',
+            category=DeprecationWarning)
 
     def get_static_config(self):
         # return if cached
