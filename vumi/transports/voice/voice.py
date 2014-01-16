@@ -75,8 +75,45 @@ class FreeSwitchESLProtocol(freeswitchesl.FreeSwitchEventProtocol):
     
 
 class VoiceServerTransport(Transport):
-    """Transport for Freeswitch Voice Service
+    """Transport for Freeswitch Voice Service.
 
+    Voice transports may receive additional hints for how to handle
+    outbound messages the ``voice`` section of ``helper_metadata``.
+    The ``voice`` section may contain the following keys:
+
+    * ``speech_url``: An HTTP URL from which a custom sound file to
+      use for this message. If absent or ``None`` a text-to-speech
+      engine will be used to generate suitable sound to play.
+      Sound formats supported are: ``.wav``, ``.ogg`` and ``.mp3``.
+      The format will be determined by the ``Content-Type`` returned
+      by the URL, or by the file extension if the ``Content-Type``
+      header is absent. The preferred format is ``.ogg``.
+
+    * ``wait_for``: Gather response characters until the given
+      DTMF character is encountered. Commonly either ``#`` or ``*``.
+      If absent or ``None``, an inbound message is sent as soon as
+      a single DTMF character arrives.
+
+      If no input is seen for some time (configurable in the
+      transport config) the voice transport will timeout the wait
+      and send the characters entered so far.
+
+      .. todo:
+
+         Maybe ``wait_for`` should default to ``#``? It's not
+         discoverable but at least it makes it possible to enter
+         multi-digit numbers by default and it's probably simpler
+         to add a bit of help text to an application that to
+         update it to send ``helper_metadata``.
+
+    Example ``helper_metadata``::
+
+      "helper_metadata": {
+          "voice": {
+              "speech_url": "http://www.example.com/voice/ab34f611cdee.ogg",
+              "wait_for": "#",
+          },
+      }
     """
     
     def validate_config(self):
