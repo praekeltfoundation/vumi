@@ -30,7 +30,7 @@ from smpp.pdu_builder import DeliverSM, SubmitSMResp
 
 class DummyService(Service):
 
-    def __init__(self, factory):
+    def __init__(self, endpoint, factory):
         self.factory = factory
         self.protocol = None
 
@@ -80,8 +80,7 @@ class SmppTransportTestCase(VumiTestCase):
     def setUp(self):
 
         self.clock = Clock()
-        self.patch(self.transport_class, 'start_service',
-                   self.patched_start_service)
+        self.patch(self.transport_class, 'service_class', DummyService)
         self.patch(self.transport_class, 'clock', self.clock)
 
         self.string_transport = proto_helpers.StringTransport()
@@ -103,11 +102,6 @@ class SmppTransportTestCase(VumiTestCase):
                 }
             }
         }
-
-    def patched_start_service(self, factory):
-        service = DummyService(factory)
-        service.startService()
-        return service
 
     @inlineCallbacks
     def get_transport(self, config={}, bind=True):

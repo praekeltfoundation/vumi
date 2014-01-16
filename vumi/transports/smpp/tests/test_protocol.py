@@ -261,20 +261,18 @@ class EsmeTestCase(VumiTestCase):
     @inlineCallbacks
     def test_enquire_link_no_response(self):
         transport, protocol = yield self.setup_bind(clear=False)
-        interval = protocol.config.smpp_enquire_link_interval
-        protocol.clock.advance(interval)
+        protocol.clock.advance(protocol.idle_timeout)
         self.assertTrue(transport.disconnecting)
 
     @inlineCallbacks
     def test_enquire_link_looping(self):
         transport, protocol = yield self.setup_bind(clear=False)
-        interval = protocol.config.smpp_enquire_link_interval
         enquire_link_resp = EnquireLinkResp(1)
 
-        protocol.clock.advance(interval - 1)
+        protocol.clock.advance(protocol.idle_timeout - 1)
         protocol.dataReceived(enquire_link_resp.get_bin())
 
-        protocol.clock.advance(interval - 1)
+        protocol.clock.advance(protocol.idle_timeout - 1)
         self.assertFalse(transport.disconnecting)
         protocol.clock.advance(1)
         self.assertTrue(transport.disconnecting)

@@ -39,6 +39,7 @@ class EsmeTransceiver(Protocol):
 
     bind_pdu = BindTransceiver
     clock = reactor
+    debug = False
 
     OPEN_STATE = 'OPEN'
     CLOSED_STATE = 'CLOSED'
@@ -70,10 +71,15 @@ class EsmeTransceiver(Protocol):
         self.sequence_generator = self.vumi_transport.sequence_generator
         self.enquire_link_call = LoopingCall(self.enquire_link)
         self.drop_link_call = None
+        self.idle_timeout = self.config.smpp_enquire_link_interval * 2
         self.disconnect_call = self.clock.callLater(
-            self.config.smpp_enquire_link_interval, self.disconnect,
+            self.idle_timeout, self.disconnect,
             'Disconnecting, no response from SMSC for longer '
-            'than %s seconds' % (self.config.smpp_enquire_link_interval,))
+            'than %s seconds' % (self.idle_timeout,))
+
+    def emit(self, msg):
+        if self.debug:
+            log.debug(msg)
 
     def connectionMade(self):
         self.state = self.OPEN_STATE
@@ -180,6 +186,7 @@ class EsmeTransceiver(Protocol):
         :param smpp.pdu_builder.PDU pdu:
             The PDU object to send.
         """
+        self.emit('<< %r' % (pdu.get_obj(),))
         return self.transport.write(pdu.get_bin())
 
     def dataReceived(self, data):
@@ -205,9 +212,10 @@ class EsmeTransceiver(Protocol):
             The dict result one gets when calling ``smpp.pdu.unpack_pdu()``
             on the received PDU
         """
+        self.emit('>> %r' % (pdu,))
         handler = getattr(self, 'handle_%s' % (command_id(pdu),),
                           self.on_unsupported_command_id)
-        self.disconnect_call.reset(self.config.smpp_enquire_link_interval)
+        self.disconnect_call.reset(self.idle_timeout)
         return maybeDeferred(handler, pdu)
 
     def on_unsupported_command_id(self, pdu):
@@ -251,6 +259,7 @@ class EsmeTransceiver(Protocol):
 
     def on_smpp_bind(self, sequence_number):
         """Called when the bind has been setup"""
+        self.drop_link_call.cancel()
         self.enquire_link_call.start(self.config.smpp_enquire_link_interval)
 
     def handle_unbind(self, pdu):
@@ -334,7 +343,7 @@ class EsmeTransceiver(Protocol):
         return self.send_pdu(EnquireLinkResp(seq_no(pdu)))
 
     def handle_enquire_link_resp(self, pdu):
-        log.msg('enquire_link_resp received.')
+        pass
 
     @require_bind
     @inlineCallbacks
