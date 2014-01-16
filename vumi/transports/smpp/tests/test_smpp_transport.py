@@ -43,12 +43,15 @@ class DummyService(Service):
             self.protocol.transport.loseConnection()
             self.protocol.connectionLost(reason=ConnectionDone)
 
+    def get_protocol(self):
+        return self.protocol
+
 
 class SMPPHelper(object):
     def __init__(self, string_transport, smpp_transport):
         self.string_transport = string_transport
         self.transport = smpp_transport
-        self.protocol = smpp_transport.service.protocol
+        self.protocol = smpp_transport.service.get_protocol()
 
     def send_pdu(self, pdu):
         """put it on the wire and don't wait for a response"""
@@ -117,7 +120,7 @@ class SmppTransportTestCase(VumiTestCase):
         d = Deferred()
 
         def cb(smpp_transport):
-            protocol = smpp_transport.service.protocol
+            protocol = smpp_transport.service.get_protocol()
             if protocol is None:
                 # Still setting up factory
                 reactor.callLater(0, cb, smpp_transport)
@@ -137,7 +140,7 @@ class SmppTransportTestCase(VumiTestCase):
         return d
 
     def send_pdu(self, transport, pdu):
-        protocol = transport.service.protocol
+        protocol = transport.service.get_protocol()
         protocol.dataReceived(pdu.get_bin())
 
     @inlineCallbacks
@@ -153,7 +156,8 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
     @inlineCallbacks
     def test_setup_transport(self):
         transport = yield self.get_transport()
-        self.assertTrue(transport.service.protocol.is_bound())
+        protocol = transport.service.get_protocol()
+        self.assertTrue(protocol.is_bound())
 
     @inlineCallbacks
     def test_mo_sms(self):

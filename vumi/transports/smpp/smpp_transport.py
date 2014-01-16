@@ -5,7 +5,7 @@ from uuid import uuid4
 
 from twisted.internet import reactor
 from twisted.internet.defer import (
-    inlineCallbacks, DeferredQueue, maybeDeferred, returnValue, Deferred)
+    inlineCallbacks, DeferredQueue, maybeDeferred, returnValue)
 
 from vumi.reconnecting_client import ReconnectingClientService
 from vumi.transports.base import Transport
@@ -91,9 +91,8 @@ class SmppTransceiverClientFactory(EsmeTransceiverFactory):
 
 class SmppService(ReconnectingClientService):
 
-    def clientConnected(self, protocol):
-        ReconnectingClientService.clientConnected(self, protocol)
-        self.protocol = protocol
+    def get_protocol(self):
+        return self._protocol
 
 
 class SmppTransceiverTransport(Transport):
@@ -126,24 +125,12 @@ class SmppTransceiverTransport(Transport):
         self.factory = self.factory_class(self)
 
         self.service = yield self.start_service(self.factory)
-        self.protocol = self.service.protocol
 
     def start_service(self, factory):
         config = self.get_static_config()
         service = self.service_class(config.twisted_endpoint, factory)
         service.startService()
-        self.addService(service)
-
-        d = Deferred()
-
-        def cb():
-            if hasattr(service, 'protocol'):
-                d.callback(service)
-            else:
-                reactor.callLater(0, cb)
-        cb()
-
-        return d
+        return service
 
     @inlineCallbacks
     def teardown_transport(self):
@@ -153,7 +140,7 @@ class SmppTransceiverTransport(Transport):
 
     def handle_outbound_message(self, message):
         d = self.submit_sm_processor.handle_outbound_message(
-            message, self.protocol)
+            message, self.service.get_protocol())
         d.addCallback(
             lambda sequence_numbers: DeferredQueue([
                 self.set_sequence_number_message_id(sqn, message['message_id'])
