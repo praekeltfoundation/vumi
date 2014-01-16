@@ -1,9 +1,27 @@
+# -*- test-case-name: vumi.transports.imimobile.tests.test_imimobile_ussd -*-
 
+import json
+
+from twisted.internet.defer import inlineCallbacks
+from twisted.web import http
+
+from vumi import log
+from vumi.components.session import SessionManager
+from vumi.config import ConfigDict, ConfigInt
+from vumi.message import TransportUserMessage
 from vumi.transports.httprpc import HttpRpcTransport
 
 
 class DmarkUssdTransportConfig(HttpRpcTransport.CONFIG_CLASS):
     """Config for Dmark USSD transport."""
+
+    ussd_session_timeout = ConfigInt(
+        "Number of seconds before USSD session information stored in Redis"
+        " expires.",
+        default=600, static=True)
+
+    redis_manager = ConfigDict(
+        "Redis client configuration.", default={}, static=True)
 
 
 class DmarkUssdTransport(HttpRpcTransport):
@@ -48,9 +66,69 @@ class DmarkUssdTransport(HttpRpcTransport):
 
     CONFIG_CLASS = DmarkUssdTransportConfig
 
-    def handle_raw_inbound_message(self, msgid, request):
-        raise NotImplementedError("Sub-classes should implement"
-                                  " handle_raw_inbound_message.")
+    ENCODING = 'utf-8'
+    EXPECTED_FIELDS = frozenset([
+        'transactionId', 'msisdn', 'ussdServiceCode', 'transactionTime',
+        'ussdRequestString', 'creationTime',
+    ])
+
+    @inlineCallbacks
+    def setup_transport(self):
+        yield super(DmarkUssdTransport, self).setup_transport()
+        config = self.get_static_config()
+        r_prefix = "vumi.transports.dmark_ussd:%s" % self.transport_name
+        self.session_manager = yield SessionManager.from_redis_config(
+            config.redis_manager, r_prefix,
+            max_session_length=config.ussd_session_timeout)
+
+    @inlineCallbacks
+    def teardown_transport(self):
+        yield super(DmarkUssdTransport, self).teardown_transport()
+        yield self.session_manager.stop()
+
+    @inlineCallbacks
+    def session_event_for_transaction(self, transaction_id):
+        # XXX: There is currently no way to detect when the user closes
+        #      the session (i.e. TransportUserMessage.SESSION_CLOSE)
+        session_id = transaction_id
+        session = yield self.session_manager.load_session(transaction_id)
+        if session:
+            session_event = TransportUserMessage.SESSION_RESUME
+            yield self.session_manager.save_session(session_id, session)
+        else:
+            session_event = TransportUserMessage.SESSION_NEW
+            yield self.session_manager.create_session(
+                session_id, transaction_id=transaction_id)
+        return session_event
+
+    def handle_raw_inbound_message(self, request_id, request):
+        values, errors = self.get_field_values(request, self.EXPECTED_FIELDS)
+        if errors:
+            log.msg('Unhappy incoming message: %s' % (errors,))
+            yield self.finish_request(
+                request_id, json.dumps(errors), code=http.BAD_REQUEST)
+            return
+
+        to_addr = values["ussdServiceCode"]
+        from_addr = values["msisdn"]
+        session_event = self.session_event_for_transaction(
+            values["transactionId"])
+
+        yield self.publish_message(
+            message_id=request_id,
+            content=values["ussdRequestString"],
+            to_addr=to_addr,
+            from_addr=from_addr,
+            provider='imimobile',
+            session_event=session_event,
+            transport_type=self.transport_type,
+            transport_metadata={
+                'dmark_ussd': {
+                    'transaction_id': values['transactionId'],
+                    'transaction_time': values['transactionTime'],
+                    'creation_time': values['creationTime'],
+                }
+            })
 
     def handle_outbound_message(self, message):
         self.emit("DmarkUssdTransport consuming %s" % (message))
@@ -58,9 +136,25 @@ class DmarkUssdTransport(HttpRpcTransport):
                             ['in_reply_to', 'content'])
         if missing_fields:
             return self.reject_message(message, missing_fields)
+
+        if message["session_event"] == TransportUserMessage.SESSION_CLOSE:
+            action = "end"
         else:
-            self.finish_request(
-                    message.payload['in_reply_to'],
-                    message.payload['content'].encode('utf-8'))
-            return self.publish_ack(user_message_id=message['message_id'],
+            action = "request"
+
+        response_data = {
+            "responseString": message["content"],
+            "action": action,
+        }
+
+        response_id = self.finish_request(
+            message['in_reply_to'], json.dumps(response_data))
+        if response_id is not None:
+            return self.publish_ack(
+                user_message_id=message['message_id'],
                 sent_message_id=message['message_id'])
+        else:
+            return self.publish_nack(
+                user_message_id=message['message_id'],
+                sent_message_id=message['message_id'],
+                reason="Could not find original request.")
