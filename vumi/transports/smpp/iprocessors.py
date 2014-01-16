@@ -31,11 +31,6 @@ class IDeliverShortMessageProcessor(Interface):
         Handle a short message PDU from the networks after it has been
         re-assembled and decoded.
 
-        Certain SMSCs submit delivery reports like normal SMSs. This should
-        call :meth:`IDeliveryReportProcessor.inspect_delivery_report_content`
-        to see if that is the case and handle appropriately if that is the
-        case.
-
         This should always return a Deferred that fires ``True`` or ``False``
         depending on whether the PDU was handled succesfully.
 
