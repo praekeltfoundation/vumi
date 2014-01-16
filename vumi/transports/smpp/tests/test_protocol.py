@@ -179,10 +179,14 @@ class EsmeTestCase(VumiTestCase):
     def test_drop_link(self):
         protocol = self.get_protocol()
         transport = yield connect_transport(protocol)
+        [bind_pdu] = yield wait_for_pdus(transport, 1)
+        self.assertCommand(bind_pdu, 'bind_transceiver')
         self.assertFalse(protocol.is_bound())
         self.assertEqual(protocol.state, EsmeTransceiver.OPEN_STATE)
         self.assertFalse(transport.disconnecting)
         self.clock.advance(protocol.config.smpp_bind_timeout + 1)
+        [unbind_pdu] = yield wait_for_pdus(transport, 1)
+        self.assertCommand(unbind_pdu, 'unbind')
         self.assertTrue(transport.disconnecting)
 
     @inlineCallbacks
@@ -262,6 +266,8 @@ class EsmeTestCase(VumiTestCase):
     def test_enquire_link_no_response(self):
         transport, protocol = yield self.setup_bind(clear=False)
         protocol.clock.advance(protocol.idle_timeout)
+        [unbind_pdu] = yield wait_for_pdus(transport, 1)
+        self.assertCommand(unbind_pdu, 'unbind')
         self.assertTrue(transport.disconnecting)
 
     @inlineCallbacks
@@ -275,6 +281,9 @@ class EsmeTestCase(VumiTestCase):
         protocol.clock.advance(protocol.idle_timeout - 1)
         self.assertFalse(transport.disconnecting)
         protocol.clock.advance(1)
+
+        [unbind_pdu] = yield wait_for_pdus(transport, 1)
+        self.assertCommand(unbind_pdu, 'unbind')
         self.assertTrue(transport.disconnecting)
 
     @inlineCallbacks

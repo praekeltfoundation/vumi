@@ -146,7 +146,10 @@ class EsmeTransceiver(Protocol):
         """
         if log_msg is not None:
             log.warning(log_msg)
-        self.transport.loseConnection()
+
+        d = self.unbind()
+        d.addCallback(lambda _: self.transport.loseConnection())
+        return d
 
     def connectionLost(self, reason):
         """
@@ -632,7 +635,6 @@ class EsmeTransceiver(Protocol):
         self.send_pdu(pdu)
         returnValue([sequence_number])
 
-    @require_bind
     @inlineCallbacks
     def unbind(self):
         sequence_number = yield self.sequence_generator.next()

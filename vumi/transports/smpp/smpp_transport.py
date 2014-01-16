@@ -43,16 +43,13 @@ class SmppTransceiverProtocol(EsmeTransceiverFactory.protocol):
     bind_pdu = BindTransceiver
 
     def connectionMade(self):
-        # TODO: create a processor for bind / unbind message processing
-        # TODO: rethink whether the transport config / smpp config split
-        #       was a good idea.
+        EsmeTransceiverFactory.protocol.connectionMade(self)
         config = self.vumi_transport.get_static_config()
         d = maybeDeferred(self.vumi_transport.unpause_connectors)
         d.addCallback(
             lambda _: self.bind(config.system_id,
                                 config.password,
                                 config.system_type))
-        d.addCallback(log.msg)
         return d
 
     def connectionLost(self, reason):
@@ -93,6 +90,15 @@ class SmppService(ReconnectingClientService):
 
     def get_protocol(self):
         return self._protocol
+
+    def stopService(self):
+        protocol = self.get_protocol()
+        if protocol is not None:
+            d = protocol.disconnect()
+            d.addCallback(
+                lambda _: ReconnectingClientService.stopService(self))
+            return d
+        return ReconnectingClientService.stopService(self)
 
 
 class SmppTransceiverTransport(Transport):
