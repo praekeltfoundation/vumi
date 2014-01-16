@@ -64,7 +64,7 @@ class DeliveryReportProcessor(object):
     implements(IDeliveryReportProcessor)
     CONFIG_CLASS = DeliveryReportProcessorConfig
 
-    status_map = {
+    STATUS_MAP = {
         1: 'ENROUTE',
         2: 'DELIVERED',
         3: 'EXPIRED',
@@ -94,7 +94,7 @@ class DeliveryReportProcessor(object):
         if receipted_message_id is None or message_state is None:
             return succeed(False)
 
-        status = self.status_map.get(message_state, 'UNKNOWN')
+        status = self.STATUS_MAP.get(message_state, 'UNKNOWN')
 
         d = self.transport.handle_delivery_report(
             receipted_message_id=receipted_message_id,

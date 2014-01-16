@@ -33,7 +33,7 @@ class EsmeCallbacksDeliveryReportProcessor(DeliveryReportProcessor):
         if receipted_message_id is None or message_state is None:
             return succeed(False)
 
-        status = self.status_map.get(message_state, 'UNKNOWN')
+        status = self.STATUS_MAP.get(message_state, 'UNKNOWN')
 
         d = self.esme_callbacks.delivery_report(
             message_id=receipted_message_id,
