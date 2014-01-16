@@ -327,7 +327,7 @@ class SmppTransceiverTransportWithOldConfig(SmppTransceiverTransport):
             'Please use the new SmppTransceiverTransport, '
             'SmppTransmitterTransport or SmppReceiverTransport '
             'with the new processor aware SmppTransportConfig.',
-            category=DeprecationWarning)
+            category=PendingDeprecationWarning)
 
     def get_static_config(self):
         # return if cached
