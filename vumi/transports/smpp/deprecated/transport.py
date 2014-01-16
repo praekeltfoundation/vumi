@@ -1,174 +1,25 @@
-# -*- test-case-name: vumi.transports.smpp.tests.test_smpp -*-
+# -*- test-case-name: vumi.transports.smpp.deprecated.tests.test_smpp -*-
+import warnings
 
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi import log
-from vumi.reconnecting_client import ReconnectingClientService
-from vumi.utils import get_operator_number
-from vumi.transports.base import Transport
-from vumi.transports.smpp.clientserver.client import (
-    EsmeTransceiverFactory, EsmeTransmitterFactory, EsmeReceiverFactory,
-    EsmeCallbacks)
-from vumi.transports.failures import FailureMessage
 from vumi.message import Message, TransportUserMessage
 from vumi.persist.txredis_manager import TxRedisManager
-from vumi.config import (ConfigText, ConfigInt, ConfigBool, ConfigDict,
-                         ConfigFloat, ConfigRegex, ConfigClientEndpoint)
-
-
-class SmppTransportConfig(Transport.CONFIG_CLASS):
-
-    DELIVERY_REPORT_REGEX = (
-        'id:(?P<id>\S{,65})'
-        ' +sub:(?P<sub>...)'
-        ' +dlvrd:(?P<dlvrd>...)'
-        ' +submit date:(?P<submit_date>\d*)'
-        ' +done date:(?P<done_date>\d*)'
-        ' +stat:(?P<stat>[A-Z]{7})'
-        ' +err:(?P<err>...)'
-        ' +[Tt]ext:(?P<text>.{,20})'
-        '.*'
-    )
-
-    DELIVERY_REPORT_STATUS_MAPPING = {
-        # Output values should map to themselves:
-        'delivered': 'delivered',
-        'failed': 'failed',
-        'pending': 'pending',
-        # SMPP `message_state` values:
-        'ENROUTE': 'pending',
-        'DELIVERED': 'delivered',
-        'EXPIRED': 'failed',
-        'DELETED': 'failed',
-        'UNDELIVERABLE': 'failed',
-        'ACCEPTED': 'delivered',
-        'UNKNOWN': 'pending',
-        'REJECTED': 'failed',
-        # From the most common regex-extracted format:
-        'DELIVRD': 'delivered',
-        'REJECTD': 'failed',
-        # Currently we will accept this for Yo! TODO: investigate
-        '0': 'delivered',
-    }
-
-    twisted_endpoint = ConfigClientEndpoint(
-        'The SMPP endpoint to connect to.',
-        required=True, static=True)
-    system_id = ConfigText(
-        'User id used to connect to the SMPP server.', required=True,
-        static=True)
-    password = ConfigText(
-        'Password for the system id.', required=True, static=True)
-    system_type = ConfigText(
-        "Additional system metadata that is passed through to the SMPP "
-        "server on connect.", default="", static=True)
-    interface_version = ConfigText(
-        "SMPP protocol version. Default is '34' (i.e. version 3.4).",
-        default="34", static=True)
-    service_type = ConfigText(
-        'The SMPP service type', default="", static=True)
-    dest_addr_ton = ConfigInt(
-        'Destination TON (type of number)', default=0, static=True)
-    dest_addr_npi = ConfigInt(
-        'Destination NPI (number plan identifier). '
-        'Default 1 (ISDN/E.164/E.163)', default=1, static=True)
-    source_addr_ton = ConfigInt(
-        'Source TON (type of number)', default=0, static=True)
-    source_addr_npi = ConfigInt(
-        'Source NPI (number plan identifier)', default=0, static=True)
-    registered_delivery = ConfigBool(
-        'Whether or not to request delivery reports', default=True,
-        static=True)
-    smpp_bind_timeout = ConfigInt(
-        'How long to wait for a succesful bind', default=30, static=True)
-    smpp_enquire_link_interval = ConfigInt(
-        "Number of seconds to delay before reconnecting to the server after "
-        "being disconnected. Default is 5s. Some WASPs, e.g. Clickatell "
-        "require a 30s delay before reconnecting. In these cases a 45s "
-        "initial_reconnect_delay is recommended.", default=55, static=True)
-    initial_reconnect_delay = ConfigInt(
-        'How long to wait between reconnecting attempts', default=5,
-        static=True)
-    third_party_id_expiry = ConfigInt(
-        'How long (seconds) to keep 3rd party message IDs around to allow for '
-        'matching submit_sm_resp and delivery report messages. Defaults to '
-        '1 week',
-        default=(60 * 60 * 24 * 7), static=True)
-    delivery_report_regex = ConfigRegex(
-        'What regex to use for matching delivery reports',
-        default=DELIVERY_REPORT_REGEX, static=True)
-    delivery_report_status_mapping = ConfigDict(
-        "Mapping from delivery report message state to "
-        "(`delivered`, `failed`, `pending`)",
-        static=True, default=DELIVERY_REPORT_STATUS_MAPPING)
-    submit_sm_expiry = ConfigInt(
-        'How long (seconds) to wait for the SMSC to return with a '
-        '`submit_sm_resp`. Defaults to 24 hours',
-        default=(60 * 60 * 24), static=True)
-    submit_sm_encoding = ConfigText(
-        'How to encode the SMS before putting on the wire', static=True,
-        default='utf-8')
-    submit_sm_data_coding = ConfigInt(
-        'What data_coding value to tell the SMSC we\'re using when putting'
-        'an SMS on the wire', static=True, default=0)
-    data_coding_overrides = ConfigDict(
-        "Overrides for data_coding character set mapping. This is useful for "
-        "setting the default encoding (0), adding additional undefined "
-        "encodings (such as 4 or 8) or overriding encodings in cases where "
-        "the SMSC is violating the spec (which happens a lot). Keys should "
-        "be integers, values should be strings containing valid Python "
-        "character encoding names.", default={}, static=True)
-    send_long_messages = ConfigBool(
-        "If `True`, messages longer than 254 characters will be sent in the "
-        "`message_payload` optional field instead of the `short_message` "
-        "field. Default is `False`, simply because that maintains previous "
-        "behaviour.", default=False, static=True)
-    send_multipart_sar = ConfigBool(
-        "If `True`, messages longer than 140 bytes will be sent as a series "
-        "of smaller messages with the sar_* parameters set. Default is "
-        "`False`.", default=False, static=True)
-    send_multipart_udh = ConfigBool(
-        "If `True`, messages longer than 140 bytes will be sent as a series "
-        "of smaller messages with the user data headers. Default is `False`.",
-        default=False, static=True)
-    split_bind_prefix = ConfigText(
-        "This is the Redis prefix to use for storing things like sequence "
-        "numbers and message ids for delivery report handling. It defaults "
-        "to `<system_id>@<host>:<port>`. "
-        "*ONLY* if the connection is split into two separate binds for RX "
-        "and TX then make sure this is the same value for both binds. "
-        "This _only_ needs to be done for TX & RX since messages sent via "
-        "the TX bind are handled by the RX bind and they need to share the "
-        "same prefix for the lookup for message ids in delivery reports to "
-        "work.", default='', static=True)
-    throttle_delay = ConfigFloat(
-        "Delay (in seconds) before retrying a message after receiving "
-        "`ESME_RTHROTTLED` or `ESME_RMSGQFUL`.", default=0.1, static=True)
-    COUNTRY_CODE = ConfigText(
-        "Used to translate a leading zero in a destination MSISDN into a "
-        "country code. Default ''", default="", static=True)
-    OPERATOR_PREFIX = ConfigDict(
-        "Nested dictionary of prefix to network name mappings. Default {} "
-        "(set network to 'UNKNOWN'). E.g. { '27': { '27761': 'NETWORK1' }} ",
-        default={}, static=True)
-    OPERATOR_NUMBER = ConfigDict(
-        "Dictionary of source MSISDN to use for each network listed in "
-        "OPERATOR_PREFIX. If a network is not listed, the source MSISDN "
-        "specified by the message sender is used. Default {} (always used the "
-        "from address specified by the message sender). "
-        "E.g. { 'NETWORK1': '27761234567'}", default={}, static=True)
-    redis_manager = ConfigDict(
-        'How to connect to Redis', default={}, static=True)
-
-    def post_validate(self):
-        long_message_params = (
-            'send_long_messages', 'send_multipart_sar', 'send_multipart_udh')
-        set_params = [p for p in long_message_params if getattr(self, p)]
-        if len(set_params) > 1:
-            params = ', '.join(set_params)
-            self.raise_config_error(
-                "The following parameters are mutually exclusive: %s" % params)
+from vumi.reconnecting_client import ReconnectingClientService
+from vumi.transports.base import Transport
+from vumi.transports.failures import FailureMessage
+from vumi.transports.smpp.deprecated.utils import convert_to_new_config
+from vumi.transports.smpp.deprecated.clientserver.client import (
+    EsmeTransceiverFactory, EsmeTransmitterFactory, EsmeReceiverFactory,
+    EsmeCallbacks)
+from vumi.transports.smpp.config import SmppTransportConfig
+from vumi.transports.smpp.deprecated.config import (
+    SmppTransportConfig as OldSmppTransportConfig)
+from vumi.transports.smpp.processors import (
+    DeliveryReportProcessorConfig, SubmitShortMessageProcessorConfig,
+    DeliverShortMessageProcessorConfig)
 
 
 class SmppTransport(Transport):
@@ -199,13 +50,16 @@ class SmppTransport(Transport):
 
     @inlineCallbacks
     def setup_transport(self):
+        warnings.warn(
+            'This SMPP implementation is deprecated. Please use the '
+            'implementations available in vumi.transports.smpp.'
+            'smpp_transport instead.', category=DeprecationWarning)
         config = self.get_static_config()
         log.msg("Starting the SmppTransport for %s" % (
             config.twisted_endpoint))
 
-        self.submit_sm_encoding = config.submit_sm_encoding
-        self.submit_sm_data_coding = config.submit_sm_data_coding
-        default_prefix = "%s@%s" % (config.system_id, config.transport_name)
+        default_prefix = "%s@%s" % (config.system_id,
+                                    config.transport_name)
 
         r_config = config.redis_manager
         r_prefix = config.split_bind_prefix or default_prefix
@@ -243,12 +97,10 @@ class SmppTransport(Transport):
         to create a bind with"""
         config = self.get_static_config()
         return dict([(key, getattr(config, key))
-                    for key in self.SMPP_BIND_CONFIG_KEYS])
+                     for key in self.SMPP_BIND_CONFIG_KEYS])
 
     def make_factory(self):
-        return EsmeTransceiverFactory(
-            self.get_static_config(), self.get_smpp_bind_params(),
-            self.redis, self.esme_callbacks)
+        return EsmeTransceiverFactory(self)
 
     def esme_connected(self, client):
         log.msg("ESME Connected, adding handlers")
@@ -286,8 +138,8 @@ class SmppTransport(Transport):
         message_id = message.payload['message_id']
         message_key = self.r_message_key(message_id)
         d = self.redis.set(message_key, message.to_json())
-        d.addCallback(lambda _: self.redis.expire(message_key,
-                                                  config.submit_sm_expiry))
+        d.addCallback(lambda _: self.redis.expire(
+            message_key, config.submit_sm_expiry))
         return d
 
     def r_get_message_json(self, message_id):
@@ -337,14 +189,14 @@ class SmppTransport(Transport):
     def _start_throttling(self):
         if self.throttled:
             return
-        log.err("Throttling outbound messages.")
+        log.warning("Throttling outbound messages.")
         self.throttled = True
         self.pause_connectors()
 
     def _stop_throttling(self):
         if not self.throttled:
             return
-        log.err("No longer throttling outbound messages.")
+        log.warning("No longer throttling outbound messages.")
         self.throttled = False
         self.unpause_connectors()
 
@@ -410,13 +262,8 @@ class SmppTransport(Transport):
             self.callLater(config.throttle_delay,
                            self._submit_outbound_message, message)
 
-    def delivery_status(self, state):
-        config = self.get_static_config()
-        return config.delivery_report_status_mapping.get(state, 'pending')
-
     @inlineCallbacks
-    def delivery_report(self, message_id, message_state):
-        delivery_status = self.delivery_status(message_state)
+    def delivery_report(self, message_id, delivery_status):
         message_id = yield self.r_get_id_for_third_party_id(message_id)
         if message_id is None:
             log.warning("Failed to retrieve message id for delivery report."
@@ -459,33 +306,8 @@ class SmppTransport(Transport):
         return self.publish_message(**message).addErrback(log.err)
 
     def send_smpp(self, message):
-        log.debug("Sending SMPP message: %s" % (message))
-        # first do a lookup in our YAML to see if we've got a source_addr
-        # defined for the given MT number, if not, trust the from_addr
-        # in the message
-        to_addr = message['to_addr']
-        from_addr = message['from_addr']
-        text = message['content']
-        continue_session = (
-            message['session_event'] != TransportUserMessage.SESSION_CLOSE)
-        config = self.get_static_config()
-        route = get_operator_number(to_addr, config.COUNTRY_CODE,
-                                    config.OPERATOR_PREFIX,
-                                    config.OPERATOR_NUMBER)
-        source_addr = route or from_addr
-        session_info = message['transport_metadata'].get('session_info')
-        return self.esme_client.submit_sm(
-            # these end up in the PDU
-            short_message=text.encode(self.submit_sm_encoding),
-            data_coding=self.submit_sm_data_coding,
-            destination_addr=to_addr.encode('ascii'),
-            source_addr=source_addr.encode('ascii'),
-            session_info=session_info.encode('ascii')
-                if session_info is not None else None,
-            # these don't end up in the PDU
-            message_type=message['transport_type'],
-            continue_session=continue_session,
-        )
+        return self.esme_client.submit_sm_processor.handle_outbound_message(
+            message, self.esme_client)
 
     def stopWorker(self):
         log.msg("Stopping the SMPPTransport")
@@ -501,14 +323,36 @@ class SmppTransport(Transport):
 class SmppTxTransport(SmppTransport):
     """An Smpp Transmitter Transport"""
     def make_factory(self):
-        return EsmeTransmitterFactory(
-            self.get_static_config(), self.get_smpp_bind_params(),
-            self.redis, self.esme_callbacks)
+        return EsmeTransmitterFactory(self)
 
 
 class SmppRxTransport(SmppTransport):
     """An Smpp Receiver Transport"""
     def make_factory(self):
-        return EsmeReceiverFactory(
-            self.get_static_config(), self.get_smpp_bind_params(),
-            self.redis, self.esme_callbacks)
+        return EsmeReceiverFactory(self)
+
+
+class SmppTransportWithOldConfig(SmppTransport):
+
+    CONFIG_CLASS = OldSmppTransportConfig
+    NEW_CONFIG_CLASS = SmppTransportConfig
+
+    def get_static_config(self):
+        # return if cached
+        if hasattr(self, '_converted_static_config'):
+            return self._converted_static_config
+
+        cfg = super(SmppTransportWithOldConfig, self).get_static_config()
+        original = cfg._config_data.original.copy()
+        config = convert_to_new_config(
+            original,
+            ('vumi.transports.smpp.deprecated.processors.'
+             'EsmeCallbacksDeliveryReportProcessor'),
+            ('vumi.transports.smpp.deprecated.processors.'
+             'EsmeCallbacksSubmitShortMessageProcessor'),
+            ('vumi.transports.smpp.deprecated.processors.'
+             'EsmeCallbacksDeliverShortMessageProcessor')
+        )
+        self._converted_static_config = self.NEW_CONFIG_CLASS(
+            config, static=True)
+        return self._converted_static_config

@@ -5,7 +5,7 @@ Some utilities and things for testing various bits of SMPP.
 from twisted.internet.defer import DeferredQueue
 from smpp.pdu_inspector import unpack_pdu
 
-from vumi.transports.smpp.clientserver.server import SmscServer
+from vumi.transports.smpp.deprecated.clientserver.server import SmscServer
 
 
 class SmscTestServer(SmscServer):
