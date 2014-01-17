@@ -38,7 +38,7 @@ class HttpRpcTransportConfig(Transport.CONFIG_CLASS):
         default=None, static=True)
     web_auth_domain = ConfigText(
         "The name of authentication domain.",
-        default="Vumi HTTP RPC transport")
+        default="Vumi HTTP RPC transport", static=True)
     health_path = ConfigText(
         "The path to listen for downstream health checks on"
         " (useful with HAProxy)", default='health', static=True)
@@ -138,6 +138,7 @@ class HttpRpcTransport(Transport):
         self.web_port = config.web_port
         self.web_username = config.web_username
         self.web_password = config.web_password
+        self.web_auth_domain = config.web_auth_domain
         self.health_path = config.health_path.lstrip('/')
         self.request_timeout = config.request_timeout
         self.request_timeout_status_code = config.request_timeout_status_code
@@ -187,7 +188,7 @@ class HttpRpcTransport(Transport):
         # start receipt web resource
         self.web_resource = yield self.start_web_resources(
             [
-                (HttpRpcResource(self), self.web_path),
+                (rpc_resource, self.web_path),
                 (HttpRpcHealthResource(self), self.health_path),
             ],
             self.web_port)
