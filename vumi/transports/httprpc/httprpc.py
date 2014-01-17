@@ -2,16 +2,19 @@
 
 import json
 
+from twisted.cred.portal import Portal
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet import reactor
 from twisted.internet.task import LoopingCall
 from twisted.web import http
+from twisted.web.guard import BasicCredentialFactory, HTTPAuthSessionWrapper
 from twisted.web.resource import Resource
 from twisted.web.server import NOT_DONE_YET
 
-from vumi.transports.base import Transport
-from vumi.config import ConfigText, ConfigInt, ConfigBool, ConfigError
 from vumi import log
+from vumi.config import ConfigText, ConfigInt, ConfigBool, ConfigError
+from vumi.transports.base import Transport
+from vumi.transports.httprpc.auth import HttpRpcRealm, StaticAuthChecker
 
 
 class HttpRpcTransportConfig(Transport.CONFIG_CLASS):
@@ -24,6 +27,18 @@ class HttpRpcTransportConfig(Transport.CONFIG_CLASS):
     web_port = ConfigInt(
         "The port to listen for requests on, defaults to `0`.",
         default=0, static=True)
+    web_username = ConfigText(
+        "The username to require callers to authenticate with. If ``None``"
+        " then no authentication is required. Currently only HTTP Basic"
+        " authentication is supported.",
+        default=None, static=True)
+    web_password = ConfigText(
+        "The password to go with ``web_username``. Must be ``None`` if and"
+        " only if ``web_username`` is ``None``.",
+        default=None, static=True)
+    web_auth_domain = ConfigText(
+        "The name of authentication domain.",
+        default="Vumi HTTP RPC transport")
     health_path = ConfigText(
         "The path to listen for downstream health checks on"
         " (useful with HAProxy)", default='health', static=True)
@@ -54,6 +69,12 @@ class HttpRpcTransportConfig(Transport.CONFIG_CLASS):
         " nor in IGNORED_FIELDS will raise an error. If 'permissive' then no"
         " error is raised as long as all the EXPECTED_FIELDS are present.",
         default='strict', static=True)
+
+    def post_validate(self):
+        auth_supplied = (self.web_username is None, self.web_password is None)
+        if any(auth_supplied) and not all(auth_supplied):
+            raise ConfigError("If either web_username or web_password is"
+                              " specified, both must be specified")
 
 
 class HttpRpcHealthResource(Resource):
@@ -115,6 +136,8 @@ class HttpRpcTransport(Transport):
         config = self.get_static_config()
         self.web_path = config.web_path
         self.web_port = config.web_port
+        self.web_username = config.web_username
+        self.web_password = config.web_password
         self.health_path = config.health_path.lstrip('/')
         self.request_timeout = config.request_timeout
         self.request_timeout_status_code = config.request_timeout_status_code
@@ -137,6 +160,19 @@ class HttpRpcTransport(Transport):
         addr = self.web_resource.getHost()
         return "http://%s:%s/%s" % (addr.host, addr.port, suffix.lstrip('/'))
 
+    def get_authenticated_resource(self, resource):
+        if not self.web_username:
+            return resource
+        realm = HttpRpcRealm(resource)
+        checkers = [
+            StaticAuthChecker(self.web_username, self.web_password),
+        ]
+        portal = Portal(realm, checkers)
+        cred_factories = [
+            BasicCredentialFactory(self.web_auth_domain),
+        ]
+        return HTTPAuthSessionWrapper(portal, cred_factories)
+
     @inlineCallbacks
     def setup_transport(self):
         self._requests = {}
@@ -144,6 +180,9 @@ class HttpRpcTransport(Transport):
         self.clock = self.get_clock()
         self.request_gc.clock = self.clock
         self.request_gc.start(self.gc_requests_interval)
+
+        rpc_resource = HttpRpcResource(self)
+        rpc_resource = self.get_authenticated_resource(rpc_resource)
 
         # start receipt web resource
         self.web_resource = yield self.start_web_resources(
