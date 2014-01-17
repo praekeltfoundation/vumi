@@ -36,8 +36,6 @@ class TestTransport(VumiTestCase):
         config = {
             'web_path': "foo",
             'web_port': 0,
-            'username': 'testuser',
-            'password': 'testpass',
             'request_timeout': 10,
             'request_timeout_status_code': 418,
             'request_timeout_body': 'I am a teapot',
@@ -110,8 +108,6 @@ class TestJSONTransport(VumiTestCase):
         config = {
             'web_path': "foo",
             'web_port': 0,
-            'username': 'testuser',
-            'password': 'testpass',
             }
         self.tx_helper = self.add_helper(TransportHelper(JSONTransport))
         self.transport = yield self.tx_helper.get_transport(config)
