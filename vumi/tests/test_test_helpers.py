@@ -499,3 +499,17 @@ class TestMessageHelper(TestCase):
             'user_message_id': msg['message_id'],
             'delivery_status': 'delivered',
         })
+
+    def test_make_reply(self):
+        """
+        .make_reply() should build a reply for the given message and content.
+        """
+        msg_helper = MessageHelper()
+        msg = msg_helper.make_inbound('inbound')
+        reply = msg_helper.make_reply(msg, 'reply content')
+        self.assert_message_fields(reply, {
+            'content': 'reply content',
+            'to_addr': msg['from_addr'],
+            'from_addr': msg['to_addr'],
+            'in_reply_to': msg['message_id'],
+        })
