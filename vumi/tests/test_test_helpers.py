@@ -1,10 +1,14 @@
 from datetime import datetime
 
+from twisted.internet.defer import Deferred, succeed
 from twisted.trial.unittest import TestCase
 
 from vumi.message import TransportUserMessage, TransportEvent
+from vumi.tests.fake_amqp import FakeAMQPBroker, FakeAMQClient
 from vumi.tests.helpers import (
-    proxyable, generate_proxies, IHelper, MessageHelper)
+    VumiTestCase, proxyable, generate_proxies, IHelper,
+    MessageHelper, WorkerHelper)
+from vumi.worker import BaseWorker
 
 
 class TestHelperHelpers(TestCase):
@@ -513,3 +517,190 @@ class TestMessageHelper(TestCase):
             'from_addr': msg['to_addr'],
             'in_reply_to': msg['message_id'],
         })
+
+
+class FakeWorker(object):
+    def __init__(self, stop_d=succeed(None)):
+        self._stop_d = stop_d
+
+    def stopWorker(self):
+        return self._stop_d
+
+
+class FakeBroker(object):
+    def __init__(self, delivery_d=succeed(None)):
+        self._delivery_d = delivery_d
+
+    def wait_delivery(self):
+        return self._delivery_d
+
+
+class ToyWorker(BaseWorker):
+    worker_started = False
+    worker_stopped = False
+
+    def setup_heartbeat(self):
+        # Overriden to skip heartbeat setup.
+        pass
+
+    def setup_connectors(self):
+        pass
+
+    def setup_worker(self):
+        self.worker_started = True
+
+    def teardown_worker(self):
+        self.worker_stopped = True
+
+
+class TestWorkerHelper(VumiTestCase):
+    def success_result_of(self, d):
+        """
+        We can't necessarily use TestCase.successResultOf because our Twisted
+        might not be new enough.
+        """
+        self.assertTrue(
+            d.called, "Deferred not called, no result available: %r" % (d,))
+        results = []
+        d.addCallback(results.append)
+        return results[0]
+
+    def test_implements_IHelper(self):
+        """
+        WorkerHelper instances should provide the IHelper interface.
+        """
+        self.assertTrue(IHelper.providedBy(WorkerHelper()))
+
+    def test_defaults(self):
+        """
+        WorkerHelper instances should have the expected parameters defaults.
+        """
+        worker_helper = WorkerHelper()
+        self.assertEqual(worker_helper._connector_name, None)
+        self.assertIsInstance(worker_helper.broker, FakeAMQPBroker)
+
+    def test_all_params(self):
+        """
+        WorkerHelper should use the provided broker and connector name.
+        """
+        broker = FakeBroker()
+        worker_helper = WorkerHelper("my_connector", broker)
+        self.assertEqual(worker_helper._connector_name, "my_connector")
+        self.assertEqual(worker_helper.broker, broker)
+
+    def test_setup_sync(self):
+        """
+        WorkerHelper.setup() should return ``None``, not a Deferred.
+        """
+        worker_helper = WorkerHelper()
+        self.assertEqual(worker_helper.setup(), None)
+
+    def test_cleanup(self):
+        """
+        WorkerHelper.cleanup() should wait for broker delivery and stop all
+        workers.
+        """
+        delivery_d = Deferred()
+        worker_stop_d = Deferred()
+        worker_helper = WorkerHelper(broker=FakeBroker(delivery_d=delivery_d))
+        worker_helper._workers.append(FakeWorker(stop_d=worker_stop_d))
+        d = worker_helper.cleanup()
+        self.assertFalse(d.called)
+        delivery_d.callback(None)
+        self.assertFalse(d.called)
+        worker_stop_d.callback(None)
+        self.assertTrue(d.called)
+
+    def test_cleanup_worker(self):
+        """
+        WorkerHelper.cleanup_worker() should remove the worker from its list
+        and then stop it.
+        """
+        worker_stop_d = Deferred()
+        worker = FakeWorker(stop_d=worker_stop_d)
+        worker_helper = WorkerHelper()
+        worker_helper._workers.append(worker)
+        d = worker_helper.cleanup_worker(worker)
+        self.assertEqual(worker_helper._workers, [])
+        self.assertEqual(d, worker_stop_d)
+
+    def test_get_fake_amqp_client(self):
+        """
+        WorkerHelper.get_fake_amqp_client() should return a FakeAMQClient
+        wrapping the given broker.
+        """
+        broker = FakeBroker()
+        client = WorkerHelper.get_fake_amqp_client(broker)
+        self.assertIsInstance(client, FakeAMQClient)
+        self.assertEqual(client.broker, broker)
+
+    def test_get_worker_raw(self):
+        """
+        WorkerHelper.get_worker_raw() should create an instance of the given
+        worker class with the given config.
+        """
+        broker = FakeBroker()
+        worker = WorkerHelper.get_worker_raw(
+            BaseWorker, {'foo': 'bar'}, broker)
+        self.assertIsInstance(worker, BaseWorker)
+        self.assertIsInstance(worker._amqp_client, FakeAMQClient)
+        self.assertEqual(worker._amqp_client.broker, broker)
+        self.assertEqual(worker.config, {
+            'foo': 'bar',
+            # worker_name is added for us if we don't provide one.
+            'worker_name': 'unnamed',
+        })
+
+    def test_get_worker_raw_worker_name_configured(self):
+        """
+        WorkerHelper.get_worker_raw() should not overwrite worker_name.
+        """
+        broker = FakeBroker()
+        worker = WorkerHelper.get_worker_raw(
+            BaseWorker, {'worker_name': 'Gilbert'}, broker)
+        self.assertIsInstance(worker, BaseWorker)
+        self.assertIsInstance(worker._amqp_client, FakeAMQClient)
+        self.assertEqual(worker._amqp_client.broker, broker)
+        self.assertEqual(worker.config, {'worker_name': 'Gilbert'})
+
+    def test_get_worker_raw_config_None(self):
+        """
+        WorkerHelper.get_worker_raw() can take ``None`` as a config.
+        """
+        broker = FakeBroker()
+        worker = WorkerHelper.get_worker_raw(
+            BaseWorker, None, broker)
+        self.assertIsInstance(worker, BaseWorker)
+        self.assertIsInstance(worker._amqp_client, FakeAMQClient)
+        self.assertEqual(worker._amqp_client.broker, broker)
+        self.assertEqual(worker.config, {})
+
+    def test_get_worker(self):
+        """
+        WorkerHelper.get_worker() should create an instance of the given worker
+        class with the given config, start it and return it.
+        """
+        worker_helper = WorkerHelper()
+        worker_d = worker_helper.get_worker(ToyWorker, {'foo': 'bar'})
+        worker = self.success_result_of(worker_d)
+        self.assertIsInstance(worker, ToyWorker)
+        self.assertIsInstance(worker._amqp_client, FakeAMQClient)
+        self.assertEqual(worker._amqp_client.broker, worker_helper.broker)
+        self.assertEqual(worker.config, {
+            'foo': 'bar',
+            # worker_name is added for us if we don't provide one.
+            'worker_name': 'unnamed',
+        })
+        self.assertTrue(worker.worker_started)
+
+    def test_get_worker_no_start(self):
+        """
+        WorkerHelper.get_worker() should not start the worker if asked not to.
+        """
+        worker_helper = WorkerHelper()
+        worker_d = worker_helper.get_worker(ToyWorker, {}, start=False)
+        worker = self.success_result_of(worker_d)
+        self.assertIsInstance(worker, ToyWorker)
+        self.assertIsInstance(worker._amqp_client, FakeAMQClient)
+        self.assertEqual(worker._amqp_client.broker, worker_helper.broker)
+        self.assertFalse(worker.worker_started)
