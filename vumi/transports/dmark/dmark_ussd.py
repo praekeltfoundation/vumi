@@ -66,6 +66,8 @@ class DmarkUssdTransport(HttpRpcTransport):
 
     CONFIG_CLASS = DmarkUssdTransportConfig
 
+    transport_type = 'ussd'
+
     ENCODING = 'utf-8'
     EXPECTED_FIELDS = frozenset([
         'transactionId', 'msisdn', 'ussdServiceCode', 'transactionTime',
