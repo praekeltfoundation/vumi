@@ -433,7 +433,8 @@ class EsmeReceiverMixin(EsmeGenericMixin):
         [failure] = self.flushLoggedErrors(UnicodeDecodeError)
         message = failure.getErrorMessage()
         codec, rest = message.split(' ', 1)
-        self.assertEqual(codec, "'utf16'")
+        # CPython calls this 'utf16', pypy calls it 'utf-16'.
+        self.assertEqual(codec.replace('-16', '16'), "'utf16'")
         self.assertTrue(rest.startswith("codec can't decode byte"))
 
     @inlineCallbacks
