@@ -13,7 +13,6 @@ install:
   - "easy_install 'riak_pb<1.3.0'"
   - "pip install -r requirements.pip --use-wheel"
   - "pip install coveralls --use-wheel"
-  - "python setup.py install"
 script:
   - VUMITEST_REDIS_DB=1 coverage run --source=vumi `which trial` vumi
 after_success:
