@@ -3,7 +3,7 @@ import json
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet.task import Clock
 
-from vumi.utils import http_request, http_request_full
+from vumi.utils import http_request, http_request_full, basic_auth_string
 from vumi.tests.helpers import VumiTestCase
 from vumi.tests.utils import LogCatcher
 from vumi.transports.httprpc import HttpRpcTransport
@@ -36,8 +36,6 @@ class TestTransport(VumiTestCase):
         config = {
             'web_path': "foo",
             'web_port': 0,
-            'username': 'testuser',
-            'password': 'testpass',
             'request_timeout': 10,
             'request_timeout_status_code': 418,
             'request_timeout_body': 'I am a teapot',
@@ -86,6 +84,66 @@ class TestTransport(VumiTestCase):
         self.assertEqual(response.code, 418)
 
 
+class TestTransportWithAuthentication(VumiTestCase):
+
+    @inlineCallbacks
+    def setUp(self):
+        self.clock = Clock()
+        self.patch(OkTransport, 'get_clock', lambda _: self.clock)
+        config = {
+            'web_path': "foo",
+            'web_port': 0,
+            'web_username': 'user-1',
+            'web_password': 'pass-secret',
+            'web_auth_domain': 'Mordor',
+            'request_timeout': 10,
+            'request_timeout_status_code': 418,
+            'request_timeout_body': 'I am a teapot',
+            }
+        self.tx_helper = self.add_helper(TransportHelper(OkTransport))
+        self.transport = yield self.tx_helper.get_transport(config)
+        self.transport_url = self.transport.get_transport_url()
+
+    @inlineCallbacks
+    def test_health_doesnt_require_auth(self):
+        result = yield http_request(self.transport_url + "health", "",
+                                    method='GET')
+        self.assertEqual(json.loads(result), {
+            'pending_requests': 0
+        })
+
+    @inlineCallbacks
+    def test_inbound_with_successful_auth(self):
+        headers = {
+            'Authorization': basic_auth_string("user-1", "pass-secret")
+        }
+        d = http_request(self.transport_url + "foo", '',
+                         headers=headers, method='GET')
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        rep = yield self.tx_helper.make_dispatch_reply(msg, "OK")
+        response = yield d
+        self.assertEqual(response, 'OK')
+        [ack] = yield self.tx_helper.wait_for_dispatched_events(1)
+        self.assertEqual(ack['user_message_id'], rep['message_id'])
+        self.assertEqual(ack['sent_message_id'], rep['message_id'])
+
+    @inlineCallbacks
+    def test_inbound_with_failed_auth(self):
+        headers = {
+            'Authorization': basic_auth_string("user-1", "bad-pass")
+        }
+        d = http_request(self.transport_url + "foo", '',
+                         headers=headers, method='GET')
+        response = yield d
+        self.assertEqual(response, 'Unauthorized')
+
+    @inlineCallbacks
+    def test_inbound_without_auth(self):
+        d = http_request(self.transport_url + "foo", '', method='GET')
+        response = yield d
+        self.assertEqual(response, 'Unauthorized')
+
+
 class JSONTransport(HttpRpcTransport):
 
     def handle_raw_inbound_message(self, msgid, request):
@@ -110,8 +168,6 @@ class TestJSONTransport(VumiTestCase):
         config = {
             'web_path': "foo",
             'web_port': 0,
-            'username': 'testuser',
-            'password': 'testpass',
             }
         self.tx_helper = self.add_helper(TransportHelper(JSONTransport))
         self.transport = yield self.tx_helper.get_transport(config)
