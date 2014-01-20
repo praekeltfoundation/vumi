@@ -13,4 +13,4 @@ Test helper API reference
    .. data:: DEFAULT
 
       This constant is a placeholder value for parameter defaults.
-      (We can't just use ``None`` because we may want to override a non-``None`` default with an explicit ``None`` value.)
+      We can't just use ``None`` because we may want to override a non-``None`` default with an explicit ``None`` value.
