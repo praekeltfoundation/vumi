@@ -323,7 +323,8 @@ class MessageHelper(object):
         Construct a :class:`~vumi.message.TransportUserMessage`.
 
         This method is the underlying implementation for :meth:`make_inbound`
-        and :meth:`make_outbound` and those should generally be used instead.
+        and :meth:`make_outbound` and those should be used instead where they
+        apply.
 
         The only real difference between using this method and constructing a
         message object directly is that this method provides sensible defaults
@@ -387,7 +388,7 @@ class MessageHelper(object):
 
         This method is the underlying implementation for :meth:`make_ack`,
         :meth:`make_nack` and :meth:`make_delivery_report`. Those should
-        generally be used instead.
+        be used instead where they apply.
 
         The only real difference between using this method and constructing an
         event object directly is that this method provides sensible defaults
@@ -519,6 +520,24 @@ def _start_and_return_worker(worker):
 
 
 class WorkerHelper(object):
+    """
+    Test helper for creating workers and dispatching messages.
+
+    This helper does no setup, but it waits for pending message deliveries and
+    the stops all workers it knows about during cleanup. It takes the following
+    parameters:
+
+    :param str connector_name:
+        Default value for ``connector_name`` on all message broker operations.
+        If ``None``, the connector name must be provided for each operation.
+
+    :param broker:
+        The message broker to use internally. This should be an instance of
+        :class:`~vumi.tests.fake_amqp.FakeAMQPBroker` if it is provided, but
+        most of the time the default of ``None`` should be used to have the
+        helper create its own broker.
+    """
+
     implements(IHelper)
 
     def __init__(self, connector_name=None, broker=None):
@@ -541,7 +560,9 @@ class WorkerHelper(object):
     @proxyable
     def cleanup_worker(self, worker):
         """
-        Clean up a particular worker manually.
+        Clean up a particular worker manually and remove it from the helper's
+        cleanup list. This should only be called with workers that are already
+        in the helper's cleanup list.
         """
         self._workers.remove(worker)
         return worker.stopWorker()
@@ -583,7 +604,8 @@ class WorkerHelper(object):
 
         :param worker_class: The worker class to instantiate.
         :param config: Config dict.
-        :param start: True to start the worker (default), False otherwise.
+        :param start:
+            ``True`` to start the worker (default), ``False`` otherwise.
         """
         worker = self.get_worker_raw(worker_class, config, self.broker)
 
@@ -600,6 +622,25 @@ class WorkerHelper(object):
 
     @proxyable
     def get_dispatched(self, connector_name, name, message_class):
+        """
+        Get messages dispatched to a routing key.
+
+        The more specific :meth:`get_dispatched_events`,
+        :meth:`get_dispatched_inbound`, and :meth:`get_dispatched_outbound`
+        wrapper methods should be used instead where they apply.
+
+        :param str connector_name:
+            The connector name, which is used as the routing key prefix.
+
+        :param str name:
+            The routing key suffix, generally ``"event"``, ``"inbound"``, or
+            ``"outbound"``.
+
+        :param message_class:
+            The message class to wrap the raw message data in. This should
+            probably be :class:`~vumi.message.TransportUserMessage` or
+            :class:`~vumi.message.TransportEvent`.
+        """
         msgs = self.broker.get_dispatched(
             'vumi', self._rkey(connector_name, name))
         return [message_class.from_json(msg.body) for msg in msgs]
@@ -610,6 +651,9 @@ class WorkerHelper(object):
 
     @proxyable
     def clear_all_dispatched(self):
+        """
+        Clear all dispatched messages from the broker.
+        """
         self.broker.clear_messages('vumi')
 
     def _clear_dispatched(self, connector_name, name):
@@ -618,20 +662,63 @@ class WorkerHelper(object):
 
     @proxyable
     def get_dispatched_events(self, connector_name=None):
+        """
+        Get events dispatched to a connector.
+
+        :param str connector_name:
+            Connector name. If ``None``, the default connector name for the
+            helper instance will be used.
+
+        :returns: A list of :class:`~vumi.message.TransportEvent` instances.
+        """
         return self.get_dispatched(connector_name, 'event', TransportEvent)
 
     @proxyable
     def get_dispatched_inbound(self, connector_name=None):
+        """
+        Get inbound messages dispatched to a connector.
+
+        :param str connector_name:
+            Connector name. If ``None``, the default connector name for the
+            helper instance will be used.
+
+        :returns:
+            A list of :class:`~vumi.message.TransportUserMessage` instances.
+        """
         return self.get_dispatched(
             connector_name, 'inbound', TransportUserMessage)
 
     @proxyable
     def get_dispatched_outbound(self, connector_name=None):
+        """
+        Get outbound messages dispatched to a connector.
+
+        :param str connector_name:
+            Connector name. If ``None``, the default connector name for the
+            helper instance will be used.
+
+        :returns:
+            A list of :class:`~vumi.message.TransportUserMessage` instances.
+        """
         return self.get_dispatched(
             connector_name, 'outbound', TransportUserMessage)
 
     @proxyable
     def wait_for_dispatched_events(self, amount, connector_name=None):
+        """
+        Wait for events dispatched to a connector.
+
+        :param int amount:
+            Number of events to wait for.
+
+        :param str connector_name:
+            Connector name. If ``None``, the default connector name for the
+            helper instance will be used.
+
+        :returns:
+            A :class:`Deferred` that fires with a list of
+            :class:`~vumi.message.TransportEvent` instances.
+        """
         d = self._wait_for_dispatched(connector_name, 'event', amount)
         d.addCallback(lambda msgs: [
             TransportEvent(**msg.payload) for msg in msgs])
@@ -639,6 +726,20 @@ class WorkerHelper(object):
 
     @proxyable
     def wait_for_dispatched_inbound(self, amount, connector_name=None):
+        """
+        Wait for inbound messages dispatched to a connector.
+
+        :param int amount:
+            Number of messages to wait for.
+
+        :param str connector_name:
+            Connector name. If ``None``, the default connector name for the
+            helper instance will be used.
+
+        :returns:
+            A :class:`Deferred` that fires with a list of
+            :class:`~vumi.message.TransportUserMessage` instances.
+        """
         d = self._wait_for_dispatched(connector_name, 'inbound', amount)
         d.addCallback(lambda msgs: [
             TransportUserMessage(**msg.payload) for msg in msgs])
@@ -646,6 +747,20 @@ class WorkerHelper(object):
 
     @proxyable
     def wait_for_dispatched_outbound(self, amount, connector_name=None):
+        """
+        Wait for outbound messages dispatched to a connector.
+
+        :param int amount:
+            Number of messages to wait for.
+
+        :param str connector_name:
+            Connector name. If ``None``, the default connector name for the
+            helper instance will be used.
+
+        :returns:
+            A :class:`Deferred` that fires with a list of
+            :class:`~vumi.message.TransportUserMessage` instances.
+        """
         d = self._wait_for_dispatched(connector_name, 'outbound', amount)
         d.addCallback(lambda msgs: [
             TransportUserMessage(**msg.payload) for msg in msgs])
@@ -653,38 +768,133 @@ class WorkerHelper(object):
 
     @proxyable
     def clear_dispatched_events(self, connector_name=None):
+        """
+        Clear dispatched events for a connector.
+
+        :param str connector_name:
+            Connector name. If ``None``, the default connector name for the
+            helper instance will be used.
+        """
         return self._clear_dispatched(connector_name, 'event')
 
     @proxyable
     def clear_dispatched_inbound(self, connector_name=None):
+        """
+        Clear dispatched inbound messages for a connector.
+
+        :param str connector_name:
+            Connector name. If ``None``, the default connector name for the
+            helper instance will be used.
+        """
         return self._clear_dispatched(connector_name, 'inbound')
 
     @proxyable
     def clear_dispatched_outbound(self, connector_name=None):
+        """
+        Clear dispatched outbound messages for a connector.
+
+        :param str connector_name:
+            Connector name. If ``None``, the default connector name for the
+            helper instance will be used.
+        """
         return self._clear_dispatched(connector_name, 'outbound')
 
     @proxyable
     def dispatch_raw(self, routing_key, message, exchange='vumi'):
+        """
+        Dispatch a message to the specified routing key.
+
+        The more specific :meth:`dispatch_inbound`, :meth:`dispatch_outbound`,
+        and :meth:`dispatch_event` wrapper methods should be used instead where
+        they apply.
+
+        :param str routing_key:
+            Routing key to dispatch the message to.
+
+        :param message:
+            Message to dispatch.
+
+        :param str exchange:
+            AMQP exchange to dispatch the message to. Defaults to ``"vumi"``
+
+        :returns:
+            A :class:`Deferred` that fires when all messages have been
+            delivered.
+        """
         self.broker.publish_message(exchange, routing_key, message)
         return self.kick_delivery()
 
     @proxyable
     def dispatch_inbound(self, message, connector_name=None):
+        """
+        Dispatch an inbound message.
+
+        :param message:
+            Message to dispatch. Should be a
+            :class:`~vumi.message.TransportUserMessage` instance.
+
+        :param str connector_name:
+            Connector name. If ``None``, the default connector name for the
+            helper instance will be used.
+
+        :returns:
+            A :class:`Deferred` that fires when all messages have been
+            delivered.
+        """
         return self.dispatch_raw(
             self._rkey(connector_name, 'inbound'), message)
 
     @proxyable
     def dispatch_outbound(self, message, connector_name=None):
+        """
+        Dispatch an outbound message.
+
+        :param message:
+            Message to dispatch. Should be a
+            :class:`~vumi.message.TransportUserMessage` instance.
+
+        :param str connector_name:
+            Connector name. If ``None``, the default connector name for the
+            helper instance will be used.
+
+        :returns:
+            A :class:`Deferred` that fires when all messages have been
+            delivered.
+        """
         return self.dispatch_raw(
             self._rkey(connector_name, 'outbound'), message)
 
     @proxyable
     def dispatch_event(self, message, connector_name=None):
+        """
+        Dispatch an event.
+
+        :param message:
+            Message to dispatch. Should be a
+            :class:`~vumi.message.TransportEvent` instance.
+
+        :param str connector_name:
+            Connector name. If ``None``, the default connector name for the
+            helper instance will be used.
+
+        :returns:
+            A :class:`Deferred` that fires when all messages have been
+            delivered.
+        """
         return self.dispatch_raw(
             self._rkey(connector_name, 'event'), message)
 
     @proxyable
     def kick_delivery(self):
+        """
+        Trigger delivery of messages by the broker.
+
+        This is generally called internally by anything that sends a message.
+
+        :returns:
+            A :class:`Deferred` that fires when all messages have been
+            delivered.
+        """
         return self.broker.kick_delivery()
 
 
