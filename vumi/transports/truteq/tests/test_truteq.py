@@ -27,7 +27,7 @@ SESSION_CLOSE = TransportUserMessage.SESSION_CLOSE
 SESSION_NONE = TransportUserMessage.SESSION_NONE
 
 
-class TestTruteqService(TruteqService):
+class StubbedTruteqService(TruteqService):
 
     def __init__(self, protocol):
         self._protocol = protocol
@@ -67,7 +67,7 @@ class TestTruteqTransport(VumiTestCase):
         yield self.login_protocol('username', 'password')
 
     def patch_get_service(self, endpoint, factory):
-        return TestTruteqService(self.protocol)
+        return StubbedTruteqService(self.protocol)
 
     @inlineCallbacks
     def login_protocol(self, username, password):
