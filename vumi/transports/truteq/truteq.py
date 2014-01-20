@@ -3,18 +3,17 @@
 
 """TruTeq USSD transport."""
 
-from twisted.python import log
-from twisted.internet.defer import Deferred, inlineCallbacks
+from twisted.internet.defer import Deferred, inlineCallbacks, maybeDeferred
 from twisted.internet.protocol import Factory
 
 
 from txssmi.protocol import SSMIProtocol
 from txssmi import constants
 
+from vumi import log
 from vumi.components.session import SessionManager
 from vumi.config import (
-    Config, ConfigText, ConfigInt, ConfigClientEndpoint, ConfigBool,
-    ConfigDict)
+    ConfigText, ConfigInt, ConfigClientEndpoint, ConfigBool, ConfigDict)
 from vumi.message import TransportUserMessage
 from vumi.reconnecting_client import ReconnectingClientService
 from vumi.transports.base import Transport
@@ -57,6 +56,18 @@ class TruteqTransportProtocol(SSMIProtocol):
                 self.link_check.start(config.link_check_period)
                 if success else self.loseConnection()))
         return d
+
+    def handle_MO(self, mo):
+        return self.vumi_transport.handle_unhandled_message(mo)
+
+    def handle_BINARY_MO(self, mo):
+        return self.vumi_transport.handle_unhandled_message(mo)
+
+    def handle_PREMIUM_MO(self, mo):
+        return self.vumi_transport.handle_unhandled_message(mo)
+
+    def handle_PREMIUM_BINARY_MO(self, mo):
+        return self.vumi_transport.handle_unhandled_message(mo)
 
     def handle_USSD_MESSAGE(self, um):
         return self.vumi_transport.handle_raw_inbound_message(um)
@@ -125,7 +136,9 @@ class TruteqTransport(Transport):
         return client_service
 
     def teardown_transport(self):
-        return self.client_service.stopService()
+        d = maybeDeferred(self.client_service.stopService)
+        d.addCallback(lambda _: self.session_manager.stop())
+        return d
 
     @inlineCallbacks
     def handle_raw_inbound_message(self, ussd_message):
@@ -151,7 +164,6 @@ class TruteqTransport(Transport):
             # If it's a new session then store the message as the USSD code
             if not message.endswith('#'):
                 message = '%s#' % (message,)
-
             session = yield self.session_manager.create_session(
                 msisdn, ussd_code=message)
             text = None
@@ -192,3 +204,7 @@ class TruteqTransport(Transport):
         log.warning('Received remote logout command, disconnecting: %r' % (
             msg,))
         return self.teardown_transport()
+
+    def handle_unhandled_message(self, mo):
+        log.warning('Received unsupported message, dropping: %r.' % (
+            mo,))

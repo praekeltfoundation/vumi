@@ -10,10 +10,11 @@ from twisted.test.proto_helpers import StringTransport
 from txssmi import constants as c
 from txssmi.builder import SSMIRequest
 from txssmi.commands import (
-    Ack, USSDMessage, ExtendedUSSDMessage, SendUSSDMessage)
+    Ack, USSDMessage, ExtendedUSSDMessage, SendUSSDMessage, MoMessage)
 
 from vumi.message import TransportUserMessage
 from vumi.tests.helpers import VumiTestCase
+from vumi.tests.utils import LogCatcher
 from vumi.transports.tests.helpers import TransportHelper
 from vumi.transports.truteq.truteq import (
     TruteqTransport, TruteqService, TruteqTransportProtocol)
@@ -108,15 +109,18 @@ class TestTruteqTransport(VumiTestCase):
 
     def incoming_ussd(self, msisdn="12345678", ussd_type=c.USSD_RESPONSE,
                       phase="ignored", message="Hello"):
-        return self.send(USSDMessage(msisdn=msisdn, type=ussd_type,
-                                     phase=c.USSD_PHASE_UNKNOWN,
-                                     message=message))
+        return self.transport.handle_raw_inbound_message(
+            USSDMessage(msisdn=msisdn, type=ussd_type,
+                        phase=c.USSD_PHASE_UNKNOWN,
+                        message=message))
 
+    @inlineCallbacks
     def start_ussd(self, message="*678#", **kw):
-        self.incoming_ussd(ussd_type=c.USSD_NEW, message=message, **kw)
-        d = self.receive(1)
-        d.addCallback(lambda _: self.tx_helper.clear_dispatched_inbound())
-        return d
+        yield self.incoming_ussd(ussd_type=c.USSD_NEW, message=message, **kw)
+        command = yield self.receive(1)
+        if self.tx_helper.get_dispatched_inbound():
+            self.tx_helper.clear_dispatched_inbound()
+        returnValue(command)
 
     @inlineCallbacks
     def check_msg(self, from_addr="+12345678", to_addr="*678#", content=None,
@@ -137,7 +141,7 @@ class TestTruteqTransport(VumiTestCase):
 
     @inlineCallbacks
     def test_handle_inbound_ussd_new(self):
-        self.send(USSDMessage(msisdn='27000000000', type=c.USSD_NEW,
+        yield self.send(USSDMessage(msisdn='27000000000', type=c.USSD_NEW,
                               message='*678#', phase=c.USSD_PHASE_1))
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assertEqual(msg['to_addr'], '*678#')
@@ -146,7 +150,7 @@ class TestTruteqTransport(VumiTestCase):
 
     @inlineCallbacks
     def test_handle_inbound_extended_ussd_new(self):
-        self.send(ExtendedUSSDMessage(
+        yield self.send(ExtendedUSSDMessage(
             msisdn='27000000000', type=c.USSD_NEW, message='*678#',
             genfields='::3', phase=c.USSD_PHASE_1))
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
@@ -247,3 +251,13 @@ class TestTruteqTransport(VumiTestCase):
     def test_ussd_addr_appends_hashes_if_missing(self):
         yield self.incoming_ussd(ussd_type=c.USSD_NEW, message="*6*7*8")
         yield self.check_msg(to_addr="*6*7*8#", session_event=SESSION_NEW)
+
+    @inlineCallbacks
+    def test_handle_inbound_sms(self):
+        cmd = MoMessage(msisdn='foo', message='bar', sequence='1')
+        with LogCatcher() as logger:
+            yield self.send(cmd)
+            [warning] = logger.messages()
+            self.assertEqual(
+                warning,
+                "Received unsupported message, dropping: %r." % (cmd,))
