@@ -24,7 +24,7 @@ setup(
         'PyYAML',
         'iso8601',
         'pyOpenSSL',
-        'python-ssmi>=0.0.5',
+        'txssmi',
         'wokkel',
         'redis',
         'txredis',
