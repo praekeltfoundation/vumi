@@ -1,4 +1,4 @@
-# -*- test-case-name: vumi.transports.imimobile.tests.test_imimobile_ussd -*-
+# -*- test-case-name: vumi.transports.dmark.tests.test_dmark_ussd -*-
 
 import json
 
@@ -122,7 +122,7 @@ class DmarkUssdTransport(HttpRpcTransport):
             content=values["ussdRequestString"],
             to_addr=to_addr,
             from_addr=from_addr,
-            provider='imimobile',
+            provider='dmark',
             session_event=session_event,
             transport_type=self.transport_type,
             transport_metadata={
