@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from twisted.internet.defer import Deferred, succeed
+from twisted.internet.defer import Deferred, succeed, inlineCallbacks
 from twisted.trial.unittest import TestCase
 
 from vumi.message import TransportUserMessage, TransportEvent
@@ -704,3 +704,456 @@ class TestWorkerHelper(VumiTestCase):
         self.assertIsInstance(worker._amqp_client, FakeAMQClient)
         self.assertEqual(worker._amqp_client.broker, worker_helper.broker)
         self.assertFalse(worker.worker_started)
+
+    def _add_to_dispatched(self, broker, rkey, msg, kick=False):
+        broker.exchange_declare('vumi', 'direct')
+        broker.publish_message('vumi', rkey, msg)
+        if kick:
+            return broker.kick_delivery()
+
+    def _get_dispatched(self, broker, rkey):
+        return broker.get_messages('vumi', rkey)
+
+    def test_get_dispatched(self):
+        """
+        WorkerHelper.get_dispatched() should get messages dispatched by the
+        broker.
+        """
+        msg_helper = MessageHelper()
+        worker_helper = WorkerHelper()
+        dispatched = worker_helper.get_dispatched(
+            'fooconn', 'inbound', TransportUserMessage)
+        self.assertEqual(dispatched, [])
+        msg = msg_helper.make_inbound('message')
+        self._add_to_dispatched(
+            worker_helper.broker, 'fooconn.inbound', msg)
+        dispatched = worker_helper.get_dispatched(
+            'fooconn', 'inbound', TransportUserMessage)
+        self.assertEqual(dispatched, [msg])
+
+    def test_get_dispatched_None_connector(self):
+        """
+        WorkerHelper.get_dispatched() should use the default connector if
+        `None` is passed in.
+        """
+        msg_helper = MessageHelper()
+        worker_helper = WorkerHelper(connector_name='fooconn')
+        dispatched = worker_helper.get_dispatched(
+            None, 'inbound', TransportUserMessage)
+        self.assertEqual(dispatched, [])
+        msg = msg_helper.make_inbound('message')
+        self._add_to_dispatched(
+            worker_helper.broker, 'fooconn.inbound', msg)
+        dispatched = worker_helper.get_dispatched(
+            None, 'inbound', TransportUserMessage)
+        self.assertEqual(dispatched, [msg])
+
+    def test_clear_all_dispatched(self):
+        """
+        WorkerHelper.clear_all_dispatched() should clear all messages
+        dispatched by the broker.
+        """
+        msg_helper = MessageHelper()
+        worker_helper = WorkerHelper()
+        msg = msg_helper.make_inbound('message')
+        self._add_to_dispatched(
+            worker_helper.broker, 'fooconn.inbound', msg)
+        self.assertNotEqual(worker_helper.broker.dispatched['vumi'], {})
+        worker_helper.clear_all_dispatched()
+        self.assertEqual(worker_helper.broker.dispatched['vumi'], {})
+
+    def test_get_dispatched_events(self):
+        """
+        WorkerHelper.get_dispatched_events() should get events dispatched by
+        the broker.
+        """
+        msg_helper = MessageHelper()
+        worker_helper = WorkerHelper()
+        dispatched = worker_helper.get_dispatched_events('fooconn')
+        self.assertEqual(dispatched, [])
+        msg = msg_helper.make_ack()
+        self._add_to_dispatched(
+            worker_helper.broker, 'fooconn.event', msg)
+        dispatched = worker_helper.get_dispatched_events('fooconn')
+        self.assertEqual(dispatched, [msg])
+
+    def test_get_dispatched_events_no_connector(self):
+        """
+        WorkerHelper.get_dispatched_events() should use the default connector
+        if none is passed in.
+        """
+        msg_helper = MessageHelper()
+        worker_helper = WorkerHelper(connector_name='fooconn')
+        dispatched = worker_helper.get_dispatched_events()
+        self.assertEqual(dispatched, [])
+        msg = msg_helper.make_ack()
+        self._add_to_dispatched(
+            worker_helper.broker, 'fooconn.event', msg)
+        dispatched = worker_helper.get_dispatched_events()
+        self.assertEqual(dispatched, [msg])
+
+    def test_get_dispatched_inbound(self):
+        """
+        WorkerHelper.get_dispatched_inbound() should get inbound messages
+        dispatched by the broker.
+        """
+        msg_helper = MessageHelper()
+        worker_helper = WorkerHelper()
+        dispatched = worker_helper.get_dispatched_inbound('fooconn')
+        self.assertEqual(dispatched, [])
+        msg = msg_helper.make_inbound('message')
+        self._add_to_dispatched(
+            worker_helper.broker, 'fooconn.inbound', msg)
+        dispatched = worker_helper.get_dispatched_inbound('fooconn')
+        self.assertEqual(dispatched, [msg])
+
+    def test_get_dispatched_inbound_no_connector(self):
+        """
+        WorkerHelper.get_dispatched_inbound() should use the default connector
+        if none is passed in.
+        """
+        msg_helper = MessageHelper()
+        worker_helper = WorkerHelper(connector_name='fooconn')
+        dispatched = worker_helper.get_dispatched_inbound()
+        self.assertEqual(dispatched, [])
+        msg = msg_helper.make_inbound('message')
+        self._add_to_dispatched(
+            worker_helper.broker, 'fooconn.inbound', msg)
+        dispatched = worker_helper.get_dispatched_inbound()
+        self.assertEqual(dispatched, [msg])
+
+    def test_get_dispatched_outbound(self):
+        """
+        WorkerHelper.get_dispatched_outbound() should get outbound messages
+        dispatched by the broker.
+        """
+        msg_helper = MessageHelper()
+        worker_helper = WorkerHelper()
+        dispatched = worker_helper.get_dispatched_outbound('fooconn')
+        self.assertEqual(dispatched, [])
+        msg = msg_helper.make_outbound('message')
+        self._add_to_dispatched(
+            worker_helper.broker, 'fooconn.outbound', msg)
+        dispatched = worker_helper.get_dispatched_outbound('fooconn')
+        self.assertEqual(dispatched, [msg])
+
+    def test_get_dispatched_outbound_no_connector(self):
+        """
+        WorkerHelper.get_dispatched_outbound() should use the default connector
+        if none is passed in.
+        """
+        msg_helper = MessageHelper()
+        worker_helper = WorkerHelper(connector_name='fooconn')
+        dispatched = worker_helper.get_dispatched_outbound()
+        self.assertEqual(dispatched, [])
+        msg = msg_helper.make_outbound('message')
+        self._add_to_dispatched(
+            worker_helper.broker, 'fooconn.outbound', msg)
+        dispatched = worker_helper.get_dispatched_outbound()
+        self.assertEqual(dispatched, [msg])
+
+    @inlineCallbacks
+    def test_wait_for_dispatched_events(self):
+        """
+        WorkerHelper.wait_for_dispatched_events() should wait for events
+        dispatched by the broker.
+        """
+        msg_helper = MessageHelper()
+        worker_helper = WorkerHelper()
+        d = worker_helper.wait_for_dispatched_events(1, 'fooconn')
+        self.assertEqual(d.called, False)
+        msg = msg_helper.make_ack()
+        yield self._add_to_dispatched(
+            worker_helper.broker, 'fooconn.event', msg, kick=True)
+        dispatched = self.success_result_of(d)
+        self.assertEqual(dispatched, [msg])
+
+    @inlineCallbacks
+    def test_wait_for_dispatched_events_no_connector(self):
+        """
+        WorkerHelper.wait_for_dispatched_events() should get use the default
+        connector if none is passed in.
+        """
+        msg_helper = MessageHelper()
+        worker_helper = WorkerHelper(connector_name='fooconn')
+        d = worker_helper.wait_for_dispatched_events(1)
+        self.assertEqual(d.called, False)
+        msg = msg_helper.make_ack()
+        yield self._add_to_dispatched(
+            worker_helper.broker, 'fooconn.event', msg, kick=True)
+        dispatched = self.success_result_of(d)
+        self.assertEqual(dispatched, [msg])
+
+    @inlineCallbacks
+    def test_wait_for_dispatched_inbound(self):
+        """
+        WorkerHelper.wait_for_dispatched_inbound() should wait for
+        inbound messages dispatched by the broker.
+        """
+        msg_helper = MessageHelper()
+        worker_helper = WorkerHelper()
+        d = worker_helper.wait_for_dispatched_inbound(1, 'fooconn')
+        msg = msg_helper.make_inbound('message')
+        yield self._add_to_dispatched(
+            worker_helper.broker, 'fooconn.inbound', msg, kick=True)
+        dispatched = self.success_result_of(d)
+        self.assertEqual(dispatched, [msg])
+
+    @inlineCallbacks
+    def test_wait_for_dispatched_inbound_no_connector(self):
+        """
+        WorkerHelper.wait_for_dispatched_inbound() should use the default
+        connector if none is passed in.
+        """
+        msg_helper = MessageHelper()
+        worker_helper = WorkerHelper(connector_name='fooconn')
+        d = worker_helper.wait_for_dispatched_inbound(1)
+        msg = msg_helper.make_inbound('message')
+        yield self._add_to_dispatched(
+            worker_helper.broker, 'fooconn.inbound', msg, kick=True)
+        dispatched = self.success_result_of(d)
+        self.assertEqual(dispatched, [msg])
+
+    @inlineCallbacks
+    def test_wait_for_dispatched_outbound(self):
+        """
+        WorkerHelper.wait_for_dispatched_outbound() should wait for outbound
+        messages dispatched by the broker.
+        """
+        msg_helper = MessageHelper()
+        worker_helper = WorkerHelper()
+        d = worker_helper.wait_for_dispatched_outbound(1, 'fooconn')
+        msg = msg_helper.make_outbound('message')
+        yield self._add_to_dispatched(
+            worker_helper.broker, 'fooconn.outbound', msg, kick=True)
+        dispatched = self.success_result_of(d)
+        self.assertEqual(dispatched, [msg])
+
+    @inlineCallbacks
+    def test_wait_for_dispatched_outbound_no_connector(self):
+        """
+        WorkerHelper.wait_for_dispatched_outbound() should use the default
+        connector if none is passed in.
+        """
+        msg_helper = MessageHelper()
+        worker_helper = WorkerHelper(connector_name='fooconn')
+        d = worker_helper.wait_for_dispatched_outbound(1)
+        msg = msg_helper.make_outbound('message')
+        yield self._add_to_dispatched(
+            worker_helper.broker, 'fooconn.outbound', msg, kick=True)
+        dispatched = self.success_result_of(d)
+        self.assertEqual(dispatched, [msg])
+
+    def test_clear_dispatched_events(self):
+        """
+        WorkerHelper.clear_dispatched_events() should clear events messages
+        dispatched to a particular endpoint from the broker.
+        """
+        msg_helper = MessageHelper()
+        worker_helper = WorkerHelper()
+        msg = msg_helper.make_ack()
+        self._add_to_dispatched(
+            worker_helper.broker, 'fooconn.event', msg)
+        self.assertNotEqual(
+            worker_helper.broker.dispatched['vumi']['fooconn.event'], [])
+        worker_helper.clear_dispatched_events('fooconn')
+        self.assertEqual(
+            worker_helper.broker.dispatched['vumi']['fooconn.event'], [])
+
+    def test_clear_dispatched_events_no_connector(self):
+        """
+        WorkerHelper.clear_dispatched_events() should use the default connector
+        if none is passed in.
+        """
+        msg_helper = MessageHelper()
+        worker_helper = WorkerHelper(connector_name='fooconn')
+        msg = msg_helper.make_ack()
+        self._add_to_dispatched(
+            worker_helper.broker, 'fooconn.event', msg)
+        self.assertNotEqual(
+            worker_helper.broker.dispatched['vumi']['fooconn.event'], [])
+        worker_helper.clear_dispatched_events()
+        self.assertEqual(
+            worker_helper.broker.dispatched['vumi']['fooconn.event'], [])
+
+    def test_clear_dispatched_inbound(self):
+        """
+        WorkerHelper.clear_dispatched_inbound() should clear inbound messages
+        dispatched to a particular endpoint from the broker.
+        """
+        msg_helper = MessageHelper()
+        worker_helper = WorkerHelper()
+        msg = msg_helper.make_inbound('message')
+        self._add_to_dispatched(
+            worker_helper.broker, 'fooconn.inbound', msg)
+        self.assertNotEqual(
+            worker_helper.broker.dispatched['vumi']['fooconn.inbound'], [])
+        worker_helper.clear_dispatched_inbound('fooconn')
+        self.assertEqual(
+            worker_helper.broker.dispatched['vumi']['fooconn.inbound'], [])
+
+    def test_clear_dispatched_inbound_no_connector(self):
+        """
+        WorkerHelper.clear_dispatched_inbound() should use the default
+        connector if none is passed in.
+        """
+        msg_helper = MessageHelper()
+        worker_helper = WorkerHelper(connector_name='fooconn')
+        msg = msg_helper.make_inbound('message')
+        self._add_to_dispatched(
+            worker_helper.broker, 'fooconn.inbound', msg)
+        self.assertNotEqual(
+            worker_helper.broker.dispatched['vumi']['fooconn.inbound'], [])
+        worker_helper.clear_dispatched_inbound()
+        self.assertEqual(
+            worker_helper.broker.dispatched['vumi']['fooconn.inbound'], [])
+
+    def test_clear_dispatched_outbound(self):
+        """
+        WorkerHelper.clear_dispatched_outbound() should clear outbound messages
+        dispatched to a particular endpoint from the broker.
+        """
+        msg_helper = MessageHelper()
+        worker_helper = WorkerHelper()
+        msg = msg_helper.make_outbound('message')
+        self._add_to_dispatched(
+            worker_helper.broker, 'fooconn.outbound', msg)
+        self.assertNotEqual(
+            worker_helper.broker.dispatched['vumi']['fooconn.outbound'], [])
+        worker_helper.clear_dispatched_outbound('fooconn')
+        self.assertEqual(
+            worker_helper.broker.dispatched['vumi']['fooconn.outbound'], [])
+
+    def test_clear_dispatched_outbound_no_connector(self):
+        """
+        WorkerHelper.clear_dispatched_outbound() should use the default
+        connector if none is passed in.
+        """
+        msg_helper = MessageHelper()
+        worker_helper = WorkerHelper(connector_name='fooconn')
+        msg = msg_helper.make_outbound('message')
+        self._add_to_dispatched(
+            worker_helper.broker, 'fooconn.outbound', msg)
+        self.assertNotEqual(
+            worker_helper.broker.dispatched['vumi']['fooconn.outbound'], [])
+        worker_helper.clear_dispatched_outbound()
+        self.assertEqual(
+            worker_helper.broker.dispatched['vumi']['fooconn.outbound'], [])
+
+    @inlineCallbacks
+    def test_dispatch_raw(self):
+        """
+        WorkerHelper.dispatch_raw() should dispatch a message.
+        """
+        msg_helper = MessageHelper()
+        worker_helper = WorkerHelper()
+        broker = worker_helper.broker
+        broker.exchange_declare('vumi', 'direct')
+        self.assertEqual(broker.get_messages('vumi', 'fooconn.foo'), [])
+        msg = msg_helper.make_inbound('message')
+        yield worker_helper.dispatch_raw('fooconn.foo', msg)
+        self.assertEqual(broker.get_messages('vumi', 'fooconn.foo'), [msg])
+
+    @inlineCallbacks
+    def test_dispatch_raw_with_exchange(self):
+        """
+        WorkerHelper.dispatch_raw() should dispatch a message on the specified
+        exchange.
+        """
+        msg_helper = MessageHelper()
+        worker_helper = WorkerHelper()
+        broker = worker_helper.broker
+        broker.exchange_declare('blah', 'direct')
+        self.assertEqual(broker.get_messages('blah', 'fooconn.foo'), [])
+        msg = msg_helper.make_inbound('message')
+        yield worker_helper.dispatch_raw('fooconn.foo', msg, exchange='blah')
+        self.assertEqual(broker.get_messages('blah', 'fooconn.foo'), [msg])
+
+    @inlineCallbacks
+    def test_dispatch_event(self):
+        """
+        WorkerHelper.dispatch_event() should dispatch an event message.
+        """
+        msg_helper = MessageHelper()
+        worker_helper = WorkerHelper()
+        broker = worker_helper.broker
+        broker.exchange_declare('vumi', 'direct')
+        self.assertEqual(broker.get_messages('vumi', 'fooconn.event'), [])
+        msg = msg_helper.make_ack()
+        yield worker_helper.dispatch_event(msg, 'fooconn')
+        self.assertEqual(broker.get_messages('vumi', 'fooconn.event'), [msg])
+
+    @inlineCallbacks
+    def test_dispatch_event_no_connector(self):
+        """
+        WorkerHelper.dispatch_event() should use the default connector if
+        none is passed in.
+        """
+        msg_helper = MessageHelper()
+        worker_helper = WorkerHelper(connector_name='fooconn')
+        broker = worker_helper.broker
+        broker.exchange_declare('vumi', 'direct')
+        self.assertEqual(broker.get_messages('vumi', 'fooconn.event'), [])
+        msg = msg_helper.make_ack()
+        yield worker_helper.dispatch_event(msg)
+        self.assertEqual(broker.get_messages('vumi', 'fooconn.event'), [msg])
+
+    @inlineCallbacks
+    def test_dispatch_inbound(self):
+        """
+        WorkerHelper.dispatch_inbound() should dispatch an inbound message.
+        """
+        msg_helper = MessageHelper()
+        worker_helper = WorkerHelper()
+        broker = worker_helper.broker
+        broker.exchange_declare('vumi', 'direct')
+        self.assertEqual(broker.get_messages('vumi', 'fooconn.inbound'), [])
+        msg = msg_helper.make_inbound('message')
+        yield worker_helper.dispatch_inbound(msg, 'fooconn')
+        self.assertEqual(broker.get_messages('vumi', 'fooconn.inbound'), [msg])
+
+    @inlineCallbacks
+    def test_dispatch_inbound_no_connector(self):
+        """
+        WorkerHelper.dispatch_inbound() should use the default connector if
+        none is passed in.
+        """
+        msg_helper = MessageHelper()
+        worker_helper = WorkerHelper(connector_name='fooconn')
+        broker = worker_helper.broker
+        broker.exchange_declare('vumi', 'direct')
+        self.assertEqual(broker.get_messages('vumi', 'fooconn.inbound'), [])
+        msg = msg_helper.make_inbound('message')
+        yield worker_helper.dispatch_inbound(msg)
+        self.assertEqual(broker.get_messages('vumi', 'fooconn.inbound'), [msg])
+
+    @inlineCallbacks
+    def test_dispatch_outbound(self):
+        """
+        WorkerHelper.dispatch_outbound() should dispatch an outbound message.
+        """
+        msg_helper = MessageHelper()
+        worker_helper = WorkerHelper()
+        broker = worker_helper.broker
+        broker.exchange_declare('vumi', 'direct')
+        self.assertEqual(broker.get_messages('vumi', 'fooconn.outbound'), [])
+        msg = msg_helper.make_outbound('message')
+        yield worker_helper.dispatch_outbound(msg, 'fooconn')
+        self.assertEqual(
+            broker.get_messages('vumi', 'fooconn.outbound'), [msg])
+
+    @inlineCallbacks
+    def test_dispatch_outbound_no_connector(self):
+        """
+        WorkerHelper.dispatch_outbound() should use the default connector if
+        none is passed in.
+        """
+        msg_helper = MessageHelper()
+        worker_helper = WorkerHelper(connector_name='fooconn')
+        broker = worker_helper.broker
+        broker.exchange_declare('vumi', 'direct')
+        self.assertEqual(broker.get_messages('vumi', 'fooconn.outbound'), [])
+        msg = msg_helper.make_outbound('message')
+        yield worker_helper.dispatch_outbound(msg)
+        self.assertEqual(
+            broker.get_messages('vumi', 'fooconn.outbound'), [msg])
