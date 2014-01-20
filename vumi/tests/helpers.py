@@ -400,7 +400,7 @@ class MessageHelper(object):
         :param str user_message_id: Event ``user_message_id`` field.
 
         Any fields required by a particular event type (such as
-        ``sent_message_id`` for ``ack``s) are also mandatory.
+        ``sent_message_id`` for ``ack`` events) are also mandatory.
 
         The following parameters override default values for the event fields
         of the same name:
