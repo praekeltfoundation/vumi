@@ -14,12 +14,19 @@ from vumi.utils import vumi_resource_path, flatten_generator
 from vumi.tests.fake_amqp import FakeAMQPBroker, FakeAMQClient
 
 
-# We can't use `None` as a placeholder for default values because we may want
-# to override the default (non-`None`) value with `None`.
-
-# This is its own class (rather than an instance of `object`) so we can make
-# pretty docs.
 class _Default(object):
+    """
+    Placeholder for default values in helpers.
+
+    We can't use ``None`` as a placeholder for default values because we may
+    want to override the default (non-``None``) value with ``None``.
+
+    This is its own class (rather than using an instance of ``object``) because
+    Sphinx uses ``repr()`` on function parameter defaults when generating API
+    documentation and we'd rather see ``DEFAULT`` in the docs than ``<object
+    object at 0x1010552c0>``.
+    """
+
     def __repr__(self):
         return 'DEFAULT'
 
