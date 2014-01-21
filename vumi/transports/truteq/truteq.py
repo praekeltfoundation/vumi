@@ -3,7 +3,7 @@
 
 """TruTeq USSD transport."""
 
-from twisted.internet.defer import Deferred, inlineCallbacks, maybeDeferred
+from twisted.internet.defer import inlineCallbacks, maybeDeferred
 from twisted.internet.protocol import Factory
 
 
@@ -42,14 +42,10 @@ class TruteqTransportConfig(Transport.CONFIG_CLASS):
 
 class TruteqTransportProtocol(SSMIProtocol):
 
-    def __init__(self, vumi_transport):
-        SSMIProtocol.__init__(self)
-        config = vumi_transport.get_static_config()
-        self.noisy = config.debug
-        self.vumi_transport = vumi_transport
-
     def connectionMade(self):
-        config = self.vumi_transport.get_static_config()
+        config = self.factory.vumi_transport.get_static_config()
+        self.factory.protocol = self
+        self.noisy = config.debug
         d = self.authenticate(config.username, config.password)
         d.addCallback(
             lambda success: (
@@ -57,39 +53,31 @@ class TruteqTransportProtocol(SSMIProtocol):
                 if success else self.loseConnection()))
         return d
 
+    def connectionLost(self, reason):
+        if self.link_check.running:
+            self.link_check.stop()
+        SSMIProtocol.connectionLost(self, reason)
+
     def handle_MO(self, mo):
-        return self.vumi_transport.handle_unhandled_message(mo)
+        return self.factory.vumi_transport.handle_unhandled_message(mo)
 
     def handle_BINARY_MO(self, mo):
-        return self.vumi_transport.handle_unhandled_message(mo)
+        return self.factory.vumi_transport.handle_unhandled_message(mo)
 
     def handle_PREMIUM_MO(self, mo):
-        return self.vumi_transport.handle_unhandled_message(mo)
+        return self.factory.vumi_transport.handle_unhandled_message(mo)
 
     def handle_PREMIUM_BINARY_MO(self, mo):
-        return self.vumi_transport.handle_unhandled_message(mo)
+        return self.factory.vumi_transport.handle_unhandled_message(mo)
 
     def handle_USSD_MESSAGE(self, um):
-        return self.vumi_transport.handle_raw_inbound_message(um)
+        return self.factory.vumi_transport.handle_raw_inbound_message(um)
 
     def handle_EXTENDED_USSD_MESSAGE(self, um):
-        return self.vumi_transport.handle_raw_inbound_message(um)
+        return self.factory.vumi_transport.handle_raw_inbound_message(um)
 
     def handle_LOGOUT(self, msg):
-        return self.vumi_transport.handle_remote_logout(msg)
-
-
-class TruteqService(ReconnectingClientService):
-
-    def get_protocol(self):
-        return self._protocol
-
-    def stopService(self):
-        protocol = self.get_protocol()
-        if protocol:
-            if protocol.link_check.running:
-                protocol.link_check.stop()
-        return ReconnectingClientService.stopService(self)
+        return self.factory.vumi_transport.handle_remote_logout(msg)
 
 
 class TruteqTransport(Transport):
@@ -101,7 +89,7 @@ class TruteqTransport(Transport):
     """
 
     CONFIG_CLASS = TruteqTransportConfig
-    service_class = TruteqService
+    service_class = ReconnectingClientService
     protocol_class = TruteqTransportProtocol
     encoding = 'iso-8859-1'
 
@@ -122,13 +110,14 @@ class TruteqTransport(Transport):
     @inlineCallbacks
     def setup_transport(self):
         config = self.get_static_config()
-        factory = Factory.forProtocol(self.protocol_class(self))
+        self.client_factory = Factory.forProtocol(self.protocol_class)
+        self.client_factory.vumi_transport = self
 
         prefix = "%s:ussd_codes" % (config.transport_name,)
         self.session_manager = yield SessionManager.from_redis_config(
             config.redis_manager, prefix, config.ussd_session_lifetime)
         self.client_service = self.get_service(
-            config.twisted_endpoint, factory)
+            config.twisted_endpoint, self.client_factory)
 
     def get_service(self, endpoint, factory):
         client_service = self.service_class(endpoint, factory)
@@ -188,7 +177,7 @@ class TruteqTransport(Transport):
             })
 
     def handle_outbound_message(self, message):
-        protocol = self.client_service.get_protocol()
+        protocol = self.client_factory.protocol
         text = message.get('content') or ''
 
         # Truteq uses \r as a message delimiter in the protocol.

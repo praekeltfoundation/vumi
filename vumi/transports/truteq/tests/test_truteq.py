@@ -2,10 +2,9 @@
 
 """Test for vumi.transport.truteq.truteq."""
 
-from twisted.internet.defer import (
-    inlineCallbacks, DeferredQueue, Deferred, returnValue)
+from twisted.internet.defer import inlineCallbacks, Deferred, returnValue
 from twisted.internet import reactor
-from twisted.test.proto_helpers import StringTransport
+from twisted.test.proto_helpers import StringTransportWithDisconnection
 
 from txssmi import constants as c
 from txssmi.builder import SSMIRequest
@@ -13,11 +12,11 @@ from txssmi.commands import (
     Ack, USSDMessage, ExtendedUSSDMessage, SendUSSDMessage, MoMessage)
 
 from vumi.message import TransportUserMessage
+from vumi.reconnecting_client import ReconnectingClientService
 from vumi.tests.helpers import VumiTestCase
 from vumi.tests.utils import LogCatcher
 from vumi.transports.tests.helpers import TransportHelper
-from vumi.transports.truteq.truteq import (
-    TruteqTransport, TruteqService, TruteqTransportProtocol)
+from vumi.transports.truteq.truteq import TruteqTransport
 
 
 # To reduce verbosity.
@@ -27,27 +26,25 @@ SESSION_CLOSE = TransportUserMessage.SESSION_CLOSE
 SESSION_NONE = TransportUserMessage.SESSION_NONE
 
 
-class StubbedTruteqService(TruteqService):
+class StringTransportEndpoint(object):
+    def __init__(self, string_transport):
+        self.string_transport = string_transport
+        self.connect_d = Deferred()
 
-    def __init__(self, protocol):
-        self._protocol = protocol
-
-    def stopService(self):
-        protocol = self.get_protocol()
-        if protocol is not None:
-            if protocol.link_check.running:
-                protocol.link_check.stop()
-            protocol.transport.loseConnection()
-
-    def startService(self):
-        pass
+    def connect(self, protocolFactory):
+        protocol = protocolFactory.buildProtocol(None)
+        protocol.makeConnection(self.string_transport)
+        self.string_transport.protocol = protocol
+        self.connect_d.callback(protocol)
+        d = Deferred()
+        d.callback(protocol)
+        return d
 
 
 class TestTruteqTransport(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self.patch(TruteqTransport, 'get_service', self.patch_get_service)
         self.tx_helper = self.add_helper(TransportHelper(TruteqTransport))
         self.config = {
             'username': 'username',
@@ -59,15 +56,16 @@ class TestTruteqTransport(VumiTestCase):
         #       as an argument.
         self.transport = yield self.tx_helper.get_transport(
             self.config, start=False)
+        self.string_transport = StringTransportWithDisconnection()
+        st_endpoint = StringTransportEndpoint(self.string_transport)
 
-        self.string_transport = StringTransport()
-        self.protocol = TruteqTransportProtocol(self.transport)
-        self.protocol.makeConnection(self.string_transport)
+        def truteq_service_maker(endpoint, factory):
+            return ReconnectingClientService(st_endpoint, factory)
+
+        self.transport.service_class = truteq_service_maker
         yield self.transport.startWorker()
+        self.protocol = yield st_endpoint.connect_d
         yield self.login_protocol('username', 'password')
-
-    def patch_get_service(self, endpoint, factory):
-        return StubbedTruteqService(self.protocol)
 
     @inlineCallbacks
     def login_protocol(self, username, password):
@@ -77,9 +75,6 @@ class TestTruteqTransport(VumiTestCase):
         self.assertEqual(cmd.password, password)
         self.send(Ack(ack_type='1'))
         returnValue(True)
-
-    def patch_get_protocol(self):
-        return self.protocol
 
     def send(self, command):
         return self.protocol.lineReceived(str(command))
