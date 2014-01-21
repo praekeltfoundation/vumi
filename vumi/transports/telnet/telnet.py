@@ -9,6 +9,7 @@ from twisted.conch.telnet import (TelnetTransport, TelnetProtocol,
                                     StatefulTelnetProtocol)
 from twisted.python import log
 
+from vumi.config import ConfigServerEndpoint, ConfigText
 from vumi.transports import Transport
 from vumi.message import TransportUserMessage
 
@@ -81,34 +82,37 @@ class AddressedTelnetTransportProtocol(StatefulTelnetProtocol):
             self.vumi_transport.deregister_client(self)
 
 
+class TelnetServerConfig(Transport.CONFIG_CLASS):
+    """
+    Telnet transport configuration.
+    """
+    twisted_endpoint = ConfigServerEndpoint(
+        "The endpoint the Telnet server will listen on.",
+        fallbacks=('telnet_host', 'telnet_port'),
+        required=True, static=True)
+    to_addr = ConfigText(
+        "The to_addr to use for inbound messages. The default is to use"
+        " the host:port of the telnet server.",
+        default=None, static=True)
+    transport_type = ConfigText(
+        "The transport_type to use for inbound messages.",
+        default='telnet', static=True)
+
+
 class TelnetServerTransport(Transport):
     """Telnet based transport.
 
     This transport listens on a specified port for telnet
     clients and routes lines to and from connected clients.
-
-    Telnet transport options:
-
-    :type telnet_port: int
-    :param telnet_port:
-        Port for the telnet server to listen on.
-    :type to_addr: str
-    :param to_addr:
-        The to_addr to use for the telnet server.
-        Defaults to 'host:port'.
-    :param transport_type:
-        The transport_type to use for the telnet server.
-        Defaults to 'telnet'.
     """
-    protocol = TelnetTransportProtocol
+    CONFIG_CLASS = TelnetServerConfig
 
-    def validate_config(self):
-        self.telnet_port = int(self.config['telnet_port'])
-        self._to_addr = self.config.get('to_addr')
-        self._transport_type = self.config.get('transport_type', 'telnet')
+    protocol = TelnetTransportProtocol
+    telnet_server = None
 
     @inlineCallbacks
     def setup_transport(self):
+        config = self.get_static_config()
         self._clients = {}
 
         def protocol():
@@ -116,8 +120,11 @@ class TelnetServerTransport(Transport):
 
         factory = ServerFactory()
         factory.protocol = protocol
-        self.telnet_server = yield reactor.listenTCP(self.telnet_port,
-                                                     factory)
+
+        self.telnet_server = yield config.twisted_endpoint.listen(factory)
+
+        self._transport_type = config.transport_type
+        self._to_addr = config.to_addr
         if self._to_addr is None:
             self._to_addr = self._format_addr(self.telnet_server.getHost())
 
@@ -129,7 +136,8 @@ class TelnetServerTransport(Transport):
             # of the transport.
             wait_for_closed = gatherResults([
                 client.registration_d for client in self._clients.values()])
-            self.telnet_server.loseConnection()
+            if self.telnet_server is not None:
+                self.telnet_server.loseConnection()
             yield wait_for_closed
 
     def _format_addr(self, addr):
