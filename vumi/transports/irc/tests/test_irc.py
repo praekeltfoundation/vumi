@@ -349,9 +349,9 @@ class TestIrcTransport(VumiTestCase):
     @inlineCallbacks
     def test_handle_outbound_message_while_disconnected(self):
         yield self.irc_connector.stopListening()
-        self.transport.client.disconnect()
+        self.transport.factory.vumibot.connectionLost("testing disconnect")
 
-        expected_error = "IrcTransport not connected (state: 'disconnected')."
+        expected_error = "IrcTransport not connected."
 
         yield self.dispatch_outbound_irc("outbound")
         [error] = self.tx_helper.get_dispatched_failures()
