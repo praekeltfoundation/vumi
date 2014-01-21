@@ -11,17 +11,34 @@ from zope.interface import Interface, implements
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.service import get_spec
 from vumi.utils import vumi_resource_path, flatten_generator
-from .fake_amqp import FakeAMQPBroker, FakeAMQClient
+from vumi.tests.fake_amqp import FakeAMQPBroker, FakeAMQClient
 
 
 # We can't use `None` as a placeholder for default values because we may want
 # to override the default (non-`None`) value with `None`.
-DEFAULT = object()
+
+# This is its own class (rather than an instance of `object`) so we can make
+# pretty docs.
+class _Default(object):
+    def __repr__(self):
+        return 'DEFAULT'
+
+DEFAULT = _Default()
 
 
 class IHelper(Interface):
+    """
+    Interface for test helpers.
+
+    This specifies a standard setup and cleanup mechanism used by test cases
+    that implement the :class:`IHelperEnabledTestCase` interface.
+
+    There are no interface restrictions on the constructor of a helper.
+    """
+
     def setup(*args, **kwargs):
-        """Perform potentially async helper setup.
+        """
+        Perform potentially async helper setup.
 
         This may return a deferred for async setup or block for sync setup. All
         helpers must implement this even if it does nothing.
@@ -31,7 +48,8 @@ class IHelper(Interface):
         """
 
     def cleanup():
-        """Clean up any resources created by this helper.
+        """
+        Clean up any resources created by this helper.
 
         This may return a deferred for async cleanup or block for sync cleanup.
         All helpers must implement this even if it does nothing.
@@ -39,24 +57,70 @@ class IHelper(Interface):
 
 
 class IHelperEnabledTestCase(Interface):
+    """
+    Interface for test cases that use helpers.
+
+    This specifies a standard mechanism for managing setup and cleanup of
+    helper classes that implement the :class:`IHelper` interface.
+    """
+
     def add_helper(helper_object, *args, **kwargs):
-        """Register cleanup and perform setup for a helper object.
+        """
+        Register cleanup and perform setup for a helper object.
 
-        This should call `helper_object.setup(*args, **kwargs)` and
-        `self.add_cleanup(helper_object.cleanup)` or an equivalent.
+        This should call ``helper_object.setup(*args, **kwargs)`` and
+        ``self.add_cleanup(helper_object.cleanup)`` or an equivalent.
 
-        Returns the `helper_object` passed in or a `Deferred` if setup is
-        async.
+        Returns the ``helper_object`` passed in or a :class:`Deferred` if
+        setup is async.
         """
 
 
 def proxyable(func):
-    """Mark a method as being suitable for automatic proxy generation."""
+    """
+    Mark a method as being suitable for automatic proxy generation.
+
+    See :func:`generate_proxies` for usage.
+    """
     func.proxyable = True
     return func
 
 
 def generate_proxies(target, source):
+    """
+    Generate proxies on ``target`` for proxyable methods on ``source``.
+
+    This is useful for wrapping helper objects in higher-level helpers or
+    extending a helper to provide extra functionality without having to resort
+    to subclassing.
+
+    The "proxying" is actually just copying the proxyable attribute onto the
+    target.
+
+    >>> class AddHelper(object):
+    ...     def __init__(self, number):
+    ...         self._number = number
+    ...
+    ...     @proxyable
+    ...     def add_number(self, number):
+    ...         return self._number + number
+
+    >>> class OtherHelper(object):
+    ...     def __init__(self, number):
+    ...         self._adder = AddHelper(number)
+    ...         generate_proxies(self, self._adder)
+    ...
+    ...     @proxyable
+    ...     def say_hello(self):
+    ...         return "hello"
+
+    >>> other_helper = OtherHelper(3)
+    >>> other_helper.say_hello()
+    'hello'
+    >>> other_helper.add_number(2)
+    5
+    """
+
     for name in dir(source):
         attribute = getattr(source, name)
         if not getattr(attribute, 'proxyable', False):
@@ -69,13 +133,42 @@ def generate_proxies(target, source):
 
 
 def get_timeout():
-    # Look up the timeout in an environment variable and use a default of 5
-    # seconds if there isn't one there.
+    """
+    Look up the test timeout in the ``VUMI_TEST_TIMEOUT`` environment variable.
+
+    A default of 5 seconds is used if there isn't one there.
+    """
     timeout_str = os.environ.get('VUMI_TEST_TIMEOUT', '5')
     return float(timeout_str)
 
 
 class VumiTestCase(TestCase):
+    """
+    Base test case class for all things vumi-related.
+
+    This is a subclass of :class:`twisted.trial.unittest.TestCase` with a small
+    number of additional features:
+
+    * It implements :class:`IHelperEnabledTestCase` to make using helpers
+      easier. (See :meth:`add_helper`.)
+
+    * :attr:`timeout` is set to a default value of ``5`` and can be overridden
+      by setting the ``VUMI_TEST_TIMEOUT`` environment variable. (Longer
+      timeouts are more reliable for continuous integration builds, shorter
+      ones are less painful for local development.)
+
+    * :meth:`add_cleanup` provides an alternative mechanism for specifying
+      cleanup in the same place as the creation of thing that needs to be
+      cleaned up.
+
+    .. note::
+
+       While this class does not have a :meth:`setUp` method (thus avoiding the
+       need for subclasses to call it), it *does* have a :meth:`tearDown`
+       method. :meth:`add_cleanup` should be used in subclasses instead of
+       overriding :meth:`tearDown`.
+    """
+
     implements(IHelperEnabledTestCase)
 
     timeout = get_timeout()
@@ -84,6 +177,9 @@ class VumiTestCase(TestCase):
 
     @inlineCallbacks
     def tearDown(self):
+        """
+        Run any cleanup functions registered with :meth:`add_cleanup`.
+        """
         # Run any cleanup code we've registered with .add_cleanup().
         # We do this ourselves instead of using trial's .addCleanup() because
         # that doesn't have timeouts applied to it.
@@ -92,11 +188,56 @@ class VumiTestCase(TestCase):
                 yield cleanup(*args, **kw)
 
     def add_cleanup(self, func, *args, **kw):
+        """
+        Register a cleanup function to be called at teardown time.
+
+        :param callable func:
+            The callable object to call at cleanup time. This callable may
+            return a :class:`Deferred`, in which case cleanup will continue
+            after it fires.
+        :param \*args: Passed to ``func`` when it is called.
+        :param \**kw: Passed to ``func`` when it is called.
+
+        .. note::
+           This method should be use in place of the inherited
+           :meth:`addCleanup` method, because the latter doesn't apply timeouts
+           to cleanup functions.
+        """
         if self._cleanup_funcs is None:
             self._cleanup_funcs = []
         self._cleanup_funcs.append((func, args, kw))
 
     def add_helper(self, helper_object, *args, **kw):
+        """
+        Perform setup and register cleanup for the given helper object.
+
+        :param helper_object:
+            Helper object to add. ``helper_object`` must provide the
+            :class:`IHelper` interface.
+        :param \*args: Passed to :meth:`helper_object.setup` when it is called.
+        :param \**kw: Passed to :meth:`helper_object.setup` when it is called.
+
+        :returns:
+            Either ``helper_object`` or a :class:`Deferred` that fires with it.
+
+        If :meth:`helper_object.setup` returns a :class:`Deferred`, this method
+        also returns a :class:`Deferred`.
+
+        Example usage assuming ``@inlineCallbacks``:
+
+        >>> @inlineCallbacks
+        ... def test_foo(self):
+        ...     msg_helper = yield self.add_helper(MessageHelper())
+        ...     msg_helper.make_inbound("foo")
+
+        Example usage assuming non-async setup:
+
+        >>> def test_bar(self):
+        ...     msg_helper = self.add_helper(MessageHelper())
+        ...     msg_helper.make_inbound("bar")
+
+        """
+
         if not IHelper.providedBy(helper_object):
             raise ValueError(
                 "Helper object does not provide the IHelper interface: %s" % (
@@ -107,6 +248,27 @@ class VumiTestCase(TestCase):
 
 
 class MessageHelper(object):
+    """
+    Test helper for constructing various messages.
+
+    This helper does no setup or cleanup. It takes the following parameters,
+    which are used as defaults for message fields:
+
+    :param str transport_name:
+        Default value for ``transport_name`` on all messages.
+
+    :param str transport_type:
+        Default value for ``transport_type`` on all messages.
+
+    :param str mobile_addr:
+        Default value for ``from_addr`` on inbound messages and ``to_addr`` on
+        outbound messages.
+
+    :param str transport_addr:
+        Default value for ``to_addr`` on inbound messages and ``from_addr`` on
+        outbound messages.
+    """
+
     implements(IHelper)
 
     def __init__(self, transport_name='sphex', transport_type='sms',
@@ -124,6 +286,13 @@ class MessageHelper(object):
 
     @proxyable
     def make_inbound(self, content, from_addr=DEFAULT, to_addr=DEFAULT, **kw):
+        """
+        Construct an inbound :class:`~vumi.message.TransportUserMessage`.
+
+        This is a convenience wrapper around :meth:`make_user_message` and just
+        sets ``to_addr`` and ``from_addr`` appropriately for an inbound
+        message.
+        """
         if from_addr is DEFAULT:
             from_addr = self.mobile_addr
         if to_addr is DEFAULT:
@@ -132,6 +301,13 @@ class MessageHelper(object):
 
     @proxyable
     def make_outbound(self, content, from_addr=DEFAULT, to_addr=DEFAULT, **kw):
+        """
+        Construct an outbound :class:`~vumi.message.TransportUserMessage`.
+
+        This is a convenience wrapper around :meth:`make_user_message` and just
+        sets ``to_addr`` and ``from_addr`` appropriately for an outbound
+        message.
+        """
         if from_addr is DEFAULT:
             from_addr = self.transport_addr
         if to_addr is DEFAULT:
@@ -143,6 +319,43 @@ class MessageHelper(object):
                           session_event=None, transport_type=DEFAULT,
                           transport_name=DEFAULT, transport_metadata=DEFAULT,
                           helper_metadata=DEFAULT, endpoint=DEFAULT, **kw):
+        """
+        Construct a :class:`~vumi.message.TransportUserMessage`.
+
+        This method is the underlying implementation for :meth:`make_inbound`
+        and :meth:`make_outbound` and those should be used instead where they
+        apply.
+
+        The only real difference between using this method and constructing a
+        message object directly is that this method provides sensible defaults
+        for most fields and sets the routing endpoint (if provided) in a more
+        convenient way.
+
+        The following parameters are mandatory:
+
+        :param str content: Message ``content`` field.
+        :param str from_addr: Message ``from_addr`` field.
+        :param str to_addr: Message ``to_addr`` field.
+
+        The following parameters override default values for the message fields
+        of the same name:
+
+        :param str group: Default ``None``.
+        :param str session_event: Default ``None``.
+        :param str transport_type: Default :attr:`transport_type`.
+        :param str transport_name: Default :attr:`transport_name`.
+        :param dict transport_metadata: Default ``{}``.
+        :param dict helper_metadata: Default ``{}``.
+
+        The following parameter is special:
+
+        :param str endpoint:
+            If specified, the routing endpoint on the message is set by calling
+            :meth:`TransportUserMessage.set_routing_endpoint`.
+
+        All other keyword args are passed to the
+        :class:`~vumi.message.TransportUserMessage` constructor.
+        """
         if transport_type is DEFAULT:
             transport_type = self.transport_type
         if helper_metadata is DEFAULT:
@@ -170,6 +383,42 @@ class MessageHelper(object):
     def make_event(self, event_type, user_message_id, transport_type=DEFAULT,
                    transport_name=DEFAULT, transport_metadata=DEFAULT,
                    endpoint=DEFAULT, **kw):
+        """
+        Construct a :class:`~vumi.message.TransportEvent`.
+
+        This method is the underlying implementation for :meth:`make_ack`,
+        :meth:`make_nack` and :meth:`make_delivery_report`. Those should
+        be used instead where they apply.
+
+        The only real difference between using this method and constructing an
+        event object directly is that this method provides sensible defaults
+        for most fields and sets the routing endpoint (if provided) in a more
+        convenient way.
+
+        The following parameters are mandatory:
+
+        :param str event_type: Event ``event_type`` field.
+        :param str user_message_id: Event ``user_message_id`` field.
+
+        Any fields required by a particular event type (such as
+        ``sent_message_id`` for ``ack`` events) are also mandatory.
+
+        The following parameters override default values for the event fields
+        of the same name:
+
+        :param str transport_type: Default :attr:`transport_type`.
+        :param str transport_name: Default :attr:`transport_name`.
+        :param dict transport_metadata: Default ``{}``.
+
+        The following parameter is special:
+
+        :param str endpoint:
+            If specified, the routing endpoint on the event is set by calling
+            :meth:`TransportUserMessage.set_routing_endpoint`.
+
+        All other keyword args are passed to the
+        :class:`~vumi.message.TransportEvent` constructor.
+        """
         if transport_type is DEFAULT:
             transport_type = self.transport_type
         if transport_name is DEFAULT:
@@ -189,6 +438,18 @@ class MessageHelper(object):
 
     @proxyable
     def make_ack(self, msg=None, sent_message_id=DEFAULT, **kw):
+        """
+        Construct an 'ack' :class:`~vumi.message.TransportEvent`.
+
+        :param msg:
+            :class:`~vumi.message.TransportUserMessage` instance the event is
+            for. If ``None``, this method will call :meth:`make_outbound` to
+            get one.
+        :param str sent_message_id:
+            If this isn't provided, ``msg['message_id']`` will be used.
+
+        All remaining keyword params are passed to :meth:`make_event`.
+        """
         if msg is None:
             msg = self.make_outbound("for ack")
         user_message_id = msg['message_id']
@@ -199,6 +460,18 @@ class MessageHelper(object):
 
     @proxyable
     def make_nack(self, msg=None, nack_reason=DEFAULT, **kw):
+        """
+        Construct a 'nack' :class:`~vumi.message.TransportEvent`.
+
+        :param msg:
+            :class:`~vumi.message.TransportUserMessage` instance the event is
+            for. If ``None``, this method will call :meth:`make_outbound` to
+            get one.
+        :param str nack_reason:
+            If this isn't provided, a suitable excuse will be used.
+
+        All remaining keyword params are passed to :meth:`make_event`.
+        """
         if msg is None:
             msg = self.make_outbound("for nack")
         user_message_id = msg['message_id']
@@ -209,6 +482,18 @@ class MessageHelper(object):
 
     @proxyable
     def make_delivery_report(self, msg=None, delivery_status=DEFAULT, **kw):
+        """
+        Construct a 'delivery_report' :class:`~vumi.message.TransportEvent`.
+
+        :param msg:
+            :class:`~vumi.message.TransportUserMessage` instance the event is
+            for. If ``None``, this method will call :meth:`make_outbound` to
+            get one.
+        :param str delivery_status:
+            If this isn't provided, ``"delivered"`` will be used.
+
+        All remaining keyword params are passed to :meth:`make_event`.
+        """
         if msg is None:
             msg = self.make_outbound("for delivery_report")
         user_message_id = msg['message_id']
@@ -220,6 +505,13 @@ class MessageHelper(object):
 
     @proxyable
     def make_reply(self, msg, content, **kw):
+        """
+        Construct a reply :class:`~vumi.message.TransportUserMessage`.
+
+        This literally just calls ``msg.reply(content, **kw)``. It is included
+        for completeness and symmetry with
+        :meth:`MessageDispatchHelper.make_dispatch_reply`.
+        """
         return msg.reply(content, **kw)
 
 
@@ -228,6 +520,24 @@ def _start_and_return_worker(worker):
 
 
 class WorkerHelper(object):
+    """
+    Test helper for creating workers and dispatching messages.
+
+    This helper does no setup, but it waits for pending message deliveries and
+    the stops all workers it knows about during cleanup. It takes the following
+    parameters:
+
+    :param str connector_name:
+        Default value for ``connector_name`` on all message broker operations.
+        If ``None``, the connector name must be provided for each operation.
+
+    :param broker:
+        The message broker to use internally. This should be an instance of
+        :class:`~vumi.tests.fake_amqp.FakeAMQPBroker` if it is provided, but
+        most of the time the default of ``None`` should be used to have the
+        helper create its own broker.
+    """
+
     implements(IHelper)
 
     def __init__(self, connector_name=None, broker=None):
@@ -249,13 +559,18 @@ class WorkerHelper(object):
 
     @proxyable
     def cleanup_worker(self, worker):
-        """Clean up a particular worker manually."""
+        """
+        Clean up a particular worker manually and remove it from the helper's
+        cleanup list. This should only be called with workers that are already
+        in the helper's cleanup list.
+        """
         self._workers.remove(worker)
         return worker.stopWorker()
 
     @classmethod
     def get_fake_amqp_client(cls, broker):
-        """Wrap a fake broker in an fake client.
+        """
+        Wrap a fake broker in an fake client.
 
         The broker parameter is mandatory because it's important that cleanup
         happen. If ``None`` is passed in explicitly, a new broker object will
@@ -266,7 +581,8 @@ class WorkerHelper(object):
 
     @classmethod
     def get_worker_raw(cls, worker_class, config, broker=None):
-        """Create and return an instance of a vumi worker.
+        """
+        Create and return an instance of a vumi worker.
 
         This doesn't start the worker and it doesn't add it to any cleanup
         machinery. In most cases, you want :meth:`get_worker` instead.
@@ -283,11 +599,13 @@ class WorkerHelper(object):
 
     @proxyable
     def get_worker(self, worker_class, config, start=True):
-        """Create and return an instance of a vumi worker.
+        """
+        Create and return an instance of a vumi worker.
 
         :param worker_class: The worker class to instantiate.
         :param config: Config dict.
-        :param start: True to start the worker (default), False otherwise.
+        :param start:
+            ``True`` to start the worker (default), ``False`` otherwise.
         """
         worker = self.get_worker_raw(worker_class, config, self.broker)
 
@@ -304,6 +622,25 @@ class WorkerHelper(object):
 
     @proxyable
     def get_dispatched(self, connector_name, name, message_class):
+        """
+        Get messages dispatched to a routing key.
+
+        The more specific :meth:`get_dispatched_events`,
+        :meth:`get_dispatched_inbound`, and :meth:`get_dispatched_outbound`
+        wrapper methods should be used instead where they apply.
+
+        :param str connector_name:
+            The connector name, which is used as the routing key prefix.
+
+        :param str name:
+            The routing key suffix, generally ``"event"``, ``"inbound"``, or
+            ``"outbound"``.
+
+        :param message_class:
+            The message class to wrap the raw message data in. This should
+            probably be :class:`~vumi.message.TransportUserMessage` or
+            :class:`~vumi.message.TransportEvent`.
+        """
         msgs = self.broker.get_dispatched(
             'vumi', self._rkey(connector_name, name))
         return [message_class.from_json(msg.body) for msg in msgs]
@@ -314,6 +651,9 @@ class WorkerHelper(object):
 
     @proxyable
     def clear_all_dispatched(self):
+        """
+        Clear all dispatched messages from the broker.
+        """
         self.broker.clear_messages('vumi')
 
     def _clear_dispatched(self, connector_name, name):
@@ -322,20 +662,63 @@ class WorkerHelper(object):
 
     @proxyable
     def get_dispatched_events(self, connector_name=None):
+        """
+        Get events dispatched to a connector.
+
+        :param str connector_name:
+            Connector name. If ``None``, the default connector name for the
+            helper instance will be used.
+
+        :returns: A list of :class:`~vumi.message.TransportEvent` instances.
+        """
         return self.get_dispatched(connector_name, 'event', TransportEvent)
 
     @proxyable
     def get_dispatched_inbound(self, connector_name=None):
+        """
+        Get inbound messages dispatched to a connector.
+
+        :param str connector_name:
+            Connector name. If ``None``, the default connector name for the
+            helper instance will be used.
+
+        :returns:
+            A list of :class:`~vumi.message.TransportUserMessage` instances.
+        """
         return self.get_dispatched(
             connector_name, 'inbound', TransportUserMessage)
 
     @proxyable
     def get_dispatched_outbound(self, connector_name=None):
+        """
+        Get outbound messages dispatched to a connector.
+
+        :param str connector_name:
+            Connector name. If ``None``, the default connector name for the
+            helper instance will be used.
+
+        :returns:
+            A list of :class:`~vumi.message.TransportUserMessage` instances.
+        """
         return self.get_dispatched(
             connector_name, 'outbound', TransportUserMessage)
 
     @proxyable
     def wait_for_dispatched_events(self, amount, connector_name=None):
+        """
+        Wait for events dispatched to a connector.
+
+        :param int amount:
+            Number of events to wait for.
+
+        :param str connector_name:
+            Connector name. If ``None``, the default connector name for the
+            helper instance will be used.
+
+        :returns:
+            A :class:`Deferred` that fires with a list of
+            :class:`~vumi.message.TransportEvent` instances.
+        """
         d = self._wait_for_dispatched(connector_name, 'event', amount)
         d.addCallback(lambda msgs: [
             TransportEvent(**msg.payload) for msg in msgs])
@@ -343,6 +726,20 @@ class WorkerHelper(object):
 
     @proxyable
     def wait_for_dispatched_inbound(self, amount, connector_name=None):
+        """
+        Wait for inbound messages dispatched to a connector.
+
+        :param int amount:
+            Number of messages to wait for.
+
+        :param str connector_name:
+            Connector name. If ``None``, the default connector name for the
+            helper instance will be used.
+
+        :returns:
+            A :class:`Deferred` that fires with a list of
+            :class:`~vumi.message.TransportUserMessage` instances.
+        """
         d = self._wait_for_dispatched(connector_name, 'inbound', amount)
         d.addCallback(lambda msgs: [
             TransportUserMessage(**msg.payload) for msg in msgs])
@@ -350,6 +747,20 @@ class WorkerHelper(object):
 
     @proxyable
     def wait_for_dispatched_outbound(self, amount, connector_name=None):
+        """
+        Wait for outbound messages dispatched to a connector.
+
+        :param int amount:
+            Number of messages to wait for.
+
+        :param str connector_name:
+            Connector name. If ``None``, the default connector name for the
+            helper instance will be used.
+
+        :returns:
+            A :class:`Deferred` that fires with a list of
+            :class:`~vumi.message.TransportUserMessage` instances.
+        """
         d = self._wait_for_dispatched(connector_name, 'outbound', amount)
         d.addCallback(lambda msgs: [
             TransportUserMessage(**msg.payload) for msg in msgs])
@@ -357,43 +768,139 @@ class WorkerHelper(object):
 
     @proxyable
     def clear_dispatched_events(self, connector_name=None):
+        """
+        Clear dispatched events for a connector.
+
+        :param str connector_name:
+            Connector name. If ``None``, the default connector name for the
+            helper instance will be used.
+        """
         return self._clear_dispatched(connector_name, 'event')
 
     @proxyable
     def clear_dispatched_inbound(self, connector_name=None):
+        """
+        Clear dispatched inbound messages for a connector.
+
+        :param str connector_name:
+            Connector name. If ``None``, the default connector name for the
+            helper instance will be used.
+        """
         return self._clear_dispatched(connector_name, 'inbound')
 
     @proxyable
     def clear_dispatched_outbound(self, connector_name=None):
+        """
+        Clear dispatched outbound messages for a connector.
+
+        :param str connector_name:
+            Connector name. If ``None``, the default connector name for the
+            helper instance will be used.
+        """
         return self._clear_dispatched(connector_name, 'outbound')
 
     @proxyable
     def dispatch_raw(self, routing_key, message, exchange='vumi'):
+        """
+        Dispatch a message to the specified routing key.
+
+        The more specific :meth:`dispatch_inbound`, :meth:`dispatch_outbound`,
+        and :meth:`dispatch_event` wrapper methods should be used instead where
+        they apply.
+
+        :param str routing_key:
+            Routing key to dispatch the message to.
+
+        :param message:
+            Message to dispatch.
+
+        :param str exchange:
+            AMQP exchange to dispatch the message to. Defaults to ``"vumi"``
+
+        :returns:
+            A :class:`Deferred` that fires when all messages have been
+            delivered.
+        """
         self.broker.publish_message(exchange, routing_key, message)
         return self.kick_delivery()
 
     @proxyable
     def dispatch_inbound(self, message, connector_name=None):
+        """
+        Dispatch an inbound message.
+
+        :param message:
+            Message to dispatch. Should be a
+            :class:`~vumi.message.TransportUserMessage` instance.
+
+        :param str connector_name:
+            Connector name. If ``None``, the default connector name for the
+            helper instance will be used.
+
+        :returns:
+            A :class:`Deferred` that fires when all messages have been
+            delivered.
+        """
         return self.dispatch_raw(
             self._rkey(connector_name, 'inbound'), message)
 
     @proxyable
     def dispatch_outbound(self, message, connector_name=None):
+        """
+        Dispatch an outbound message.
+
+        :param message:
+            Message to dispatch. Should be a
+            :class:`~vumi.message.TransportUserMessage` instance.
+
+        :param str connector_name:
+            Connector name. If ``None``, the default connector name for the
+            helper instance will be used.
+
+        :returns:
+            A :class:`Deferred` that fires when all messages have been
+            delivered.
+        """
         return self.dispatch_raw(
             self._rkey(connector_name, 'outbound'), message)
 
     @proxyable
     def dispatch_event(self, message, connector_name=None):
+        """
+        Dispatch an event.
+
+        :param message:
+            Message to dispatch. Should be a
+            :class:`~vumi.message.TransportEvent` instance.
+
+        :param str connector_name:
+            Connector name. If ``None``, the default connector name for the
+            helper instance will be used.
+
+        :returns:
+            A :class:`Deferred` that fires when all messages have been
+            delivered.
+        """
         return self.dispatch_raw(
             self._rkey(connector_name, 'event'), message)
 
     @proxyable
     def kick_delivery(self):
+        """
+        Trigger delivery of messages by the broker.
+
+        This is generally called internally by anything that sends a message.
+
+        :returns:
+            A :class:`Deferred` that fires when all messages have been
+            delivered.
+        """
         return self.broker.kick_delivery()
 
 
 class MessageDispatchHelper(object):
-    """Helper for creating and immediately dispatching messages.
+    """
+    Helper for creating and immediately dispatching messages.
 
     This builds on top of :class:`MessageHelper` and :class:`WorkerHelper`.
 
@@ -453,7 +960,8 @@ class MessageDispatchHelper(object):
 
 
 class RiakDisabledForTest(object):
-    """Placeholder object for a disabled riak config.
+    """
+    Placeholder object for a disabled riak config.
 
     This class exists to throw a meaningful error when trying to use Riak in
     a test that disallows it. We can't do this from inside the Riak setup
@@ -480,7 +988,8 @@ def import_skip(exc, *expected):
 
 
 def maybe_async(sync_attr):
-    """Decorate a method that may be sync or async.
+    """
+    Decorate a method that may be sync or async.
 
     This redecorates with the either @inlineCallbacks or @flatten_generator,
     depending on the `sync_attr`.
@@ -501,7 +1010,8 @@ def maybe_async(sync_attr):
 
 
 def maybe_async_return(value, maybe_deferred):
-    """Return `value` or a deferred that fires with it.
+    """
+    Return `value` or a deferred that fires with it.
 
     This is useful in cases where we're performing a potentially async
     operation but don't necessarily have enough information to use
@@ -567,7 +1077,8 @@ class PersistenceHelper(object):
             patch.restore()
 
     def _get_riak_managers_for_cleanup(self):
-        """Get a list of Riak managers and whether they should be purged.
+        """
+        Get a list of Riak managers and whether they should be purged.
 
         The return value is a list of (`bool`, `Manager`) tuples. If the first
         item is `True`, the manager should be purged. It's safe to purge
@@ -588,7 +1099,8 @@ class PersistenceHelper(object):
         return reversed(managers)
 
     def _get_redis_managers_for_cleanup(self):
-        """Get a list of Redis managers and whether they should be purged.
+        """
+        Get a list of Redis managers and whether they should be purged.
 
         The return value is a list of (`bool`, `Manager`) tuples. If the first
         item is `True`, the manager should be purged. It's safe to purge
