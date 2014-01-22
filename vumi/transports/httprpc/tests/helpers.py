@@ -47,6 +47,12 @@ class HttpRpcTransportHelper(TransportHelper):
     def mk_request_raw(self, suffix='', params=None, data=None, method='GET'):
         """
         Make an HTTP request, ignoring this helper's ``request_defaults``.
+
+        :param str suffix: Suffix to add to the transport's URL.
+        :param dict params: A dictionary of URL parameters to append to the URL
+                            as a query string or None for no URL parameters.
+        :param str data: Request body or None for no request body.
+        :param str method: HTTP method to use for the request.
         """
         if self.transport_url is None:
             raise HttpRpcTransportHelperError(
@@ -59,6 +65,15 @@ class HttpRpcTransportHelper(TransportHelper):
     def mk_request(self, _suffix='', _data=None, _method='GET', **kw):
         """
         Make an HTTP request.
+
+        :param str _suffix: Suffix to add to the transport's URL.
+        :param str _data: Request body or None for no request body.
+        :param str _method: HTTP method to use for the request.
+        :param **kw: URL query string parameters.
+
+        The ``_`` prefixes on the function parameter names are to
+        make accidental clashes with URL query parameter names less
+        likely.
         """
         params = self.request_defaults.copy()
         params.update(kw)
