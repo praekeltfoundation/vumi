@@ -226,3 +226,43 @@ class TestTwitterTransport(VumiTestCase):
             self.assertEqual(
                 lc.messages(),
                 ["Received non-tweet from user stream: {'foo': 'bar'}"])
+
+    def test_tweet_content_with_mention_at_start(self):
+        self.assertEqual('hello', self.transport.tweet_content({
+            'id_str': '12345',
+            'text': '@fakeuser hello',
+            'user': {},
+            'entities': {
+                'user_mentions': [{
+                    'id_str': '123',
+                    'screen_name': 'fakeuser',
+                    'name': 'Fake User',
+                    'indices': [0, 8]
+                }]
+            },
+        }))
+
+    def test_tweet_content_with_mention_not_at_start(self):
+        self.assertEqual('hello @fakeuser!', self.transport.tweet_content({
+            'id_str': '12345',
+            'text': 'hello @fakeuser!',
+            'user': {},
+            'entities': {
+                'user_mentions': [{
+                    'id_str': '123',
+                    'screen_name': 'fakeuser',
+                    'name': 'Fake User',
+                    'indices': [6, 14]
+                }]
+            },
+        }))
+
+    def test_tweet_content_with_no_mention(self):
+        self.assertEqual('hello', self.transport.tweet_content({
+            'id_str': '12345',
+            'text': 'hello',
+            'user': {},
+            'entities': {
+                'user_mentions': []
+            },
+        }))

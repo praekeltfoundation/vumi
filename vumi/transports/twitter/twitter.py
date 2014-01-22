@@ -119,7 +119,9 @@ class TwitterTransport(Transport):
     def tweet_content(cls, tweet):
         to_addr = cls.tweet_to_addr(tweet)
         content = messagetools.tweet_text(tweet)
-        return content.lstrip("%s " % (to_addr,))
+        if content.startswith(to_addr):
+            content = content[len(to_addr):].lstrip()
+        return content
 
     def publish_tweet_message(self, tweet):
         return self.publish_message(
