@@ -1,14 +1,12 @@
 import json
-from urllib import urlencode
 from datetime import datetime
 
 from twisted.internet.defer import inlineCallbacks
 
-from vumi.utils import http_request_full
 from vumi.message import TransportUserMessage
 from vumi.tests.helpers import VumiTestCase
 from vumi.transports.imimobile import ImiMobileUssdTransport
-from vumi.transports.tests.helpers import TransportHelper
+from vumi.transports.httprpc.tests.helpers import HttpRpcTransportHelper
 
 
 class TestImiMobileUssdTransport(VumiTestCase):
@@ -36,22 +34,13 @@ class TestImiMobileUssdTransport(VumiTestCase):
             }
         }
         self.tx_helper = self.add_helper(
-            TransportHelper(ImiMobileUssdTransport))
+            HttpRpcTransportHelper(ImiMobileUssdTransport,
+                                   request_defaults=self._request_defaults))
         self.transport = yield self.tx_helper.get_transport(self.config)
         self.session_manager = self.transport.session_manager
         self.transport_url = self.transport.get_transport_url(
             self.config['web_path'])
         yield self.session_manager.redis._purge_all()  # just in case
-
-    def mk_full_request(self, suffix, **params):
-        return http_request_full('%s?%s' % (self.transport_url + suffix,
-            urlencode(params)), data='/api/v1/imimobile/ussd/', method='GET')
-
-    def mk_request(self, suffix, **params):
-        defaults = {}
-        defaults.update(self._request_defaults)
-        defaults.update(params)
-        return self.mk_full_request(suffix, **defaults)
 
     @inlineCallbacks
     def mk_session(self, from_addr=_from_addr, to_addr=_to_addr):
@@ -98,7 +87,7 @@ class TestImiMobileUssdTransport(VumiTestCase):
     def test_inbound_begin(self):
         # Second connect is the actual start of the session
         user_content = "Who are you?"
-        d = self.mk_request('some-suffix', msg=user_content)
+        d = self.tx_helper.mk_request('some-suffix', msg=user_content)
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assert_inbound_message(msg,
             session_event=TransportUserMessage.SESSION_NEW,
@@ -121,7 +110,7 @@ class TestImiMobileUssdTransport(VumiTestCase):
         yield self.mk_session(from_addr)
 
         user_content = "Well, what is it you want?"
-        d = self.mk_request('some-suffix', msg=user_content)
+        d = self.tx_helper.mk_request('some-suffix', msg=user_content)
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assert_inbound_message(msg,
             session_event=TransportUserMessage.SESSION_RESUME,
@@ -147,7 +136,7 @@ class TestImiMobileUssdTransport(VumiTestCase):
         yield self.mk_session()
 
         user_content = "Well, what is it you want?"
-        d = self.mk_request('some-suffix', msg=user_content)
+        d = self.tx_helper.mk_request('some-suffix', msg=user_content)
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assert_inbound_message(msg,
             session_event=TransportUserMessage.SESSION_RESUME,
@@ -170,7 +159,7 @@ class TestImiMobileUssdTransport(VumiTestCase):
         yield self.mk_session(from_addr=from_addr)
 
         user_content = "Farewell, sweet Concorde!"
-        d = self.mk_request('some-suffix', msg=user_content)
+        d = self.tx_helper.mk_request('some-suffix', msg=user_content)
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assert_inbound_message(msg,
             session_event=TransportUserMessage.SESSION_CLOSE,
@@ -187,7 +176,7 @@ class TestImiMobileUssdTransport(VumiTestCase):
 
     @inlineCallbacks
     def test_request_with_unknown_suffix(self):
-        response = yield self.mk_request('unk-suffix')
+        response = yield self.tx_helper.mk_request('unk-suffix')
 
         self.assertEqual(
             response.delivered_body,
@@ -196,8 +185,8 @@ class TestImiMobileUssdTransport(VumiTestCase):
 
     @inlineCallbacks
     def test_request_with_missing_parameters(self):
-        response = yield self.mk_full_request(
-            'some-suffix', msg='', code='', dcs='')
+        response = yield self.tx_helper.mk_request_raw(
+            'some-suffix', params={"msg": '', "code": '', "dcs": ''})
 
         self.assertEqual(
             response.delivered_body,
@@ -206,7 +195,7 @@ class TestImiMobileUssdTransport(VumiTestCase):
 
     @inlineCallbacks
     def test_request_with_unexpected_parameters(self):
-        response = yield self.mk_request(
+        response = yield self.tx_helper.mk_request(
             'some-suffix', unexpected_p1='', unexpected_p2='')
 
         self.assertEqual(response.code, 400)

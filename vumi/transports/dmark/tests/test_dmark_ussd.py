@@ -3,15 +3,13 @@
 """Tests for vumi.transports.dmark.dmark_ussd."""
 
 import json
-from urllib import urlencode
 
 from twisted.internet.defer import inlineCallbacks
 
-from vumi.utils import http_request_full
 from vumi.message import TransportUserMessage
 from vumi.tests.helpers import VumiTestCase
 from vumi.transports.dmark import DmarkUssdTransport
-from vumi.transports.tests.helpers import TransportHelper
+from vumi.transports.httprpc.tests.helpers import HttpRpcTransportHelper
 
 
 class TestDmarkUssdTransport(VumiTestCase):
@@ -34,22 +32,14 @@ class TestDmarkUssdTransport(VumiTestCase):
             'web_port': 0,
             'web_path': '/api/v1/dmark/ussd/',
         }
-        self.tx_helper = self.add_helper(TransportHelper(DmarkUssdTransport))
+        self.tx_helper = self.add_helper(
+            HttpRpcTransportHelper(DmarkUssdTransport,
+                                   request_defaults=self._request_defaults))
         self.transport = yield self.tx_helper.get_transport(self.config)
         self.session_manager = self.transport.session_manager
         self.transport_url = self.transport.get_transport_url(
             self.config['web_path'])
         yield self.session_manager.redis._purge_all()  # just in case
-
-    def mk_full_request(self, **params):
-        return http_request_full('%s?%s' % (self.transport_url,
-            urlencode(params)), data='random-data', method='GET')
-
-    def mk_request(self, **params):
-        defaults = {}
-        defaults.update(self._request_defaults)
-        defaults.update(params)
-        return self.mk_full_request(**defaults)
 
     @inlineCallbacks
     def mk_session(self, transaction_id=_transaction_id):
@@ -91,7 +81,7 @@ class TestDmarkUssdTransport(VumiTestCase):
     @inlineCallbacks
     def test_inbound_begin(self):
         user_content = "Who are you?"
-        d = self.mk_request(ussdRequestString=user_content)
+        d = self.tx_helper.mk_request(ussdRequestString=user_content)
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assert_inbound_message(msg,
             session_event=TransportUserMessage.SESSION_NEW,
@@ -115,7 +105,7 @@ class TestDmarkUssdTransport(VumiTestCase):
         yield self.mk_session(self._transaction_id)
 
         user_content = "Well, what is it you want?"
-        d = self.mk_request(ussdRequestString=user_content)
+        d = self.tx_helper.mk_request(ussdRequestString=user_content)
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assert_inbound_message(msg,
             session_event=TransportUserMessage.SESSION_RESUME,
@@ -139,7 +129,7 @@ class TestDmarkUssdTransport(VumiTestCase):
         yield self.mk_session()
 
         user_content = "Well, what is it you want?"
-        d = self.mk_request(ussdRequestString=user_content)
+        d = self.tx_helper.mk_request(ussdRequestString=user_content)
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assert_inbound_message(msg,
             session_event=TransportUserMessage.SESSION_RESUME,
@@ -160,8 +150,8 @@ class TestDmarkUssdTransport(VumiTestCase):
 
     @inlineCallbacks
     def test_request_with_missing_parameters(self):
-        response = yield self.mk_full_request(
-            ussdServiceCode='', msisdn='', creationTime='')
+        response = yield self.tx_helper.mk_request_raw(
+            params={"ussdServiceCode": '', "msisdn": '', "creationTime": ''})
 
         self.assertEqual(
             response.delivered_body,
@@ -175,7 +165,7 @@ class TestDmarkUssdTransport(VumiTestCase):
 
     @inlineCallbacks
     def test_request_with_unexpected_parameters(self):
-        response = yield self.mk_request(
+        response = yield self.tx_helper.mk_request(
             unexpected_p1='', unexpected_p2='')
 
         self.assertEqual(response.code, 400)
