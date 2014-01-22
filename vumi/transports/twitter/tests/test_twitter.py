@@ -102,7 +102,7 @@ class TestTwitterTransport(VumiTestCase):
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
 
         self.assertEqual(msg['from_addr'], '@someone')
-        self.assertEqual(msg['to_addr'], 'NO_USER')
+        self.assertEqual(msg['to_addr'], '@me')
         self.assertEqual(msg['content'], '@me hello')
 
         self.assertEqual(
