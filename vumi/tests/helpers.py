@@ -557,10 +557,10 @@ class WorkerHelper(object):
 
     @inlineCallbacks
     def cleanup(self):
-        # Wait for any pending message deliveries to avoid a race with a dirty
-        # reactor.
+        """
+        Wait for any pending message deliveries and stop all workers.
+        """
         yield self.broker.wait_delivery()
-        # Now stop all the workers we created.
         for worker in self._workers:
             yield worker.stopWorker()
 
@@ -915,6 +915,9 @@ class MessageDispatchHelper(object):
     that, either use :class:`MessageHelper` and :class:`WorkerHelper` directly
     or build a second :class:`MessageDispatchHelper` with a second
     :class:`WorkerHelper`.
+
+    :param msg_helper: A :class:`MessageHelper` instance.
+    :param worker_helper: A :class:`WorkerHelper` instance.
     """
 
     implements(IHelper)
@@ -931,36 +934,97 @@ class MessageDispatchHelper(object):
 
     @proxyable
     def make_dispatch_inbound(self, *args, **kw):
+        """
+        Construct and dispatch an inbound message.
+
+        This is a wrapper around :meth:`MessageHelper.make_inbound` (to which
+        all parameters are passed) and :meth:`WorkerHelper.dispatch_inbound`.
+
+        :returns:
+            A :class:`Deferred` that fires with the constructed message once it
+            has been dispatched.
+        """
         msg = self.msg_helper.make_inbound(*args, **kw)
         d = self.worker_helper.dispatch_inbound(msg)
         return d.addCallback(lambda r: msg)
 
     @proxyable
     def make_dispatch_outbound(self, *args, **kw):
+        """
+        Construct and dispatch an outbound message.
+
+        This is a wrapper around :meth:`MessageHelper.make_outbound` (to which
+        all parameters are passed) and :meth:`WorkerHelper.dispatch_outbound`.
+
+        :returns:
+            A :class:`Deferred` that fires with the constructed message once it
+            has been dispatched.
+        """
         msg = self.msg_helper.make_outbound(*args, **kw)
         d = self.worker_helper.dispatch_outbound(msg)
         return d.addCallback(lambda r: msg)
 
     @proxyable
     def make_dispatch_ack(self, *args, **kw):
+        """
+        Construct and dispatch an ack event.
+
+        This is a wrapper around :meth:`MessageHelper.make_ack` (to which all
+        parameters are passed) and :meth:`WorkerHelper.dispatch_event`.
+
+        :returns:
+            A :class:`Deferred` that fires with the constructed event once it
+            has been dispatched.
+        """
         msg = self.msg_helper.make_ack(*args, **kw)
         d = self.worker_helper.dispatch_event(msg)
         return d.addCallback(lambda r: msg)
 
     @proxyable
     def make_dispatch_nack(self, *args, **kw):
+        """
+        Construct and dispatch a nack event.
+
+        This is a wrapper around :meth:`MessageHelper.make_nack` (to which all
+        parameters are passed) and :meth:`WorkerHelper.dispatch_event`.
+
+        :returns:
+            A :class:`Deferred` that fires with the constructed event once it
+            has been dispatched.
+        """
         msg = self.msg_helper.make_nack(*args, **kw)
         d = self.worker_helper.dispatch_event(msg)
         return d.addCallback(lambda r: msg)
 
     @proxyable
     def make_dispatch_delivery_report(self, *args, **kw):
+        """
+        Construct and dispatch a delivery report event.
+
+        This is a wrapper around :meth:`MessageHelper.make_delivery_report` (to
+        which all parameters are passed) and
+        :meth:`WorkerHelper.dispatch_event`.
+
+        :returns:
+            A :class:`Deferred` that fires with the constructed event once it
+            has been dispatched.
+        """
         msg = self.msg_helper.make_delivery_report(*args, **kw)
         d = self.worker_helper.dispatch_event(msg)
         return d.addCallback(lambda r: msg)
 
     @proxyable
     def make_dispatch_reply(self, *args, **kw):
+        """
+        Construct and dispatch a reply message.
+
+        This is a wrapper around :meth:`MessageHelper.make_reply` (to which all
+        parameters are passed) and :meth:`WorkerHelper.dispatch_outbound`.
+
+        :returns:
+            A :class:`Deferred` that fires with the constructed message once it
+            has been dispatched.
+        """
         msg = self.msg_helper.make_reply(*args, **kw)
         d = self.worker_helper.dispatch_outbound(msg)
         return d.addCallback(lambda r: msg)

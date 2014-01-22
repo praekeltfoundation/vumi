@@ -7,7 +7,7 @@ from vumi.message import TransportUserMessage, TransportEvent
 from vumi.tests.fake_amqp import FakeAMQPBroker, FakeAMQClient
 from vumi.tests.helpers import (
     VumiTestCase, proxyable, generate_proxies, IHelper,
-    MessageHelper, WorkerHelper)
+    MessageHelper, WorkerHelper, MessageDispatchHelper)
 from vumi.worker import BaseWorker
 
 
@@ -148,6 +148,13 @@ class TestMessageHelper(TestCase):
         msg_helper = MessageHelper()
         self.assertEqual(msg_helper.setup(), None)
 
+    def test_cleanup_sync(self):
+        """
+        MessageHelper.cleanup() should return ``None``, not a Deferred.
+        """
+        msg_helper = MessageHelper()
+        self.assertEqual(msg_helper.cleanup(), None)
+
     def test_make_inbound_defaults(self):
         """
         .make_inbound() should build a message with expected default values.
@@ -166,7 +173,7 @@ class TestMessageHelper(TestCase):
 
     def test_make_inbound_with_addresses(self):
         """
-        .make_inbound() should build use overridden addresses if provided.
+        .make_inbound() should use overridden addresses if provided.
         """
         msg_helper = MessageHelper()
         msg = msg_helper.make_inbound(
@@ -221,7 +228,7 @@ class TestMessageHelper(TestCase):
 
     def test_make_outbound_with_addresses(self):
         """
-        .make_outbound() should build use overridden addresses if provided.
+        .make_outbound() should use overridden addresses if provided.
         """
         msg_helper = MessageHelper()
         msg = msg_helper.make_outbound(
@@ -1157,3 +1164,277 @@ class TestWorkerHelper(VumiTestCase):
         yield worker_helper.dispatch_outbound(msg)
         self.assertEqual(
             broker.get_messages('vumi', 'fooconn.outbound'), [msg])
+
+
+class TestMessageDispatchHelper(VumiTestCase):
+    def success_result_of(self, d):
+        """
+        We can't necessarily use TestCase.successResultOf because our Twisted
+        might not be new enough.
+        """
+        self.assertTrue(
+            d.called, "Deferred not called, no result available: %r" % (d,))
+        results = []
+        d.addCallback(results.append)
+        return results[0]
+
+    def assert_message_fields(self, msg, field_dict):
+        self.assertEqual(field_dict, dict(
+            (k, v) for k, v in msg.payload.iteritems() if k in field_dict))
+
+    def test_implements_IHelper(self):
+        """
+        MessageDispatchHelper instances should provide the IHelper interface.
+        """
+        self.assertTrue(IHelper.providedBy(MessageDispatchHelper(None, None)))
+
+    def test_setup_sync(self):
+        """
+        MessageDispatchHelper.setup() should return ``None``, not a Deferred.
+        """
+        md_helper = MessageDispatchHelper(None, None)
+        self.assertEqual(md_helper.setup(), None)
+
+    def test_cleanup_sync(self):
+        """
+        MessageDispatchHelper.cleanup() should return ``None``, not a Deferred.
+        """
+        md_helper = MessageDispatchHelper(None, None)
+        self.assertEqual(md_helper.cleanup(), None)
+
+    @inlineCallbacks
+    def test_make_dispatch_inbound_defaults(self):
+        """
+        .make_dispatch_inbound() should build and dispatch an inbound message.
+        """
+        md_helper = MessageDispatchHelper(
+            MessageHelper(), WorkerHelper('fooconn'))
+        broker = md_helper.worker_helper.broker
+        broker.exchange_declare('vumi', 'direct')
+        self.assertEqual(broker.get_messages('vumi', 'fooconn.inbound'), [])
+        msg = yield md_helper.make_dispatch_inbound('inbound message')
+        self.assertEqual(broker.get_messages('vumi', 'fooconn.inbound'), [msg])
+        self.assert_message_fields(msg, {
+            'content': 'inbound message',
+            'from_addr': md_helper.msg_helper.mobile_addr,
+            'to_addr': md_helper.msg_helper.transport_addr,
+            'transport_type': md_helper.msg_helper.transport_type,
+            'transport_name': md_helper.msg_helper.transport_name,
+            'helper_metadata': {},
+            'transport_metadata': {},
+        })
+
+    @inlineCallbacks
+    def test_make_dispatch_inbound_with_addresses(self):
+        """
+        .make_dispatch_inbound() should build and dispatch an inbound message
+        with non-default parameters.
+        """
+        md_helper = MessageDispatchHelper(
+            MessageHelper(), WorkerHelper('fooconn'))
+        broker = md_helper.worker_helper.broker
+        broker.exchange_declare('vumi', 'direct')
+        self.assertEqual(broker.get_messages('vumi', 'fooconn.inbound'), [])
+        msg = yield md_helper.make_dispatch_inbound(
+            'inbound message', from_addr='ib_from', to_addr='ib_to')
+        self.assertEqual(broker.get_messages('vumi', 'fooconn.inbound'), [msg])
+        self.assert_message_fields(msg, {
+            'content': 'inbound message',
+            'from_addr': 'ib_from',
+            'to_addr': 'ib_to',
+            'transport_type': md_helper.msg_helper.transport_type,
+            'transport_name': md_helper.msg_helper.transport_name,
+            'helper_metadata': {},
+            'transport_metadata': {},
+        })
+
+    @inlineCallbacks
+    def test_make_dispatch_outbound_defaults(self):
+        """
+        .make_dispatch_outbound() should build and dispatch an outbound
+        message.
+        """
+        md_helper = MessageDispatchHelper(
+            MessageHelper(), WorkerHelper('fooconn'))
+        broker = md_helper.worker_helper.broker
+        broker.exchange_declare('vumi', 'direct')
+        self.assertEqual(broker.get_messages('vumi', 'fooconn.outbound'), [])
+        msg = yield md_helper.make_dispatch_outbound('outbound message')
+        self.assertEqual(
+            broker.get_messages('vumi', 'fooconn.outbound'), [msg])
+        self.assert_message_fields(msg, {
+            'content': 'outbound message',
+            'from_addr': md_helper.msg_helper.transport_addr,
+            'to_addr': md_helper.msg_helper.mobile_addr,
+            'transport_type': md_helper.msg_helper.transport_type,
+            'transport_name': md_helper.msg_helper.transport_name,
+            'helper_metadata': {},
+            'transport_metadata': {},
+        })
+
+    @inlineCallbacks
+    def test_make_dispatch_outbound_with_addresses(self):
+        """
+        .make_dispatch_outbound() should build and dispatch an outbound message
+        with non-default parameters.
+        """
+        md_helper = MessageDispatchHelper(
+            MessageHelper(), WorkerHelper('fooconn'))
+        broker = md_helper.worker_helper.broker
+        broker.exchange_declare('vumi', 'direct')
+        self.assertEqual(broker.get_messages('vumi', 'fooconn.outbound'), [])
+        msg = yield md_helper.make_dispatch_outbound(
+            'outbound message', from_addr='ob_from', to_addr='ob_to')
+        self.assertEqual(
+            broker.get_messages('vumi', 'fooconn.outbound'), [msg])
+        self.assert_message_fields(msg, {
+            'content': 'outbound message',
+            'from_addr': 'ob_from',
+            'to_addr': 'ob_to',
+            'transport_type': md_helper.msg_helper.transport_type,
+            'transport_name': md_helper.msg_helper.transport_name,
+            'helper_metadata': {},
+            'transport_metadata': {},
+        })
+
+    @inlineCallbacks
+    def test_make_dispatch_ack_default(self):
+        """
+        .make_dispatch_ack() should build and dispatch an ack event.
+        """
+        md_helper = MessageDispatchHelper(
+            MessageHelper(), WorkerHelper('fooconn'))
+        broker = md_helper.worker_helper.broker
+        broker.exchange_declare('vumi', 'direct')
+        self.assertEqual(broker.get_messages('vumi', 'fooconn.event'), [])
+        event = yield md_helper.make_dispatch_ack()
+        self.assertEqual(
+            broker.get_messages('vumi', 'fooconn.event'), [event])
+        self.assert_message_fields(event, {
+            'event_type': 'ack',
+            'sent_message_id': event['user_message_id'],
+        })
+
+    @inlineCallbacks
+    def test_make_ack_with_sent_message_id(self):
+        """
+        .make_dispatch_ack() should build and dispatch an ack event with
+        non-default parameters.
+        """
+        md_helper = MessageDispatchHelper(
+            MessageHelper(), WorkerHelper('fooconn'))
+        broker = md_helper.worker_helper.broker
+        broker.exchange_declare('vumi', 'direct')
+        self.assertEqual(broker.get_messages('vumi', 'fooconn.event'), [])
+        msg = md_helper.msg_helper.make_outbound('test message')
+        event = yield md_helper.make_dispatch_ack(
+            msg, sent_message_id='abc123')
+        self.assertEqual(
+            broker.get_messages('vumi', 'fooconn.event'), [event])
+        self.assert_message_fields(event, {
+            'event_type': 'ack',
+            'user_message_id': msg['message_id'],
+            'sent_message_id': 'abc123',
+        })
+
+    @inlineCallbacks
+    def test_make_dispatch_nack_default(self):
+        """
+        .make_dispatch_nack() should build and dispatch a nack event.
+        """
+        md_helper = MessageDispatchHelper(
+            MessageHelper(), WorkerHelper('fooconn'))
+        broker = md_helper.worker_helper.broker
+        broker.exchange_declare('vumi', 'direct')
+        self.assertEqual(broker.get_messages('vumi', 'fooconn.event'), [])
+        event = yield md_helper.make_dispatch_nack()
+        self.assertEqual(
+            broker.get_messages('vumi', 'fooconn.event'), [event])
+        self.assert_message_fields(event, {
+            'event_type': 'nack',
+            'nack_reason': 'sunspots',
+        })
+
+    @inlineCallbacks
+    def test_make_nack_with_sent_message_id(self):
+        """
+        .make_dispatch_nack() should build and dispatch a nack event with
+        non-default parameters.
+        """
+        md_helper = MessageDispatchHelper(
+            MessageHelper(), WorkerHelper('fooconn'))
+        broker = md_helper.worker_helper.broker
+        broker.exchange_declare('vumi', 'direct')
+        self.assertEqual(broker.get_messages('vumi', 'fooconn.event'), [])
+        msg = md_helper.msg_helper.make_outbound('test message')
+        event = yield md_helper.make_dispatch_nack(
+            msg, nack_reason='bogon emissions')
+        self.assertEqual(
+            broker.get_messages('vumi', 'fooconn.event'), [event])
+        self.assert_message_fields(event, {
+            'event_type': 'nack',
+            'user_message_id': msg['message_id'],
+            'nack_reason': 'bogon emissions',
+        })
+
+    @inlineCallbacks
+    def test_make_dispatch_delivery_report_default(self):
+        """
+        .make_dispatch_delivery_report() should build and dispatch a
+        delivery_report.
+        """
+        md_helper = MessageDispatchHelper(
+            MessageHelper(), WorkerHelper('fooconn'))
+        broker = md_helper.worker_helper.broker
+        broker.exchange_declare('vumi', 'direct')
+        self.assertEqual(broker.get_messages('vumi', 'fooconn.event'), [])
+        event = yield md_helper.make_dispatch_delivery_report()
+        self.assertEqual(
+            broker.get_messages('vumi', 'fooconn.event'), [event])
+        self.assert_message_fields(event, {
+            'event_type': 'delivery_report',
+            'delivery_status': 'delivered',
+        })
+
+    @inlineCallbacks
+    def test_make_delivery_report_with_sent_message_id(self):
+        """
+        .make_dispatch_delivery_report() should build and dispatch a delivery
+        report with non-default parameters.
+        """
+        md_helper = MessageDispatchHelper(
+            MessageHelper(), WorkerHelper('fooconn'))
+        broker = md_helper.worker_helper.broker
+        broker.exchange_declare('vumi', 'direct')
+        self.assertEqual(broker.get_messages('vumi', 'fooconn.event'), [])
+        msg = md_helper.msg_helper.make_outbound('test message')
+        event = yield md_helper.make_dispatch_delivery_report(
+            msg, delivery_status='pending')
+        self.assertEqual(
+            broker.get_messages('vumi', 'fooconn.event'), [event])
+        self.assert_message_fields(event, {
+            'event_type': 'delivery_report',
+            'user_message_id': msg['message_id'],
+            'delivery_status': 'pending',
+        })
+
+    @inlineCallbacks
+    def test_make_reply(self):
+        """
+        .make_dispatch_reply() should build and dispatch a reply message.
+        """
+        md_helper = MessageDispatchHelper(
+            MessageHelper(), WorkerHelper('fooconn'))
+        broker = md_helper.worker_helper.broker
+        broker.exchange_declare('vumi', 'direct')
+        self.assertEqual(broker.get_messages('vumi', 'fooconn.outbound'), [])
+        msg = md_helper.msg_helper.make_inbound('inbound')
+        reply = yield md_helper.make_dispatch_reply(msg, 'reply content')
+        self.assertEqual(
+            broker.get_messages('vumi', 'fooconn.outbound'), [reply])
+        self.assert_message_fields(reply, {
+            'content': 'reply content',
+            'to_addr': msg['from_addr'],
+            'from_addr': msg['to_addr'],
+            'in_reply_to': msg['message_id'],
+        })
