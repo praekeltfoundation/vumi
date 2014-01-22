@@ -51,10 +51,6 @@ class TestDmarkUssdTransport(VumiTestCase):
         defaults.update(params)
         return self.mk_full_request(**defaults)
 
-    def mk_reply(self, request_msg, reply_content, continue_session=True):
-        request_msg = TransportUserMessage(**request_msg.payload)
-        return request_msg.reply(reply_content, continue_session)
-
     @inlineCallbacks
     def mk_session(self, transaction_id=_transaction_id):
         yield self.session_manager.create_session(
@@ -102,7 +98,7 @@ class TestDmarkUssdTransport(VumiTestCase):
             content=user_content)
 
         reply_content = "We are the Knights Who Say ... Ni!"
-        reply = self.mk_reply(msg, reply_content)
+        reply = msg.reply(reply_content)
         self.tx_helper.dispatch_outbound(reply)
         response = yield d
         self.assertEqual(json.loads(response.delivered_body), {
@@ -126,7 +122,7 @@ class TestDmarkUssdTransport(VumiTestCase):
             content=user_content)
 
         reply_content = "We want ... a shrubbery!"
-        reply = self.mk_reply(msg, reply_content, continue_session=False)
+        reply = msg.reply(reply_content, continue_session=False)
         self.tx_helper.dispatch_outbound(reply)
         response = yield d
         self.assertEqual(json.loads(response.delivered_body), {
@@ -150,7 +146,7 @@ class TestDmarkUssdTransport(VumiTestCase):
             content=user_content)
 
         reply_content = "We want ... a shrubbery!"
-        reply = self.mk_reply(msg, reply_content, continue_session=True)
+        reply = msg.reply(reply_content, continue_session=True)
         self.tx_helper.dispatch_outbound(reply)
         response = yield d
         self.assertEqual(json.loads(response.delivered_body), {
