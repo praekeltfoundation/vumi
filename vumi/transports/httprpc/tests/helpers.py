@@ -16,14 +16,16 @@ class HttpRpcTransportHelperError(VumiError):
 
 class HttpRpcTransportHelper(TransportHelper):
     """
-    Test helper for subclasses of HttpRpcTransport.
+    Test helper for subclasses of
+    :class:`~vumi.transports.httprpc.HttpRpcTransport`.
 
-    Adds support for making HTTP requests to the HttpRpcTransport to the
-    base TransportHelper.
+    Adds support for making HTTP requests to the HTTP RPC transport to the
+    base :class:`~vumi.transports.tests.helpers.TransportHelper`.
 
     :param dict request_defaults: Default URL parameters for HTTP requests.
 
-    Other parameters are the same as for TransportHelper.
+    Other parameters are the same as for
+    :class:`~vumi.transports.tests.helpers.TransportHelper`.
     """
 
     implements(IHelper)
@@ -53,6 +55,9 @@ class HttpRpcTransportHelper(TransportHelper):
                             as a query string or None for no URL parameters.
         :param str data: Request body or None for no request body.
         :param str method: HTTP method to use for the request.
+
+        :raises HttpRpcTransportHelperError:
+            When invoked before calling :meth:`get_transport`.
         """
         if self.transport_url is None:
             raise HttpRpcTransportHelperError(
@@ -70,6 +75,9 @@ class HttpRpcTransportHelper(TransportHelper):
         :param str _data: Request body or None for no request body.
         :param str _method: HTTP method to use for the request.
         :param **kw: URL query string parameters.
+
+        :raises HttpRpcTransportHelperError:
+            When invoked before calling :meth:`get_transport`.
 
         The ``_`` prefixes on the function parameter names are to
         make accidental clashes with URL query parameter names less
