@@ -12,6 +12,7 @@ from twisted.python import log
 
 from vumi.transports import Transport
 from vumi.message import TransportUserMessage
+from vumi.config import ConfigServerEndpoint, ConfigInt, ConfigDict, ConfigText
 
 import sys, os.path
 import freeswitchesl
@@ -24,6 +25,7 @@ class FreeSwitchESLProtocol(freeswitchesl.FreeSwitchEventProtocol):
     def __init__(self,vumi_transport):
        self.vumi_transport=vumi_transport
        freeswitchesl.FreeSwitchEventProtocol.__init__(self)
+       self.request_hang_up=False
        
     @inlineCallbacks
     def connectionMade(self):
@@ -46,57 +48,79 @@ class FreeSwitchESLProtocol(freeswitchesl.FreeSwitchEventProtocol):
     #    self.playback("/usr/src/freeswitch/pySource/media/test.wav")
 
     @inlineCallbacks
-    def streamTextAsSpeech(self,message):       
-        log.msg("TTS: " +message+"\n");
-        yield self.set("tts_engine=flite")
-        yield self.set("tts_voice=kal")
-        yield self.execute("speak",message)        
+    def streamTextAsSpeech(self,message):  
+        finalmessage=message.replace("\n"," . ")     
+        log.msg("TTS: " +finalmessage+"\n")
+        log.msg("TTS Engine: " +self.vumi_transport.config.tts_engine+"\n")
+        yield self.set("tts_engine="+self.vumi_transport.config.tts_engine)
+        yield self.set("tts_voice="+self.vumi_transport.config.tts_voice)
+        yield self.execute("speak",finalmessage)        
         
     def getAddress(self):
         return self.uniquecallid
         
     def outputMessage(self,text):
-        self.streamTextAsSpeech(text);        
-        
+        self.streamTextAsSpeech(text)      
+    
+    def closeCall(self):
+        self.request_hang_up=True
 
     def onChannelExecuteComplete(self, ev):
-        log.msg("execute complete "+ev.variable_call_uuid);
+        log.msg("execute complete "+ev.variable_call_uuid)
+        if self.request_hang_up:
+          self.hangup()
+          self.vumi_transport.deregister_client(self)
+        
 
     def onChannelHangup(self, ev):
         self.vumi_transport.deregister_client(self)
-        start_usec = float(ev.Caller_Channel_Answered_Time)
-        end_usec = float(ev.Event_Date_Timestamp)
-        duration = (end_usec - start_usec) / 1000000.0
-        print "%s hung up: %s (call duration: %0.2f)" % \
-            (ev.variable_presence_id, ev.Hangup_Cause, duration)
-
-    # def unboundEvent(self, evdata, evname):
-    #    pass
+        log.msg("User hung up")
+        
+    def unboundEvent(self, evdata, evname):
+        pass
     
+
+class VoiceServerTransportConfig(Transport.CONFIG_CLASS):
+    """
+    Configuration parameters for the voice transport
+    """
+    tts_type = ConfigText(
+        "Either 'freeswitch' or 'local' to specify were tts is executed.", default="freeswitch", static=True)
+        
+    tts_engine = ConfigText(
+        "Specify tts engine to use.", default="flite", static=True)
+        
+    tts_voice = ConfigText(
+        "Specify tts voice to use.", default="kal", static=True)
+    
+    freeswitch_listenport = ConfigInt(
+        "Port number that freeswitch will attempt to connect on",
+        default=8084, static=True)    
+
+
 
 class VoiceServerTransport(Transport):
     """Transport for Freeswitch Voice Service
 
     """
     
-    def validate_config(self):
-        self._to_addr="freeswitchvoice";
-        self._transport_type="voice";
-        #self.telnet_port = int(self.config['telnet_port'])
-        #self._to_addr = self.config.get('to_addr')
-        #self._transport_type = self.config.get('transport_type', 'telnet')
+    CONFIG_CLASS = VoiceServerTransportConfig
 
     @inlineCallbacks
     def setup_transport(self):
         self._clients = {}
 
+        self.config=self.get_static_config()
+        self._to_addr="freeswitchvoice";
+        self._transport_type="voice";
+        
         def protocol():
-          return FreeSwitchESLProtocol(self);
+          return FreeSwitchESLProtocol(self)
       
         factory=ServerFactory()
         factory.protocol=protocol;
 
-        yield reactor.listenTCP(8084,factory);
+        yield reactor.listenTCP(self.config.freeswitch_listenport,factory)
 
     def teardown_transport(self):
        pass
@@ -146,6 +170,6 @@ class VoiceServerTransport(Transport):
         text = text.encode('utf-8')
         client.outputMessage("%s\n" % text)
         
-        #    if message['session_event'] == TransportUserMessage.SESSION_CLOSE:
-        #        client.transport.loseConnection()
+        if message['session_event'] == TransportUserMessage.SESSION_CLOSE:
+           client.closeCall()
 
