@@ -112,7 +112,7 @@ class TestTwitterTransport(VumiTestCase):
         self.assertEqual(msg['helper_metadata'], {
             'twitter': {
                 'in_reply_to_status_id': None,
-                'in_reply_to_screen_name': None,
+                'in_reply_to_screen_name': 'me',
                 'user_mentions': [{
                     'id_str': self.user.id_str,
                     'id': int(self.user.id_str),
@@ -167,6 +167,7 @@ class TestTwitterTransport(VumiTestCase):
 
     @inlineCallbacks
     def test_sending(self):
+        self.twitter.new_user('someone', 'someone')
         msg = yield self.tx_helper.make_dispatch_outbound(
             'hello', to_addr='@someone')
         [ack] = yield self.tx_helper.wait_for_dispatched_events(1)
