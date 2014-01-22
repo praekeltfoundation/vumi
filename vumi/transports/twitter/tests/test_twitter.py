@@ -63,7 +63,7 @@ class TestTwitterTransport(VumiTestCase):
 
         self.assertEqual(msg['from_addr'], '@someone_else')
         self.assertEqual(msg['to_addr'], '@someone')
-        self.assertEqual(msg['content'], '@someone arnold')
+        self.assertEqual(msg['content'], 'arnold')
 
         self.assertEqual(
             msg['transport_metadata'],
@@ -103,7 +103,7 @@ class TestTwitterTransport(VumiTestCase):
 
         self.assertEqual(msg['from_addr'], '@someone')
         self.assertEqual(msg['to_addr'], '@me')
-        self.assertEqual(msg['content'], '@me hello')
+        self.assertEqual(msg['content'], 'hello')
 
         self.assertEqual(
             msg['transport_metadata'],
@@ -134,7 +134,7 @@ class TestTwitterTransport(VumiTestCase):
 
         self.assertEqual(msg['from_addr'], '@someone')
         self.assertEqual(msg['to_addr'], '@me')
-        self.assertEqual(msg['content'], '@me goodbye')
+        self.assertEqual(msg['content'], 'goodbye')
 
         self.assertEqual(
             msg['transport_metadata'],

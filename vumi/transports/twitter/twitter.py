@@ -115,9 +115,15 @@ class TwitterTransport(Transport):
         user = messagetools.tweet_user(tweet)
         return cls.screen_name_as_addr(messagetools.user_screen_name(user))
 
+    @classmethod
+    def tweet_content(cls, tweet):
+        to_addr = cls.tweet_to_addr(tweet)
+        content = messagetools.tweet_text(tweet)
+        return content.lstrip("%s " % (to_addr,))
+
     def publish_tweet_message(self, tweet):
         return self.publish_message(
-            content=messagetools.tweet_text(tweet),
+            content=self.tweet_content(tweet),
             to_addr=self.tweet_to_addr(tweet),
             from_addr=self.tweet_from_addr(tweet),
             transport_type=self.transport_type,
