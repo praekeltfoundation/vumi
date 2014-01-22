@@ -1062,8 +1062,8 @@ def maybe_async(sync_attr):
     """
     Decorate a method that may be sync or async.
 
-    This redecorates with the either @inlineCallbacks or @flatten_generator,
-    depending on the `sync_attr`.
+    This redecorates with the either ``@inlineCallbacks`` or
+    ``@flatten_generator``, depending on the value of ``sync_attr``.
     """
     if callable(sync_attr):
         # If we don't get a sync attribute name, default to 'is_sync'.
@@ -1082,7 +1082,7 @@ def maybe_async(sync_attr):
 
 def maybe_async_return(value, maybe_deferred):
     """
-    Return `value` or a deferred that fires with it.
+    Return ``value`` or a deferred that fires with it.
 
     This is useful in cases where we're performing a potentially async
     operation but don't necessarily have enough information to use
