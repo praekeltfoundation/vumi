@@ -220,8 +220,10 @@ class ConfigServerEndpoint(ConfigText):
 
     def __init__(self, *args, **kws):
         fallbacks = kws.pop('fallbacks', ('host', 'port'))
+        port_fallback_default = kws.pop('port_fallback_default', None)
         super(ConfigServerEndpoint, self).__init__(*args, **kws)
         self._host_fallback, self._port_fallback = fallbacks
+        self._port_fallback_default = port_fallback_default
         self.doc += (" A TCP4 endpoint may be specified using config field"
                      " '%s' for the host and field '%s' for the port but"
                      " this is deprecated"
@@ -240,7 +242,8 @@ class ConfigServerEndpoint(ConfigText):
 
     def _endpoint_from_fallbacks(self, obj):
         host = obj._config_data.get(self._host_fallback, None)
-        port = obj._config_data.get(self._port_fallback, None)
+        port = obj._config_data.get(self._port_fallback,
+                                    self._port_fallback_default)
         if port is None:
             self.raise_fallback_error('port was not given')
         try:

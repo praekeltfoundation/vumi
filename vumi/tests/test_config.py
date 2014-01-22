@@ -433,3 +433,15 @@ class ConfigFieldTest(VumiTestCase):
             TCP4ClientEndpoint, host='localhost', port=80)
 
         self.assert_field_invalid(field)
+
+    def test_client_endpoint_field_with_port_fallback(self):
+        field = self.make_field(
+            ConfigClientEndpoint, port_fallback_default=51)
+        self.check_endpoint(
+            self.field_value(field, config={'host': 'localhost'}),
+            TCP4ClientEndpoint, host='localhost', port=51)
+        self.check_endpoint(self.field_value(
+            field, config={'host': 'localhost', 'port': 80}),
+            TCP4ClientEndpoint, host='localhost', port=80)
+
+        self.assert_field_invalid(field, config={'port': 80})
