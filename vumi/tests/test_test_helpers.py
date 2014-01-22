@@ -718,9 +718,6 @@ class TestWorkerHelper(VumiTestCase):
         if kick:
             return broker.kick_delivery()
 
-    def _get_dispatched(self, broker, rkey):
-        return broker.get_messages('vumi', rkey)
-
     def test_get_dispatched(self):
         """
         WorkerHelper.get_dispatched() should get messages dispatched by the
@@ -1167,17 +1164,6 @@ class TestWorkerHelper(VumiTestCase):
 
 
 class TestMessageDispatchHelper(VumiTestCase):
-    def success_result_of(self, d):
-        """
-        We can't necessarily use TestCase.successResultOf because our Twisted
-        might not be new enough.
-        """
-        self.assertTrue(
-            d.called, "Deferred not called, no result available: %r" % (d,))
-        results = []
-        d.addCallback(results.append)
-        return results[0]
-
     def assert_message_fields(self, msg, field_dict):
         self.assertEqual(field_dict, dict(
             (k, v) for k, v in msg.payload.iteritems() if k in field_dict))
