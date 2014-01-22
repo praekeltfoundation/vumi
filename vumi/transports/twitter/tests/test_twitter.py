@@ -267,3 +267,13 @@ class TestTwitterTransport(VumiTestCase):
                 'user_mentions': []
             },
         }))
+
+    def test_tweet_content_with_no_user_in_text(self):
+        self.assertEqual('NO_USER hello', self.transport.tweet_content({
+            'id_str': '12345',
+            'text': 'NO_USER hello',
+            'user': {},
+            'entities': {
+                'user_mentions': []
+            },
+        }))
