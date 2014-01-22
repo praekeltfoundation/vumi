@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from twisted.internet.defer import Deferred, succeed, inlineCallbacks
+from twisted.python.failure import Failure
 from twisted.trial.unittest import TestCase
 
 from vumi.message import TransportUserMessage, TransportEvent
@@ -566,10 +567,13 @@ class TestWorkerHelper(VumiTestCase):
         We can't necessarily use TestCase.successResultOf because our Twisted
         might not be new enough.
         """
-        self.assertTrue(
-            d.called, "Deferred not called, no result available: %r" % (d,))
         results = []
-        d.addCallback(results.append)
+        d.addBoth(results.append)
+        if not results:
+            self.fail("No result available for deferred: %r" % (d,))
+        if isinstance(results[0], Failure):
+            self.fail("Expected success from deferred %r, got failure: %r" % (
+                d, results[0]))
         return results[0]
 
     def test_implements_IHelper(self):
