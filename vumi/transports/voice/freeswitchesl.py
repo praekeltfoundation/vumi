@@ -7,7 +7,8 @@
 
 import types
 import string
-import re, urllib
+import re
+import urllib
 from cStringIO import StringIO
 from twisted.python import log
 from twisted.protocols import basic
@@ -15,14 +16,19 @@ from twisted.internet import defer, reactor, protocol
 
 __version__ = "0.1"
 
+
 class EventError(Exception):
     pass
+
 
 class AuthError(Exception):
     pass
 
+
 class _O(dict):
+
     """Translates dictionary keys to instance attributes"""
+
     def __setattr__(self, k, v):
         dict.__setitem__(self, k, v)
 
@@ -34,6 +40,7 @@ class _O(dict):
             return dict.__getitem__(self, k)
         except KeyError:
             return dict.__getattribute__(self, k)
+
 
 class FreeSwitchEventSocket(basic.LineReceiver):
     delimiter = "\n"
@@ -52,7 +59,7 @@ class FreeSwitchEventSocket(basic.LineReceiver):
         #log.msg("send %s" % cmd)
         if isinstance(cmd, types.UnicodeType):
             cmd = cmd.encode("utf-8")
-        self.transport.write(cmd+"\n\n")
+        self.transport.write(cmd + "\n\n")
 
     def rawSend(self, stuff):
         if isinstance(stuff, types.UnicodeType):
@@ -114,11 +121,11 @@ class FreeSwitchEventSocket(basic.LineReceiver):
         self.__ctx = self.__rawlen = None
 
     def eventReceived(self, ctx):
-        msg.log("event recevied"+repr(ctx));
+        msg.log("event recevied" + repr(ctx))
 
     def lineReceived(self, line):
         if line:
-            self.__io.write(line+"\n")
+            self.__io.write(line + "\n")
         else:
             ctx = self.parseEvent(True)
             rawlength = ctx.get("Content_Length")
@@ -144,7 +151,9 @@ class FreeSwitchEventSocket(basic.LineReceiver):
                 self.dispatchEvent(self.__ctx, self.parseEvent())
             self.setLineMode(rest)
 
+
 class FreeSwitchEventProtocol(FreeSwitchEventSocket):
+
     def __init__(self):
         FreeSwitchEventSocket.__init__(self)
 
@@ -163,7 +172,7 @@ class FreeSwitchEventProtocol(FreeSwitchEventSocket):
     def __protocolSend(self, name, args=""):
         deferred = defer.Deferred()
         self.__EventQueue.append((name, deferred))
-        self.send("%s %s" % (name, args))        
+        self.send("%s %s" % (name, args))
         return deferred
 
     def __protocolSendRaw(self, name, args=""):
@@ -180,7 +189,7 @@ class FreeSwitchEventProtocol(FreeSwitchEventSocket):
 
     def eventReceived(self, ctx):
         content_type = ctx.get("Content_Type", None)
-        log.msg("GOT EVENT: %.100s" % repr(content_type))        
+        log.msg("GOT EVENT: %.100s" % repr(content_type))
         if content_type:
             method = self.__EventCallbacks.get(content_type, None)
             if callable(method):
@@ -193,25 +202,26 @@ class FreeSwitchEventProtocol(FreeSwitchEventSocket):
 
     def onDisconnect(self, ctx):
         log.msg("OnDisconnect received")
-        
 
     def _apiResponse(self, ctx):
         cmd, deferred = self.__EventQueue.pop(0)
         if cmd == "api":
             deferred.callback(ctx)
         else:
-            deferred.errback(EventError("apiResponse on '%s': out of sync?" % cmd))
+            deferred.errback(
+                EventError(
+                    "apiResponse on '%s': out of sync?" %
+                    cmd))
 
     def _commandReply(self, ctx):
-        if not self.__EventQueue: #an unexpected reply ignore it
-           return
+        if not self.__EventQueue:  # an unexpected reply ignore it
+            return
         cmd, deferred = self.__EventQueue.pop(0)
-        #on connection define our UUID
+        # on connection define our UUID
         if cmd == "connect":
-           log.msg("Connect Reply " + ctx.variable_call_uuid)
-           self.uniquecallid=ctx.variable_call_uuid
-            
-            
+            log.msg("Connect Reply " + ctx.variable_call_uuid)
+            self.uniquecallid = ctx.variable_call_uuid
+
         if ctx.Reply_Text.startswith("+OK"):
             deferred.callback(ctx)
         elif cmd == "auth":
@@ -232,21 +242,22 @@ class FreeSwitchEventProtocol(FreeSwitchEventSocket):
 
     def unknownContentType(self, content_type, ctx):
         log.err("[freeswitchesl] unknown Content-Type: %s" % content_type,
-            logLevel=log.logging.DEBUG)
+                logLevel=log.logging.DEBUG)
 
     def unboundEvent(self, ctx, evname):
         log.err("[freeswitchesl] unbound Event: %s" % evname,
-            logLevel=log.logging.DEBUG)
+                logLevel=log.logging.DEBUG)
 
     # EVENT SOCKET COMMANDS
     def api(self, args):
         "Please refer to http://wiki.freeswitch.org/wiki/Event_Socket#api"
         return self.__protocolSend("api", args)
 
-    def sendevent(self, name, args=dict(),body=None):
-        "Please refer to http://wiki.freeswitch.org/wiki/Event_Socket#sendevent"
+    def sendevent(self, name, args=dict(), body=None):
+        "Please refer to http://wiki.freeswitch.org/wiki/"
+        "Event_Socket#sendevent"
         parsed_args = [name]
-        for k,v in args.iteritems():
+        for k, v in args.iteritems():
             parsed_args.append('%s: %s' % (k, v))
         parsed_args.append('')
         if body:
@@ -268,16 +279,18 @@ class FreeSwitchEventProtocol(FreeSwitchEventSocket):
     def event(self, args):
         "Please refer to http://wiki.freeswitch.org/wiki/Event_Socket#event"
         return self.__protocolSendmsg("event", args, lock=True)
-    
+
     def linger(self, args=None):
         "Please refer to http://wiki.freeswitch.org/wiki/Event_Socket#event"
         return self.__protocolSend("linger", args)
 
     def filter(self, args):
-        """Please refer to http://wiki.freeswitch.org/wiki/Event_Socket#filter
+        """
+        Please refer to http://wiki.freeswitch.org/wiki/Event_Socket#filter
 
-        The user might pass any number of values to filter an event for. But, from the point
-        filter() is used, just the filtered events will come to the app - this is where this
+        The user might pass any number of values to filter an event for.
+        But, from the point filter() is used, just the filtered events
+        will come to the app - this is where this
         function differs from event().
 
         >>> filter('Event-Name MYEVENT')
@@ -286,14 +299,18 @@ class FreeSwitchEventProtocol(FreeSwitchEventSocket):
         return self.__protocolSend('filter', args)
 
     def filter_delete(self, args):
-        """Please refer to http://wiki.freeswitch.org/wiki/Event_Socket#filter_delete
+        """
+        Please refer to http://wiki.freeswitch.org/wiki/Event_Socket
+        #filter_delete
 
         >>> filter_delete('Event-Name MYEVENT')
         """
         return self.__protocolSend('filter delete', args)
 
     def verbose_events(self):
-        """Please refer to http://wiki.freeswitch.org/wiki/Misc._Dialplan_Tools_verbose_events
+        """
+        Please refer to http://wiki.freeswitch.org/wiki/
+        Misc._Dialplan_Tools_verbose_events
 
         >>> verbose_events()
         """
@@ -306,20 +323,23 @@ class FreeSwitchEventProtocol(FreeSwitchEventSocket):
         return self.__protocolSend("auth", args)
 
     def connect(self):
-        "Please refer to http://wiki.freeswitch.org/wiki/Event_Socket_Outbound#Using_Netcat"
+        "Please refer to http://wiki.freeswitch.org/wiki/"
+        "Event_Socket_Outbound#Using_Netcat"
         return self.__protocolSend("connect")
 
     def myevents(self):
-        "Please refer to http://wiki.freeswitch.org/wiki/Event_Socket#event"
+        "Please refer to http://wiki.freeswitch.org/wiki/"
+        "Event_Socket#event"
         return self.__protocolSend("myevents")
 
     def answer(self):
-        "Please refer to http://wiki.freeswitch.org/wiki/Event_Socket_Outbound#Using_Netcat"
+        "Please refer to http://wiki.freeswitch.org/wiki/"
+        "Event_Socket_Outbound#Using_Netcat"
         return self.__protocolSendmsg("answer", lock=True)
 
     def bridge(self, args):
-        """Please refer to http://wiki.freeswitch.org/wiki/Event_Socket_Outbound
-
+        """
+        Please refer to http://wiki.freeswitch.org/wiki/Event_Socket_Outbound
         >>> bridge("{ignore_early_media=true}sofia/gateway/myGW/177808")
         """
         return self.__protocolSendmsg("bridge", args, lock=True)
@@ -328,130 +348,117 @@ class FreeSwitchEventProtocol(FreeSwitchEventSocket):
         """Hangup may be used by both Inbound and Outbound connections.
 
         When used by Inbound connections, you may add the extra `reason`
-        argument. Please refer to http://wiki.freeswitch.org/wiki/Event_Socket#hangup
+        argument.
+        Please refer to http://wiki.freeswitch.org/wiki/Event_Socket#hangup
         for details.
 
-        When used by Outbound connections, the `reason` argument must be ignored.
-
-        Please refer to http://wiki.freeswitch.org/wiki/Event_Socket_Outbound for
-        details.
         """
         return self.__protocolSendmsg("hangup", reason, lock=True)
 
     def sched_api(self, args):
-        "Please refer to http://wiki.freeswitch.org/wiki/Mod_commands#sched_api"
+        "Please refer to http://wiki.freeswitch.org/wiki/"
+        "Mod_commands#sched_api"
         return self.__protocolSendmsg("sched_api", args, lock=True)
 
     def ring_ready(self):
-        "Please refer to http://wiki.freeswitch.org/wiki/Misc._Dialplan_Tools_ring_ready"
+        "Please refer to http://wiki.freeswitch.org/wiki/"
+        "Misc._Dialplan_Tools_ring_ready"
         return self.__protocolSendmsg("ring_ready")
 
     def record_session(self, filename):
-        """Please refer to http://wiki.freeswitch.org/wiki/Misc._Dialplan_Tools_record_session
-
-        >>> record_session("/tmp/dump.gsm")
+        """
+        Please refer to http://wiki.freeswitch.org/wiki/
+        Misc._Dialplan_Tools_record_session
         """
         return self.__protocolSendmsg("record_session", filename, lock=True)
 
     def read(self, args):
-        """Please refer to http://wiki.freeswitch.org/wiki/Misc._Dialplan_Tools_read
-
-        >>> read("0 10 $${base_dir}/sounds/en/us/callie/conference/8000/conf-pin.wav res 10000 #")
+        """
+        Please refer to http://wiki.freeswitch.org/wiki/
+        Misc._Dialplan_Tools_read
         """
         return self.__protocolSendmsg("read", args, lock=True)
 
     def bind_meta_app(self, args):
-        """Please refer to http://wiki.freeswitch.org/wiki/Misc._Dialplan_Tools_bind_meta_app
-
-        >>> bind_meta_app("2 ab s record_session::/tmp/dump.gsm")
+        """
+        Please refer to http://wiki.freeswitch.org/wiki/
+        Misc._Dialplan_Tools_bind_meta_app
         """
         return self.__protocolSendmsg("bind_meta_app", args, lock=True)
 
     def wait_for_silence(self, args):
-        """Please refer to http://wiki.freeswitch.org/wiki/Misc._Dialplan_Tools_wait_for_silence
-
-        >>> wait_for_silence("200 15 10 5000")
+        """Please refer to http://wiki.freeswitch.org/wiki/
+           Misc._Dialplan_Tools_wait_for_silence
         """
         return self.__protocolSendmsg("wait_for_silence", args, lock=True)
 
     def sleep(self, milliseconds):
-        """Please refer to http://wiki.freeswitch.org/wiki/Misc._Dialplan_Tools_sleep
-
-        >>> sleep(5000)
-        >>> sleep("5000")
+        """
+        Please refer to http://wiki.freeswitch.org/wiki/
+        Misc._Dialplan_Tools_sleep
         """
         return self.__protocolSendmsg("sleep", milliseconds, lock=True)
 
     def vmd(self, args):
-        """Please refer to http://wiki.freeswitch.org/wiki/Mod_vmd
-
-        >>> vmd("start")
-        >>> vmd("stop")
+        """
+        Please refer to http://wiki.freeswitch.org/wiki/Mod_vmd
         """
         return self.__protocolSendmsg("vmd", args, lock=True)
 
     def set(self, args):
-        """Please refer to http://wiki.freeswitch.org/wiki/Misc._Dialplan_Tools_set
-
+        """Please refer to http://wiki.freeswitch.org/wiki/
+        Misc._Dialplan_Tools_set
         >>> set("ringback=${us-ring}")
         """
         return self.__protocolSendmsg("set", args, lock=True)
 
     def set_global(self, args):
-        """Please refer to http://wiki.freeswitch.org/wiki/Misc._Dialplan_Tools_set_global
-
-        >>> set_global("global_var=value")
+        """Please refer to http://wiki.freeswitch.org/wiki/
+        Misc._Dialplan_Tools_set_global
         """
         return self.__protocolSendmsg("set_global", args, lock=True)
 
     def unset(self, args):
-        """Please refer to http://wiki.freeswitch.org/wiki/Misc._Dialplan_Tools_unset
-
-        >>> unset("ringback")
+        """
+        Please refer to http://wiki.freeswitch.org/wiki/
+        Misc._Dialplan_Tools_unset
         """
         return self.__protocolSendmsg("unset", args, lock=True)
 
     def start_dtmf(self):
-        """Please refer to http://wiki.freeswitch.org/wiki/Misc._Dialplan_Tools_start_dtmf
-
-        >>> start_dtmf()
+        """Please refer to http://wiki.freeswitch.org/wiki/
+        Misc._Dialplan_Tools_start_dtmf
         """
         return self.__protocolSendmsg("start_dtmf", lock=True)
 
     def stop_dtmf(self):
-        """Please refer to http://wiki.freeswitch.org/wiki/Misc._Dialplan_Tools_stop_dtmf
-
-        >>> stop_dtmf()
+        """Please refer to http://wiki.freeswitch.org/wiki/
+        Misc._Dialplan_Tools_stop_dtmf
         """
         return self.__protocolSendmsg("stop_dtmf", lock=True)
 
     def start_dtmf_generate(self):
-        """Please refer to http://wiki.freeswitch.org/wiki/Misc._Dialplan_Tools_start_dtmf_generate
-
-        >>> start_dtmf_generate()
+        """Please refer to http://wiki.freeswitch.org/wiki/
+        Misc._Dialplan_Tools_start_dtmf_generate
         """
         return self.__protocolSendmsg("start_dtmf_generate", "true", lock=True)
 
     def stop_dtmf_generate(self):
-        """Please refer to http://wiki.freeswitch.org/wiki/Misc._Dialplan_Tools_stop_dtmf_generate
-
-        >>> stop_dtmf_generate()
+        """Please refer to http://wiki.freeswitch.org/wiki/
+        Misc._Dialplan_Tools_stop_dtmf_generate
         """
         return self.__protocolSendmsg("stop_dtmf_generate", lock=True)
 
     def queue_dtmf(self, args):
-        """Please refer to http://wiki.freeswitch.org/wiki/Misc._Dialplan_Tools_queue_dtmf
-
-        Enqueue each received dtmf, that'll be sent once the call is bridged.
-
-        >>> queue_dtmf("0123456789")
+        """
+        Please refer to http://wiki.freeswitch.org/wiki/
+        Misc._Dialplan_Tools_queue_dtmf
         """
         return self.__protocolSendmsg("queue_dtmf", args, lock=True)
 
     def flush_dtmf(self):
-        """Please refer to http://wiki.freeswitch.org/wiki/Misc._Dialplan_Tools_flush_dtmf
-
-        >>> flush_dtmf()
+        """Please refer to http://wiki.freeswitch.org/wiki/
+        Misc._Dialplan_Tools_flush_dtmf
         """
         return self.__protocolSendmsg("flush_dtmf", lock=True)
 
@@ -484,21 +491,27 @@ class FreeSwitchEventProtocol(FreeSwitchEventSocket):
         return self.__protocolSendmsg("playback", filename, lock=lock)
 
     def transfer(self, args):
-        """Please refer to http://wiki.freeswitch.org/wiki/Misc._Dialplan_Tools_transfer
+        """
+        Please refer to http://wiki.freeswitch.org/wiki/
+        Misc._Dialplan_Tools_transfer
 
         >>> transfer("3222 XML default")
         """
         return self.__protocolSendmsg("transfer", args, lock=True)
 
     def conference(self, args):
-        """Please refer to http://wiki.freeswitch.org/wiki/Mod_conference#API_Reference
+        """
+        Please refer to http://wiki.freeswitch.org/wiki/
+        Mod_conference#API_Reference
 
         >>> conference("myconf")
         """
         return self.__protocolSendmsg("conference", args, lock=True)
 
     def att_xfer(self, url):
-        """Please refer to http://wiki.freeswitch.org/wiki/Misc._Dialplan_Tools_att_xfer
+        """
+        Please refer to http://wiki.freeswitch.org/wiki/
+        Misc._Dialplan_Tools_att_xfer
 
         >>> att_xfer("user/1001")
         """
@@ -508,14 +521,18 @@ class FreeSwitchEventProtocol(FreeSwitchEventSocket):
         return self.__protocolSendmsg("break", lock=True)
 
     def endless_playback(self, filename):
-        """Please refer to http://wiki.freeswitch.org/wiki/Misc._Dialplan_Tools_endless_playback
+        """
+        Please refer to http://wiki.freeswitch.org/wiki/
+        Misc._Dialplan_Tools_endless_playback
 
         >>> endless_playback("/tmp/dump.gsm")
         """
         return self.__protocolSendmsg("endless_playback", filename, lock=True)
 
     def execute(self, command, args):
-        """Please refer to http://wiki.freeswitch.org/wiki/Event_Socket_Library#execute
+        """
+        Please refer to http://wiki.freeswitch.org/wiki/
+        Event_Socket_Library#execute
 
         >>> execute('voicemail', 'default $${domain} 1000')
         """
