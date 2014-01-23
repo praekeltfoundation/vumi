@@ -40,6 +40,9 @@ class DmarkUssdTransport(HttpRpcTransport):
     * ``creationTime``: The time the USSD request was sent, as a Unix
       timestamp (UTC), if available. (This time is given by the mobile
       network, and may not always be reliable.)
+    * ``response``: ``"false"`` if this is a new session, ``"true"`` if it is
+      not. Currently not used by the transport (it relies on the
+      ``transactionId`` being unique instead).
 
     The transport may respond to this request either using JSON or form-encoded
     data. A successful response must return HTTP status code 200. Any other
@@ -71,7 +74,7 @@ class DmarkUssdTransport(HttpRpcTransport):
     ENCODING = 'utf-8'
     EXPECTED_FIELDS = frozenset([
         'transactionId', 'msisdn', 'ussdServiceCode', 'transactionTime',
-        'ussdRequestString', 'creationTime',
+        'ussdRequestString', 'creationTime', 'response',
     ])
 
     @inlineCallbacks
