@@ -1428,3 +1428,8 @@ class TestMessageDispatchHelper(VumiTestCase):
             'from_addr': msg['to_addr'],
             'in_reply_to': msg['message_id'],
         })
+
+
+class TestPersistenceHelper(VumiTestCase):
+    # TODO: Figure out how to test this.
+    pass

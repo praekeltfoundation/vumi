@@ -1054,6 +1054,13 @@ def import_filter(exc, *expected):
 
 
 def import_skip(exc, *expected):
+    """
+    Raise :class:`SkipTest` if the provided :class:`ImportError` matches a
+    module name in ``expected``, otherwise reraise the :class:`ImportError`.
+
+    This is useful for skipping tests that require optional dependencies which
+    might not be present.
+    """
     module = import_filter(exc, *expected)
     raise SkipTest("Failed to import '%s'." % (module,))
 
@@ -1094,6 +1101,27 @@ def maybe_async_return(value, maybe_deferred):
 
 
 class PersistenceHelper(object):
+    """
+    Test helper for managing persistent storage.
+
+    This helper manages Riak and Redis clients and configs and cleans up after
+    them. It does no setup, but its cleanup may take a while if there's a lot
+    in Riak.
+
+    All configs for objects that build Riak or Redis clients must be passed
+    through :meth:`mk_config`.
+
+    :param bool use_riak:
+        Pass ``True`` if Riak is desired, otherwise it will be disabled in the
+        generated config parameters.
+
+    :param bool is_sync:
+        Pass ``True`` if synchronous Riak and Redis clients are desired,
+        otherwise asynchronous ones will be built. This only applies to client
+        built by this helper, not those built by other objects using configs
+        from this helper.
+    """
+
     implements(IHelper)
 
     def __init__(self, use_riak=False, is_sync=False):
@@ -1270,6 +1298,18 @@ class PersistenceHelper(object):
 
     @proxyable
     def get_riak_manager(self, config=None):
+        """
+        Build and return a Riak manager.
+
+        :param dict config:
+            Riak manager config. (Not a complete worker config.) If ``None``,
+            the one used by :meth:`mk_config` will be used.
+
+        :returns:
+            A :class:`~vumi.persist.riak_manager.RiakManager` or
+            :class:`~vumi.persist.riak_manager.TxRiakManager`, depending on the
+            value of :attr:`is_sync`.
+        """
         if config is None:
             config = self._config_overrides['riak_manager'].copy()
 
@@ -1295,6 +1335,21 @@ class PersistenceHelper(object):
 
     @proxyable
     def get_redis_manager(self, config=None):
+        """
+        Build and return a Redis manager.
+
+        This will be backed by an in-memory fake unless the
+        ``VUMITEST_REDIS_DB`` environment variable is set.
+
+        :param dict config:
+            Redis manager config. (Not a complete worker config.) If ``None``,
+            the one used by :meth:`mk_config` will be used.
+
+        :returns:
+            A :class:`~vumi.persist.redis_manager.RedisManager` or
+            :class:`~vumi.persist.redis_manager.TxRedisManager`, depending on
+            the value of :attr:`is_sync`.
+        """
         if config is None:
             config = self._config_overrides['redis_manager'].copy()
 
@@ -1317,6 +1372,13 @@ class PersistenceHelper(object):
 
     @proxyable
     def mk_config(self, config):
+        """
+        Return a copy of ``config`` with the ``riak_manager`` and
+        ``redis_manager`` fields overridden.
+
+        All configs for things that create Riak or Redis clients should be
+        passed through this method.
+        """
         config = config.copy()
         config.update(self._config_overrides)
         return config
