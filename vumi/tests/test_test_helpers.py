@@ -1591,3 +1591,66 @@ class TestPersistenceHelper(VumiTestCase):
         persistence_helper = PersistenceHelper()
         err = self.assertRaises(Exception, persistence_helper.mk_config, {})
         self.assertTrue('setup() must be called' in str(err))
+
+    def test_get_riak_manager_no_riak(self):
+        """
+        .get_riak_manager() should fail if ``use_riak`` is ``False``.
+        """
+        persistence_helper = self.add_helper(PersistenceHelper())
+        err = self.assertRaises(Exception, persistence_helper.get_riak_manager)
+        self.assertTrue(
+            'Use of Riak has been disabled for this test.' in str(err))
+
+    def test_get_riak_manager_sync(self):
+        """
+        .get_riak_manager() should return a RiakManager if ``is_sync`` is
+        ``True``.
+        """
+        persistence_helper = self.add_helper(
+            PersistenceHelper(use_riak=True, is_sync=True))
+        manager = persistence_helper.get_riak_manager()
+        self.assertIsInstance(manager, self._RiakManager)
+
+    def test_get_riak_manager_async(self):
+        """
+        .get_riak_manager() should return a TxRiakManager if ``is_sync`` is
+        ``False``.
+        """
+        persistence_helper = self.add_helper(PersistenceHelper(use_riak=True))
+        manager = persistence_helper.get_riak_manager()
+        self.assertIsInstance(manager, self._TxRiakManager)
+
+    def test_get_redis_manager_sync(self):
+        """
+        .get_redis_manager() should return a RedisManager if ``is_sync`` is
+        ``True``.
+        """
+        persistence_helper = self.add_helper(PersistenceHelper(is_sync=True))
+        manager = persistence_helper.get_redis_manager()
+        self.assertIsInstance(manager, self._RedisManager)
+
+    @inlineCallbacks
+    def test_get_redis_manager_async(self):
+        """
+        .get_redis_manager() should return a Deferred that fires with a
+        TxRedisManager if ``is_sync`` is ``False``.
+        """
+        persistence_helper = self.add_helper(PersistenceHelper())
+        manager_d = persistence_helper.get_redis_manager()
+        self.assertIsInstance(manager_d, Deferred)
+        manager = yield manager_d
+        self.assertIsInstance(manager, self._TxRedisManager)
+
+    def test_mk_config(self):
+        """
+        .mk_config() should return a copy of the provided config with
+        riak_manager and redis_manager fields overridden.
+        """
+        persistence_helper = self.add_helper(PersistenceHelper())
+        config = {}
+        new_config = persistence_helper.mk_config(config)
+        self.assertEqual(
+            ['redis_manager', 'riak_manager'], sorted(new_config.keys()))
+        self.assertEqual(config, {})
+
+    # TODO: Test cleanup properly.
