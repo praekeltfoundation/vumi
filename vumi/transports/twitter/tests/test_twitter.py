@@ -63,7 +63,7 @@ class TestTwitterTransport(VumiTestCase):
 
         self.assertEqual(msg['from_addr'], '@someone_else')
         self.assertEqual(msg['to_addr'], '@someone')
-        self.assertEqual(msg['content'], '@someone arnold')
+        self.assertEqual(msg['content'], 'arnold')
 
         self.assertEqual(
             msg['transport_metadata'],
@@ -102,8 +102,8 @@ class TestTwitterTransport(VumiTestCase):
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
 
         self.assertEqual(msg['from_addr'], '@someone')
-        self.assertEqual(msg['to_addr'], 'NO_USER')
-        self.assertEqual(msg['content'], '@me hello')
+        self.assertEqual(msg['to_addr'], '@me')
+        self.assertEqual(msg['content'], 'hello')
 
         self.assertEqual(
             msg['transport_metadata'],
@@ -112,7 +112,7 @@ class TestTwitterTransport(VumiTestCase):
         self.assertEqual(msg['helper_metadata'], {
             'twitter': {
                 'in_reply_to_status_id': None,
-                'in_reply_to_screen_name': None,
+                'in_reply_to_screen_name': 'me',
                 'user_mentions': [{
                     'id_str': self.user.id_str,
                     'id': int(self.user.id_str),
@@ -134,7 +134,7 @@ class TestTwitterTransport(VumiTestCase):
 
         self.assertEqual(msg['from_addr'], '@someone')
         self.assertEqual(msg['to_addr'], '@me')
-        self.assertEqual(msg['content'], '@me goodbye')
+        self.assertEqual(msg['content'], 'goodbye')
 
         self.assertEqual(
             msg['transport_metadata'],
@@ -167,6 +167,7 @@ class TestTwitterTransport(VumiTestCase):
 
     @inlineCallbacks
     def test_sending(self):
+        self.twitter.new_user('someone', 'someone')
         msg = yield self.tx_helper.make_dispatch_outbound(
             'hello', to_addr='@someone')
         [ack] = yield self.tx_helper.wait_for_dispatched_events(1)
@@ -226,3 +227,53 @@ class TestTwitterTransport(VumiTestCase):
             self.assertEqual(
                 lc.messages(),
                 ["Received non-tweet from user stream: {'foo': 'bar'}"])
+
+    def test_tweet_content_with_mention_at_start(self):
+        self.assertEqual('hello', self.transport.tweet_content({
+            'id_str': '12345',
+            'text': '@fakeuser hello',
+            'user': {},
+            'entities': {
+                'user_mentions': [{
+                    'id_str': '123',
+                    'screen_name': 'fakeuser',
+                    'name': 'Fake User',
+                    'indices': [0, 8]
+                }]
+            },
+        }))
+
+    def test_tweet_content_with_mention_not_at_start(self):
+        self.assertEqual('hello @fakeuser!', self.transport.tweet_content({
+            'id_str': '12345',
+            'text': 'hello @fakeuser!',
+            'user': {},
+            'entities': {
+                'user_mentions': [{
+                    'id_str': '123',
+                    'screen_name': 'fakeuser',
+                    'name': 'Fake User',
+                    'indices': [6, 14]
+                }]
+            },
+        }))
+
+    def test_tweet_content_with_no_mention(self):
+        self.assertEqual('hello', self.transport.tweet_content({
+            'id_str': '12345',
+            'text': 'hello',
+            'user': {},
+            'entities': {
+                'user_mentions': []
+            },
+        }))
+
+    def test_tweet_content_with_no_user_in_text(self):
+        self.assertEqual('NO_USER hello', self.transport.tweet_content({
+            'id_str': '12345',
+            'text': 'NO_USER hello',
+            'user': {},
+            'entities': {
+                'user_mentions': []
+            },
+        }))
