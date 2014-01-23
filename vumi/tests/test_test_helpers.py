@@ -2,7 +2,7 @@ from datetime import datetime
 
 from twisted.internet.defer import Deferred, succeed, inlineCallbacks
 from twisted.python.failure import Failure
-from twisted.trial.unittest import TestCase
+from twisted.trial.unittest import SkipTest, TestCase
 
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.tests.fake_amqp import FakeAMQPBroker, FakeAMQClient
@@ -119,6 +119,32 @@ class TestHelperHelpers(TestCase):
         generate_proxies(target, source1)
         err = self.assertRaises(Exception, generate_proxies, target, source2)
         self.assertTrue('is_proxyable' in err.args[0])
+
+    def test_import_skip_skips(self):
+        """
+        import_skip() should raise a SkipTest exception if given an ImportError
+        referencing an expected module name.
+        """
+        try:
+            import badmodule
+            self.fail(
+                "Expected ImportError for %r, nothing raised." % (badmodule,))
+        except ImportError as import_error:
+            self.assertRaises(SkipTest, import_skip, import_error, 'badmodule')
+
+    def test_import_skip_reraises(self):
+        """
+        import_skip() should reraise the given ImportError if it does not
+        reference an expected module name.
+        """
+        try:
+            import badmodule
+            self.fail(
+                "Expected ImportError for %r, nothing raised." % (badmodule,))
+        except ImportError as import_error:
+            err = self.assertRaises(
+                ImportError, import_skip, import_error, 'nothing')
+            self.assertEqual(err, import_error)
 
 
 class TestMessageHelper(TestCase):
