@@ -53,7 +53,8 @@ class DispatcherHelper(object):
         generate_proxies(self, self.dispatch_helper)
 
     def setup(self):
-        pass
+        self.persistence_helper.setup()
+        self.worker_helper.setup()
 
     @inlineCallbacks
     def cleanup(self):

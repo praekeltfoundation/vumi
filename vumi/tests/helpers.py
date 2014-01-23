@@ -1124,6 +1124,8 @@ class PersistenceHelper(object):
 
     implements(IHelper)
 
+    _patches_applied = False
+
     def __init__(self, use_riak=False, is_sync=False):
         self.use_riak = use_riak
         self.is_sync = is_sync
@@ -1141,13 +1143,13 @@ class PersistenceHelper(object):
         }
         if not self.use_riak:
             self._config_overrides['riak_manager'] = RiakDisabledForTest()
+
+    def setup(self):
         self._patch_riak()
         self._patch_txriak()
         self._patch_redis()
         self._patch_txredis()
-
-    def setup(self):
-        pass
+        self._patches_applied = True
 
     @maybe_async
     def cleanup(self):
@@ -1172,8 +1174,7 @@ class PersistenceHelper(object):
                 yield self._purge_redis(manager)
             yield manager.close_manager()
 
-        for patch in reversed(self._patches):
-            patch.restore()
+        self._unpatch()
 
     def _get_riak_managers_for_cleanup(self):
         """
@@ -1224,6 +1225,11 @@ class PersistenceHelper(object):
         self._patches.append(monkey_patch)
         monkey_patch.patch()
         return monkey_patch
+
+    def _unpatch(self):
+        for patch in reversed(self._patches):
+            patch.restore()
+        self._patches_applied = False
 
     def _patch_riak(self):
         try:
@@ -1296,6 +1302,11 @@ class PersistenceHelper(object):
                 raise
         yield manager.close_manager()
 
+    def _check_patches_applied(self):
+        if not self._patches_applied:
+            raise Exception(
+                "setup() must be called before performing this operation.")
+
     @proxyable
     def get_riak_manager(self, config=None):
         """
@@ -1310,6 +1321,7 @@ class PersistenceHelper(object):
             :class:`~vumi.persist.riak_manager.TxRiakManager`, depending on the
             value of :attr:`is_sync`.
         """
+        self._check_patches_applied()
         if config is None:
             config = self._config_overrides['riak_manager'].copy()
 
@@ -1350,6 +1362,7 @@ class PersistenceHelper(object):
             :class:`~vumi.persist.redis_manager.TxRedisManager`, depending on
             the value of :attr:`is_sync`.
         """
+        self._check_patches_applied()
         if config is None:
             config = self._config_overrides['redis_manager'].copy()
 
@@ -1379,6 +1392,7 @@ class PersistenceHelper(object):
         All configs for things that create Riak or Redis clients should be
         passed through this method.
         """
+        self._check_patches_applied()
         config = config.copy()
         config.update(self._config_overrides)
         return config

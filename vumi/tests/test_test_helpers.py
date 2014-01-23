@@ -7,8 +7,8 @@ from twisted.trial.unittest import TestCase
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.tests.fake_amqp import FakeAMQPBroker, FakeAMQClient
 from vumi.tests.helpers import (
-    VumiTestCase, proxyable, generate_proxies, IHelper,
-    MessageHelper, WorkerHelper, MessageDispatchHelper)
+    VumiTestCase, proxyable, generate_proxies, IHelper, import_skip,
+    MessageHelper, WorkerHelper, MessageDispatchHelper, PersistenceHelper)
 from vumi.worker import BaseWorker
 
 
@@ -134,7 +134,7 @@ class TestMessageHelper(TestCase):
 
     def test_defaults(self):
         """
-        MessageHelper instances should have the expected parameters defaults.
+        MessageHelper instances should have the expected parameter defaults.
         """
         msg_helper = MessageHelper()
         self.assertEqual(msg_helper.transport_name, 'sphex')
@@ -584,7 +584,7 @@ class TestWorkerHelper(VumiTestCase):
 
     def test_defaults(self):
         """
-        WorkerHelper instances should have the expected parameters defaults.
+        WorkerHelper instances should have the expected parameter defaults.
         """
         worker_helper = WorkerHelper()
         self.assertEqual(worker_helper._connector_name, None)
@@ -1431,5 +1431,137 @@ class TestMessageDispatchHelper(VumiTestCase):
 
 
 class TestPersistenceHelper(VumiTestCase):
-    # TODO: Figure out how to test this.
-    pass
+    def success_result_of(self, d):
+        """
+        We can't necessarily use TestCase.successResultOf because our Twisted
+        might not be new enough.
+        """
+        results = []
+        d.addBoth(results.append)
+        if not results:
+            self.fail("No result available for deferred: %r" % (d,))
+        if isinstance(results[0], Failure):
+            self.fail("Expected success from deferred %r, got failure: %r" % (
+                d, results[0]))
+        return results[0]
+
+    @property
+    def _RiakManager(self):
+        try:
+            from vumi.persist.riak_manager import RiakManager
+        except ImportError, e:
+            import_skip(e, 'riak')
+        return RiakManager
+
+    @property
+    def _TxRiakManager(self):
+        try:
+            from vumi.persist.txriak_manager import TxRiakManager
+        except ImportError, e:
+            import_skip(e, 'riakasaurus', 'riakasaurus.riak')
+        return TxRiakManager
+
+    @property
+    def _RedisManager(self):
+        try:
+            from vumi.persist.redis_manager import RedisManager
+        except ImportError, e:
+            import_skip(e, 'redis')
+        return RedisManager
+
+    @property
+    def _TxRedisManager(self):
+        from vumi.persist.txredis_manager import TxRedisManager
+        return TxRedisManager
+
+    def test_implements_IHelper(self):
+        """
+        PersistenceHelper instances should provide the IHelper interface.
+        """
+        self.assertTrue(IHelper.providedBy(PersistenceHelper()))
+
+    def test_defaults(self):
+        """
+        PersistenceHelper instances should have the expected parameter
+        defaults.
+        """
+        persistence_helper = PersistenceHelper()
+        self.assertEqual(persistence_helper.use_riak, False)
+        self.assertEqual(persistence_helper.is_sync, False)
+        self.assertEqual
+
+    def test_all_params(self):
+        """
+        PersistenceHelper instances should accept ``use_riak`` and ``is_sync``
+        params. defaults.
+        """
+        persistence_helper = PersistenceHelper(use_riak=True, is_sync=True)
+        self.assertEqual(persistence_helper.use_riak, True)
+        self.assertEqual(persistence_helper.is_sync, True)
+
+    def get_manager_inits(self):
+        return (
+            self._RiakManager.__init__,
+            self._TxRiakManager.__init__,
+            self._RedisManager.__init__,
+            self._TxRedisManager.__init__,
+        )
+
+    def test_setup_applies_patches(self):
+        """
+        PersistenceHelper.setup() should apply patches to the persistence
+        managers and return ``None``, not a Deferred.
+        """
+        manager_inits = self.get_manager_inits()
+        persistence_helper = PersistenceHelper()
+        self.assertEqual(persistence_helper._patches_applied, False)
+        self.assertEqual(manager_inits, self.get_manager_inits())
+
+        self.assertEqual(persistence_helper.setup(), None)
+        self.assertEqual(persistence_helper._patches_applied, True)
+        self.assertNotEqual(manager_inits, self.get_manager_inits())
+
+        # Clean up after ourselves.
+        persistence_helper._unpatch()
+        self.assertEqual(persistence_helper._patches_applied, False)
+        self.assertEqual(manager_inits, self.get_manager_inits())
+
+    def test_cleanup_restores_patches(self):
+        """
+        PersistenceHelper.cleanup() should restore any patches applied by
+        PersistenceHelper.setup().
+        """
+        manager_inits = self.get_manager_inits()
+        persistence_helper = PersistenceHelper()
+        self.assertEqual(persistence_helper.setup(), None)
+        self.assertEqual(persistence_helper._patches_applied, True)
+        self.assertNotEqual(manager_inits, self.get_manager_inits())
+
+        self.success_result_of(persistence_helper.cleanup())
+        self.assertEqual(persistence_helper._patches_applied, False)
+        self.assertEqual(manager_inits, self.get_manager_inits())
+
+    def test_get_riak_manager_unpatched(self):
+        """
+        .get_riak_manager() should fail if .setup() has not been called.
+        """
+        persistence_helper = PersistenceHelper()
+        err = self.assertRaises(Exception, persistence_helper.get_riak_manager)
+        self.assertTrue('setup() must be called' in str(err))
+
+    def test_get_redis_manager_unpatched(self):
+        """
+        .get_redis_manager() should fail if .setup() has not been called.
+        """
+        persistence_helper = PersistenceHelper()
+        err = self.assertRaises(
+            Exception, persistence_helper.get_redis_manager)
+        self.assertTrue('setup() must be called' in str(err))
+
+    def test_mk_config_unpatched(self):
+        """
+        .mk_config() should fail if .setup() has not been called.
+        """
+        persistence_helper = PersistenceHelper()
+        err = self.assertRaises(Exception, persistence_helper.mk_config, {})
+        self.assertTrue('setup() must be called' in str(err))

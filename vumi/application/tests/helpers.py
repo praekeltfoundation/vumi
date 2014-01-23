@@ -27,7 +27,8 @@ class ApplicationHelper(object):
         generate_proxies(self, self.persistence_helper)
 
     def setup(self):
-        pass
+        self.persistence_helper.setup()
+        self.worker_helper.setup()
 
     @inlineCallbacks
     def cleanup(self):
