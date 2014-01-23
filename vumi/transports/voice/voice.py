@@ -42,19 +42,26 @@ class FreeSwitchESLProtocol(freeswitchesl.FreeSwitchEventProtocol):
         print "DTMF:", ev.DTMF_Digit
         yield self.vumi_transport.handle_input(self, ev.DTMF_Digit)
         
-    #def streamTextAsSpeech(self,message):
-    #    print "Generating speech for text: "+message
-    #    os.system("espeak -w /usr/src/freeswitch/pySource/media/test.wav \""+message+"\"")
-    #    self.playback("/usr/src/freeswitch/pySource/media/test.wav")
+    @inlineCallbacks
+    def createAndStreamTextAsSpeech(self,engine,voice,message):
+        os.system("%s -w /usr/src/freeswitch/pySource/media/test.wav \"%s\""%(engine,message))
+        yield self.playback("/usr/src/freeswitch/pySource/media/test.wav")
 
     @inlineCallbacks
+    def sendTextAsSpeech(self,engine,voice,message):
+        yield self.set("tts_engine="+engine)
+        yield self.set("tts_voice="+voice)
+        yield self.execute("speak",message)        
+        
+
     def streamTextAsSpeech(self,message):  
         finalmessage=message.replace("\n"," . ")     
         log.msg("TTS: " +finalmessage+"\n")
-        log.msg("TTS Engine: " +self.vumi_transport.config.tts_engine+"\n")
-        yield self.set("tts_engine="+self.vumi_transport.config.tts_engine)
-        yield self.set("tts_voice="+self.vumi_transport.config.tts_voice)
-        yield self.execute("speak",finalmessage)        
+        if (self.vumi_transport.config.tts_type=="local"):
+            self.createAndStreamTextAsSpeech(self.vumi_transport.config.tts_engine,self.vumi_transport.config.tts_voice,finalmessage)
+        else:
+            self.sendTextAsSpeech(self.vumi_transport.config.tts_engine,self.vumi_transport.config.tts_voice,finalmessage)
+            
         
     def getAddress(self):
         return self.uniquecallid
