@@ -26,6 +26,7 @@ class TestDmarkUssdTransport(VumiTestCase):
         'transactionTime': '1389971940',
         'ussdRequestString': _to_addr,
         'creationTime': '1389971950',
+        'response': 'false',
     }
 
     @inlineCallbacks
@@ -171,7 +172,8 @@ class TestDmarkUssdTransport(VumiTestCase):
             response.delivered_body,
             json.dumps({
                 'missing_parameter': [
-                    "transactionTime", "transactionId", "ussdRequestString"
+                    "transactionTime", "transactionId", "response",
+                    "ussdRequestString",
                 ],
             })
         )
