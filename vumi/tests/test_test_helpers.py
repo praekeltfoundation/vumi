@@ -1456,6 +1456,44 @@ class TestMessageDispatchHelper(VumiTestCase):
         })
 
 
+class FakeRiakManagerForCleanup(object):
+    purged = False
+
+    def __init__(self, bucket_prefix, conns=None):
+        self.bucket_prefix = bucket_prefix
+        if conns is not None:
+            self._cm = self
+            self.conns = conns
+        self.client = self
+
+    def purge_all(self):
+        self.purged = True
+        return 'maybe async'
+
+
+class FakeRiakClientConnection(object):
+    closed = False
+
+    def close(self):
+        self.closed = True
+
+
+class FakeRedisManagerForCleanup(object):
+    purged = False
+    connected = True
+
+    def __init__(self, key_prefix):
+        self._key_prefix = key_prefix
+
+    def _purge_all(self):
+        if not self.connected:
+            raise RuntimeError('Not connected')
+        self.purged = True
+
+    def close_manager(self):
+        self.connected = False
+
+
 class TestPersistenceHelper(VumiTestCase):
     def success_result_of(self, d):
         """
@@ -1653,4 +1691,107 @@ class TestPersistenceHelper(VumiTestCase):
             ['redis_manager', 'riak_manager'], sorted(new_config.keys()))
         self.assertEqual(config, {})
 
-    # TODO: Test cleanup properly.
+    def test__get_riak_managers_for_cleanup(self):
+        """
+        ._get_riak_managers_for_cleanup() should return the known Riak managers
+        in reverse order with appropriate boolean determining whether they
+        should be purged or not.
+        """
+        persistence_helper = PersistenceHelper()
+        managers = [
+            FakeRiakManagerForCleanup('bucket1'),
+            FakeRiakManagerForCleanup('bucket2'),
+            FakeRiakManagerForCleanup('bucket2'),
+            FakeRiakManagerForCleanup('bucket1'),
+            FakeRiakManagerForCleanup('bucket3'),
+        ]
+        persistence_helper._riak_managers.extend(managers)
+        self.assertEqual(
+            list(persistence_helper._get_riak_managers_for_cleanup()),
+            list(reversed(zip([True, True, False, False, True], managers))))
+
+    def test__get_redis_managers_for_cleanup(self):
+        """
+        ._get_redis_managers_for_cleanup() should return the known Redis
+        managers in reverse order with appropriate boolean determining whether
+        they should be purged or not.
+        """
+        persistence_helper = PersistenceHelper()
+        managers = [
+            FakeRedisManagerForCleanup('prefix1'),
+            FakeRedisManagerForCleanup('prefix2'),
+            FakeRedisManagerForCleanup('prefix2'),
+            FakeRedisManagerForCleanup('prefix1'),
+            FakeRedisManagerForCleanup('prefix3'),
+        ]
+        persistence_helper._redis_managers.extend(managers)
+        self.assertEqual(
+            list(persistence_helper._get_redis_managers_for_cleanup()),
+            list(reversed(zip([True, True, False, False, True], managers))))
+
+    def test__purge_riak(self):
+        """
+        ._purge_riak() should call manager.purge_all().
+        """
+        persistence_helper = PersistenceHelper()
+        manager = FakeRiakManagerForCleanup('prefix1')
+        self.assertEqual(manager.purged, False)
+        self.assertEqual(
+            persistence_helper._purge_riak(manager), 'maybe async')
+        self.assertEqual(manager.purged, True)
+
+    def test__purge_redis(self):
+        """
+        ._purge_redis() should call manager._purge_all() and disconnect.
+        """
+        persistence_helper = PersistenceHelper()
+        manager = FakeRedisManagerForCleanup('prefix1')
+        self.assertEqual(manager.purged, False)
+        self.assertEqual(manager.connected, True)
+        self.success_result_of(persistence_helper._purge_redis(manager))
+        self.assertEqual(manager.purged, True)
+        self.assertEqual(manager.connected, False)
+
+    def test__purge_redis_not_connected(self):
+        """
+        ._purge_redis() should ignore riak managers that aren't connected.
+        """
+        persistence_helper = PersistenceHelper()
+        manager = FakeRedisManagerForCleanup('prefix1')
+        manager.close_manager()
+        self.assertEqual(manager.purged, False)
+        self.success_result_of(persistence_helper._purge_redis(manager))
+        self.assertEqual(manager.purged, False)
+
+    def test_cleanup_purges_managers(self):
+        """
+        .cleanup() should purge the Riak and Redis managers that need purging.
+        """
+        persistence_helper = PersistenceHelper()
+        riak_purge = FakeRiakManagerForCleanup('bucket1')
+        riak_nopurge = FakeRiakManagerForCleanup('bucket1')
+        redis_purge = FakeRedisManagerForCleanup('prefix1')
+        redis_nopurge = FakeRedisManagerForCleanup('prefix1')
+        persistence_helper._riak_managers.extend([riak_purge, riak_nopurge])
+        persistence_helper._redis_managers.extend([redis_purge, redis_nopurge])
+
+        self.success_result_of(persistence_helper.cleanup())
+        self.assertEqual(
+            [True, False], [riak_purge.purged, riak_nopurge.purged])
+        self.assertEqual(
+            [True, False], [redis_purge.purged, redis_nopurge.purged])
+
+    def test_cleanup_closes_sync_riak_managers(self):
+        """
+        .cleanup() should close sync Riak client connections.
+        """
+        persistence_helper = PersistenceHelper()
+        conn1 = FakeRiakClientConnection()
+        conn2 = FakeRiakClientConnection()
+        manager = FakeRiakManagerForCleanup('bucket1', [conn1, conn2])
+        persistence_helper._riak_managers.append(manager)
+        self.assertEqual(manager.conns, [conn1, conn2])
+        self.assertEqual([conn1.closed, conn2.closed], [False, False])
+        self.success_result_of(persistence_helper.cleanup())
+        self.assertEqual(manager.conns, [])
+        self.assertEqual([conn1.closed, conn2.closed], [True, True])
