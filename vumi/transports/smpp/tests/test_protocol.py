@@ -82,6 +82,14 @@ class DummySmppTransport(object):
     pass
 
 
+class ForwardableRedisSequence(RedisSequence):
+
+    def advance(self, seq_nr):
+        d = self.redis.set('smpp_last_sequence_number', seq_nr)
+        d.addCallback(lambda _: seq_nr)
+        return d
+
+
 class EsmeTestCase(VumiTestCase):
 
     @inlineCallbacks
@@ -126,9 +134,11 @@ class EsmeTestCase(VumiTestCase):
             dr_processor = cfg.delivery_report_processor(
                 dummy_smpp_transport, cfg.delivery_report_processor_config)
 
+        sequence_generator = ForwardableRedisSequence(self.redis)
+
         dummy_smpp_transport.dr_processor = dr_processor
         dummy_smpp_transport.deliver_sm_processor = deliver_sm_processor
-        dummy_smpp_transport.sequence_generator = RedisSequence(self.redis)
+        dummy_smpp_transport.sequence_generator = sequence_generator
 
         factory = factory_class(dummy_smpp_transport)
         proto = factory.buildProtocol(('127.0.0.1', 0))
@@ -349,6 +359,33 @@ class EsmeTestCase(VumiTestCase):
         self.assertEqual(1, len(set(msg_refs)))
 
     @inlineCallbacks
+    def test_udh_ref_num_limit(self):
+        transport, protocol = yield self.setup_bind(config={
+            'send_multipart_udh': True,
+        })
+
+        # forward until we go past 0xFF
+        yield protocol.sequence_generator.advance(0xFF)
+
+        long_message = 'This is a long message.' * 20
+        seq_numbers = yield protocol.submit_csm_udh(
+            'dest_addr', short_message=long_message)
+        pdus = yield wait_for_pdus(transport, 4)
+
+        self.assertEqual(len(seq_numbers), 4)
+        self.assertTrue(all([sn > 0xFF for sn in seq_numbers]))
+
+        msg_refs = []
+
+        for pdu in pdus:
+            msg = short_message(pdu)
+            _, _, _, udh_ref, _, _ = [ord(octet) for octet in msg[:6]]
+            msg_refs.append(udh_ref)
+
+        self.assertEqual(1, len(set(msg_refs)))
+        self.assertTrue(all([msg_ref < 0xFF for msg_ref in msg_refs]))
+
+    @inlineCallbacks
     def test_submit_sm_multipart_sar(self):
         transport, protocol = yield self.setup_bind(config={
             'send_multipart_sar': True,
@@ -375,6 +412,33 @@ class EsmeTestCase(VumiTestCase):
 
         self.assertEqual(long_message, ''.join(msg_parts))
         self.assertEqual([3, 3, 3, 3], msg_refs)
+
+    @inlineCallbacks
+    def test_sar_ref_num_limit(self):
+        transport, protocol = yield self.setup_bind(config={
+            'send_multipart_udh': True,
+        })
+
+        # forward until we go past 0xFFFF
+        yield protocol.sequence_generator.advance(0xFFFF)
+
+        long_message = 'This is a long message.' * 20
+        seq_numbers = yield protocol.submit_csm_udh(
+            'dest_addr', short_message=long_message)
+        pdus = yield wait_for_pdus(transport, 4)
+
+        self.assertEqual(len(seq_numbers), 4)
+        self.assertTrue(all([sn > 0xFF for sn in seq_numbers]))
+
+        msg_refs = []
+
+        for pdu in pdus:
+            msg = short_message(pdu)
+            _, _, _, udh_ref, _, _ = [ord(octet) for octet in msg[:6]]
+            msg_refs.append(udh_ref)
+
+        self.assertEqual(1, len(set(msg_refs)))
+        self.assertTrue(all([msg_ref < 0xFFFF for msg_ref in msg_refs]))
 
     @inlineCallbacks
     def test_query_sm(self):

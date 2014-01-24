@@ -545,7 +545,8 @@ class EsmeTransceiver(Protocol):
         for i, msg in enumerate(split_msg):
             pdu_params = pdu_params.copy()
             optional_parameters.update({
-                'sar_msg_ref_num': ref_num,
+                # Reference number must be between 00 & FFFF
+                'sar_msg_ref_num': (ref_num % 0xFFFF),
                 'sar_total_segments': len(split_msg),
                 'sar_segment_seqnum': i + 1,
             })
@@ -595,7 +596,8 @@ class EsmeTransceiver(Protocol):
                 '\05',  # Full UDH header length
                 '\00',  # Information Element Identifier for Concatenated SMS
                 '\03',  # header length
-                chr(ref_num),
+                # Reference number must be between 00 & FF
+                chr(ref_num % 0xFF),
                 chr(len(split_msg)),
                 chr(i + 1),
             ])
