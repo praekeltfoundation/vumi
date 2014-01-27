@@ -31,14 +31,15 @@ from smpp.pdu_builder import DeliverSM, SubmitSMResp
 
 class DummyService(Service):
 
-    def __init__(self, endpoint, factory, connected_deferred):
+    def __init__(self, endpoint, factory):
         self.factory = factory
         self.protocol = None
-        self.connected_deferred = connected_deferred
+        self.wait_on_protocol_deferreds = []
 
     def startService(self):
         self.protocol = self.factory.buildProtocol(('120.0.0.1', 0))
-        self.connected_deferred.callback(self.protocol)
+        for deferred in self.wait_on_protocol_deferreds:
+            deferred.callback(self.protocol)
 
     def stopService(self):
         if self.protocol and self.protocol.transport:
@@ -46,14 +47,19 @@ class DummyService(Service):
             self.protocol.connectionLost(reason=ConnectionDone)
 
     def get_protocol(self):
-        return self.protocol
+        if self.protocol is not None:
+            return succeed(self.protocol)
+        else:
+            d = Deferred()
+            self.wait_on_protocol_deferreds.append(d)
+            return d
 
 
 class SMPPHelper(object):
-    def __init__(self, string_transport, smpp_transport):
+    def __init__(self, string_transport, transport, protocol):
         self.string_transport = string_transport
-        self.transport = smpp_transport
-        self.protocol = smpp_transport.service.get_protocol()
+        self.transport = transport
+        self.protocol = protocol
 
     def send_pdu(self, pdu):
         """put it on the wire and don't wait for a response"""
@@ -119,26 +125,13 @@ class SmppTransportTestCase(VumiTestCase):
         returnValue(transport)
 
     def create_smpp_bind(self, smpp_transport):
-        d = Deferred()
+        d = smpp_transport.service.get_protocol()
 
-        def cb(smpp_transport):
-            protocol = smpp_transport.service.get_protocol()
-            if protocol is None:
-                # Still setting up factory
-                reactor.callLater(0, cb, smpp_transport)
-                return
+        def cb(protocol):
+            protocol.makeConnection(self.string_transport)
+            return bind_protocol(self.string_transport, protocol)
 
-            if not protocol.transport:
-                # Factory setup, needs bind pdus
-                protocol.makeConnection(self.string_transport)
-                bind_d = bind_protocol(self.string_transport, protocol)
-                bind_d.addCallback(
-                    lambda _: reactor.callLater(0, cb, smpp_transport))
-                return bind_d
-
-            d.callback(smpp_transport)
-
-        cb(smpp_transport)
+        d.addCallback(cb)
         return d
 
     def send_pdu(self, transport, pdu):
@@ -148,7 +141,8 @@ class SmppTransportTestCase(VumiTestCase):
     @inlineCallbacks
     def get_smpp_helper(self, *args, **kwargs):
         transport = yield self.get_transport(*args, **kwargs)
-        returnValue(SMPPHelper(self.string_transport, transport))
+        protocol = yield transport.service.get_protocol()
+        returnValue(SMPPHelper(self.string_transport, transport, protocol))
 
 
 class SmppTransceiverTransportTestCase(SmppTransportTestCase):
@@ -158,7 +152,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
     @inlineCallbacks
     def test_setup_transport(self):
         transport = yield self.get_transport()
-        protocol = transport.service.get_protocol()
+        protocol = yield transport.service.get_protocol()
         self.assertTrue(protocol.is_bound())
 
     @inlineCallbacks
