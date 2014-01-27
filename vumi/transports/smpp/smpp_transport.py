@@ -60,6 +60,12 @@ class SmppTransceiverProtocol(EsmeTransceiverFactory.protocol):
                 self, reason))
         return d
 
+    def on_smpp_bind(self, sequence_number):
+        d = maybeDeferred(EsmeTransceiverFactory.protocol.on_smpp_bind,
+                          self, sequence_number)
+        d.addCallback(lambda _: self.vumi_transport.unpause_connectors())
+        return d
+
     def on_submit_sm_resp(self, sequence_number, smpp_message_id,
                           command_status):
         cb = {
@@ -123,6 +129,7 @@ class SmppTransceiverTransport(Transport):
     factory_class = SmppTransceiverClientFactory
     service_class = SmppService
     clock = reactor
+    start_message_consumer = False
 
     @inlineCallbacks
     def setup_transport(self):
