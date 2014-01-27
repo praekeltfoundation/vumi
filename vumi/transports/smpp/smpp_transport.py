@@ -5,7 +5,7 @@ from uuid import uuid4
 
 from twisted.internet import reactor
 from twisted.internet.defer import (
-    inlineCallbacks, DeferredQueue, maybeDeferred, returnValue)
+    inlineCallbacks, DeferredQueue, maybeDeferred, returnValue, Deferred)
 
 from vumi.reconnecting_client import ReconnectingClientService
 from vumi.transports.base import Transport
@@ -88,6 +88,14 @@ class SmppTransceiverClientFactory(EsmeTransceiverFactory):
 
 class SmppService(ReconnectingClientService):
 
+    def __init__(self, endpoint, factory, connected_deferred):
+        ReconnectingClientService.__init__(Self, endpoint, factory)
+        self.connected_deferred = connected_deferred
+
+    def clientConnected(self, protocol):
+        ReconnectingClientService.clientConnected(self, protocol)
+        self.connected_deferred.callback(protocol)
+
     def get_protocol(self):
         return self._protocol
 
@@ -130,11 +138,15 @@ class SmppTransceiverTransport(Transport):
         self.throttled = None
         self.factory = self.factory_class(self)
 
-        self.service = yield self.start_service(self.factory)
+        protocol_connected = Deferred()
+        self.service = self.start_service(
+            self.factory, protocol_connected)
+        self.protocol = yield protocol_connected
 
-    def start_service(self, factory):
+    def start_service(self, factory, protocol_connected):
         config = self.get_static_config()
-        service = self.service_class(config.twisted_endpoint, factory)
+        service = self.service_class(
+            config.twisted_endpoint, factory, protocol_connected)
         service.startService()
         return service
 

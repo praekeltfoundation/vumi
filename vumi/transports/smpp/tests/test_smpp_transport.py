@@ -31,12 +31,14 @@ from smpp.pdu_builder import DeliverSM, SubmitSMResp
 
 class DummyService(Service):
 
-    def __init__(self, endpoint, factory):
+    def __init__(self, endpoint, factory, connected_deferred):
         self.factory = factory
         self.protocol = None
+        self.connected_deferred = connected_deferred
 
     def startService(self):
         self.protocol = self.factory.buildProtocol(('120.0.0.1', 0))
+        self.connected_deferred.callback(self.protocol)
 
     def stopService(self):
         if self.protocol and self.protocol.transport:
