@@ -670,8 +670,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_reconnect(self):
-        self.patch(SmppTransceiverProtocol, 'bind', lambda *a: succeed(True))
-        smpp_helper = yield self.get_smpp_helper(bind=False)
+        smpp_helper = yield self.get_smpp_helper()
         transport = smpp_helper.transport
         protocol = smpp_helper.protocol
         connector = transport.connectors[transport.transport_name]
@@ -681,8 +680,6 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         yield protocol.connectionLost(ConnectionDone)
         self.assertTrue(connector._consumers['outbound'].paused)
 
-        yield protocol.connectionMade()
-        self.assertFalse(connector._consumers['outbound'].paused)
         yield protocol.connectionMade()
         self.assertFalse(connector._consumers['outbound'].paused)
 
