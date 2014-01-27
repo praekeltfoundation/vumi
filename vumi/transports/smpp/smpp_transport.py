@@ -13,7 +13,7 @@ from vumi.transports.base import Transport
 from vumi.message import TransportUserMessage
 
 from vumi.transports.smpp.config import SmppTransportConfig
-from vumi.transports.smpp.deprecated.config import (
+from vumi.transports.smpp.deprecated.transport import (
     SmppTransportConfig as OldSmppTransportConfig)
 from vumi.transports.smpp.deprecated.utils import convert_to_new_config
 from vumi.transports.smpp.protocol import EsmeTransceiverFactory

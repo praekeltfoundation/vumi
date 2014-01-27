@@ -5,18 +5,63 @@ from twisted.internet.defer import Deferred, inlineCallbacks, succeed
 from twisted.internet.task import Clock
 from smpp.pdu_builder import SubmitSMResp, DeliverSM
 
+from vumi.config import ConfigError
 from vumi.message import TransportUserMessage
 from vumi.transports.smpp.deprecated.clientserver.client import (
     EsmeTransceiver, EsmeCallbacks)
 from vumi.transports.smpp.deprecated.transport import (
     SmppTransport, SmppTxTransport, SmppRxTransport)
 from vumi.transports.smpp.deprecated.service import SmppService
-from vumi.transports.smpp.smpp_utils import unpacked_pdu_opts
+from vumi.transports.smpp.deprecated.clientserver.client import (
+    unpacked_pdu_opts)
 from vumi.transports.smpp.deprecated.clientserver.tests.utils import (
-    SmscTestServer,)
+    SmscTestServer)
 from vumi.tests.utils import LogCatcher
 from vumi.transports.tests.helpers import TransportHelper
 from vumi.tests.helpers import VumiTestCase
+
+
+class TestSmppTransportConfig(VumiTestCase):
+    def required_config(self, config_params):
+        config = {
+            "transport_name": "my_transport",
+            "twisted_endpoint": "tcp:host=localhost:port=0",
+            "system_id": "vumitest-vumitest-vumitest",
+            "password": "password",
+        }
+        config.update(config_params)
+        return config
+
+    def get_config(self, config_dict):
+        return SmppTransport.CONFIG_CLASS(config_dict)
+
+    def assert_config_error(self, config_dict):
+        try:
+            self.get_config(config_dict)
+            self.fail("ConfigError not raised.")
+        except ConfigError as err:
+            return err.args[0]
+
+    def test_long_message_params(self):
+        self.get_config(self.required_config({}))
+        self.get_config(self.required_config({'send_long_messages': True}))
+        self.get_config(self.required_config({'send_multipart_sar': True}))
+        self.get_config(self.required_config({'send_multipart_udh': True}))
+        errmsg = self.assert_config_error(self.required_config({
+            'send_long_messages': True,
+            'send_multipart_sar': True,
+        }))
+        self.assertEqual(errmsg, (
+            "The following parameters are mutually exclusive: "
+            "send_long_messages, send_multipart_sar"))
+        errmsg = self.assert_config_error(self.required_config({
+            'send_long_messages': True,
+            'send_multipart_sar': True,
+            'send_multipart_udh': True,
+        }))
+        self.assertEqual(errmsg, (
+            "The following parameters are mutually exclusive: "
+            "send_long_messages, send_multipart_sar, send_multipart_udh"))
 
 
 class TestSmppTransport(VumiTestCase):
@@ -24,13 +69,12 @@ class TestSmppTransport(VumiTestCase):
     @inlineCallbacks
     def setUp(self):
         config = {
+            "system_id": "vumitest-vumitest-vumitest",
             "twisted_endpoint": "tcp:host=localhost:port=0",
             "password": "password",
-            "system_id": "vumitest-vumitest-vumitest",
             "smpp_bind_timeout": 12,
             "smpp_enquire_link_interval": 123,
             "third_party_id_expiry": 3600,  # just 1 hour
-            "data_coding_overrides": {0: 'utf-8'},
         }
 
         # hack a lot of transport setup
@@ -50,7 +94,10 @@ class TestSmppTransport(VumiTestCase):
             submit_sm_resp=self.transport.submit_sm_resp,
             delivery_report=self.transport.delivery_report,
             deliver_sm=lambda: None)
-        self.esme = EsmeTransceiver(self.transport)
+        self.esme = EsmeTransceiver(
+            self.transport.get_static_config(),
+            self.transport.get_smpp_bind_params(),
+            self.transport.redis, self.esme_callbacks)
         self.esme.sent_pdus = []
         self.esme.send_pdu = self.esme.sent_pdus.append
         self.esme.state = 'BOUND_TRX'
@@ -93,8 +140,8 @@ class TestSmppTransport(VumiTestCase):
     @inlineCallbacks
     def test_redis_third_party_id_persistence(self):
         # Testing: set -> get -> delete, for redis third party id mapping
-        config = self.transport.get_static_config()
-        self.assertEqual(config.third_party_id_expiry, 3600)
+        self.assertEqual(
+            self.transport.get_static_config().third_party_id_expiry, 3600)
         our_id = "blergh34534545433454354"
         their_id = "omghesvomitingnumbers"
         yield self.transport.r_set_id_for_third_party_id(their_id, our_id)
@@ -313,11 +360,10 @@ class EsmeToSmscTestCase(VumiTestCase):
         self.tx_helper = self.add_helper(TransportHelper(MockSmppTransport))
         server_config = {
             "transport_name": self.tx_helper.transport_name,
-            "twisted_endpoint": "tcp:0",
-            "transport_type": "smpp",
             "system_id": "VumiTestSMSC",
             "password": "password",
-            'data_coding_overrides': {0: 'utf-8'},
+            "twisted_endpoint": "tcp:0",
+            "transport_type": "smpp",
         }
         server_config.update(self.CONFIG_OVERRIDE)
         self.service = SmppService(None, config=server_config)
@@ -359,9 +405,8 @@ class EsmeToSmscTestCase(VumiTestCase):
             self.assert_server_pdu(expected, pdu)
 
     @inlineCallbacks
-    def startTransport(self, config={}):
+    def startTransport(self):
         self.transport._block_till_bind = Deferred()
-        self.transport.config.update(config)
         yield self.transport.startWorker()
 
     @inlineCallbacks
@@ -538,10 +583,8 @@ class EsmeToSmscTestCase(VumiTestCase):
     @inlineCallbacks
     def test_submit_sm_encoding(self):
         # Startup
-        yield self.startTransport({
-            'submit_sm_encoding': 'latin-1',
-        })
-        # self.transport.submit_sm_encoding = 'latin-1'
+        yield self.startTransport()
+        self.transport.submit_sm_encoding = 'latin-1'
         yield self.transport._block_till_bind
         yield self.clear_link_pdus()
 
@@ -561,10 +604,8 @@ class EsmeToSmscTestCase(VumiTestCase):
     @inlineCallbacks
     def test_submit_sm_data_coding(self):
         # Startup
-        yield self.startTransport({
-            'submit_sm_data_coding': 8,
-        })
-        # self.transport.submit_sm_data_coding = 8
+        yield self.startTransport()
+        self.transport.submit_sm_data_coding = 8
         yield self.transport._block_till_bind
         yield self.clear_link_pdus()
 
@@ -791,12 +832,12 @@ class TestEsmeToSmscTx(VumiTestCase):
     def setUp(self):
         self.tx_helper = self.add_helper(TransportHelper(MockSmppTxTransport))
         self.config = {
+            "transport_name": self.tx_helper.transport_name,
             "system_id": "VumiTestSMSC",
             "password": "password",
             "host": "localhost",
             "port": 0,
             "transport_type": "smpp",
-            "transport_name": self.tx_helper.transport_name,
         }
         self.service = SmppService(None, config=self.config)
         self.add_cleanup(self.cleanup_service)
@@ -855,18 +896,17 @@ class TestEsmeToSmscRx(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        # from twisted.internet.base import DelayedCall
-        # DelayedCall.debug = True
+        from twisted.internet.base import DelayedCall
+        DelayedCall.debug = True
 
         self.tx_helper = self.add_helper(TransportHelper(MockSmppRxTransport))
         self.config = {
+            "transport_name": self.tx_helper.transport_name,
             "system_id": "VumiTestSMSC",
             "password": "password",
             "host": "localhost",
             "port": 0,
             "transport_type": "smpp",
-            "transport_name": self.tx_helper.transport_name,
-            'data_coding_overrides': {0: 'utf-8'},
         }
         self.service = SmppService(None, config=self.config)
         self.add_cleanup(self.cleanup_service)
@@ -919,14 +959,12 @@ class TestEsmeToSmscRx(VumiTestCase):
         bad_pdu = DeliverSM(555,
                             short_message="SMS from server containing \xa7",
                             destination_addr="2772222222",
-                            source_addr="2772000000",
-                            data_coding=1)
+                            source_addr="2772000000")
 
         good_pdu = DeliverSM(555,
                              short_message="Next message",
                              destination_addr="2772222222",
-                             source_addr="2772000000",
-                             data_coding=1)
+                             source_addr="2772000000")
 
         self.service.factory.smsc.send_pdu(bad_pdu)
         self.service.factory.smsc.send_pdu(good_pdu)
@@ -942,9 +980,9 @@ class TestEsmeToSmscRx(VumiTestCase):
         [failure] = self.flushLoggedErrors(UnicodeDecodeError)
         message = failure.getErrorMessage()
         codec, rest = message.split(' ', 1)
-        self.assertEqual(codec, "'ascii'")
-        self.assertTrue(
-            rest.startswith("codec can't decode byte 0xa7 in position 27"))
+        self.assertTrue(codec in ("'utf8'", "'utf-8'"))
+        self.assertTrue(rest.startswith(
+                "codec can't decode byte 0xa7 in position 27"))
 
     @inlineCallbacks
     def test_deliver_ussd_start(self):
