@@ -9,7 +9,6 @@ from twisted.application.service import Service
 
 from vumi.tests.helpers import VumiTestCase
 from vumi.tests.utils import LogCatcher
-from vumi.tests.fake_amqp import FakeAMQPChannel
 
 from vumi.transports.tests.helpers import TransportHelper
 from vumi.transports.smpp.smpp_transport import (
@@ -607,8 +606,8 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         yield transport.set_sequence_number_message_id(3, msg['message_id'])
         yield transport.cache_message(msg)
         yield smpp_helper.handle_pdu(SubmitSMResp(sequence_number=3,
-                                                 message_id='foo',
-                                                 command_status='ESME_ROK'))
+                                                  message_id='foo',
+                                                  command_status='ESME_ROK'))
         self.assertEqual(
             None,
             (yield transport.get_cached_message(msg['message_id'])))
@@ -670,17 +669,17 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_reconnect(self):
-        smpp_helper = yield self.get_smpp_helper()
+        smpp_helper = yield self.get_smpp_helper(bind=False)
         transport = smpp_helper.transport
-        protocol = smpp_helper.protocol
         connector = transport.connectors[transport.transport_name]
+        self.assertTrue(connector._consumers['outbound'].paused)
+        yield self.create_smpp_bind(transport)
         self.assertFalse(connector._consumers['outbound'].paused)
-        yield protocol.connectionLost(ConnectionDone)
+        transport.service.stopService()
         self.assertTrue(connector._consumers['outbound'].paused)
-        yield protocol.connectionLost(ConnectionDone)
+        transport.service.startService()
         self.assertTrue(connector._consumers['outbound'].paused)
-
-        yield protocol.connectionMade()
+        yield self.create_smpp_bind(transport)
         self.assertFalse(connector._consumers['outbound'].paused)
 
     @inlineCallbacks
