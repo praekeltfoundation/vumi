@@ -1552,12 +1552,11 @@ class TestPersistenceHelper(VumiTestCase):
         persistence_helper = PersistenceHelper()
         self.assertEqual(persistence_helper.use_riak, False)
         self.assertEqual(persistence_helper.is_sync, False)
-        self.assertEqual
 
     def test_all_params(self):
         """
         PersistenceHelper instances should accept ``use_riak`` and ``is_sync``
-        params. defaults.
+        params.
         """
         persistence_helper = PersistenceHelper(use_riak=True, is_sync=True)
         self.assertEqual(persistence_helper.use_riak, True)

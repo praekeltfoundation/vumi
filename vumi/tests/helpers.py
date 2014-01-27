@@ -1117,7 +1117,7 @@ class PersistenceHelper(object):
 
     :param bool is_sync:
         Pass ``True`` if synchronous Riak and Redis clients are desired,
-        otherwise asynchronous ones will be built. This only applies to client
+        otherwise asynchronous ones will be built. This only applies to clients
         built by this helper, not those built by other objects using configs
         from this helper.
     """
