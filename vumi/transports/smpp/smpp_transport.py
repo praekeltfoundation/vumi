@@ -1,6 +1,7 @@
 # -*- test-case-name: vumi.transports.smpp.tests.test_smpp_transport -*-
 
 import warnings
+import time
 from uuid import uuid4
 
 from twisted.internet import reactor
@@ -46,12 +47,7 @@ class SmppTransceiverProtocol(EsmeTransceiverFactory.protocol):
     def connectionMade(self):
         EsmeTransceiverFactory.protocol.connectionMade(self)
         config = self.vumi_transport.get_static_config()
-        d = maybeDeferred(self.vumi_transport.unpause_connectors)
-        d.addCallback(
-            lambda _: self.bind(config.system_id,
-                                config.password,
-                                config.system_type))
-        return d
+        self.bind(config.system_id, config.password, config.system_type)
 
     def connectionLost(self, reason):
         d = maybeDeferred(self.vumi_transport.pause_connectors)
