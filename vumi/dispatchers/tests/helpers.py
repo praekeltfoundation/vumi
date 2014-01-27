@@ -37,6 +37,24 @@ class DummyDispatcher(BaseDispatchWorker):
 
 
 class DispatcherHelper(object):
+    """
+    Test helper for dispatcher workers.
+
+    This helper construct and wraps several lower-level helpers and provides
+    higher-level functionality for dispatcher tests.
+
+    :param dispatcher_class:
+        The worker class for the dispatcher being tested.
+
+    :param bool use_riak:
+        Set to ``True`` if the test requires Riak. This is passed to the
+        underlying :class:`~vumi.tests.helpers.PersistenceHelper`.
+
+    :param \**kw:
+        All other keyword params are passed to the underlying
+        :class:`~vumi.tests.helpers.PersistenceHelper`.
+    """
+
     implements(IHelper)
 
     def __init__(self, dispatcher_class, use_riak=False, **msg_helper_args):
@@ -62,16 +80,36 @@ class DispatcherHelper(object):
         yield self.persistence_helper.cleanup()
 
     def get_dispatcher(self, config, cls=None, start=True):
+        """
+        Get an instance of a dispatcher class.
+
+        :param dict config: Config dict.
+        :param cls:
+            The transport class to instantiate. Defaults to
+            :attr:`dispatcher_class`
+        :param bool start:
+            ``True`` to start the dispatcher (default), ``False`` otherwise.
+        """
         if cls is None:
             cls = self.dispatcher_class
         config = self.persistence_helper.mk_config(config)
         return self.get_worker(cls, config, start)
 
     def get_connector_helper(self, connector_name):
+        """
+        Construct a :class:`~DispatcherConnectorHelper` for the provided
+        ``connector_name``.
+        """
         return DispatcherConnectorHelper(self, connector_name)
 
 
 class DispatcherConnectorHelper(object):
+    """
+    Subset of :class:`~vumi.tests.helpers.WorkerHelper` and
+    :class:`~vumi.tests.helpers.MessageDispatchHelper` functionality for a
+    specific connector. This should only be created with
+    :meth:`DispatcherHelper.get_connector_helper`.
+    """
     def __init__(self, dispatcher_helper, connector_name):
         self.msg_helper = dispatcher_helper.msg_helper
         self.worker_helper = WorkerHelper(
