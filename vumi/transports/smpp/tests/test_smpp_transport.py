@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
 from twisted.test import proto_helpers
-from twisted.internet import reactor
 from twisted.internet.defer import (
     inlineCallbacks, returnValue, Deferred, succeed)
 from twisted.internet.error import ConnectionDone
@@ -10,10 +9,11 @@ from twisted.application.service import Service
 
 from vumi.tests.helpers import VumiTestCase
 from vumi.tests.utils import LogCatcher
+from vumi.tests.fake_amqp import FakeAMQPChannel
 
 from vumi.transports.tests.helpers import TransportHelper
 from vumi.transports.smpp.smpp_transport import (
-    SmppTransceiverTransport, SmppTransceiverProtocol,
+    SmppTransceiverTransport,
     SmppTransceiverTransportWithOldConfig,
     SmppTransmitterTransport, SmppReceiverTransport,
     message_key, remote_message_key)
@@ -682,6 +682,19 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
         yield protocol.connectionMade()
         self.assertFalse(connector._consumers['outbound'].paused)
+
+    @inlineCallbacks
+    def test_startup_with_backlog(self):
+        smpp_helper = yield self.get_smpp_helper(bind=False)
+
+        for i in range(2):
+            msg = self.tx_helper.make_outbound('hello world')
+            yield self.tx_helper.dispatch_outbound(msg)
+
+        yield self.create_smpp_bind(smpp_helper.transport)
+        [submit_sm1, submit_sm2] = yield smpp_helper.wait_for_pdus(2)
+        self.assertEqual(short_message(submit_sm1), 'hello world')
+        self.assertEqual(short_message(submit_sm2), 'hello world')
 
 
 class SmppTransmitterTransportTestCase(SmppTransceiverTransportTestCase):
