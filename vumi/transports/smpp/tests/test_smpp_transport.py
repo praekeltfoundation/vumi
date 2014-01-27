@@ -687,13 +687,13 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         smpp_helper = yield self.get_smpp_helper(bind=False)
 
         for i in range(2):
-            msg = self.tx_helper.make_outbound('hello world')
+            msg = self.tx_helper.make_outbound('hello world %s' % (i,))
             yield self.tx_helper.dispatch_outbound(msg)
 
         yield self.create_smpp_bind(smpp_helper.transport)
         [submit_sm1, submit_sm2] = yield smpp_helper.wait_for_pdus(2)
-        self.assertEqual(short_message(submit_sm1), 'hello world')
-        self.assertEqual(short_message(submit_sm2), 'hello world')
+        self.assertEqual(short_message(submit_sm1), 'hello world 0')
+        self.assertEqual(short_message(submit_sm2), 'hello world 1')
 
 
 class SmppTransmitterTransportTestCase(SmppTransceiverTransportTestCase):
