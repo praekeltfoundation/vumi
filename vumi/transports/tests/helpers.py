@@ -10,6 +10,24 @@ from vumi.tests.helpers import (
 
 
 class TransportHelper(object):
+    """
+    Test helper for transport workers.
+
+    This helper construct and wraps several lower-level helpers and provides
+    higher-level functionality for transport tests.
+
+    :param transport_class:
+        The worker class for the transport being tested.
+
+    :param bool use_riak:
+        Set to ``True`` if the test requires Riak. This is passed to the
+        underlying :class:`~vumi.tests.helpers.PersistenceHelper`.
+
+    :param \**kw:
+        All other keyword params are passed to the underlying
+        :class:`~vumi.tests.helpers.PersistenceHelper`.
+    """
+
     implements(IHelper)
 
     def __init__(self, transport_class, use_riak=False, **msg_helper_args):
@@ -58,4 +76,15 @@ class TransportHelper(object):
         return self.get_worker(cls, config, start)
 
     def get_dispatched_failures(self, connector_name=None):
+        """
+        Get failures dispatched by a transport.
+
+        :param str connector_name:
+            Connector name. If ``None``, the default connector name for the
+            helper instance will be used.
+
+        :returns:
+            A list of :class:`~vumi.transports.failures.FailureMessage`
+            instances.
+        """
         return self.get_dispatched(connector_name, 'failures', FailureMessage)
