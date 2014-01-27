@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 import binascii
 
-from twisted.internet.defer import (
-    Deferred, inlineCallbacks, succeed, returnValue)
+from twisted.internet.defer import Deferred, inlineCallbacks, succeed
 from twisted.internet.task import Clock
 from smpp.pdu_builder import SubmitSMResp, DeliverSM
 
@@ -10,8 +9,7 @@ from vumi.message import TransportUserMessage
 from vumi.transports.smpp.deprecated.clientserver.client import (
     EsmeTransceiver, EsmeCallbacks)
 from vumi.transports.smpp.deprecated.transport import (
-    SmppTransport, SmppTxTransport, SmppRxTransport,
-    SmppTransportWithOldConfig)
+    SmppTransport, SmppTxTransport, SmppRxTransport)
 from vumi.transports.smpp.deprecated.service import SmppService
 from vumi.transports.smpp.smpp_utils import unpacked_pdu_opts
 from vumi.transports.smpp.deprecated.clientserver.tests.utils import (
@@ -32,23 +30,7 @@ class TestSmppTransport(VumiTestCase):
             "smpp_bind_timeout": 12,
             "smpp_enquire_link_interval": 123,
             "third_party_id_expiry": 3600,  # just 1 hour
-            'submit_short_message_processor': (
-                'vumi.transports.smpp.deprecated.processors.'
-                'EsmeCallbacksSubmitShortMessageProcessor'
-            ),
-            'deliver_short_message_processor': (
-                'vumi.transports.smpp.deprecated.processors.'
-                'EsmeCallbacksDeliverShortMessageProcessor'
-            ),
-            'delivery_report_processor': (
-                'vumi.transports.smpp.deprecated.processors.'
-                'EsmeCallbacksDeliveryReportProcessor'
-            ),
-            'deliver_short_message_processor_config': {
-                'data_coding_overrides': {
-                    0: 'utf-8'
-                }
-            }
+            "data_coding_overrides": {0: 'utf-8'},
         }
 
         # hack a lot of transport setup
@@ -335,23 +317,7 @@ class EsmeToSmscTestCase(VumiTestCase):
             "transport_type": "smpp",
             "system_id": "VumiTestSMSC",
             "password": "password",
-            'submit_short_message_processor': (
-                'vumi.transports.smpp.deprecated.processors.'
-                'EsmeCallbacksSubmitShortMessageProcessor'
-            ),
-            'deliver_short_message_processor': (
-                'vumi.transports.smpp.deprecated.processors.'
-                'EsmeCallbacksDeliverShortMessageProcessor'
-            ),
-            'delivery_report_processor': (
-                'vumi.transports.smpp.deprecated.processors.'
-                'EsmeCallbacksDeliveryReportProcessor'
-            ),
-            'deliver_short_message_processor_config': {
-                'data_coding_overrides': {
-                    0: 'utf-8'
-                }
-            }
+            'data_coding_overrides': {0: 'utf-8'},
         }
         server_config.update(self.CONFIG_OVERRIDE)
         self.service = SmppService(None, config=server_config)
@@ -573,9 +539,7 @@ class EsmeToSmscTestCase(VumiTestCase):
     def test_submit_sm_encoding(self):
         # Startup
         yield self.startTransport({
-            'submit_short_message_processor_config': {
-                'submit_sm_encoding': 'latin-1',
-            }
+            'submit_sm_encoding': 'latin-1',
         })
         # self.transport.submit_sm_encoding = 'latin-1'
         yield self.transport._block_till_bind
@@ -598,9 +562,7 @@ class EsmeToSmscTestCase(VumiTestCase):
     def test_submit_sm_data_coding(self):
         # Startup
         yield self.startTransport({
-            'submit_short_message_processor_config': {
-                'submit_sm_data_coding': 8,
-            }
+            'submit_sm_data_coding': 8,
         })
         # self.transport.submit_sm_data_coding = 8
         yield self.transport._block_till_bind
@@ -795,9 +757,7 @@ class TestDeliveryYo(EsmeToSmscTestCase):
         " +[Tt]ext:(?P<text>.{,20}).*")
 
     CONFIG_OVERRIDE = {
-        "delivery_report_processor_config": {
-            "delivery_report_regex": DELIVERY_REPORT_REGEX,
-        },
+        "delivery_report_regex": DELIVERY_REPORT_REGEX,
         "smsc_delivery_report_string": (
             'id:%s sub:1 dlvrd:1 submit date:%s done date:%s '
             'stat:0 err:0 text:If a general electio'),
@@ -808,10 +768,8 @@ class TestDeliveryOverrideMapping(EsmeToSmscTestCase):
     # This tests a non-standard delivery report status mapping.
 
     CONFIG_OVERRIDE = {
-        "delivery_report_processor_config": {
-            "delivery_report_regex": "id:(?P<id>\S+) stat:(?P<stat>\S+) .*",
-            "delivery_report_status_mapping": {"foo": "delivered"},
-        },
+        "delivery_report_regex": "id:(?P<id>\S+) stat:(?P<stat>\S+) .*",
+        "delivery_report_status_mapping": {"foo": "delivered"},
         "smsc_delivery_report_string": (
             'id:%s stat:foo submit date:%s done date:%s'),
     }
@@ -839,18 +797,6 @@ class TestEsmeToSmscTx(VumiTestCase):
             "port": 0,
             "transport_type": "smpp",
             "transport_name": self.tx_helper.transport_name,
-            'submit_short_message_processor': (
-                'vumi.transports.smpp.deprecated.processors.'
-                'EsmeCallbacksSubmitShortMessageProcessor'
-            ),
-            'deliver_short_message_processor': (
-                'vumi.transports.smpp.deprecated.processors.'
-                'EsmeCallbacksDeliverShortMessageProcessor'
-            ),
-            'delivery_report_processor': (
-                'vumi.transports.smpp.deprecated.processors.'
-                'EsmeCallbacksDeliveryReportProcessor'
-            ),
         }
         self.service = SmppService(None, config=self.config)
         self.add_cleanup(self.cleanup_service)
@@ -920,23 +866,7 @@ class TestEsmeToSmscRx(VumiTestCase):
             "port": 0,
             "transport_type": "smpp",
             "transport_name": self.tx_helper.transport_name,
-            'submit_short_message_processor': (
-                'vumi.transports.smpp.deprecated.processors.'
-                'EsmeCallbacksSubmitShortMessageProcessor'
-            ),
-            'deliver_short_message_processor': (
-                'vumi.transports.smpp.deprecated.processors.'
-                'EsmeCallbacksDeliverShortMessageProcessor'
-            ),
-            'delivery_report_processor': (
-                'vumi.transports.smpp.deprecated.processors.'
-                'EsmeCallbacksDeliveryReportProcessor'
-            ),
-            'deliver_short_message_processor_config': {
-                'data_coding_overrides': {
-                    0: 'utf-8'
-                }
-            }
+            'data_coding_overrides': {0: 'utf-8'},
         }
         self.service = SmppService(None, config=self.config)
         self.add_cleanup(self.cleanup_service)
@@ -1039,32 +969,3 @@ class TestEsmeToSmscRx(VumiTestCase):
 
         dispatched_failures = self.tx_helper.get_dispatched_failures()
         self.assertEqual(dispatched_failures, [])
-
-
-class TestSmppTransportWithOldConfig(TestSmppTransport):
-
-    @inlineCallbacks
-    def setUp(self):
-        config = {
-            "twisted_endpoint": "tcp:host=localhost:port=0",
-            "password": "password",
-            "system_id": "vumitest-vumitest-vumitest",
-            "smpp_bind_timeout": 12,
-            "smpp_enquire_link_interval": 123,
-            "third_party_id_expiry": 3600,  # just 1 hour
-            "data_coding_overrides": {
-                0: 'utf-8'
-            }
-        }
-
-        # hack a lot of transport setup
-        self.tx_helper = self.add_helper(
-            TransportHelper(SmppTransportWithOldConfig))
-        self.transport = yield self.tx_helper.get_transport(
-            config, start=False)
-        self.transport.esme_client = None
-        yield self.transport.startWorker()
-
-        self._make_esme()
-        self.transport.esme_client = self.esme
-        self.transport.esme_connected(self.esme)

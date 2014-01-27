@@ -17,16 +17,15 @@ from vumi.transports.smpp.deprecated.clientserver.client import (
 from vumi.transports.smpp.config import SmppTransportConfig
 from vumi.transports.smpp.deprecated.config import (
     SmppTransportConfig as OldSmppTransportConfig)
-from vumi.transports.smpp.processors import (
-    DeliveryReportProcessorConfig, SubmitShortMessageProcessorConfig,
-    DeliverShortMessageProcessorConfig)
 
 
 class SmppTransport(Transport):
     """
     An SMPP Transceiver Transport.
     """
-    CONFIG_CLASS = SmppTransportConfig
+
+    CONFIG_CLASS = OldSmppTransportConfig
+    NEW_CONFIG_CLASS = SmppTransportConfig
 
     # Which of the keys in SmppTransportConfig are keys that are to
     # be passed on to the ESMETransceiver base class to create a bind with.
@@ -47,6 +46,26 @@ class SmppTransport(Transport):
     start_message_consumer = False
 
     callLater = reactor.callLater
+
+    def get_static_config(self):
+        # return if cached
+        if hasattr(self, '_converted_static_config'):
+            return self._converted_static_config
+
+        cfg = super(SmppTransport, self).get_static_config()
+        original = cfg._config_data.original.copy()
+        config = convert_to_new_config(
+            original,
+            ('vumi.transports.smpp.deprecated.processors.'
+             'EsmeCallbacksDeliveryReportProcessor'),
+            ('vumi.transports.smpp.deprecated.processors.'
+             'EsmeCallbacksSubmitShortMessageProcessor'),
+            ('vumi.transports.smpp.deprecated.processors.'
+             'EsmeCallbacksDeliverShortMessageProcessor')
+        )
+        self._converted_static_config = self.NEW_CONFIG_CLASS(
+            config, static=True)
+        return self._converted_static_config
 
     @inlineCallbacks
     def setup_transport(self):
@@ -330,29 +349,3 @@ class SmppRxTransport(SmppTransport):
     """An Smpp Receiver Transport"""
     def make_factory(self):
         return EsmeReceiverFactory(self)
-
-
-class SmppTransportWithOldConfig(SmppTransport):
-
-    CONFIG_CLASS = OldSmppTransportConfig
-    NEW_CONFIG_CLASS = SmppTransportConfig
-
-    def get_static_config(self):
-        # return if cached
-        if hasattr(self, '_converted_static_config'):
-            return self._converted_static_config
-
-        cfg = super(SmppTransportWithOldConfig, self).get_static_config()
-        original = cfg._config_data.original.copy()
-        config = convert_to_new_config(
-            original,
-            ('vumi.transports.smpp.deprecated.processors.'
-             'EsmeCallbacksDeliveryReportProcessor'),
-            ('vumi.transports.smpp.deprecated.processors.'
-             'EsmeCallbacksSubmitShortMessageProcessor'),
-            ('vumi.transports.smpp.deprecated.processors.'
-             'EsmeCallbacksDeliverShortMessageProcessor')
-        )
-        self._converted_static_config = self.NEW_CONFIG_CLASS(
-            config, static=True)
-        return self._converted_static_config
