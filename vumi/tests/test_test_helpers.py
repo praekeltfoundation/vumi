@@ -1647,6 +1647,7 @@ class TestPersistenceHelper(VumiTestCase):
             PersistenceHelper(use_riak=True, is_sync=True))
         manager = persistence_helper.get_riak_manager()
         self.assertIsInstance(manager, self._RiakManager)
+        self.assertEqual(persistence_helper._riak_managers, [manager])
 
     def test_get_riak_manager_async(self):
         """
@@ -1656,6 +1657,7 @@ class TestPersistenceHelper(VumiTestCase):
         persistence_helper = self.add_helper(PersistenceHelper(use_riak=True))
         manager = persistence_helper.get_riak_manager()
         self.assertIsInstance(manager, self._TxRiakManager)
+        self.assertEqual(persistence_helper._riak_managers, [manager])
 
     def test_get_redis_manager_sync(self):
         """
@@ -1665,6 +1667,7 @@ class TestPersistenceHelper(VumiTestCase):
         persistence_helper = self.add_helper(PersistenceHelper(is_sync=True))
         manager = persistence_helper.get_redis_manager()
         self.assertIsInstance(manager, self._RedisManager)
+        self.assertEqual(persistence_helper._redis_managers, [manager])
 
     @inlineCallbacks
     def test_get_redis_manager_async(self):
@@ -1677,6 +1680,7 @@ class TestPersistenceHelper(VumiTestCase):
         self.assertIsInstance(manager_d, Deferred)
         manager = yield manager_d
         self.assertIsInstance(manager, self._TxRedisManager)
+        self.assertEqual(persistence_helper._redis_managers, [manager])
 
     def test_mk_config(self):
         """
