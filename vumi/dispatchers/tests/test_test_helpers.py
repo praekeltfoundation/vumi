@@ -1,11 +1,10 @@
 from twisted.internet.defer import inlineCallbacks
-from twisted.python.failure import Failure
 
 from vumi.dispatchers.endpoint_dispatchers import Dispatcher
 from vumi.dispatchers.tests.helpers import DummyDispatcher, DispatcherHelper
 from vumi.tests.helpers import (
     VumiTestCase, IHelper, PersistenceHelper, MessageHelper, WorkerHelper,
-    MessageDispatchHelper)
+    MessageDispatchHelper, success_result_of)
 
 
 class TestDummyDispatcher(VumiTestCase):
@@ -78,20 +77,6 @@ class FakeCleanupCheckHelper(object):
 
 
 class TestDispatcherHelper(VumiTestCase):
-    def success_result_of(self, d):
-        """
-        We can't necessarily use TestCase.successResultOf because our Twisted
-        might not be new enough.
-        """
-        results = []
-        d.addBoth(results.append)
-        if not results:
-            self.fail("No result available for deferred: %r" % (d,))
-        if isinstance(results[0], Failure):
-            self.fail("Expected success from deferred %r, got failure: %r" % (
-                d, results[0]))
-        return results[0]
-
     def test_implements_IHelper(self):
         """
         DispatcherHelper instances should provide the IHelper interface.
@@ -145,7 +130,7 @@ class TestDispatcherHelper(VumiTestCase):
         disp_helper.worker_helper = FakeCleanupCheckHelper()
         self.assertEqual(disp_helper.persistence_helper.cleaned_up, False)
         self.assertEqual(disp_helper.worker_helper.cleaned_up, False)
-        self.success_result_of(disp_helper.cleanup())
+        success_result_of(disp_helper.cleanup())
         self.assertEqual(disp_helper.persistence_helper.cleaned_up, True)
         self.assertEqual(disp_helper.worker_helper.cleaned_up, True)
 
