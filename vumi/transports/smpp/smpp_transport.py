@@ -1,7 +1,6 @@
 # -*- test-case-name: vumi.transports.smpp.tests.test_smpp_transport -*-
 
 import warnings
-import time
 from uuid import uuid4
 
 from twisted.internet import reactor
