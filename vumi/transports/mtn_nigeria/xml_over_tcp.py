@@ -1,13 +1,8 @@
 import uuid
 import struct
 from random import randint
-from xml.etree import ElementTree as ET
 
-try:
-    from xml.etree.ElementTree import ParseError
-except ImportError:
-    from xml.parsers.expat import ExpatError as ParseError
-
+from twisted.web import microdom
 from twisted.internet import reactor
 from twisted.internet.task import LoopingCall
 from twisted.internet.protocol import Protocol
@@ -48,13 +43,13 @@ class CodedXmlOverTcpError(XmlOverTcpError):
 
     def __init__(self, code, reason=None):
         self.code = code
-        self.message = self.ERRORS.get(code, 'Unknown Code')
+        self.msg = self.ERRORS.get(code, 'Unknown Code')
         self.reason = reason
 
     def __str__(self):
         return '(%s) %s%s' % (
             self.code,
-            self.message,
+            self.msg,
             ': %s' % self.reason if self.reason else '')
 
 
@@ -68,6 +63,7 @@ class XmlOverTcpClient(Protocol):
 
     PACKET_RECEIVED_HANDLERS = {
         'USSDRequest': 'handle_data_request',
+        'USSDResponse': 'handle_data_response',
         'AUTHResponse': 'handle_login_response',
         'AUTHError': 'handle_login_error_response',
         'ENQRequest': 'handle_enquire_link_request',
@@ -95,7 +91,9 @@ class XmlOverTcpClient(Protocol):
     # field. '15' is used for ASCII, and is the default. The documentation
     # does not offer any other codes.
     DATA_CODING_SCHEME = '15'
-    ENCODING = 'ASCII'
+
+    # By observation, it appears that latin1 is the protocol's encoding
+    ENCODING = 'latin1'
 
     # Data requests and responses need to include a 'phase' field. The
     # documentation does not provide any information about 'phase', but we are
@@ -149,8 +147,7 @@ class XmlOverTcpClient(Protocol):
     def reset_scheduled_timeout(self):
         self.cancel_scheduled_timeout()
 
-        # cap the timeout period at the enquire link interval to prevent
-        # skipped enquire link responses from going unnoticed.
+        # cap the timeout period at the enquire link interval
         delay = min(self.timeout_period, self.enquire_link_interval)
         self.scheduled_timeout = self.clock.callLater(delay, self.timeout)
 
@@ -159,7 +156,6 @@ class XmlOverTcpClient(Protocol):
             log.msg("Heartbeat could not be started, client not authenticated")
             return
 
-        self.reset_scheduled_timeout()
         self.periodic_enquire_link.clock = self.clock
         d = self.periodic_enquire_link.start(
             self.enquire_link_interval, now=True)
@@ -192,8 +188,8 @@ class XmlOverTcpClient(Protocol):
 
             try:
                 packet_type, params = self.deserialize_body(body)
-            except ParseError as e:
-                log.err("Error parsing packet (%s): %s" % (e, packet))
+            except Exception, e:
+                log.err("Error parsing packet (%s): %r" % (e, packet))
                 self.disconnect()
                 return
 
@@ -214,8 +210,8 @@ class XmlOverTcpClient(Protocol):
         return self._buffer[:n]
 
     @classmethod
-    def remove_nullbytes(cls, str):
-        return str.replace('\0', '')
+    def remove_nullbytes(cls, s):
+        return s.replace('\0', '')
 
     @classmethod
     def deserialize_header(cls, header):
@@ -223,20 +219,32 @@ class XmlOverTcpClient(Protocol):
 
         # The headers appear to be padded with trailing nullbytes, so we need
         # to remove these before doing any other parsing
-        return (cls.remove_nullbytes(session_id.decode(cls.ENCODING)),
-                int(cls.remove_nullbytes(length.decode(cls.ENCODING))))
+        return (cls.remove_nullbytes(session_id),
+                int(cls.remove_nullbytes(length)))
+
+    @staticmethod
+    def _xml_node_text(node):
+        result = ''
+
+        for child in node.childNodes:
+            if isinstance(child, microdom.CharacterData):
+                result += child.value
+            elif isinstance(child, microdom.EntityReference):
+                result += microdom.unescape(
+                    child.toxml(), chars=microdom.XML_ESCAPE_CHARS)
+
+        return result.strip()
 
     @classmethod
     def deserialize_body(cls, body):
-        # The 'requestId' field often has nullbytes in it. We suspect this
-        # happens when the requestId length is shorter that 16 bytes, so they
-        # just pad it with trailing nullbytes. We need to remove the nullbytes
-        # before parsing the xml to prevent parse errors
-        root = ET.fromstring(cls.remove_nullbytes(body))
+        document = microdom.parseXMLString(body.decode(cls.ENCODING))
+        root = document.firstChild()
 
-        packet_type = root.tag
-        params = dict((el.tag.strip(), el.text.strip()) for el in root)
-        return packet_type, params
+        params = dict(
+            (node.nodeName, cls._xml_node_text(node))
+            for node in root.childNodes)
+
+        return root.nodeName, params
 
     def packet_received(self, session_id, packet_type, params):
         log.debug("Packet of type '%s' with session id '%s' received: %s"
@@ -334,9 +342,29 @@ class XmlOverTcpClient(Protocol):
     def data_request_received(self, session_id, params):
         raise NotImplementedError("Subclasses should implement.")
 
+    def handle_data_response(self, session_id, params):
+        # We seem to get these if we reply to a session that has already been
+        # closed.
+
+        try:
+            self.validate_packet_fields(
+                params,
+                self.DATA_REQUEST_FIELDS,
+                self.OTHER_DATA_REQUEST_FIELDS)
+        except CodedXmlOverTcpError as e:
+            self.handle_error(session_id, params.get('requestId'), e)
+            return
+
+        # if EndofSession is not in params, assume the end of session
+        params.setdefault('EndofSession', '1')
+        self.data_response_received(session_id, params)
+
+    def data_response_received(self, session_id, params):
+        log.msg("Received spurious USSDResponse message, ignoring.")
+
     @classmethod
     def serialize_header_field(cls, header, header_size):
-        return str(header).ljust(header_size, '\0').encode(cls.ENCODING)
+        return str(header).ljust(header_size, '\0')
 
     @classmethod
     def serialize_header(cls, session_id, body):
@@ -348,11 +376,15 @@ class XmlOverTcpClient(Protocol):
 
     @classmethod
     def serialize_body(cls, packet_type, params):
-        root = ET.Element(packet_type)
-        for param_name, param_value in params:
-            param_value = str(param_value).encode(cls.ENCODING)
-            ET.SubElement(root, param_name).text = param_value
-        return ET.tostring(root)
+        root = microdom.Element(packet_type.encode('utf8'), preserveCase=True)
+
+        for name, value in params:
+            el = microdom.Element(name.encode('utf8'), preserveCase=True)
+            el.appendChild(microdom.Text(value.encode('utf8')))
+            root.appendChild(el)
+
+        data = root.toxml()
+        return data.decode('utf8').encode(cls.ENCODING, 'xmlcharrefreplace')
 
     @classmethod
     def serialize_packet(cls, session_id, packet_type, params):
@@ -385,7 +417,7 @@ class XmlOverTcpClient(Protocol):
         # NOTE: The protocol requires request ids to be number only ids. With a
         # request id length of 10 digits, generating ids using randint could
         # well cause collisions to occur, although this should be unlikely.
-        return randint(0, (10 ** cls.REQUEST_ID_LENGTH) - 1)
+        return str(randint(0, (10 ** cls.REQUEST_ID_LENGTH) - 1))
 
     def login(self):
         params = [
@@ -451,6 +483,7 @@ class XmlOverTcpClient(Protocol):
             ('requestId', self.gen_request_id()),
             ('enqCmd', 'ENQUIRELINK')
         ])
+        self.reset_scheduled_timeout()
 
     def handle_enquire_link_response(self, session_id, params):
         try:
@@ -461,7 +494,7 @@ class XmlOverTcpClient(Protocol):
 
         log.debug("Enquire link response received, sending next request in %s "
                   "seconds" % self.enquire_link_interval)
-        self.reset_scheduled_timeout()
+        self.cancel_scheduled_timeout()
 
     def send_enquire_link_response(self, session_id, request_id):
         self.send_packet(session_id, 'ENQResponse', [

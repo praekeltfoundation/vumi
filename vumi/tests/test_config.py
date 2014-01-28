@@ -1,14 +1,29 @@
-from twisted.trial.unittest import TestCase
 from twisted.internet.endpoints import TCP4ServerEndpoint, TCP4ClientEndpoint
 
 from vumi.errors import ConfigError
 from vumi.config import (
     Config, ConfigField, ConfigText, ConfigInt, ConfigFloat, ConfigBool,
     ConfigList, ConfigDict, ConfigUrl, ConfigRegex, ConfigServerEndpoint,
-    ConfigClientEndpoint)
+    ConfigClientEndpoint, ConfigClassName)
+from vumi.tests.helpers import VumiTestCase
+
+from zope.interface import Interface, implements
 
 
-class ConfigTest(TestCase):
+class ITestConfigInterface(Interface):
+
+    def implements_this(foo):
+        """This should be implemented"""
+
+
+class TestConfigClassName(object):
+    implements(ITestConfigInterface)
+
+    def implements_this(self, foo):
+        pass
+
+
+class ConfigTest(VumiTestCase):
     def test_simple_config(self):
         class FooConfig(Config):
             "Test config."
@@ -110,6 +125,8 @@ class ConfigTest(TestCase):
             bar = ConfigField("New field.")
 
         conf = BarConfig({'foo': 'blah', 'bar': 'bleh'})
+        self.assertEqual(conf.fields,
+                         [FooConfig.foo, BarConfig.bar])
         self.assertEqual(conf.foo, 'blah')
         self.assertEqual(conf.bar, 'bleh')
 
@@ -127,6 +144,26 @@ class ConfigTest(TestCase):
             "",
             "    New field.",
             ]))
+
+    def test_double_inheritance(self):
+        class FooConfig(Config):
+            "Test config."
+            foo = ConfigField("From base class.")
+
+        class BarConfig(FooConfig):
+            "Another test config."
+            bar = ConfigField("From middle class.")
+
+        class BazConfig(BarConfig):
+            "Second-level inheritance test config."
+            baz = ConfigField("From top class.")
+
+        conf = BazConfig({'foo': 'blah', 'bar': 'bleh', 'baz': 'blerg'})
+        self.assertEqual(conf.fields,
+                         [FooConfig.foo, BarConfig.bar, BazConfig.baz])
+        self.assertEqual(conf.foo, 'blah')
+        self.assertEqual(conf.bar, 'bleh')
+        self.assertEqual(conf.baz, 'blerg')
 
     def test_validation(self):
         class FooConfig(Config):
@@ -174,7 +211,7 @@ class FakeModel(object):
         self._config_data = config
 
 
-class ConfigFieldTest(TestCase):
+class ConfigFieldTest(VumiTestCase):
     def fake_model(self, *value, **kw):
         config = kw.pop('config', {})
         if value:
@@ -214,6 +251,30 @@ class ConfigFieldTest(TestCase):
         self.assertTrue(value.match('vumi'))
         self.assertFalse(value.match('notvumi'))
         self.assertEqual(None, self.field_value(field, None))
+
+    def test_classname_field(self):
+        field = self.make_field(ConfigClassName)
+        klass = self.field_value(field,
+                                 'vumi.tests.test_config.TestConfigClassName')
+        self.assertEqual(klass, TestConfigClassName)
+
+    def test_invalid_classname_field(self):
+        field = self.make_field(ConfigClassName)
+        self.assert_field_invalid(field, '0000')
+        self.assert_field_invalid(field, '0000.bar')
+
+    def test_classname_implements_field(self):
+        field = self.make_field(ConfigClassName,
+                                implements=ITestConfigInterface)
+        klass = self.field_value(
+            field, 'vumi.tests.test_config.TestConfigClassName')
+        self.assertEqual(klass, TestConfigClassName)
+
+    def test_invalid_classname_implements_field(self):
+        field = self.make_field(ConfigClassName,
+                                implements=ITestConfigInterface)
+        self.assert_field_invalid(
+            field, 'vumi.tests.test_config.ConfigTest')
 
     def test_int_field(self):
         field = self.make_field(ConfigInt)
@@ -372,3 +433,15 @@ class ConfigFieldTest(TestCase):
             TCP4ClientEndpoint, host='localhost', port=80)
 
         self.assert_field_invalid(field)
+
+    def test_client_endpoint_field_with_port_fallback(self):
+        field = self.make_field(
+            ConfigClientEndpoint, port_fallback_default=51)
+        self.check_endpoint(
+            self.field_value(field, config={'host': 'localhost'}),
+            TCP4ClientEndpoint, host='localhost', port=51)
+        self.check_endpoint(self.field_value(
+            field, config={'host': 'localhost', 'port': 80}),
+            TCP4ClientEndpoint, host='localhost', port=80)
+
+        self.assert_field_invalid(field, config={'port': 80})

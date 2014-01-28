@@ -1,10 +1,11 @@
 from twisted.internet.defer import (Deferred, DeferredList, inlineCallbacks,
                                     returnValue)
 
-from vumi.tests.utils import StubbedWorkerCreator, VumiWorkerTestCase
+from vumi.tests.utils import StubbedWorkerCreator
 from vumi.service import Worker
 from vumi.message import TransportUserMessage
 from vumi.multiworker import MultiWorker
+from vumi.tests.helpers import VumiTestCase, MessageHelper, WorkerHelper
 
 
 class ToyWorker(Worker):
@@ -17,8 +18,8 @@ class ToyWorker(Worker):
     @inlineCallbacks
     def startWorker(self):
         self.events.append("START: %s" % self.name)
-        self.pub = yield self.publish_to("%s.out" % self.name)
-        yield self.consume("%s.in" % self.name, self.process_message,
+        self.pub = yield self.publish_to("%s.outbound" % self.name)
+        yield self.consume("%s.inbound" % self.name, self.process_message,
                            message_class=TransportUserMessage)
         self._d.callback(None)
 
@@ -40,18 +41,7 @@ class StubbedMultiWorker(MultiWorker):
         return DeferredList([w._d for w in self.workers])
 
 
-def mkmsg(content):
-    return TransportUserMessage(
-        from_addr='from',
-        to_addr='to',
-        transport_name='sphex',
-        transport_type='test',
-        transport_metadata={},
-        content=content,
-        )
-
-
-class MultiWorkerTestCase(VumiWorkerTestCase):
+class TestMultiWorker(VumiTestCase):
 
     base_config = {
         'workers': {
@@ -65,29 +55,28 @@ class MultiWorkerTestCase(VumiWorkerTestCase):
         }
 
     def setUp(self):
-        super(MultiWorkerTestCase, self).setUp()
+        self.msg_helper = self.add_helper(MessageHelper())
+        self.worker_helper = self.add_helper(WorkerHelper())
+        self.clear_events()
+        self.add_cleanup(self.clear_events)
+
+    def clear_events(self):
         ToyWorker.events[:] = []
 
-    @inlineCallbacks
-    def tearDown(self):
-        yield super(MultiWorkerTestCase, self).tearDown()
-        ToyWorker.events[:] = []
+    def dispatch(self, msg, connector_name):
+        return self.worker_helper.dispatch_inbound(msg, connector_name)
+
+    def get_replies(self, connector_name):
+        msgs = self.worker_helper.get_dispatched_outbound(connector_name)
+        return [msg['content'] for msg in msgs]
 
     @inlineCallbacks
     def get_multiworker(self, config):
-        self.worker = yield self.get_worker(
-            config, StubbedMultiWorker, start=False)
+        self.worker = yield self.worker_helper.get_worker(
+            StubbedMultiWorker, config, start=False)
         yield self.worker.startService()
         yield self.worker.wait_for_workers()
         returnValue(self.worker)
-
-    def dispatch(self, message, worker_name):
-        rkey = "%s.in" % (worker_name,)
-        return self._dispatch(message, rkey)
-
-    def get_replies(self, worker_name):
-        msgs = self._amqp.get_messages('vumi', "%s.out" % (worker_name,))
-        return [m['content'] for m in msgs]
 
     @inlineCallbacks
     def test_start_stop_workers(self):
@@ -103,10 +92,10 @@ class MultiWorkerTestCase(VumiWorkerTestCase):
     @inlineCallbacks
     def test_message_flow(self):
         yield self.get_multiworker(self.base_config)
-        yield self.dispatch(mkmsg("foo"), "worker1")
+        yield self.dispatch(self.msg_helper.make_inbound("foo"), "worker1")
         self.assertEqual(['oof'], self.get_replies("worker1"))
-        yield self.dispatch(mkmsg("bar"), "worker2")
-        yield self.dispatch(mkmsg("baz"), "worker3")
+        yield self.dispatch(self.msg_helper.make_inbound("bar"), "worker2")
+        yield self.dispatch(self.msg_helper.make_inbound("baz"), "worker3")
         self.assertEqual(['rab'], self.get_replies("worker2"))
         self.assertEqual(['zab'], self.get_replies("worker3"))
 

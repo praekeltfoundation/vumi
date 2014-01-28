@@ -2,16 +2,19 @@
 
 import json
 
+from twisted.cred.portal import Portal
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet import reactor
 from twisted.internet.task import LoopingCall
 from twisted.web import http
+from twisted.web.guard import BasicCredentialFactory, HTTPAuthSessionWrapper
 from twisted.web.resource import Resource
 from twisted.web.server import NOT_DONE_YET
 
-from vumi.transports.base import Transport
-from vumi.config import ConfigText, ConfigInt, ConfigBool, ConfigError
 from vumi import log
+from vumi.config import ConfigText, ConfigInt, ConfigBool, ConfigError
+from vumi.transports.base import Transport
+from vumi.transports.httprpc.auth import HttpRpcRealm, StaticAuthChecker
 
 
 class HttpRpcTransportConfig(Transport.CONFIG_CLASS):
@@ -24,6 +27,18 @@ class HttpRpcTransportConfig(Transport.CONFIG_CLASS):
     web_port = ConfigInt(
         "The port to listen for requests on, defaults to `0`.",
         default=0, static=True)
+    web_username = ConfigText(
+        "The username to require callers to authenticate with. If ``None``"
+        " then no authentication is required. Currently only HTTP Basic"
+        " authentication is supported.",
+        default=None, static=True)
+    web_password = ConfigText(
+        "The password to go with ``web_username``. Must be ``None`` if and"
+        " only if ``web_username`` is ``None``.",
+        default=None, static=True)
+    web_auth_domain = ConfigText(
+        "The name of authentication domain.",
+        default="Vumi HTTP RPC transport", static=True)
     health_path = ConfigText(
         "The path to listen for downstream health checks on"
         " (useful with HAProxy)", default='health', static=True)
@@ -54,6 +69,12 @@ class HttpRpcTransportConfig(Transport.CONFIG_CLASS):
         " nor in IGNORED_FIELDS will raise an error. If 'permissive' then no"
         " error is raised as long as all the EXPECTED_FIELDS are present.",
         default='strict', static=True)
+
+    def post_validate(self):
+        auth_supplied = (self.web_username is None, self.web_password is None)
+        if any(auth_supplied) and not all(auth_supplied):
+            raise ConfigError("If either web_username or web_password is"
+                              " specified, both must be specified")
 
 
 class HttpRpcHealthResource(Resource):
@@ -115,6 +136,9 @@ class HttpRpcTransport(Transport):
         config = self.get_static_config()
         self.web_path = config.web_path
         self.web_port = config.web_port
+        self.web_username = config.web_username
+        self.web_password = config.web_password
+        self.web_auth_domain = config.web_auth_domain
         self.health_path = config.health_path.lstrip('/')
         self.request_timeout = config.request_timeout
         self.request_timeout_status_code = config.request_timeout_status_code
@@ -137,6 +161,19 @@ class HttpRpcTransport(Transport):
         addr = self.web_resource.getHost()
         return "http://%s:%s/%s" % (addr.host, addr.port, suffix.lstrip('/'))
 
+    def get_authenticated_resource(self, resource):
+        if not self.web_username:
+            return resource
+        realm = HttpRpcRealm(resource)
+        checkers = [
+            StaticAuthChecker(self.web_username, self.web_password),
+        ]
+        portal = Portal(realm, checkers)
+        cred_factories = [
+            BasicCredentialFactory(self.web_auth_domain),
+        ]
+        return HTTPAuthSessionWrapper(portal, cred_factories)
+
     @inlineCallbacks
     def setup_transport(self):
         self._requests = {}
@@ -145,10 +182,13 @@ class HttpRpcTransport(Transport):
         self.request_gc.clock = self.clock
         self.request_gc.start(self.gc_requests_interval)
 
+        rpc_resource = HttpRpcResource(self)
+        rpc_resource = self.get_authenticated_resource(rpc_resource)
+
         # start receipt web resource
         self.web_resource = yield self.start_web_resources(
             [
-                (HttpRpcResource(self), self.web_path),
+                (rpc_resource, self.web_path),
                 (HttpRpcHealthResource(self), self.health_path),
             ],
             self.web_port)
@@ -189,14 +229,15 @@ class HttpRpcTransport(Transport):
         return missing_fields
 
     def manually_close_requests(self):
-        for request_id, (timestamp, request) in self._requests.items():
+        for request_id, request_data in self._requests.items():
+            timestamp = request_data['timestamp']
             if timestamp < self.clock.seconds() - self.request_timeout:
                 self.close_request(request_id)
 
     def close_request(self, request_id):
-        log.warning('Timing out %s' % (request_id,))
+        log.warning('Timing out %s' % (self.get_request_to_addr(request_id),))
         self.finish_request(request_id, self.request_timeout_body,
-            self.request_timeout_status_code)
+                            self.request_timeout_status_code)
 
     def get_health_response(self):
         return json.dumps({
@@ -206,12 +247,14 @@ class HttpRpcTransport(Transport):
     def set_request(self, request_id, request_object, timestamp=None):
         if timestamp is None:
             timestamp = self.clock.seconds()
-        self._requests[request_id] = (timestamp, request_object)
+        self._requests[request_id] = {
+            'timestamp': timestamp,
+            'request': request_object,
+        }
 
     def get_request(self, request_id):
         if request_id in self._requests:
-            _, request = self._requests[request_id]
-            return request
+            return self._requests[request_id]['request']
 
     def remove_request(self, request_id):
         del self._requests[request_id]
@@ -257,3 +300,22 @@ class HttpRpcTransport(Transport):
                                         request.client.port,
                                         Transport.generate_message_id())
             return response_id
+
+    # NOTE: This hackery is required so that we know what to_addr a message
+    #       was received on. This is useful so we can log more useful debug
+    #       information when something goes wrong, like a timeout for example.
+    #
+    #       Since all the different transports that subclass this
+    #       base class have different implementations for retreiving the
+    #       to_addr it's impossible to grab this information higher up
+    #       in a consistent manner.
+    def publish_message(self, **kwargs):
+        self.set_request_to_addr(kwargs['message_id'], kwargs['to_addr'])
+        return super(HttpRpcTransport, self).publish_message(**kwargs)
+
+    def get_request_to_addr(self, request_id):
+        return self._requests[request_id].get('to_addr', 'Unknown')
+
+    def set_request_to_addr(self, request_id, to_addr):
+        if request_id in self._requests:
+            self._requests[request_id]['to_addr'] = to_addr

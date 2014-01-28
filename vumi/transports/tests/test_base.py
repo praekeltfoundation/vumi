@@ -1,18 +1,11 @@
 from twisted.internet.defer import inlineCallbacks
 
-from vumi.transports.tests.utils import TransportTestCase
+from vumi.tests.helpers import VumiTestCase
 from vumi.transports.base import Transport
+from vumi.transports.tests.helpers import TransportHelper
 
 
-class BaseTransportTestCase(TransportTestCase):
-    """
-    This is a test for the base Transport class.
-
-    Not to be confused with TransportTestCase above.
-    """
-
-    transport_name = 'carrier_pigeon'
-    transport_class = Transport
+class TestBaseTransport(VumiTestCase):
 
     TEST_MIDDLEWARE_CONFIG = {
         "middleware": [
@@ -21,61 +14,68 @@ class BaseTransportTestCase(TransportTestCase):
         ],
     }
 
+    def setUp(self):
+        self.tx_helper = self.add_helper(TransportHelper(Transport))
+
     @inlineCallbacks
     def test_start_transport(self):
-        tr = yield self.get_transport({})
-        self.assertEqual(self.transport_name, tr.transport_name)
-        self.assert_basic_rkeys(tr)
+        tr = yield self.tx_helper.get_transport({})
+        self.assertEqual(self.tx_helper.transport_name, tr.transport_name)
+        self.assertTrue(len(tr.connectors) >= 1)
+        connector = tr.connectors[tr.transport_name]
+        self.assertTrue(connector._consumers.keys(), set(['outbound']))
+        self.assertTrue(connector._publishers.keys(),
+                        set(['inbound', 'event']))
+        self.assertEqual(tr.failure_publisher.routing_key,
+                         '%s.failures' % (tr.transport_name,))
 
     @inlineCallbacks
     def test_middleware_for_inbound_messages(self):
-        transport = yield self.get_transport(self.TEST_MIDDLEWARE_CONFIG)
-        orig_msg = self.mkmsg_in()
-        orig_msg['timestamp'] = 0
+        transport = yield self.tx_helper.get_transport(
+            self.TEST_MIDDLEWARE_CONFIG)
+        orig_msg = self.tx_helper.make_inbound("inbound")
         yield transport.publish_message(**orig_msg.payload)
-        [msg] = self.get_dispatched_messages()
+        [msg] = self.tx_helper.get_dispatched_inbound()
         self.assertEqual(msg['record'], [
-            ['mw2', 'inbound', self.transport_name],
-            ['mw1', 'inbound', self.transport_name],
+            ['mw2', 'inbound', self.tx_helper.transport_name],
+            ['mw1', 'inbound', self.tx_helper.transport_name],
             ])
 
     @inlineCallbacks
     def test_middleware_for_events(self):
-        transport = yield self.get_transport(self.TEST_MIDDLEWARE_CONFIG)
-        orig_msg = self.mkmsg_ack()
-        orig_msg['event_id'] = 1234
-        orig_msg['timestamp'] = 0
+        transport = yield self.tx_helper.get_transport(
+            self.TEST_MIDDLEWARE_CONFIG)
+        orig_msg = self.tx_helper.make_ack()
         yield transport.publish_event(**orig_msg.payload)
-        [msg] = self.get_dispatched_events()
+        [msg] = self.tx_helper.get_dispatched_events()
         self.assertEqual(msg['record'], [
-            ['mw2', 'event', self.transport_name],
-            ['mw1', 'event', self.transport_name],
+            ['mw2', 'event', self.tx_helper.transport_name],
+            ['mw1', 'event', self.tx_helper.transport_name],
             ])
 
     @inlineCallbacks
     def test_middleware_for_failures(self):
-        transport = yield self.get_transport(self.TEST_MIDDLEWARE_CONFIG)
-        orig_msg = self.mkmsg_out()
-        orig_msg['timestamp'] = 0
+        transport = yield self.tx_helper.get_transport(
+            self.TEST_MIDDLEWARE_CONFIG)
+        orig_msg = self.tx_helper.make_outbound("outbound")
         yield transport.send_failure(orig_msg, ValueError(), "dummy_traceback")
-        [msg] = self.get_dispatched_failures()
+        [msg] = self.tx_helper.get_dispatched_failures()
         self.assertEqual(msg['record'], [
-            ['mw2', 'failure', self.transport_name],
-            ['mw1', 'failure', self.transport_name],
+            ['mw2', 'failure', self.tx_helper.transport_name],
+            ['mw1', 'failure', self.tx_helper.transport_name],
             ])
 
     @inlineCallbacks
     def test_middleware_for_outbound_messages(self):
-        transport = yield self.get_transport(self.TEST_MIDDLEWARE_CONFIG)
+        transport = yield self.tx_helper.get_transport(
+            self.TEST_MIDDLEWARE_CONFIG)
         msgs = []
         transport.handle_outbound_message = msgs.append
-        orig_msg = self.mkmsg_out()
-        orig_msg['timestamp'] = 0
-        yield self.dispatch(orig_msg)
+        yield self.tx_helper.make_dispatch_outbound("outbound")
         [msg] = msgs
         self.assertEqual(msg['record'], [
-            ('mw1', 'outbound', self.transport_name),
-            ('mw2', 'outbound', self.transport_name),
+            ('mw1', 'outbound', self.tx_helper.transport_name),
+            ('mw2', 'outbound', self.tx_helper.transport_name),
             ])
 
     def get_tx_consumers(self, tx):
@@ -85,7 +85,7 @@ class BaseTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_transport_prefetch_count_custom(self):
-        transport = yield self.get_transport({
+        transport = yield self.tx_helper.get_transport({
             'amqp_prefetch_count': 1,
             })
         consumers = list(self.get_tx_consumers(transport))
@@ -95,7 +95,7 @@ class BaseTransportTestCase(TransportTestCase):
 
     @inlineCallbacks
     def test_transport_prefetch_count_default(self):
-        transport = yield self.get_transport({})
+        transport = yield self.tx_helper.get_transport({})
         consumers = list(self.get_tx_consumers(transport))
         self.assertEqual(1, len(consumers))
         for consumer in consumers:

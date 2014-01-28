@@ -8,18 +8,22 @@ import pkg_resources
 import logging
 from collections import defaultdict
 
+from OpenSSL.SSL import (
+    VERIFY_PEER, VERIFY_FAIL_IF_NO_PEER_CERT, VERIFY_NONE)
+
 from twisted.internet.defer import (
     inlineCallbacks, fail, succeed, DeferredQueue)
 from twisted.internet.error import ProcessTerminated
-from twisted.trial.unittest import TestCase, SkipTest
+from twisted.trial.unittest import SkipTest
 
-from vumi.message import TransportUserMessage, TransportEvent
-from vumi.application.tests.utils import ApplicationTestCase
 from vumi.application.sandbox import (
-    Sandbox, SandboxApi, SandboxCommand, SandboxError, SandboxResources,
+    Sandbox, SandboxApi, SandboxCommand, SandboxResources,
     SandboxResource, RedisResource, OutboundResource, JsSandboxResource,
-    LoggingResource, HttpClientResource, JsSandbox, JsFileSandbox)
-from vumi.tests.utils import LogCatcher, PersistenceMixin
+    LoggingResource, HttpClientResource, JsSandbox, JsFileSandbox,
+    HttpClientContextFactory)
+from vumi.application.tests.helpers import ApplicationHelper
+from vumi.tests.utils import LogCatcher
+from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 
 
 class MockResource(SandboxResource):
@@ -38,9 +42,13 @@ class ListLoggingResource(LoggingResource):
         self.msgs.append((level, msg))
 
 
-class SandboxTestCaseBase(ApplicationTestCase):
+class SandboxTestCaseBase(VumiTestCase):
 
     application_class = Sandbox
+
+    def setUp(self):
+        self.app_helper = self.add_helper(
+            ApplicationHelper(self.application_class))
 
     def setup_app(self, executable=None, args=None, extra_config=None):
         tmp_path = self.mktemp()
@@ -55,47 +63,13 @@ class SandboxTestCaseBase(ApplicationTestCase):
             config['args'] = args
         if extra_config is not None:
             config.update(extra_config)
-        return self.get_application(config)
-
-    def mk_ack(self, **kw):
-        msg_kw = {
-            'event_type': 'ack', 'user_message_id': '1',
-            'sent_message_id': '1', 'sandbox_id': 'sandbox1',
-        }
-        msg_kw.update(kw)
-        return TransportEvent(**msg_kw)
-
-    def mk_nack(self, **kw):
-        msg_kw = {
-            'event_type': 'nack', 'user_message_id': '1',
-            'sandbox_id': 'sandbox1', 'nack_reason': 'unknown',
-        }
-        msg_kw.update(kw)
-        return TransportEvent(**msg_kw)
-
-    def mk_delivery_report(self, **kw):
-        msg_kw = {
-            'event_type': 'delivery_report', 'user_message_id': '1',
-            'sent_message_id': '1', 'sandbox_id': 'sandbox1',
-            'delivery_status': 'delivered',
-        }
-        msg_kw.update(kw)
-        return TransportEvent(**msg_kw)
-
-    def mk_msg(self, **kw):
-        msg_kw = {
-            'to_addr': "1", 'from_addr': "2",
-            'transport_name': "test", 'transport_type': "sphex",
-            'sandbox_id': 'sandbox1',
-        }
-        msg_kw.update(kw)
-        return TransportUserMessage(**msg_kw)
+        return self.app_helper.get_application(config)
 
 
-class SandboxTestCase(SandboxTestCaseBase):
+class TestSandbox(SandboxTestCaseBase):
 
     def setup_app(self, python_code, extra_config=None):
-        return super(SandboxTestCase, self).setup_app(
+        return super(TestSandbox, self).setup_app(
             sys.executable, ['-c', python_code],
             extra_config=extra_config)
 
@@ -108,7 +82,8 @@ class SandboxTestCase(SandboxTestCaseBase):
             "time.sleep(5)\n"
         )
         with LogCatcher(log_level=logging.ERROR) as lc:
-            status = yield app.process_event_in_sandbox(self.mk_ack())
+            status = yield app.process_event_in_sandbox(
+                self.app_helper.make_ack(sandbox_id='sandbox1'))
             [msg] = lc.messages()
         self.assertTrue(msg.startswith(
             "Resource fallback received unknown command 'unknown'"
@@ -126,10 +101,24 @@ class SandboxTestCase(SandboxTestCaseBase):
             "sys.stderr.write('err\\n')\n"
         )
         with LogCatcher(log_level=logging.ERROR) as lc:
-            status = yield app.process_event_in_sandbox(self.mk_ack())
+            status = yield app.process_event_in_sandbox(
+                self.app_helper.make_ack(sandbox_id='sandbox1'))
             msgs = lc.messages()
         self.assertEqual(status, 0)
         self.assertEqual(msgs, ["err"])
+
+    @inlineCallbacks
+    def test_stderr_from_sandbox_with_multiple_lines(self):
+        app = yield self.setup_app(
+            "import sys\n"
+            "sys.stderr.write('err1\\nerr2\\nerr3')\n"
+        )
+        with LogCatcher(log_level=logging.ERROR) as lc:
+            status = yield app.process_event_in_sandbox(
+                self.app_helper.make_ack(sandbox_id='sandbox1'))
+            msgs = lc.messages()
+        self.assertEqual(status, 0)
+        self.assertEqual(msgs, ["err1\nerr2\nerr3"])
 
     @inlineCallbacks
     def test_bad_rlimit(self):
@@ -147,14 +136,15 @@ class SandboxTestCase(SandboxTestCaseBase):
             "sys.stderr.write('%s %s\\n' % rlimit_nofile)\n",
             {'rlimits': {'RLIMIT_NOFILE': [soft, hard * 2]}})
         with LogCatcher(log_level=logging.ERROR) as lc:
-            status = yield app.process_event_in_sandbox(self.mk_ack())
+            status = yield app.process_event_in_sandbox(
+                self.app_helper.make_ack(sandbox_id='sandbox1'))
             msgs = lc.messages()
         self.assertEqual(status, 0)
         self.assertEqual(msgs, ["%s %s" % (soft, hard)])
 
     @inlineCallbacks
     def test_resource_setup(self):
-        r_server = yield self.get_redis_manager()
+        r_server = yield self.app_helper.get_redis_manager()
         json_data = SandboxCommand(cmd='db.set', key='foo',
                                    value={'a': 1, 'b': 2}).to_json()
         app = yield self.setup_app(
@@ -169,7 +159,8 @@ class SandboxTestCase(SandboxTestCaseBase):
                     },
                 },
             }})
-        status = yield app.process_event_in_sandbox(self.mk_ack())
+        status = yield app.process_event_in_sandbox(
+            self.app_helper.make_ack(sandbox_id='sandbox1'))
         self.assertEqual(status, 0)
         self.assertEqual(sorted((yield r_server.keys())),
                          ['count#sandbox1',
@@ -180,7 +171,7 @@ class SandboxTestCase(SandboxTestCaseBase):
 
     @inlineCallbacks
     def test_outbound_reply_from_sandbox(self):
-        msg = self.mk_msg()
+        msg = self.app_helper.make_inbound("foo", sandbox_id='sandbox1')
         json_data = SandboxCommand(cmd='outbound.reply_to',
                                    content='Hooray!',
                                    in_reply_to=msg['message_id']).to_json()
@@ -194,7 +185,7 @@ class SandboxTestCase(SandboxTestCaseBase):
             }})
         status = yield app.process_message_in_sandbox(msg)
         self.assertEqual(status, 0)
-        [reply] = self.get_dispatched_messages()
+        [reply] = self.app_helper.get_dispatched_outbound()
         self.assertEqual(reply['content'], "Hooray!")
         self.assertEqual(reply['session_event'], None)
 
@@ -213,7 +204,8 @@ class SandboxTestCase(SandboxTestCaseBase):
             % (send_out, send_err),
             {'recv_limit': str(recv_limit)})
         with LogCatcher(log_level=logging.ERROR) as lc:
-            status = yield app.process_message_in_sandbox(self.mk_msg())
+            status = yield app.process_message_in_sandbox(
+                self.app_helper.make_inbound("foo", sandbox_id='sandbox1'))
             msgs = lc.messages()
         self.assertEqual(status, None)
         self.assertEqual(msgs[0],
@@ -237,7 +229,8 @@ class SandboxTestCase(SandboxTestCaseBase):
              }},
         )
         with LogCatcher() as lc:
-            status = yield app.process_message_in_sandbox(self.mk_msg())
+            status = yield app.process_message_in_sandbox(
+                self.app_helper.make_inbound("foo", sandbox_id='sandbox1'))
             [value_str] = lc.messages()
         self.assertEqual(status, 0)
         self.assertEqual(value_str, "success")
@@ -256,7 +249,8 @@ class SandboxTestCase(SandboxTestCaseBase):
              }},
         )
         with LogCatcher() as lc:
-            status = yield app.process_message_in_sandbox(self.mk_msg())
+            status = yield app.process_message_in_sandbox(
+                self.app_helper.make_inbound("foo", sandbox_id='sandbox1'))
             [path_str] = lc.messages()
         self.assertEqual(status, 0)
         path = path_str.split(':')
@@ -277,7 +271,8 @@ class SandboxTestCase(SandboxTestCaseBase):
              }},
         )
         with LogCatcher() as lc:
-            status = yield app.process_message_in_sandbox(self.mk_msg())
+            status = yield app.process_message_in_sandbox(
+                self.app_helper.make_inbound("foo", sandbox_id='sandbox1'))
             [path_str] = lc.messages()
         self.assertEqual(status, 0)
         path = path_str.split(':')
@@ -298,7 +293,8 @@ class SandboxTestCase(SandboxTestCaseBase):
              }},
         )
         with LogCatcher() as lc:
-            status = yield app.process_message_in_sandbox(self.mk_msg())
+            status = yield app.process_message_in_sandbox(
+                self.app_helper.make_inbound("foo", sandbox_id='sandbox1'))
             msgs = lc.messages()
         self.assertEqual(status, 0)
         logging_resource = app.resources.resources['foo']
@@ -330,42 +326,59 @@ class SandboxTestCase(SandboxTestCaseBase):
         self.assertEqual(echoed_cmd['msg'], msg.payload)
 
     def test_consume_user_message(self):
-        return self.echo_check('consume_user_message', self.mk_msg(),
-                               'inbound-message')
+        msg = self.app_helper.make_inbound("foo", sandbox_id='sandbox1')
+        return self.echo_check('consume_user_message', msg, 'inbound-message')
 
     def test_close_session(self):
-        return self.echo_check('close_session', self.mk_msg(),
-                               'inbound-message')
+        msg = self.app_helper.make_inbound("foo", sandbox_id='sandbox1')
+        return self.echo_check('close_session', msg, 'inbound-message')
 
     def test_consume_ack(self):
-        return self.echo_check('consume_ack', self.mk_ack(),
-                               'inbound-event')
+        msg = self.app_helper.make_ack(sandbox_id='sandbox1')
+        return self.echo_check('consume_ack', msg, 'inbound-event')
 
     def test_consume_nack(self):
-        return self.echo_check('consume_nack', self.mk_nack(),
-                               'inbound-event')
+        msg = self.app_helper.make_nack(sandbox_id='sandbox1')
+        return self.echo_check('consume_nack', msg, 'inbound-event')
 
     def test_consume_delivery_report(self):
-        return self.echo_check('consume_delivery_report',
-            self.mk_delivery_report(), 'inbound-event')
+        msg = self.app_helper.make_delivery_report(sandbox_id='sandbox1')
+        return self.echo_check('consume_delivery_report', msg, 'inbound-event')
+
+    @inlineCallbacks
+    def event_dispatch_check(self, event):
+        yield self.setup_app(
+            "import sys, json\n"
+            "cmd = sys.stdin.readline()\n"
+            "log = {'cmd': 'log.info', 'cmd_id': '1',\n"
+            "       'reply': False, 'msg': cmd}\n"
+            "sys.stdout.write(json.dumps(log) + '\\n')\n",
+            {'sandbox': {
+                'log': {'cls': 'vumi.application.sandbox.LoggingResource'},
+            }},
+        )
+        with LogCatcher() as lc:
+            yield self.app_helper.dispatch_event(event)
+            [cmd_json] = lc.messages()
+
+        if not cmd_json.startswith('{'):
+            self.fail(cmd_json)
+        echoed_cmd = json.loads(cmd_json)
+        self.assertEqual(echoed_cmd['cmd'], 'inbound-event')
+        echoed_cmd['msg']['timestamp'] = event['timestamp']
+        self.assertEqual(echoed_cmd['msg'], event.payload)
+
+    def test_event_dispatch_default(self):
+        return self.event_dispatch_check(
+            self.app_helper.make_ack(sandbox_id='sandbox1'))
+
+    def test_event_dispatch_non_default(self):
+        ack = self.app_helper.make_ack(sandbox_id='sandbox1')
+        ack.set_routing_endpoint('foo')
+        return self.event_dispatch_check(ack)
 
 
-class JsSandboxTestCase(SandboxTestCaseBase):
-
-    application_class = JsSandbox
-
-    def setUp(self):
-        super(JsSandboxTestCase, self).setUp()
-        if JsSandbox.find_nodejs() is None:
-            raise SkipTest("No node.js executable found.")
-
-    def setup_app(self, javascript_code, extra_config=None):
-        extra_config = extra_config or {}
-        extra_config.update({
-            'javascript': javascript_code,
-        })
-        return super(JsSandboxTestCase, self).setup_app(
-            extra_config=extra_config)
+class JsSandboxTestMixin(object):
 
     @inlineCallbacks
     def test_js_sandboxer(self):
@@ -375,7 +388,8 @@ class JsSandboxTestCase(SandboxTestCaseBase):
         app = yield self.setup_app(javascript)
 
         with LogCatcher() as lc:
-            status = yield app.process_message_in_sandbox(self.mk_msg())
+            status = yield app.process_message_in_sandbox(
+                self.app_helper.make_inbound("foo", sandbox_id='sandbox1'))
             failures = [log['failure'].value for log in lc.errors]
             msgs = lc.messages()
         self.assertEqual(failures, [])
@@ -399,7 +413,8 @@ class JsSandboxTestCase(SandboxTestCaseBase):
         })
 
         with LogCatcher() as lc:
-            status = yield app.process_message_in_sandbox(self.mk_msg())
+            status = yield app.process_message_in_sandbox(
+                self.app_helper.make_inbound("foo", sandbox_id='sandbox1'))
             failures = [log['failure'].value for log in lc.errors]
             msgs = lc.messages()
         self.assertEqual(failures, [])
@@ -413,9 +428,32 @@ class JsSandboxTestCase(SandboxTestCaseBase):
         ])
 
 
-class JsFileSandboxTestCase(JsSandboxTestCase):
+class TestJsSandbox(SandboxTestCaseBase, JsSandboxTestMixin):
+
+    application_class = JsSandbox
+
+    def setUp(self):
+        if JsSandbox.find_nodejs() is None:
+            raise SkipTest("No node.js executable found.")
+        super(TestJsSandbox, self).setUp()
+
+    def setup_app(self, javascript_code, extra_config=None):
+        extra_config = extra_config or {}
+        extra_config.update({
+            'javascript': javascript_code,
+        })
+        return super(TestJsSandbox, self).setup_app(
+            extra_config=extra_config)
+
+
+class TestJsFileSandbox(SandboxTestCaseBase, JsSandboxTestMixin):
 
     application_class = JsFileSandbox
+
+    def setUp(self):
+        if JsSandbox.find_nodejs() is None:
+            raise SkipTest("No node.js executable found.")
+        super(TestJsFileSandbox, self).setUp()
 
     def setup_app(self, javascript, extra_config=None):
         tmp_file_name = self.mktemp()
@@ -428,7 +466,7 @@ class JsFileSandboxTestCase(JsSandboxTestCase):
             'javascript_file': tmp_file_name,
         })
 
-        return super(JsSandboxTestCase, self).setup_app(
+        return super(TestJsFileSandbox, self).setup_app(
             extra_config=extra_config)
 
 
@@ -436,11 +474,14 @@ class DummyAppWorker(object):
 
     class DummyApi(object):
         def __init__(self):
-            pass
+            self.logs = []
 
         def set_sandbox(self, sandbox):
             self.sandbox = sandbox
             self.sandbox_id = sandbox.sandbox_id
+
+        def log(self, message, level):
+            self.logs.append((level, message))
 
     class DummyProtocol(object):
         def __init__(self, sandbox_id, api):
@@ -466,7 +507,7 @@ class DummyAppWorker(object):
         return mock_method
 
 
-class SandboxApiTestCase(TestCase):
+class TestSandboxApi(VumiTestCase):
     def setUp(self):
         self.sent_messages = DeferredQueue()
         self.patch(SandboxApi, 'sandbox_send',
@@ -498,7 +539,7 @@ class SandboxApiTestCase(TestCase):
         self.assertEqual(logged_error.type, Exception)
 
 
-class ResourceTestCaseBase(TestCase):
+class ResourceTestCaseBase(VumiTestCase):
 
     app_worker_cls = DummyAppWorker
     resource_cls = None
@@ -513,15 +554,15 @@ class ResourceTestCaseBase(TestCase):
                                                                self.api)
 
     @inlineCallbacks
-    def tearDown(self):
-        if self.resource is not None:
-            yield self.resource.teardown()
-
-    @inlineCallbacks
     def create_resource(self, config):
+        if self.resource is not None:
+            # clean-up any existing resource so
+            # .create_resource can be called multiple times.
+            yield self.resource.teardown()
         resource = self.resource_cls(self.resource_name,
                                      self.app_worker,
                                      config)
+        self.add_cleanup(resource.teardown)
         yield resource.setup()
         self.resource = resource
 
@@ -537,25 +578,23 @@ class ResourceTestCaseBase(TestCase):
         return self.resource.dispatch_request(self.api, msg)
 
 
-class TestRedisResource(ResourceTestCaseBase, PersistenceMixin):
+class TestRedisResource(ResourceTestCaseBase):
 
     resource_cls = RedisResource
 
     @inlineCallbacks
     def setUp(self):
         super(TestRedisResource, self).setUp()
-        yield self._persist_setUp()
-        self.r_server = yield self.get_redis_manager()
-        yield self.create_resource({
-            'redis_manager': {
-                'FAKE_REDIS': self.r_server,
-                'key_prefix': self.r_server._key_prefix,
-            }})
+        self.persistence_helper = self.add_helper(PersistenceHelper())
+        self.r_server = yield self.persistence_helper.get_redis_manager()
+        yield self.create_resource({})
 
-    @inlineCallbacks
-    def tearDown(self):
-        yield super(TestRedisResource, self).tearDown()
-        yield self._persist_tearDown()
+    def create_resource(self, config):
+        config.setdefault('redis_manager', {
+            'FAKE_REDIS': self.r_server,
+            'key_prefix': self.r_server._key_prefix,
+        })
+        return super(TestRedisResource, self).create_resource(config)
 
     def check_reply(self, reply, success=True, **kw):
         self.assertEqual(reply['success'], success)
@@ -577,6 +616,12 @@ class TestRedisResource(ResourceTestCaseBase, PersistenceMixin):
         self.assertEqual((yield self.r_server.get(count_key)),
                          str(total_count))
 
+    def assert_api_log(self, expected_level, expected_message):
+        [log_entry] = self.api.logs
+        level, message = log_entry
+        self.assertEqual(level, expected_level)
+        self.assertEqual(message, expected_message)
+
     @inlineCallbacks
     def test_handle_set(self):
         reply = yield self.dispatch_command('set', key='foo', value='bar')
@@ -584,11 +629,57 @@ class TestRedisResource(ResourceTestCaseBase, PersistenceMixin):
         yield self.check_metric('foo', json.dumps('bar'), 1)
 
     @inlineCallbacks
-    def test_handle_set_too_many(self):
+    def test_handle_set_soft_limit_reached(self):
+        yield self.create_metric('foo', 'a', total_count=80)
+        reply = yield self.dispatch_command('set', key='bar', value='bar')
+        self.check_reply(reply, success=True)
+        self.assert_api_log(
+            logging.WARNING,
+            'Redis soft limit of 80 keys reached for sandbox test_id. '
+            'Once the hard limit of 100 is reached no more keys can '
+            'be written.'
+        )
+
+    @inlineCallbacks
+    def test_handle_set_hard_limit_reached(self):
         yield self.create_metric('foo', 'a', total_count=100)
         reply = yield self.dispatch_command('set', key='bar', value='bar')
         self.check_reply(reply, success=False, reason='Too many keys')
         yield self.check_metric('bar', None, 100)
+        self.assert_api_log(
+            logging.ERROR,
+            'Redis hard limit of test_id keys reached for sandbox 100. '
+            'No more keys can be written.'
+        )
+
+    @inlineCallbacks
+    def test_keys_per_user_fallback_hard_limit(self):
+        yield self.create_resource({
+            'keys_per_user': 10,
+        })
+        yield self.create_metric('foo', 'a', total_count=10)
+        reply = yield self.dispatch_command('set', key='bar', value='bar')
+        self.check_reply(reply, success=False, reason='Too many keys')
+        self.assert_api_log(
+            logging.ERROR,
+            'Redis hard limit of test_id keys reached for sandbox 10. '
+            'No more keys can be written.'
+        )
+
+    @inlineCallbacks
+    def test_keys_per_user_fallback_soft_limit(self):
+        yield self.create_resource({
+            'keys_per_user': 10,
+        })
+        yield self.create_metric('foo', 'a', total_count=8)
+        reply = yield self.dispatch_command('set', key='bar', value='bar')
+        self.check_reply(reply, success=True)
+        self.assert_api_log(
+            logging.WARNING,
+            'Redis soft limit of 8 keys reached for sandbox test_id. '
+            'Once the hard limit of 10 is reached no more keys can '
+            'be written.'
+        )
 
     @inlineCallbacks
     def test_handle_get(self):
@@ -637,11 +728,32 @@ class TestRedisResource(ResourceTestCaseBase, PersistenceMixin):
         yield self.check_metric('foo', 'a', 1)
 
     @inlineCallbacks
-    def test_handle_incr_too_many_keys(self):
+    def test_handle_incr_soft_limit_reached(self):
+        yield self.create_metric('foo', 'a', total_count=80)
+        reply = yield self.dispatch_command('incr', key='bar', amount=2)
+        self.check_reply(reply, success=True)
+        [limit_warning] = self.api.logs
+        level, message = limit_warning
+        self.assertEqual(level, logging.WARNING)
+        self.assertEqual(
+            message,
+            'Redis soft limit of 80 keys reached for sandbox test_id. '
+            'Once the hard limit of 100 is reached no more keys can '
+            'be written.')
+
+    @inlineCallbacks
+    def test_handle_incr_hard_limit_reached(self):
         yield self.create_metric('foo', 'a', total_count=100)
         reply = yield self.dispatch_command('incr', key='bar', amount=2)
         self.check_reply(reply, success=False, reason='Too many keys')
         yield self.check_metric('bar', None, 100)
+        [limit_error] = self.api.logs
+        level, message = limit_error
+        self.assertEqual(level, logging.ERROR)
+        self.assertEqual(
+            message,
+            'Redis hard limit of test_id keys reached for sandbox 100. '
+            'No more keys can be written.')
 
 
 class TestOutboundResource(ResourceTestCaseBase):
@@ -680,7 +792,7 @@ class TestOutboundResource(ResourceTestCaseBase):
                                             tag='default')
         self.assertEqual(reply, None)
         self.assertEqual(self.app_worker.mock_calls['send_to'],
-                         [(('1234', 'hello'), {'tag': 'default'})])
+                         [(('1234', 'hello'), {'endpoint': 'default'})])
 
 
 class JsDummyAppWorker(DummyAppWorker):
@@ -751,6 +863,13 @@ class TestLoggingResource(ResourceTestCaseBase):
     def test_handle_log_defaults_to_info(self):
         return self.check_logs('log', 'foo', logging.INFO)
 
+    def test_with_unicode(self):
+        with LogCatcher() as lc:
+            reply = yield self.dispatch_command('log', msg=u'Zo\u00eb')
+            msgs = lc.messages()
+        self.assertEqual(reply['success'], True)
+        self.assertEqual(msgs, ['Zo\xc3\xab'])
+
 
 class TestHttpClientResource(ResourceTestCaseBase):
 
@@ -785,6 +904,9 @@ class TestHttpClientResource(ResourceTestCaseBase):
     def assert_not_unicode(self, arg):
         self.assertFalse(isinstance(arg, unicode))
 
+    def get_context_factory(self):
+        return self._context_factory
+
     def assert_http_request(self, url, method='GET', headers={}, data=None,
                             timeout=None, data_limit=None):
         timeout = (timeout if timeout is not None
@@ -795,6 +917,9 @@ class TestHttpClientResource(ResourceTestCaseBase):
         kw = dict(method=method, headers=headers, data=data,
                   timeout=timeout, data_limit=data_limit)
         [(actual_args, actual_kw)] = self._http_requests
+        self._context_factory = actual_kw.pop('context_factory')
+        self.assertTrue(isinstance(self._context_factory,
+                                   HttpClientContextFactory))
         self.assertEqual((actual_args, actual_kw), (args, kw))
 
         self.assert_not_unicode(actual_args[0])
@@ -863,3 +988,43 @@ class TestHttpClientResource(ResourceTestCaseBase):
         reply = yield self.dispatch_command('get')
         self.assertFalse(reply['success'])
         self.assertEqual(reply['reason'], "No URL given")
+
+    @inlineCallbacks
+    def test_https_request(self):
+        self.http_request_succeed("foo")
+        reply = yield self.dispatch_command('get',
+                                            url='https://www.example.com')
+        self.assertTrue(reply['success'])
+        self.assertEqual(reply['body'], "foo")
+        self.assert_http_request('https://www.example.com', method='GET')
+
+        ctxt = self.get_context_factory()
+        self.assertEqual(ctxt.verify_options, None)
+
+    @inlineCallbacks
+    def test_https_request_verify_none(self):
+        self.http_request_succeed("foo")
+        reply = yield self.dispatch_command(
+            'get', url='https://www.example.com',
+            verify_options=['VERIFY_NONE'])
+        self.assertTrue(reply['success'])
+        self.assertEqual(reply['body'], "foo")
+        self.assert_http_request('https://www.example.com', method='GET')
+
+        ctxt = self.get_context_factory()
+        self.assertEqual(ctxt.verify_options, VERIFY_NONE)
+
+    @inlineCallbacks
+    def test_https_request_verify_peer_or_fail(self):
+        self.http_request_succeed("foo")
+        reply = yield self.dispatch_command(
+            'get', url='https://www.example.com',
+            verify_options=['VERIFY_PEER', 'VERIFY_FAIL_IF_NO_PEER_CERT'])
+        self.assertTrue(reply['success'])
+        self.assertEqual(reply['body'], "foo")
+        self.assert_http_request('https://www.example.com', method='GET')
+
+        ctxt = self.get_context_factory()
+        self.assertEqual(
+            ctxt.verify_options,
+            VERIFY_PEER | VERIFY_FAIL_IF_NO_PEER_CERT)

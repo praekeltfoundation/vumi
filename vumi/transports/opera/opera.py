@@ -13,7 +13,7 @@ from vumi.utils import normalize_msisdn
 from vumi.transports import Transport
 from vumi.transports.failures import TemporaryFailure, PermanentFailure
 from vumi.transports.opera import utils
-from vumi.components import SessionManager
+from vumi.components.session import SessionManager
 
 
 def get_receipts_xml(content):
@@ -211,6 +211,17 @@ class OperaTransport(Transport):
             ],
             self.web_port
         )
+
+    def get_transport_url(self, suffix=''):
+        """
+        Get the URL for the HTTP resource. Requires the worker to be started.
+
+        This is mostly useful in tests, and probably shouldn't be used
+        in non-test code, because the API might live behind a load
+        balancer or proxy.
+        """
+        addr = self.web_resource.getHost()
+        return "http://%s:%s/%s" % (addr.host, addr.port, suffix.lstrip('/'))
 
     @inlineCallbacks
     def handle_outbound_message(self, message):

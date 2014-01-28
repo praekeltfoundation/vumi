@@ -5,14 +5,14 @@ from twisted.internet.protocol import ReconnectingClientFactory
 from vumi import log
 from vumi.transports.base import Transport
 from vumi.message import TransportUserMessage
-from vumi.config import ConfigInt, ConfigText,  ConfigDict
+from vumi.config import ConfigInt, ConfigText, ConfigDict
 from vumi.components.session import SessionManager
 from vumi.transports.mtn_nigeria.xml_over_tcp import (
     XmlOverTcpError, CodedXmlOverTcpError, XmlOverTcpClient)
 
 
 class MtnNigeriaUssdTransportConfig(Transport.CONFIG_CLASS):
-    "MTN Nigeria USSD transport configuration."
+    """MTN Nigeria USSD transport configuration."""
 
     server_hostname = ConfigText(
         "Hostname of the server the transport's client should connect to.",
@@ -34,11 +34,10 @@ class MtnNigeriaUssdTransportConfig(Transport.CONFIG_CLASS):
         "to check whether the connection is alive and well.",
         default=30, static=True)
     timeout_period = ConfigInt(
-        "How long (in seconds) after a heartbeat the client should wait "
-        "before timing out, should the server not respond to the heartbeat "
-        "(enquire link) request. NOTE: the timeout period is capped at the "
-        "enquire link interval to prevent skipped enquire link responses from "
-        "going unnoticed.", default=30, static=True)
+        "How long (in seconds) after sending an enquire link request the "
+        "client should wait for a response before timing out. NOTE: The "
+        "timeout period should not be longer than the enquire link interval",
+        default=30, static=True)
     user_termination_response = ConfigText(
         "Response given back to the user if the user terminated the session.",
         default='Session Ended', static=True)
@@ -52,8 +51,10 @@ class MtnNigeriaUssdTransportConfig(Transport.CONFIG_CLASS):
 
 class MtnNigeriaUssdTransport(Transport):
     """
-    XXX: Integration is still ongoing for this transport, it is currently an
-    early alpha. Use with care and a bit of insanity (you'll need it).
+    USSD transport for MTN Nigeria.
+
+    This transport connects as a TCP client and sends messages using a
+    custom protocol whose packets consist of binary headers plus an XML body.
     """
 
     transport_type = 'ussd'
@@ -132,8 +133,8 @@ class MtnNigeriaUssdTransport(Transport):
             to_addr = session['ussd_code']
             content = params.pop('userdata')
 
-        # pop the remaining needed fields (the rest is left as metadata)
-        message_id, from_addr = self.pop_fields(params, 'requestId', 'msisdn')
+        # pop the remaining needed field (the rest is left as metadata)
+        [from_addr] = self.pop_fields(params, 'msisdn')
 
         log.msg('MtnNigeriaUssdTransport receiving inbound message from %s '
                 'to %s: %s' % (from_addr, to_addr, content))
@@ -141,7 +142,7 @@ class MtnNigeriaUssdTransport(Transport):
         if session_event == TransportUserMessage.SESSION_CLOSE:
             self.factory.client.send_data_response(
                 session_id=session_id,
-                request_id=message_id,
+                request_id=params['requestId'],
                 star_code=params['starCode'],
                 client_id=params['clientId'],
                 msisdn=from_addr,
@@ -149,7 +150,6 @@ class MtnNigeriaUssdTransport(Transport):
                 end_session=True)
 
         yield self.publish_message(
-            message_id=message_id,
             content=content,
             to_addr=to_addr,
             from_addr=from_addr,
@@ -199,7 +199,7 @@ class MtnNigeriaUssdTransport(Transport):
         yield self.send_response(
             message_id=message['message_id'],
             session_id=metadata['session_id'],
-            request_id=message['in_reply_to'],
+            request_id=metadata['requestId'],
             star_code=metadata['starCode'],
             client_id=metadata['clientId'],
             msisdn=message['to_addr'],

@@ -2,24 +2,19 @@ import re
 from xml.etree import ElementTree
 from urllib import urlencode
 
-from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks
-from vumi.transports.tests.utils import TransportTestCase
 from vumi.utils import http_request
 from vumi.transports.vodacom_messaging import (VodacomMessagingResponse,
     VodacomMessagingTransport)
 from vumi.message import TransportUserMessage
+from vumi.transports.tests.helpers import TransportHelper
+from vumi.tests.helpers import VumiTestCase
 
 
-class TestVodacomMessagingTransport(TransportTestCase):
-
-    timeout = 3
-    transport_name = 'vodacom_messaging'
-    transport_class = VodacomMessagingTransport
+class TestVodacomMessagingTransport(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        yield super(TestVodacomMessagingTransport, self).setUp()
         self.config = {
             'transport_type': 'ussd',
             'ussd_string_prefix': '*120*666#',
@@ -29,7 +24,9 @@ class TestVodacomMessagingTransport(TransportTestCase):
             'username': 'testuser',
             'password': 'testpass',
         }
-        self.transport = yield self.get_transport(self.config)
+        self.tx_helper = self.add_helper(
+            TransportHelper(VodacomMessagingTransport))
+        self.transport = yield self.tx_helper.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url().rstrip('/')
 
     @inlineCallbacks
@@ -44,8 +41,8 @@ class TestVodacomMessagingTransport(TransportTestCase):
                 'request': '*120*666#',
             }))
         d = http_request(url, '', method='GET')
-        msg, = yield self.wait_for_dispatched_messages(1)
-        self.assertEqual(msg['transport_name'], self.transport_name)
+        msg, = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        self.assertEqual(msg['transport_name'], self.tx_helper.transport_name)
         self.assertEqual(msg['transport_type'], "ussd")
         self.assertEqual(msg['transport_metadata'], {
             "session_id": "123"
@@ -55,9 +52,7 @@ class TestVodacomMessagingTransport(TransportTestCase):
         self.assertEqual(msg['from_addr'], '555')
         self.assertEqual(msg['to_addr'], '*120*666#')
         self.assertEqual(msg['content'], '*120*666#')
-        tum = TransportUserMessage(**msg.payload)
-        reply = tum.reply("OK")
-        self.dispatch(reply)
+        self.tx_helper.make_dispatch_reply(msg, "OK")
         response = yield d
         correct_response = '<request>\n\t<headertext>OK</headertext>\n\t' \
                 '<options>\n\t\t<option command="1" order="1" ' \
@@ -78,20 +73,16 @@ class TestVodacomMessagingTransport(TransportTestCase):
             })
         )
         d = http_request(url, '', method='GET')
-        msg, = yield self.wait_for_dispatched_messages(1)
-        payload = msg.payload
-        self.assertEqual(payload['transport_name'], self.transport_name)
-        self.assertEqual(payload['transport_type'], "ussd")
-        self.assertEqual(payload['transport_metadata'],
-                         {"session_id": "123"})
-        self.assertEqual(payload['session_event'],
-                         TransportUserMessage.SESSION_RESUME)
-        self.assertEqual(payload['from_addr'], '555')
-        self.assertEqual(payload['to_addr'], '')
-        self.assertEqual(payload['content'], '1')
-        tum = TransportUserMessage(**payload)
-        rep = tum.reply("OK")
-        self.dispatch(rep)
+        msg, = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        self.assertEqual(msg['transport_name'], self.tx_helper.transport_name)
+        self.assertEqual(msg['transport_type'], "ussd")
+        self.assertEqual(msg['transport_metadata'], {"session_id": "123"})
+        self.assertEqual(
+            msg['session_event'], TransportUserMessage.SESSION_RESUME)
+        self.assertEqual(msg['from_addr'], '555')
+        self.assertEqual(msg['to_addr'], '')
+        self.assertEqual(msg['content'], '1')
+        self.tx_helper.make_dispatch_reply(msg, "OK")
         response = yield d
         correct_response = '<request>\n\t<headertext>OK</headertext>\n\t' \
                 '<options>\n\t\t<option command="1" order="1" ' \
@@ -112,20 +103,16 @@ class TestVodacomMessagingTransport(TransportTestCase):
             })
         )
         d = http_request(url, '', method='GET')
-        msg, = yield self.wait_for_dispatched_messages(1)
-        payload = msg.payload
-        self.assertEqual(payload['transport_name'], self.transport_name)
-        self.assertEqual(payload['transport_type'], "ussd")
-        self.assertEqual(payload['transport_metadata'],
-                         {"session_id": "123"})
-        self.assertEqual(payload['session_event'],
-                         TransportUserMessage.SESSION_RESUME)
-        self.assertEqual(payload['from_addr'], '555')
-        self.assertEqual(payload['to_addr'], '')
-        self.assertEqual(payload['content'], '1')
-        tum = TransportUserMessage(**payload)
-        rep = tum.reply("OK", False)
-        self.dispatch(rep)
+        msg, = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        self.assertEqual(msg['transport_name'], self.tx_helper.transport_name)
+        self.assertEqual(msg['transport_type'], "ussd")
+        self.assertEqual(msg['transport_metadata'], {"session_id": "123"})
+        self.assertEqual(
+            msg['session_event'], TransportUserMessage.SESSION_RESUME)
+        self.assertEqual(msg['from_addr'], '555')
+        self.assertEqual(msg['to_addr'], '')
+        self.assertEqual(msg['content'], '1')
+        self.tx_helper.make_dispatch_reply(msg, "OK", continue_session=False)
         response = yield d
         correct_response = '<request>\n\t<headertext>OK' + \
                             '</headertext>\n</request>'
@@ -133,16 +120,15 @@ class TestVodacomMessagingTransport(TransportTestCase):
 
     @inlineCallbacks
     def test_nack(self):
-        msg = self.mkmsg_out()
-        yield self.dispatch(msg)
-        [nack] = yield self.wait_for_dispatched_events(1)
+        msg = yield self.tx_helper.make_dispatch_outbound("outbound")
+        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(nack['user_message_id'], msg['message_id'])
         self.assertEqual(nack['sent_message_id'], msg['message_id'])
         self.assertEqual(nack['nack_reason'],
             'Missing fields: in_reply_to')
 
 
-class VodacomMessagingResponseTest(TestCase):
+class VodacomMessagingResponseTest(VumiTestCase):
     '''
     Test the construction of XML replies for Vodacom Messaging
     '''
@@ -150,9 +136,6 @@ class VodacomMessagingResponseTest(TestCase):
     def setUp(self):
         self.web_host = 'vumi.p.org'
         self.web_path = '/api/v1/ussd/vmes/'
-
-    def tearDown(self):
-        pass
 
     def stdXML(self, obj):
         string = ElementTree.tostring(ElementTree.fromstring(str(obj)))

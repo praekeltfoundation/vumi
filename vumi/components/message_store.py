@@ -3,17 +3,21 @@
 
 """Message store."""
 
+import warnings
+
 from uuid import uuid4
 
 from twisted.internet.defer import returnValue, inlineCallbacks
 
 from vumi.message import TransportEvent, TransportUserMessage
 from vumi.persist.model import Model, Manager
-from vumi.persist.fields import (VumiMessage, ForeignKey, ListOf, Tag, Dynamic,
-                                 Unicode)
+from vumi.persist.fields import (
+    VumiMessage, ForeignKey, ManyToMany, ListOf, Tag, Dynamic, Unicode)
 from vumi.persist.txriak_manager import TxRiakManager
 from vumi import log
 from vumi.components.message_store_cache import MessageStoreCache
+from vumi.components.message_store_migrators import (
+    InboundMessageMigrator, OutboundMessageMigrator)
 
 
 class Batch(Model):
@@ -59,9 +63,13 @@ class CurrentTag(Model):
 
 
 class OutboundMessage(Model):
+
+    VERSION = 1
+    MIGRATOR = OutboundMessageMigrator
+
     # key is message_id
     msg = VumiMessage(TransportUserMessage)
-    batch = ForeignKey(Batch, null=True)
+    batches = ManyToMany(Batch)
 
 
 class Event(Model):
@@ -71,9 +79,13 @@ class Event(Model):
 
 
 class InboundMessage(Model):
+
+    VERSION = 1
+    MIGRATOR = InboundMessageMigrator
+
     # key is message_id
     msg = VumiMessage(TransportUserMessage)
-    batch = ForeignKey(Batch, null=True)
+    batches = ManyToMany(Batch)
 
 
 class MessageStore(object):
@@ -132,7 +144,6 @@ class MessageStore(object):
 
     @Manager.calls_manager
     def reconcile_inbound_cache(self, batch_id):
-        # FIXME: We're loading messages one at a time here, which is stupid.
         inbound_keys = yield self.batch_inbound_keys(batch_id)
         for key in inbound_keys:
             try:
@@ -143,7 +154,6 @@ class MessageStore(object):
 
     @Manager.calls_manager
     def reconcile_outbound_cache(self, batch_id):
-        # FIXME: We're loading messages one at a time here, which is stupid.
         outbound_keys = yield self.batch_outbound_keys(batch_id)
         for key in outbound_keys:
             try:
@@ -161,7 +171,7 @@ class MessageStore(object):
             yield self.cache.add_event(batch_id, event)
 
     @Manager.calls_manager
-    def batch_start(self, tags, **metadata):
+    def batch_start(self, tags=(), **metadata):
         batch_id = uuid4().get_hex()
         batch = self.batches(batch_id)
         batch.tags.extend(tags)
@@ -189,17 +199,25 @@ class MessageStore(object):
                 yield tag.save()
 
     @Manager.calls_manager
-    def add_outbound_message(self, msg, tag=None, batch_id=None):
+    def add_outbound_message(self, msg, tag=None, batch_id=None, batch_ids=()):
         msg_id = msg['message_id']
-        msg_record = self.outbound_messages(msg_id, msg=msg)
+        msg_record = yield self.outbound_messages.load(msg_id)
+        if msg_record is None:
+            msg_record = self.outbound_messages(msg_id, msg=msg)
+        else:
+            msg_record.msg = msg
 
         if batch_id is None and tag is not None:
             tag_record = yield self.current_tags.load(tag)
             if tag_record is not None:
                 batch_id = tag_record.current_batch.key
 
+        batch_ids = list(batch_ids)
         if batch_id is not None:
-            msg_record.batch.key = batch_id
+            batch_ids.append(batch_id)
+
+        for batch_id in batch_ids:
+            msg_record.batches.add_key(batch_id)
             yield self.cache.add_outbound_message(batch_id, msg)
 
         yield msg_record.save()
@@ -213,13 +231,16 @@ class MessageStore(object):
     def add_event(self, event):
         event_id = event['event_id']
         msg_id = event['user_message_id']
-        event_record = self.events(event_id, event=event, message=msg_id)
+        event_record = yield self.events.load(event_id)
+        if event_record is None:
+            event_record = self.events(event_id, event=event, message=msg_id)
+        else:
+            event_record.event = event
         yield event_record.save()
 
         msg_record = yield self.outbound_messages.load(msg_id)
         if msg_record is not None:
-            batch_id = msg_record.batch.key
-            if batch_id is not None:
+            for batch_id in msg_record.batches.keys():
                 yield self.cache.add_event(batch_id, event)
 
     @Manager.calls_manager
@@ -228,17 +249,25 @@ class MessageStore(object):
         returnValue(event.event if event is not None else None)
 
     @Manager.calls_manager
-    def add_inbound_message(self, msg, tag=None, batch_id=None):
+    def add_inbound_message(self, msg, tag=None, batch_id=None, batch_ids=()):
         msg_id = msg['message_id']
-        msg_record = self.inbound_messages(msg_id, msg=msg)
+        msg_record = yield self.inbound_messages.load(msg_id)
+        if msg_record is None:
+            msg_record = self.inbound_messages(msg_id, msg=msg)
+        else:
+            msg_record.msg = msg
 
         if batch_id is None and tag is not None:
             tag_record = yield self.current_tags.load(tag)
             if tag_record is not None:
                 batch_id = tag_record.current_batch.key
 
+        batch_ids = list(batch_ids)
         if batch_id is not None:
-            msg_record.batch.key = batch_id
+            batch_ids.append(batch_id)
+
+        for batch_id in batch_ids:
+            msg_record.batches.add_key(batch_id)
             self.cache.add_inbound_message(batch_id, msg)
 
         yield msg_record.save()
@@ -262,32 +291,31 @@ class MessageStore(object):
         return self.cache.get_event_status(batch_id)
 
     def batch_outbound_keys(self, batch_id):
-        mr = self.manager.mr_from_field(OutboundMessage, 'batch', batch_id)
-        return mr.get_keys()
+        return self.outbound_messages.index_keys('batches', batch_id)
 
     def batch_outbound_keys_matching(self, batch_id, query):
-        mr = self.outbound_messages.index_match(query, 'batch', batch_id)
+        mr = self.outbound_messages.index_match(query, 'batches', batch_id)
         return mr.get_keys()
 
     def batch_inbound_keys(self, batch_id):
-        mr = self.manager.mr_from_field(InboundMessage, 'batch', batch_id)
-        return mr.get_keys()
+        return self.inbound_messages.index_keys('batches', batch_id)
 
     def batch_inbound_keys_matching(self, batch_id, query):
-        mr = self.inbound_messages.index_match(query, 'batch', batch_id)
+        mr = self.inbound_messages.index_match(query, 'batches', batch_id)
         return mr.get_keys()
 
     def message_event_keys(self, msg_id):
-        mr = self.manager.mr_from_field(Event, 'message', msg_id)
-        return mr.get_keys()
+        return self.events.index_keys('message', msg_id)
 
+    @Manager.calls_manager
     def batch_inbound_count(self, batch_id):
-        return self.inbound_messages.index_lookup(
-            'batch', batch_id).get_count()
+        keys = yield self.batch_inbound_keys(batch_id)
+        returnValue(len(keys))
 
+    @Manager.calls_manager
     def batch_outbound_count(self, batch_id):
-        return self.outbound_messages.index_lookup(
-            'batch', batch_id).get_count()
+        keys = yield self.batch_outbound_keys(batch_id)
+        returnValue(len(keys))
 
     @inlineCallbacks
     def find_inbound_keys_matching(self, batch_id, query, ttl=None,
@@ -380,7 +408,15 @@ class MessageStore(object):
         return self.cache.is_query_in_progress(batch_id, token)
 
     def get_inbound_message_keys(self, batch_id, start=0, stop=-1,
-                                    with_timestamp=False):
+                                 with_timestamp=False):
+        warnings.warn("get_inbound_message_keys() is deprecated. Use "
+                      "get_cached_inbound_message_keys().",
+                      category=DeprecationWarning)
+        return self.get_cached_inbound_message_keys(batch_id, start, stop,
+                                                    with_timestamp)
+
+    def get_cached_inbound_message_keys(self, batch_id, start=0, stop=-1,
+                                        with_timestamp=False):
         """
         Return the keys ordered by descending timestamp.
 
@@ -394,11 +430,19 @@ class MessageStore(object):
             Whether or not to return a list of (key, timestamp) tuples
             instead of only the list of keys.
         """
-        return self.cache.get_inbound_message_keys(batch_id, start, stop,
-            with_timestamp=with_timestamp)
+        return self.cache.get_inbound_message_keys(
+            batch_id, start, stop, with_timestamp=with_timestamp)
 
     def get_outbound_message_keys(self, batch_id, start=0, stop=-1,
-                                    with_timestamp=False):
+                                  with_timestamp=False):
+        warnings.warn("get_outbound_message_keys() is deprecated. Use "
+                      "get_cached_outbound_message_keys().",
+                      category=DeprecationWarning)
+        return self.get_cached_outbound_message_keys(batch_id, start, stop,
+                                                     with_timestamp)
+
+    def get_cached_outbound_message_keys(self, batch_id, start=0, stop=-1,
+                                         with_timestamp=False):
         """
         Return the keys ordered by descending timestamp.
 
@@ -412,5 +456,5 @@ class MessageStore(object):
             Whether or not to return a list of (key, timestamp) tuples
             instead of only the list of keys.
         """
-        return self.cache.get_outbound_message_keys(batch_id, start, stop,
-            with_timestamp=with_timestamp)
+        return self.cache.get_outbound_message_keys(
+            batch_id, start, stop, with_timestamp=with_timestamp)

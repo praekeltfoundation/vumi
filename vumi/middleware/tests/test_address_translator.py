@@ -1,11 +1,10 @@
 """Tests from vumi.middleware.address_translator."""
 
-from twisted.trial.unittest import TestCase
-
 from vumi.middleware.address_translator import AddressTranslationMiddleware
+from vumi.tests.helpers import VumiTestCase
 
 
-class AddressTranslationMiddlewareTestCase(TestCase):
+class TestAddressTranslationMiddleware(VumiTestCase):
 
     def mk_addr_trans(self, outbound_map):
         worker = object()

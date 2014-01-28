@@ -38,11 +38,11 @@ start the Vumi workers.
 
 Open a terminal window and start the transport worker by running::
 
-  twistd -n --pidfile=telnettransport.pid start_worker --worker-class vumi.transports.telnet.TelnetServerTransport --set-option=transport_name:telnet --set-option=telnet_port:9010
+  twistd -n --pidfile=telnettransport.pid vumi_worker --worker-class vumi.transports.telnet.TelnetServerTransport --set-option=transport_name:telnet --set-option=telnet_port:9010
 
 If all is well, open a second terminal window and start the application worker::
 
-  twistd -n --pidfile=echoworker.pid start_worker --worker-class vumi.demos.words.EchoWorker --set-option=transport_name:telnet 
+  twistd -n --pidfile=echoworker.pid vumi_worker --worker-class vumi.demos.words.EchoWorker --set-option=transport_name:telnet 
 
 Your first Vumi setup should now be running. You can test it by
 opening a third window and connecting with a telnet client::

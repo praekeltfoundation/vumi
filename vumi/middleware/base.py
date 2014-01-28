@@ -56,14 +56,21 @@ class BaseMiddleware(object):
         """
         pass
 
-    def handle_inbound(self, message, connector_name):
-        """Called when an inbound transport user message is published
-        or consumed.
+    def handle_consume_inbound(self, message, connector_name):
+        """Called when an inbound transport user message is consumed.
 
-        The other methods -- :meth:`handle_outbound`,
-        :meth:`handle_event`, :meth:`handle_failure` -- all function
-        in the same way. Only the kind of message being processed
-        differs.
+        The other methods listed below all function in the same way. Only the
+        kind and direction of the message being processed differs.
+
+         * :meth:`handle_publish_inbound`
+         * :meth:`handle_consume_outbound`
+         * :meth:`handle_publish_outbound`
+         * :meth:`handle_consume_event`
+         * :meth:`handle_publish_event`
+         * :meth:`handle_failure`
+
+        By default, the ``handle_consume_*`` and ``handle_publish_*`` methods
+        call their ``handle_*`` equivalents.
 
         :param vumi.message.TransportUserMessage message:
             Inbound message to process.
@@ -73,25 +80,83 @@ class BaseMiddleware(object):
         :rtype: vumi.message.TransportUserMessage
         :returns: The processed message.
         """
+        return self.handle_inbound(message, connector_name)
+
+    def handle_publish_inbound(self, message, connector_name):
+        """Called when an inbound transport user message is published.
+
+        See :meth:`handle_consume_inbound`.
+        """
+        return self.handle_inbound(message, connector_name)
+
+    def handle_inbound(self, message, connector_name):
+        """Default handler for published and consumed inbound messages.
+
+        See :meth:`handle_consume_inbound`.
+        """
         return message
+
+    def handle_consume_outbound(self, message, connector_name):
+        """Called when an outbound transport user message is consumed.
+
+        See :meth:`handle_consume_inbound`.
+        """
+        return self.handle_outbound(message, connector_name)
+
+    def handle_publish_outbound(self, message, connector_name):
+        """Called when an outbound transport user message is published.
+
+        See :meth:`handle_consume_inbound`.
+        """
+        return self.handle_outbound(message, connector_name)
 
     def handle_outbound(self, message, connector_name):
-        """Called to process an outbound transport user message.
-        See :meth:`handle_inbound`.
+        """Default handler for published and consumed outbound messages.
+
+        See :meth:`handle_consume_inbound`.
         """
         return message
 
+    def handle_consume_event(self, event, connector_name):
+        """Called when a transport event is consumed.
+
+        See :meth:`handle_consume_inbound`.
+        """
+        return self.handle_event(event, connector_name)
+
+    def handle_publish_event(self, event, connector_name):
+        """Called when a transport event is published.
+
+        See :meth:`handle_consume_inbound`.
+        """
+        return self.handle_event(event, connector_name)
+
     def handle_event(self, event, connector_name):
-        """Called to process an event message (
-        :class:`vumi.message.TransportEvent`).
-        See :meth:`handle_inbound`.
+        """Default handler for published and consumed events.
+
+        See :meth:`handle_consume_inbound`.
         """
         return event
+
+    def handle_consume_failure(self, failure, connector_name):
+        """Called when a failure message is consumed.
+
+        See :meth:`handle_consume_inbound`.
+        """
+        return self.handle_failure(failure, connector_name)
+
+    def handle_publish_failure(self, failure, connector_name):
+        """Called when a failure message is published.
+
+        See :meth:`handle_consume_inbound`.
+        """
+        return self.handle_failure(failure, connector_name)
 
     def handle_failure(self, failure, connector_name):
         """Called to process a failure message (
         :class:`vumi.transports.failures.FailureMessage`).
-        See :meth:`handle_inbound`.
+
+        See :meth:`handle_consume_inbound`.
         """
         return failure
 
@@ -126,10 +191,12 @@ class MiddlewareStack(object):
         returnValue(message)
 
     def apply_consume(self, handler_name, message, connector_name):
+        handler_name = 'consume_%s' % (handler_name,)
         return self._handle(
             self.middlewares, handler_name, message, connector_name)
 
     def apply_publish(self, handler_name, message, connector_name):
+        handler_name = 'publish_%s' % (handler_name,)
         return self._handle(
             reversed(self.middlewares), handler_name, message, connector_name)
 

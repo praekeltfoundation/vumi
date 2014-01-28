@@ -2,26 +2,24 @@ from urllib import urlencode
 
 from twisted.internet.defer import inlineCallbacks
 
-from vumi.transports.tests.utils import TransportTestCase
+from vumi.tests.helpers import VumiTestCase
 from vumi.transports.cellulant import CellulantTransport
 from vumi.message import TransportUserMessage
 from vumi.utils import http_request
+from vumi.transports.tests.helpers import TransportHelper
 
 
-class TestCellulantTransportTestCase(TransportTestCase):
-
-    transport_class = CellulantTransport
-    transport_name = 'test_cellulant'
+class TestCellulantTransport(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        yield super(TestCellulantTransportTestCase, self).setUp()
         self.config = {
             'web_port': 0,
             'web_path': '/api/v1/ussd/cellulant/',
             'ussd_session_timeout': 60,
         }
-        self.transport = yield self.get_transport(self.config)
+        self.tx_helper = self.add_helper(TransportHelper(CellulantTransport))
+        self.transport = yield self.tx_helper.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url(
             self.config['web_path'])
         yield self.transport.session_manager.redis._purge_all()  # just in case
@@ -54,7 +52,7 @@ class TestCellulantTransportTestCase(TransportTestCase):
     def test_inbound_begin(self):
         deferred = self.mk_request(INPUT="*120*1#")
 
-        [msg] = yield self.wait_for_dispatched_messages(1)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assertEqual(msg['content'], None)
         self.assertEqual(msg['to_addr'], '*120*1#')
         self.assertEqual(msg['from_addr'], '27761234567'),
@@ -64,8 +62,7 @@ class TestCellulantTransportTestCase(TransportTestCase):
             'session_id': '1',
         })
 
-        reply = TransportUserMessage(**msg.payload).reply("ussd message")
-        yield self.dispatch(reply)
+        yield self.tx_helper.make_dispatch_reply(msg, "ussd message")
         response = yield deferred
         self.assertEqual(response, '1|ussd message|null|null|null|null')
 
@@ -79,7 +76,7 @@ class TestCellulantTransportTestCase(TransportTestCase):
                 )
         deferred = self.mk_request(INPUT='hi', opCode='')
 
-        [msg] = yield self.wait_for_dispatched_messages(1)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assertEqual(msg['content'], 'hi')
         self.assertEqual(msg['to_addr'], '*120*VERY_FAKE_CODE#')
         self.assertEqual(msg['from_addr'], '27761234567')
@@ -89,9 +86,8 @@ class TestCellulantTransportTestCase(TransportTestCase):
             'session_id': '1',
         })
 
-        reply = TransportUserMessage(**msg.payload).reply("hello world",
-            continue_session=False)
-        self.dispatch(reply)
+        yield self.tx_helper.make_dispatch_reply(
+            msg, "hello world", continue_session=False)
         response = yield deferred
         self.assertEqual(response, '1|hello world|null|null|end|null')
 
@@ -114,7 +110,7 @@ class TestCellulantTransportTestCase(TransportTestCase):
         resp = yield self.mk_request(opCode='ABO')
         self.assertEqual(resp, '')
 
-        [msg] = yield self.get_dispatched_messages()
+        [msg] = yield self.tx_helper.get_dispatched_inbound()
         self.assertEqual(msg['session_event'],
                          TransportUserMessage.SESSION_CLOSE)
 
@@ -123,15 +119,14 @@ class TestCellulantTransportTestCase(TransportTestCase):
         # should also return immediately
         resp = yield self.mk_request(ABORT=1)
         self.assertEqual(resp, '')
-        [msg] = yield self.get_dispatched_messages()
+        [msg] = yield self.tx_helper.get_dispatched_inbound()
         self.assertEqual(msg['session_event'],
                          TransportUserMessage.SESSION_CLOSE)
 
     @inlineCallbacks
     def test_nack(self):
-        msg = self.mkmsg_out()
-        self.dispatch(msg)
-        [nack] = yield self.wait_for_dispatched_events(1)
+        msg = yield self.tx_helper.make_dispatch_outbound("foo")
+        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(nack['user_message_id'], msg['message_id'])
         self.assertEqual(nack['sent_message_id'], msg['message_id'])
         self.assertEqual(nack['nack_reason'], 'Missing fields: in_reply_to')

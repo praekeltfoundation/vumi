@@ -1,21 +1,21 @@
-from twisted.trial.unittest import TestCase
-from twisted.internet import reactor
-from twisted.internet.defer import inlineCallbacks, Deferred
-from vumi.blinkenlights import metrics
-from vumi.tests.utils import get_stubbed_worker, get_stubbed_channel, mocking
-from vumi.message import Message
-from vumi.service import Worker
-
 import time
 
+from twisted.internet import reactor
+from twisted.internet.defer import inlineCallbacks, Deferred
 
-class TestMetricManager(TestCase):
+from vumi.blinkenlights import metrics
+from vumi.tests.utils import get_stubbed_channel
+from vumi.message import Message
+from vumi.service import Worker
+from vumi.tests.helpers import VumiTestCase, WorkerHelper
+
+
+class TestMetricManager(VumiTestCase):
 
     def setUp(self):
         self._next_publish = Deferred()
-
-    def tearDown(self):
-        self._next_publish.callback(None)
+        self.add_cleanup(lambda: self._next_publish.callback(None))
+        self.worker_helper = self.add_helper(WorkerHelper())
 
     def on_publish(self, mm):
         d, self._next_publish = self._next_publish, Deferred()
@@ -24,22 +24,28 @@ class TestMetricManager(TestCase):
     def wait_publish(self):
         return self._next_publish
 
+    @inlineCallbacks
+    def start_manager(self, manager):
+        channel = yield get_stubbed_channel(self.worker_helper.broker)
+        manager.start(channel)
+        self.add_cleanup(manager.stop)
+
     def _sleep(self, delay):
         d = Deferred()
         reactor.callLater(delay, lambda: d.callback(None))
         return d
 
-    def _check_msg(self, broker, metric, values):
-        msgs = broker.get_dispatched("vumi.metrics", "vumi.metrics")
+    def _check_msg(self, manager, metric, values):
+        msgs = self.worker_helper.broker.get_dispatched(
+            "vumi.metrics", "vumi.metrics")
         if values is None:
             self.assertEqual(msgs, [])
             return
         content = msgs[-1]
-        name = metric.name
         self.assertEqual(content.properties, {"delivery mode": 2})
         msg = Message.from_json(content.body)
         [datapoint] = msg.payload["datapoints"]
-        self.assertEqual(datapoint[0], name)
+        self.assertEqual(datapoint[0], manager.prefix + metric.name)
         self.assertEqual(datapoint[1], list(metric.aggs))
         # check datapoints within 2s of now -- the truncating of
         # time.time() to an int for timestamps can cause a 1s
@@ -51,10 +57,20 @@ class TestMetricManager(TestCase):
                         % (now, datapoint))
         self.assertEqual([dp[1] for dp in datapoint[2]], values)
 
+    def test_oneshot(self):
+        self.patch(time, "time", lambda: 12345)
+        mm = metrics.MetricManager("vumi.test.")
+        cnt = metrics.Count("my.count")
+        mm.oneshot(cnt, 3)
+        self.assertEqual(cnt.name, "my.count")
+        self.assertEqual(mm._oneshot_msgs, [
+            (cnt, [(12345, 3)]),
+        ])
+
     def test_register(self):
         mm = metrics.MetricManager("vumi.test.")
         cnt = mm.register(metrics.Count("my.count"))
-        self.assertEqual(cnt.name, "vumi.test.my.count")
+        self.assertEqual(cnt.name, "my.count")
         self.assertEqual(mm._metrics, [cnt])
 
     def test_double_register(self):
@@ -68,29 +84,45 @@ class TestMetricManager(TestCase):
         cnt = mm.register(metrics.Count("my.count"))
         self.assertTrue("my.count" in mm)
         self.assertTrue(mm["my.count"] is cnt)
-        self.assertEqual(mm["my.count"].name, "vumi.test.my.count")
+        self.assertEqual(mm["my.count"].name, "my.count")
+
+    @inlineCallbacks
+    def test_publish_metrics_poll(self):
+        mm = metrics.MetricManager("vumi.test.", 0.1, self.on_publish)
+        cnt = mm.register(metrics.Count("my.count"))
+        yield self.start_manager(mm)
+
+        cnt.inc()
+        mm._publish_metrics()
+        self._check_msg(mm, cnt, [1])
+
+    @inlineCallbacks
+    def test_publish_metrics_oneshot(self):
+        mm = metrics.MetricManager("vumi.test.", 0.1, self.on_publish)
+        cnt = metrics.Count("my.count")
+        yield self.start_manager(mm)
+
+        mm.oneshot(cnt, 1)
+        mm._publish_metrics()
+        self._check_msg(mm, cnt, [1])
 
     @inlineCallbacks
     def test_start(self):
-        channel = yield get_stubbed_channel()
-        broker = channel.broker
         mm = metrics.MetricManager("vumi.test.", 0.1, self.on_publish)
         cnt = mm.register(metrics.Count("my.count"))
-        mm.start(channel)
-        try:
-            self.assertTrue(mm._task is not None)
-            self._check_msg(broker, cnt, None)
+        yield self.start_manager(mm)
 
-            cnt.inc()
-            yield self.wait_publish()
-            self._check_msg(broker, cnt, [1])
+        self.assertTrue(mm._task is not None)
+        self._check_msg(mm, cnt, None)
 
-            cnt.inc()
-            cnt.inc()
-            yield self.wait_publish()
-            self._check_msg(broker, cnt, [1, 1])
-        finally:
-            mm.stop()
+        cnt.inc()
+        yield self.wait_publish()
+        self._check_msg(mm, cnt, [1])
+
+        cnt.inc()
+        cnt.inc()
+        yield self.wait_publish()
+        self._check_msg(mm, cnt, [1, 1])
 
     def test_stop_unstarted(self):
         mm = metrics.MetricManager("vumi.test.", 0.1, self.on_publish)
@@ -99,19 +131,18 @@ class TestMetricManager(TestCase):
 
     @inlineCallbacks
     def test_in_worker(self):
-        worker = get_stubbed_worker(Worker)
-        broker = worker._amqp_client.broker
+        worker = yield self.worker_helper.get_worker(Worker, {}, start=False)
         mm = yield worker.start_publisher(metrics.MetricManager,
                                           "vumi.test.", 0.1, self.on_publish)
         acc = mm.register(metrics.Metric("my.acc"))
         try:
             self.assertTrue(mm._task is not None)
-            self._check_msg(broker, acc, None)
+            self._check_msg(mm, acc, None)
 
             acc.set(1.5)
             acc.set(1.0)
             yield self.wait_publish()
-            self._check_msg(broker, acc, [1.5, 1.0])
+            self._check_msg(mm, acc, [1.5, 1.0])
         finally:
             mm.stop()
 
@@ -137,7 +168,7 @@ class TestMetricManager(TestCase):
         self.assertTrue(error.type is BadMetricError)
 
 
-class TestAggregators(TestCase):
+class TestAggregators(VumiTestCase):
     def test_sum(self):
         self.assertEqual(metrics.SUM([]), 0.0)
         self.assertEqual(metrics.SUM([1.0, 2.0]), 3.0)
@@ -204,28 +235,34 @@ class CheckValuesMixin(object):
         self.assertEqual(actual_values, expected_values)
 
 
-class TestMetric(TestCase, CheckValuesMixin):
+class TestMetric(VumiTestCase, CheckValuesMixin):
     def test_manage(self):
+        mm = metrics.MetricManager("vumi.test.")
         metric = metrics.Metric("foo")
-        self.assertEqual(metric.name, None)
-        metric.manage("vumi.test.")
-        self.assertEqual(metric.name, "vumi.test.foo")
+        metric.manage(mm)
+        self.assertEqual(metric.name, "foo")
+        mm2 = metrics.MetricManager("vumi.othertest.")
         self.assertRaises(metrics.MetricRegistrationError, metric.manage,
-                          "vumi.othertest.")
+                          mm2)
+
+    def test_managed(self):
+        metric = metrics.Metric("foo")
+        self.assertFalse(metric.managed)
+        mm = metrics.MetricManager("vumi.test.")
+        metric.manage(mm)
+        self.assertTrue(metric.managed)
 
     def test_poll(self):
         metric = metrics.Metric("foo")
-        metric.manage("prefix.")
         self.check_poll(metric, [])
         metric.set(1.0)
         metric.set(2.0)
         self.check_poll(metric, [1.0, 2.0])
 
 
-class TestCount(TestCase, CheckValuesMixin):
+class TestCount(VumiTestCase, CheckValuesMixin):
     def test_inc_and_poll(self):
         metric = metrics.Count("foo")
-        metric.manage("prefix.")
         self.check_poll(metric, [])
         metric.inc()
         self.check_poll(metric, [1.0])
@@ -235,50 +272,116 @@ class TestCount(TestCase, CheckValuesMixin):
         self.check_poll(metric, [1.0, 1.0])
 
 
-class TestTimer(TestCase, CheckValuesMixin):
+class TestTimer(VumiTestCase, CheckValuesMixin):
+
+    def patch_time(self, starting_value):
+        def fake_time():
+            return self._fake_time
+        self.patch(time, 'time', fake_time)
+        self._fake_time = starting_value
+
+    def incr_fake_time(self, value):
+        self._fake_time += value
+
     def test_start_and_stop(self):
         timer = metrics.Timer("foo")
-        timer.manage("prefix.")
-        with mocking(time.time) as mockt:
-            mockt.return_value = 12345.0
-            timer.start()
-            try:
-                mockt.return_value += 0.1  # feign sleep
-            finally:
-                timer.stop()
-            self.check_poll_func(timer, 1, lambda x: 0.09 < x < 0.11)
-            self.check_poll(timer, [])
+
+        self.patch_time(12345.0)
+        timer.start()
+        self.incr_fake_time(0.1)
+        timer.stop()
+        self.check_poll_func(timer, 1, lambda x: 0.09 < x < 0.11)
+        self.check_poll(timer, [])
 
     def test_already_started(self):
         timer = metrics.Timer("foo")
-        timer.manage("prefix.")
         timer.start()
         self.assertRaises(metrics.TimerAlreadyStartedError, timer.start)
 
+    def test_not_started(self):
+        timer = metrics.Timer("foo")
+        self.assertRaises(metrics.TimerNotStartedError, timer.stop)
+
+    def test_stop_and_stop(self):
+        timer = metrics.Timer("foo")
+        timer.start()
+        timer.stop()
+        self.assertRaises(metrics.TimerNotStartedError, timer.stop)
+
+    def test_double_start_and_stop(self):
+        timer = metrics.Timer("foo")
+        self.patch_time(12345.0)
+        timer.start()
+        self.incr_fake_time(0.1)
+        timer.stop()
+        timer.start()
+        self.incr_fake_time(0.1)
+        timer.stop()
+        self.check_poll_func(timer, 2, lambda x: 0.09 < x < 0.11)
+        self.check_poll(timer, [])
+
     def test_context_manager(self):
         timer = metrics.Timer("foo")
-        timer.manage("prefix.")
-        with mocking(time.time) as mockt:
-            mockt.return_value = 12345.0
-            with timer:
-                mockt.return_value += 0.1  # feign sleep
-            self.check_poll_func(timer, 1, lambda x: 0.09 < x < 0.11)
-            self.check_poll(timer, [])
+        self.patch_time(12345.0)
+        with timer:
+            self.incr_fake_time(0.1)  # feign sleep
+        self.check_poll_func(timer, 1, lambda x: 0.09 < x < 0.11)
+        self.check_poll(timer, [])
 
     def test_accumulate_times(self):
         timer = metrics.Timer("foo")
-        timer.manage("prefix.")
-        with mocking(time.time) as mockt:
-            mockt.return_value = 12345.0
-            with timer:
-                mockt.return_value += 0.1  # feign sleep
-            with timer:
-                mockt.return_value += 0.1  # feign sleep
-            self.check_poll_func(timer, 2, lambda x: 0.09 < x < 0.11)
-            self.check_poll(timer, [])
+        self.patch_time(12345.0)
+        with timer:
+            self.incr_fake_time(0.1)  # feign sleep
+        with timer:
+            self.incr_fake_time(0.1)  # feign sleep
+        self.check_poll_func(timer, 2, lambda x: 0.09 < x < 0.11)
+        self.check_poll(timer, [])
+
+    def test_timeit(self):
+        timer = metrics.Timer("foo")
+        self.patch_time(12345.0)
+        with timer.timeit():
+            self.incr_fake_time(0.1)
+        self.check_poll_func(timer, 1, lambda x: 0.09 < x < 0.11)
+        self.check_poll(timer, [])
+
+    def test_timeit_start_and_stop(self):
+        timer = metrics.Timer("foo")
+        self.patch_time(12345.0)
+        event_timer = timer.timeit()
+        event_timer.start()
+        self.incr_fake_time(0.1)
+        event_timer.stop()
+        self.check_poll_func(timer, 1, lambda x: 0.09 < x < 0.11)
+        self.check_poll(timer, [])
+
+    def test_timeit_start_and_start(self):
+        event_timer = metrics.Timer("foo").timeit()
+        event_timer.start()
+        self.assertRaises(metrics.TimerAlreadyStartedError, event_timer.start)
+
+    def test_timeit_stop_without_start(self):
+        event_timer = metrics.Timer("foo").timeit()
+        self.assertRaises(metrics.TimerNotStartedError, event_timer.stop)
+
+    def test_timeit_stop_and_stop(self):
+        event_timer = metrics.Timer("foo").timeit()
+        event_timer.start()
+        event_timer.stop()
+        self.assertRaises(metrics.TimerAlreadyStoppedError, event_timer.stop)
+
+    def test_timeit_autostart(self):
+        timer = metrics.Timer("foo")
+        self.patch_time(12345.0)
+        event_timer = timer.timeit(start=True)
+        self.incr_fake_time(0.1)
+        event_timer.stop()
+        self.check_poll_func(timer, 1, lambda x: 0.09 < x < 0.11)
+        self.check_poll(timer, [])
 
 
-class TestMetricsConsumer(TestCase):
+class TestMetricsConsumer(VumiTestCase):
     def test_consume_message(self):
         expected_datapoints = [
             ("vumi.test.v1", 1234, 1.0),

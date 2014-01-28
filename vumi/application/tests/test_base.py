@@ -1,11 +1,11 @@
-import warnings
-
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.application.base import ApplicationWorker, SESSION_NEW, SESSION_CLOSE
-from vumi.message import TransportUserMessage, TransportEvent
-from vumi.tests.utils import get_stubbed_worker, LogCatcher
-from vumi.application.tests.utils import ApplicationTestCase
+from vumi.message import TransportUserMessage
+
+from vumi.application.tests.helpers import ApplicationHelper
+from vumi.tests.helpers import VumiTestCase, WorkerHelper
+from vumi.errors import InvalidEndpoint
 
 
 class DummyApplicationWorker(ApplicationWorker):
@@ -38,37 +38,18 @@ class DummyApplicationWorker(ApplicationWorker):
         self.record.append(('close_session', message))
 
 
-class DeprApplicationWorker(DummyApplicationWorker):
-
-    SEND_TO_TAGS = frozenset(['default', 'outbound1'])
-    start_message_consumer = True
-
-
 class EchoApplicationWorker(ApplicationWorker):
     def consume_user_message(self, message):
         self.reply_to(message, message['content'])
 
 
-class FakeUserMessage(TransportUserMessage):
-    def __init__(self, **kw):
-        kw['to_addr'] = 'to'
-        kw['from_addr'] = 'from'
-        kw['transport_name'] = 'test'
-        kw['transport_type'] = 'fake'
-        kw['transport_metadata'] = {}
-        super(FakeUserMessage, self).__init__(**kw)
-
-
-class TestApplicationWorker(ApplicationTestCase):
-
-    application_class = DummyApplicationWorker
+class TestApplicationWorker(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        yield super(TestApplicationWorker, self).setUp()
-        self.transport_name = 'test'
-        self.config = {'transport_name': self.transport_name}
-        self.worker = yield self.get_application(self.config)
+        self.app_helper = self.add_helper(
+            ApplicationHelper(DummyApplicationWorker))
+        self.worker = yield self.app_helper.get_application({})
 
     def assert_msgs_match(self, msgs, expected_msgs):
         for key in ['timestamp', 'message_id']:
@@ -85,14 +66,12 @@ class TestApplicationWorker(ApplicationTestCase):
     @inlineCallbacks
     def test_event_dispatch(self):
         events = [
-            ('ack', self.mkmsg_ack(sent_message_id='remote-id',
-                                   user_message_id='ack-uuid')),
-            ('nack', self.mkmsg_nack(user_message_id='nack-uuid')),
-            ('delivery_report', self.mkmsg_delivery(
-                                        user_message_id='dr-uuid')),
+            ('ack', self.app_helper.make_ack()),
+            ('nack', self.app_helper.make_nack()),
+            ('delivery_report', self.app_helper.make_delivery_report()),
             ]
         for name, event in events:
-            yield self.dispatch_event(event)
+            yield self.app_helper.dispatch_event(event)
             self.assertEqual(self.worker.record, [(name, event)])
             del self.worker.record[:]
 
@@ -100,58 +79,56 @@ class TestApplicationWorker(ApplicationTestCase):
     def test_unknown_event_dispatch(self):
         # temporarily pretend the worker doesn't know about acks
         del self.worker._event_handlers['ack']
-        bad_event = TransportEvent(event_type='ack',
-                                   sent_message_id='remote-id',
-                                   user_message_id='bad-uuid')
-        yield self.dispatch_event(bad_event)
+        bad_event = yield self.app_helper.make_dispatch_ack()
         self.assertEqual(self.worker.record, [('unknown_event', bad_event)])
 
     @inlineCallbacks
     def test_user_message_dispatch(self):
         messages = [
-            ('user_message', FakeUserMessage()),
-            ('new_session', FakeUserMessage(session_event=SESSION_NEW)),
-            ('close_session', FakeUserMessage(session_event=SESSION_CLOSE)),
+            ('user_message', self.app_helper.make_inbound("foo")),
+            ('new_session', self.app_helper.make_inbound(
+                "foo", session_event=SESSION_NEW)),
+            ('close_session', self.app_helper.make_inbound(
+                "foo", session_event=SESSION_CLOSE)),
             ]
         for name, message in messages:
-            yield self.dispatch(message)
+            yield self.app_helper.dispatch_inbound(message)
             self.assertEqual(self.worker.record, [(name, message)])
             del self.worker.record[:]
 
     @inlineCallbacks
     def test_reply_to(self):
-        msg = FakeUserMessage()
+        msg = self.app_helper.make_inbound("foo")
         yield self.worker.reply_to(msg, "More!")
         yield self.worker.reply_to(msg, "End!", False)
-        replies = self.get_dispatched_messages()
+        replies = self.app_helper.get_dispatched_outbound()
         expecteds = [msg.reply("More!"), msg.reply("End!", False)]
         self.assert_msgs_match(replies, expecteds)
 
     @inlineCallbacks
     def test_waiting_message(self):
         # Get rid of the old worker.
-        yield self.worker.stopWorker()
-        self._workers.remove(self.worker)
+        yield self.app_helper.cleanup_worker(self.worker)
+        self.worker = None
 
         # Stick a message on the queue before starting the worker so it will be
         # received as soon as the message consumer starts consuming.
-        msg = FakeUserMessage(content="Hello!")
-        yield self.dispatch(msg)
+        msg = yield self.app_helper.make_dispatch_inbound("Hello!")
 
         # Start the app and process stuff.
-        self.application_class = EchoApplicationWorker
-        self.worker = yield self.get_application(self.config)
+        self.worker = yield self.app_helper.get_application(
+            {}, EchoApplicationWorker)
 
-        replies = yield self.wait_for_dispatched_messages(1)
+        replies = yield self.app_helper.wait_for_dispatched_outbound(1)
 
         expecteds = [msg.reply("Hello!")]
         self.assert_msgs_match(replies, expecteds)
 
     @inlineCallbacks
     def test_reply_to_group(self):
-        msg = FakeUserMessage()
+        msg = self.app_helper.make_inbound("foo")
         yield self.worker.reply_to_group(msg, "Group!")
-        replies = self.get_dispatched_messages()
+        replies = self.app_helper.get_dispatched_outbound()
         expecteds = [msg.reply_group("Group!")]
         self.assert_msgs_match(replies, expecteds)
 
@@ -159,7 +136,7 @@ class TestApplicationWorker(ApplicationTestCase):
     def test_send_to(self):
         sent_msg = yield self.worker.send_to(
             '+12345', "Hi!", endpoint="default")
-        sends = self.get_dispatched_messages()
+        sends = self.app_helper.get_dispatched_outbound()
         expecteds = [TransportUserMessage.send(
             '+12345', "Hi!", transport_name=None)]
         self.assert_msgs_match(sends, expecteds)
@@ -170,7 +147,7 @@ class TestApplicationWorker(ApplicationTestCase):
         sent_msg = yield self.worker.send_to(
             '+12345', "Hi!", endpoint="outbound1",
             transport_type=TransportUserMessage.TT_USSD)
-        sends = self.get_dispatched_messages()
+        sends = self.app_helper.get_dispatched_outbound()
         expecteds = [TransportUserMessage.send(
             '+12345', "Hi!", transport_type=TransportUserMessage.TT_USSD)]
         expecteds[0].set_routing_endpoint("outbound1")
@@ -178,15 +155,15 @@ class TestApplicationWorker(ApplicationTestCase):
         self.assert_msgs_match(sends, expecteds)
 
     def test_subclassing_api(self):
-        worker = get_stubbed_worker(ApplicationWorker,
-                                    {'transport_name': 'test'})
-        worker.consume_ack(self.mkmsg_ack())
-        worker.consume_nack(self.mkmsg_nack())
-        worker.consume_delivery_report(self.mkmsg_delivery())
-        worker.consume_unknown_event(FakeUserMessage())
-        worker.consume_user_message(FakeUserMessage())
-        worker.new_session(FakeUserMessage())
-        worker.close_session(FakeUserMessage())
+        worker = WorkerHelper.get_worker_raw(
+            ApplicationWorker, {'transport_name': 'test'})
+        worker.consume_ack(self.app_helper.make_ack())
+        worker.consume_nack(self.app_helper.make_nack())
+        worker.consume_delivery_report(self.app_helper.make_delivery_report())
+        worker.consume_unknown_event(self.app_helper.make_inbound("foo"))
+        worker.consume_user_message(self.app_helper.make_inbound("foo"))
+        worker.new_session(self.app_helper.make_inbound("foo"))
+        worker.close_session(self.app_helper.make_inbound("foo"))
 
     def get_app_consumers(self, app):
         for connector in app.connectors.values():
@@ -195,7 +172,7 @@ class TestApplicationWorker(ApplicationTestCase):
 
     @inlineCallbacks
     def test_application_prefetch_count_custom(self):
-        app = yield self.get_application({
+        app = yield self.app_helper.get_application({
             'transport_name': 'test',
             'amqp_prefetch_count': 10,
             })
@@ -204,7 +181,7 @@ class TestApplicationWorker(ApplicationTestCase):
 
     @inlineCallbacks
     def test_application_prefetch_count_default(self):
-        app = yield self.get_application({
+        app = yield self.app_helper.get_application({
             'transport_name': 'test',
             })
         for consumer in self.get_app_consumers(app):
@@ -212,50 +189,40 @@ class TestApplicationWorker(ApplicationTestCase):
 
     @inlineCallbacks
     def test_application_prefetch_count_none(self):
-        app = yield self.get_application({
+        app = yield self.app_helper.get_application({
             'transport_name': 'test',
             'amqp_prefetch_count': None,
             })
         for consumer in self.get_app_consumers(app):
             self.assertFalse(consumer.channel.qos_prefetch_count)
 
-    @inlineCallbacks
-    def test_deprecated_methods_warning(self):
-        class DeprApp(ApplicationWorker):
-            def _setup_transport_publisher(self):
-                return super(DeprApp, self)._setup_transport_publisher()
-
-        with warnings.catch_warnings(record=True) as warns:
-            yield self.get_application({})
-        self.assertEqual(warns, [])
-
-        with warnings.catch_warnings(record=True) as warns:
-            yield self.get_application({}, DeprApp)
-        self.assertEqual(len(warns), 2)
+    def test_check_endpoints(self):
+        app = yield self.app_helper.get_application({})
+        check = app.check_endpoint
+        self.assertNotRaises(InvalidEndpoint, check, None, None)
+        self.assertNotRaises(InvalidEndpoint, check, None, 'foo')
+        self.assertNotRaises(InvalidEndpoint, check, ['default'], None)
+        self.assertNotRaises(InvalidEndpoint, check, ['foo'], 'foo')
+        self.assertRaises(InvalidEndpoint, check, [], None)
+        self.assertRaises(InvalidEndpoint, check, ['foo'], 'bar')
 
 
-class TestDeprApplicationWorker(ApplicationTestCase):
-
-    application_class = DeprApplicationWorker
+class TestApplicationWorkerWithSendToConfig(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        yield super(TestDeprApplicationWorker, self).setUp()
-        self.transport_name = 'test'
-        self.config = {
-            'transport_name': self.transport_name,
+        self.app_helper = self.add_helper(
+            ApplicationHelper(DummyApplicationWorker))
+        self.worker = yield self.app_helper.get_application({
             'send_to': {
                 'default': {
                     'transport_name': 'default_transport',
-                    },
+                },
                 'outbound1': {
                     'transport_name': 'outbound1_transport',
-                    },
                 },
-            }
-        with warnings.catch_warnings(record=True) as warns:
-            self.worker = yield self.get_application(self.config)
-        self.warns = warns[:]
+            },
+        })
 
     def assert_msgs_match(self, msgs, expected_msgs):
         for key in ['timestamp', 'message_id']:
@@ -269,115 +236,50 @@ class TestDeprApplicationWorker(ApplicationTestCase):
             self.assertEqual(msg, expected_msg)
         self.assertEqual(len(msgs), len(expected_msgs))
 
-    def assert_warnings(self, warning_strs):
-        warning_strs = [
-            "SEND_TO_TAGS is deprecated.",
-            "'send_to' configuration is deprecated.",
-            "The 'start_message_consumer' attribute is deprecated.",
-        ] + warning_strs
-        self.assertEqual(len(self.warns), len(warning_strs))
-        for warning_obj, warning_str in zip(self.warns, warning_strs):
-            self.assertTrue(
-                warning_str in str(warning_obj.message),
-                "Warning message %r does not contain %r." % (
-                    str(warning_obj.message), warning_str))
-
     @inlineCallbacks
     def send_to(self, *args, **kw):
-        with warnings.catch_warnings(record=True) as warns:
-            sent_msg = yield self.worker.send_to(*args, **kw)
-        self.warns.extend(warns)
+        sent_msg = yield self.worker.send_to(*args, **kw)
         returnValue(sent_msg)
 
     @inlineCallbacks
     def test_send_to(self):
         sent_msg = yield self.send_to('+12345', "Hi!")
-        sends = self.get_dispatched_messages()
+        sends = self.app_helper.get_dispatched_outbound()
         expecteds = [TransportUserMessage.send('+12345', "Hi!",
                 transport_name='default_transport')]
         self.assert_msgs_match(sends, expecteds)
         self.assert_msgs_match(sends, [sent_msg])
-        self.assert_warnings([
-            "The 'tag' parameter to send_to() is deprecated."])
 
     @inlineCallbacks
     def test_send_to_with_options(self):
         sent_msg = yield self.send_to(
             '+12345', "Hi!", transport_type=TransportUserMessage.TT_USSD)
-        sends = self.get_dispatched_messages()
+        sends = self.app_helper.get_dispatched_outbound()
         expecteds = [TransportUserMessage.send('+12345', "Hi!",
                 transport_type=TransportUserMessage.TT_USSD,
                 transport_name='default_transport')]
         self.assert_msgs_match(sends, expecteds)
         self.assert_msgs_match(sends, [sent_msg])
-        self.assert_warnings([
-            "The 'tag' parameter to send_to() is deprecated."])
 
     @inlineCallbacks
-    def test_send_to_with_tag(self):
+    def test_send_to_with_endpoint(self):
         sent_msg = yield self.send_to('+12345', "Hi!", "outbound1",
                 transport_type=TransportUserMessage.TT_USSD)
-        sends = self.get_dispatched_messages()
+        sends = self.app_helper.get_dispatched_outbound()
         expecteds = [TransportUserMessage.send('+12345', "Hi!",
                 transport_type=TransportUserMessage.TT_USSD,
                 transport_name='outbound1_transport')]
         expecteds[0].set_routing_endpoint("outbound1")
         self.assert_msgs_match(sends, expecteds)
         self.assert_msgs_match(sends, [sent_msg])
-        self.assert_warnings([
-            "The 'tag' parameter to send_to() is deprecated."])
 
     @inlineCallbacks
-    def test_send_to_with_bad_tag(self):
+    def test_send_to_with_bad_endpoint(self):
         yield self.assertFailure(
-            self.send_to('+12345', "Hi!", "outbound_unknown"), ValueError)
-        self.assert_warnings([])
-
-    @inlineCallbacks
-    def test_send_to_with_no_send_to_tags(self):
-        config = {'transport_name': 'badconfig_app', 'send_to': {}}
-        with warnings.catch_warnings(record=True) as warns:
-            with LogCatcher(message=r'is required\.$') as lc:
-                yield self.get_application(config)
-                def_log, out1_log = sorted(lc.messages())
-        self.assertTrue(def_log.startswith(
-            "No configuration for send_to tag 'default'."))
-        self.assertTrue(out1_log.startswith(
-            "No configuration for send_to tag 'outbound1'."))
-        self.warns.extend(warns)
-        self.assert_warnings([
-            "SEND_TO_TAGS is deprecated.",
-            "The 'start_message_consumer' attribute is deprecated.",
-        ])
-
-    @inlineCallbacks
-    def test_send_to_with_bad_config(self):
-        config = {'transport_name': 'badconfig_app',
-                  'send_to': {
-                      'default': {},  # missing transport_name
-                      'outbound1': {},  # also missing transport_name
-                      },
-                  }
-        with warnings.catch_warnings(record=True) as warns:
-            with LogCatcher(message=r'is required\.$') as lc:
-                yield self.get_application(config)
-                def_log, out1_log = sorted(lc.messages())
-        self.assertTrue(def_log.startswith(
-            "No transport_name configured for send_to tag 'default'."))
-        self.assertTrue(out1_log.startswith(
-            "No transport_name configured for send_to tag 'outbound1'."))
-        self.warns.extend(warns)
-        self.assert_warnings([
-            "SEND_TO_TAGS is deprecated.",
-            "'send_to' configuration is deprecated.",
-            "The 'start_message_consumer' attribute is deprecated.",
-        ])
+            self.send_to('+12345', "Hi!", "outbound_unknown"), InvalidEndpoint)
 
 
-class TestApplicationMiddlewareHooks(ApplicationTestCase):
-
-    transport_name = 'carrier_pigeon'
-    application_class = ApplicationWorker
+class TestApplicationMiddlewareHooks(VumiTestCase):
 
     TEST_MIDDLEWARE_CONFIG = {
         "middleware": [
@@ -386,43 +288,44 @@ class TestApplicationMiddlewareHooks(ApplicationTestCase):
         ],
     }
 
+    def setUp(self):
+        self.app_helper = self.add_helper(ApplicationHelper(ApplicationWorker))
+
     @inlineCallbacks
     def test_middleware_for_inbound_messages(self):
-        app = yield self.get_application(self.TEST_MIDDLEWARE_CONFIG)
+        app = yield self.app_helper.get_application(
+            self.TEST_MIDDLEWARE_CONFIG)
         msgs = []
         app.consume_user_message = msgs.append
-        orig_msg = self.mkmsg_in()
-        orig_msg['timestamp'] = 0
-        yield self.dispatch(orig_msg)
+        yield self.app_helper.make_dispatch_inbound("hi")
         [msg] = msgs
         self.assertEqual(msg['record'], [
-            ('mw1', 'inbound', self.transport_name),
-            ('mw2', 'inbound', self.transport_name),
+            ('mw1', 'inbound', self.app_helper.transport_name),
+            ('mw2', 'inbound', self.app_helper.transport_name),
             ])
 
     @inlineCallbacks
     def test_middleware_for_events(self):
-        app = yield self.get_application(self.TEST_MIDDLEWARE_CONFIG)
+        app = yield self.app_helper.get_application(
+            self.TEST_MIDDLEWARE_CONFIG)
         msgs = []
         app._event_handlers['ack'] = msgs.append
-        orig_msg = self.mkmsg_ack()
-        orig_msg['event_id'] = 1234
-        orig_msg['timestamp'] = 0
-        yield self.dispatch_event(orig_msg)
+        yield self.app_helper.make_dispatch_ack()
         [msg] = msgs
         self.assertEqual(msg['record'], [
-            ('mw1', 'event', self.transport_name),
-            ('mw2', 'event', self.transport_name),
+            ('mw1', 'event', self.app_helper.transport_name),
+            ('mw2', 'event', self.app_helper.transport_name),
             ])
 
     @inlineCallbacks
     def test_middleware_for_outbound_messages(self):
-        app = yield self.get_application(self.TEST_MIDDLEWARE_CONFIG)
-        orig_msg = self.mkmsg_out()
+        app = yield self.app_helper.get_application(
+            self.TEST_MIDDLEWARE_CONFIG)
+        orig_msg = self.app_helper.make_inbound("hi")
         yield app.reply_to(orig_msg, 'Hello!')
-        msgs = self.get_dispatched_messages()
+        msgs = self.app_helper.get_dispatched_outbound()
         [msg] = msgs
         self.assertEqual(msg['record'], [
-            ['mw2', 'outbound', self.transport_name],
-            ['mw1', 'outbound', self.transport_name],
+            ['mw2', 'outbound', self.app_helper.transport_name],
+            ['mw1', 'outbound', self.app_helper.transport_name],
             ])

@@ -5,13 +5,14 @@
 Includes a publisher, a consumer and a set of simple metrics.
 """
 
+import time
+import warnings
+
 from twisted.internet.task import LoopingCall
 from twisted.python import log
 
 from vumi.service import Publisher, Consumer
 from vumi.blinkenlights.message20110818 import MetricMessage
-
-import time
 
 
 class MetricManager(Publisher):
@@ -36,8 +37,9 @@ class MetricManager(Publisher):
 
     def __init__(self, prefix, publish_interval=5, on_publish=None):
         self.prefix = prefix
-        self._metrics = []  # list of metric objects
-        self._metrics_lookup = {}  # metric suffix -> metric
+        self._metrics = []  # list of metrics to poll
+        self._oneshot_msgs = []  # list of oneshot messages since last publish
+        self._metrics_lookup = {}  # metric name -> metric
         self._publish_interval = publish_interval
         self._task = None  # created in .start()
         self._on_publish = on_publish
@@ -58,11 +60,32 @@ class MetricManager(Publisher):
 
     def _publish_metrics(self):
         msg = MetricMessage()
+        # oneshot metrics
+        oneshots, self._oneshot_msgs = self._oneshot_msgs, []
+        for metric, values in oneshots:
+            msg.append(
+                (self.prefix + metric.name, metric.aggs, values))
+        # polled metrics
         for metric in self._metrics:
-            msg.append((metric.name, metric.aggs, metric.poll()))
+            msg.append(
+                (self.prefix + metric.name, metric.aggs, metric.poll()))
         self.publish_message(msg)
         if self._on_publish is not None:
             self._on_publish(self)
+
+    def oneshot(self, metric, value):
+        """Publish a single value for the given metric.
+
+        :type metric: :class:`Metric`
+        :param metric:
+            Metric object to register. Will have the manager's prefix
+            added to its name.
+        :type value: float
+        :param value:
+            The value to publish for the metric.
+        """
+        self._oneshot_msgs.append(
+            (metric, [(int(time.time()), value)]))
 
     def register(self, metric):
         """Register a new metric object to be managed by this metric set.
@@ -71,17 +94,17 @@ class MetricManager(Publisher):
 
         :type metric: :class:`Metric`
         :param metric:
-            Metric object to register. Will have the manager's prefix
-            added to its name.
+            Metric object to register. The metric will have its `.manage()`
+            method called with this manager as the manager.
         :rtype:
             For convenience, returns the metric passed in.
         """
-        metric.manage(self.prefix)
+        metric.manage(self)
         self._metrics.append(metric)
-        if metric.suffix in self._metrics_lookup:
+        if metric.name in self._metrics_lookup:
             raise MetricRegistrationError("Duplicate metric name %s"
                                           % metric.name)
-        self._metrics_lookup[metric.suffix] = metric
+        self._metrics_lookup[metric.name] = metric
         return metric
 
     def __getitem__(self, suffix):
@@ -142,10 +165,11 @@ class Metric(object):
     Values set are collected and polled periodically by the metric
     manager.
 
-    :type suffix: str
-    :param suffix:
-        Suffix to append to the :class:`MetricManager`
-        prefix to create the metric name.
+    :type name: str
+    :param name:
+        Name of this metric. Will be appened to the
+        :class:`MetricManager` prefix when this metric
+        is published.
     :type aggregators: list of aggregators, optional
     :param aggregators:
         List of aggregation functions to request
@@ -158,27 +182,31 @@ class Metric(object):
     >>> my_val = mm.register(Metric('my.value'))
     >>> my_val.set(1.5)
     >>> my_val.name
-    'vumi.worker0.my.value'
+    'my.value'
     """
 
     #: Default aggregators are [:data:`AVG`]
     DEFAULT_AGGREGATORS = [AVG]
 
-    def __init__(self, suffix, aggregators=None):
+    def __init__(self, name, aggregators=None):
         if aggregators is None:
             aggregators = self.DEFAULT_AGGREGATORS
-        self.name = None  # set when prefix is set
+        self.name = name
         self.aggs = tuple(sorted(agg.name for agg in aggregators))
-        self.suffix = suffix
+        self._manager = None
         self._values = []  # list of unpolled values
 
-    def manage(self, prefix):
+    @property
+    def managed(self):
+        return self._manager is not None
+
+    def manage(self, manager):
         """Called by :class:`MetricManager` when this metric is registered."""
-        if self.name is not None:
-            raise MetricRegistrationError("Metric %s%s already registered"
-                                          " with a MetricManager." %
-                                          (prefix, self.suffix))
-        self.name = prefix + self.suffix
+        if self._manager is not None:
+            raise MetricRegistrationError(
+                "Metric %s already registered with MetricManager with"
+                " prefix %s." % (self.name, self._manager.prefix))
+        self._manager = manager
 
     def set(self, value):
         """Append a value for later polling."""
@@ -208,8 +236,59 @@ class Count(Metric):
         self.set(1.0)
 
 
-class TimerAlreadyStartedError(Exception):
-    pass
+class TimerError(Exception):
+    """Raised when an error occurs in a call to an EventTimer method."""
+
+
+class TimerAlreadyStartedError(TimerError):
+    """Raised when attempting to start an EventTimer that is already started.
+    """
+
+
+class TimerNotStartedError(TimerError):
+    """Raised when attempting to stop an EventTimer that was not started.
+    """
+
+
+class TimerAlreadyStoppedError(TimerError):
+    """Raised when attempting to stop an EventTimer that is already stopped.
+    """
+
+
+class EventTimer(object):
+    def __init__(self, timer, start=False):
+        self._timer = timer
+        self._start_time = None
+        self._stop_time = None
+        if start:
+            self.start()
+
+    def __enter__(self):
+        self.start()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.stop()
+        return False
+
+    def start(self):
+        if self._start_time is not None:
+            raise TimerAlreadyStartedError("Attempt to start timer %r that"
+                                           " was already started" %
+                                           (self._timer.name,))
+        self._start_time = time.time()
+
+    def stop(self):
+        if self._start_time is None:
+            raise TimerNotStartedError("Attempt to stop timer %r that"
+                                       " has not been started" %
+                                       (self._timer.name,))
+        if self._stop_time is not None:
+            raise TimerAlreadyStoppedError("Attempt to stop timer %r that"
+                                           " has already been stopped" %
+                                           (self._timer.name,))
+        self._stop_time = time.time()
+        self._timer.set(self._stop_time - self._start_time)
 
 
 class Timer(Metric):
@@ -222,16 +301,43 @@ class Timer(Metric):
 
     Using the timer as a context manager:
 
-    >>> with my_timer:
+    >>> with my_timer.timeit():
     >>>     process_data()
 
-    Or equivalently using .start() and stop() directly:
+    Using the timer without a context manager:
 
-    >>> my_timer.start()
-    >>> try:
-    >>>     process_other_data()
-    >>> finally:
-    >>>     my_timer.stop()
+    >>> event_timer = my_timer.timeit()
+    >>> event_timer.start()
+    >>> d = process_other_data()
+    >>> d.addCallback(lambda r: event_timer.stop())
+
+    Note that timers returned by `timeit` may only have `start` and `stop`
+    called on them once (and only in that order).
+
+    .. note::
+
+       Using ``.start()`` or ``.stop()`` directly or via using the
+       :class:`Timer` instance itself as a context manager is
+       deprecated because they are not re-entrant and it's easy to
+       accidentally overlap multiple calls to ``.start()`` and ``.stop()`` on
+       the same :class:`Timer` instance (e.g. by letting the reactor run in
+       between).
+
+       All applications should be updated to use ``.timeit()``.
+
+       Deprecated use of ``.start()`` and ``.stop()``:
+
+       >>> my_timer.start()
+       >>> try:
+       >>>     process_other_data()
+       >>> finally:
+       >>>     my_timer.stop()
+
+       Deprecated use of ``.start()`` and ``.stop()`` via using the
+       :class:`Timer` itself as a context manager:
+
+       >>> with my_timer:
+       >>>     process_more_data()
     """
 
     #: Default aggregators are [:data:`AVG`]
@@ -239,27 +345,34 @@ class Timer(Metric):
 
     def __init__(self, *args, **kws):
         super(Timer, self).__init__(*args, **kws)
-        self._start_time = None
+        self._event_timer = EventTimer(self)
 
     def __enter__(self):
-        self.start()
-        return self
+        warnings.warn(
+            "Use of Timer directly as a context manager is deprecated."
+            " Please use Timer.timeit() instead.",
+            DeprecationWarning)
+        return self._event_timer.__enter__()
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.stop()
-        return False
+        result = self._event_timer.__exit__(exc_type, exc_val, exc_tb)
+        self._event_timer = EventTimer(self)
+        return result
+
+    def timeit(self, start=False):
+        return EventTimer(self, start=start)
 
     def start(self):
-        if self._start_time is not None:
-            raise TimerAlreadyStartedError("Attempt to start timer %s that "
-                                           "was already started" %
-                                           (self.name,))
-        self._start_time = time.time()
+        warnings.warn(
+            "Use of Timer.start() is deprecated."
+            " Please use Timer.timeit() instead.",
+            DeprecationWarning)
+        return self._event_timer.start()
 
     def stop(self):
-        duration = time.time() - self._start_time
-        self._start_time = None
-        self.set(duration)
+        result = self._event_timer.stop()
+        self._event_timer = EventTimer(self)
+        return result
 
 
 class MetricsConsumer(Consumer):

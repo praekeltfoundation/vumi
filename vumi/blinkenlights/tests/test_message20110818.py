@@ -1,9 +1,10 @@
-from twisted.trial.unittest import TestCase
-import vumi.blinkenlights.message20110818 as message
 import time
 
+import vumi.blinkenlights.message20110818 as message
+from vumi.tests.helpers import VumiTestCase
 
-class TestMessage(TestCase):
+
+class TestMessage(VumiTestCase):
 
     def test_to_dict(self):
         now = time.time()

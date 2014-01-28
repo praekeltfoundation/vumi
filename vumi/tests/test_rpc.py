@@ -2,14 +2,13 @@
 
 """Tests for vumi.rpc."""
 
-from twisted.trial.unittest import TestCase
-
 from vumi.rpc import (
     RpcCheckError, Signature, signature, RpcType, Null, Unicode, Int, List,
     Dict, Tag)
+from vumi.tests.helpers import VumiTestCase
 
 
-class TestSignature(TestCase):
+class TestSignature(VumiTestCase):
     def test_check_params(self):
         s = Signature(lambda slf, x, y: x, x=Int(), y=Unicode())
         s.check_params([None, 1, u"a"], {})
@@ -62,7 +61,7 @@ def dummy_function(a, b):
     return unicode(a * b)
 
 
-class TestSignatureDecorate(TestCase):
+class TestSignatureDecorate(VumiTestCase):
     def test_decorate_unbound_method(self):
         api = DummyApi()
         self.assertEqual(api.test.signature, [['null', 'string', 'int']])
@@ -87,7 +86,7 @@ class TestSignatureDecorate(TestCase):
         self.assertRaises(RpcCheckError, dummy_function, u"a", 1, 2)
 
 
-class TestRpcType(TestCase):
+class TestRpcType(VumiTestCase):
     def test_jsonrpc_type(self):
         self.assertEqual(RpcType.jsonrpc_type, None)
 
@@ -114,7 +113,7 @@ class TestRpcType(TestCase):
         self.assertRaises(RpcCheckError, RpcType().check, "name", "foo")
 
 
-class TestNull(TestCase):
+class TestNull(VumiTestCase):
     def test_jsonrpc_type(self):
         self.assertEqual(Null.jsonrpc_type, 'null')
 
@@ -124,7 +123,7 @@ class TestNull(TestCase):
         self.assertRaises(RpcCheckError, n.check, "name", 1)
 
 
-class TestUnicode(TestCase):
+class TestUnicode(VumiTestCase):
     def test_jsonrpc_type(self):
         self.assertEqual(Unicode.jsonrpc_type, 'string')
 
@@ -135,7 +134,7 @@ class TestUnicode(TestCase):
         self.assertRaises(RpcCheckError, u.check, "name", 1)
 
 
-class TestInt(TestCase):
+class TestInt(VumiTestCase):
     def test_jsonrpc_type(self):
         self.assertEqual(Int.jsonrpc_type, 'int')
 
@@ -145,7 +144,7 @@ class TestInt(TestCase):
         self.assertRaises(RpcCheckError, i.check, "name", "foo")
 
 
-class TestList(TestCase):
+class TestList(VumiTestCase):
     def test_jsonrpc_type(self):
         self.assertEqual(List.jsonrpc_type, 'array')
 
@@ -168,7 +167,7 @@ class TestList(TestCase):
         self.assertRaises(RpcCheckError, l.check, "name", [1, 2, 3])
 
 
-class TestDict(TestCase):
+class TestDict(VumiTestCase):
     def test_jsonrpc_type(self):
         self.assertEqual(Dict.jsonrpc_type, 'struct')
 
@@ -223,7 +222,7 @@ class TestDict(TestCase):
                           {'foo': 1, 'bar': 2, 'extra': 3})
 
 
-class TestTag(TestCase):
+class TestTag(VumiTestCase):
     def test_jsonrpc_type(self):
         self.assertEqual(Tag.jsonrpc_type, 'array')
 

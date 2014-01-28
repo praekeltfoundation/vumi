@@ -4,11 +4,12 @@
 
 from twisted.internet import reactor
 from twisted.internet.protocol import ServerFactory
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, Deferred, gatherResults
 from twisted.conch.telnet import (TelnetTransport, TelnetProtocol,
                                     StatefulTelnetProtocol)
 from twisted.python import log
 
+from vumi.config import ConfigServerEndpoint, ConfigText
 from vumi.transports import Transport
 from vumi.message import TransportUserMessage
 
@@ -81,34 +82,37 @@ class AddressedTelnetTransportProtocol(StatefulTelnetProtocol):
             self.vumi_transport.deregister_client(self)
 
 
+class TelnetServerConfig(Transport.CONFIG_CLASS):
+    """
+    Telnet transport configuration.
+    """
+    twisted_endpoint = ConfigServerEndpoint(
+        "The endpoint the Telnet server will listen on.",
+        fallbacks=('telnet_host', 'telnet_port'),
+        required=True, static=True)
+    to_addr = ConfigText(
+        "The to_addr to use for inbound messages. The default is to use"
+        " the host:port of the telnet server.",
+        default=None, static=True)
+    transport_type = ConfigText(
+        "The transport_type to use for inbound messages.",
+        default='telnet', static=True)
+
+
 class TelnetServerTransport(Transport):
     """Telnet based transport.
 
     This transport listens on a specified port for telnet
     clients and routes lines to and from connected clients.
-
-    Telnet transport options:
-
-    :type telnet_port: int
-    :param telnet_port:
-        Port for the telnet server to listen on.
-    :type to_addr: str
-    :param to_addr:
-        The to_addr to use for the telnet server.
-        Defaults to 'host:port'.
-    :param transport_type:
-        The transport_type to use for the telnet server.
-        Defaults to 'telnet'.
     """
-    protocol = TelnetTransportProtocol
+    CONFIG_CLASS = TelnetServerConfig
 
-    def validate_config(self):
-        self.telnet_port = int(self.config['telnet_port'])
-        self._to_addr = self.config.get('to_addr')
-        self._transport_type = self.config.get('transport_type', 'telnet')
+    protocol = TelnetTransportProtocol
+    telnet_server = None
 
     @inlineCallbacks
     def setup_transport(self):
+        config = self.get_static_config()
         self._clients = {}
 
         def protocol():
@@ -116,20 +120,33 @@ class TelnetServerTransport(Transport):
 
         factory = ServerFactory()
         factory.protocol = protocol
-        self.telnet_server = yield reactor.listenTCP(self.telnet_port,
-                                                     factory)
+
+        self.telnet_server = yield config.twisted_endpoint.listen(factory)
+
+        self._transport_type = config.transport_type
+        self._to_addr = config.to_addr
         if self._to_addr is None:
             self._to_addr = self._format_addr(self.telnet_server.getHost())
 
     @inlineCallbacks
     def teardown_transport(self):
         if hasattr(self, 'telnet_server'):
-            yield self.telnet_server.loseConnection()
+            # We need to wait for all the client connections to be closed (and
+            # their deregistration messages sent) before tearing down the rest
+            # of the transport.
+            wait_for_closed = gatherResults([
+                client.registration_d for client in self._clients.values()])
+            if self.telnet_server is not None:
+                self.telnet_server.loseConnection()
+            yield wait_for_closed
 
     def _format_addr(self, addr):
         return "%s:%s" % (addr.host, addr.port)
 
     def register_client(self, client):
+        # We add our own Deferred to the client here because we only want to
+        # fire it after we're finished with our own deregistration process.
+        client.registration_d = Deferred()
         client_addr = client.getAddress()
         log.msg("Registering client connected from %r" % client_addr)
         self._clients[client_addr] = client
@@ -138,9 +155,10 @@ class TelnetServerTransport(Transport):
 
     def deregister_client(self, client):
         log.msg("Deregistering client.")
-        self.send_inbound_message(client, None,
-                                  TransportUserMessage.SESSION_CLOSE)
+        self.send_inbound_message(
+            client, None, TransportUserMessage.SESSION_CLOSE)
         del self._clients[client.getAddress()]
+        client.registration_d.callback(None)
 
     def handle_input(self, client, text):
         self.send_inbound_message(client, text,

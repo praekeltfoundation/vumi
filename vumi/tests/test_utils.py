@@ -1,11 +1,11 @@
 import os.path
 
-from twisted.trial.unittest import TestCase
 from twisted.internet import reactor
 from twisted.internet.defer import Deferred, inlineCallbacks
 from twisted.web.server import Site, NOT_DONE_YET
 from twisted.web.resource import Resource
 from twisted.web import http
+from twisted.web.client import WebClientContextFactory, Agent
 from twisted.internet.protocol import Protocol, Factory
 
 from vumi.utils import (normalize_msisdn, vumi_resource_path, cleanup_msisdn,
@@ -13,7 +13,7 @@ from vumi.utils import (normalize_msisdn, vumi_resource_path, cleanup_msisdn,
                         get_first_word, redis_from_config, build_web_site,
                         LogFilterSite)
 from vumi.persist.fake_redis import FakeRedis
-from vumi.tests.utils import import_skip
+from vumi.tests.helpers import VumiTestCase, import_skip
 
 
 class DummyRequest(object):
@@ -22,13 +22,7 @@ class DummyRequest(object):
         self.prepath = prepath
 
 
-class UtilsTestCase(TestCase):
-    def setUp(self):
-        pass
-
-    def tearDown(self):
-        pass
-
+class TestUtils(VumiTestCase):
     def test_normalize_msisdn(self):
         self.assertEqual(normalize_msisdn('0761234567', '27'),
                          '+27761234567')
@@ -118,9 +112,7 @@ class FakeHTTP10(Protocol):
         self.transport.loseConnection()
 
 
-class HttpUtilsTestCase(TestCase):
-
-    timeout = 3
+class TestHttpUtils(VumiTestCase):
 
     class InterruptHttp(Exception):
         """Indicates that test server should halt http reply"""
@@ -132,12 +124,10 @@ class HttpUtilsTestCase(TestCase):
         self.root.isLeaf = True
         site_factory = Site(self.root)
         self.webserver = yield reactor.listenTCP(0, site_factory)
+        # This is a lambda because we replace self.webserver in a test.
+        self.add_cleanup(lambda: self.webserver.loseConnection())
         addr = self.webserver.getHost()
         self.url = "http://%s:%s/" % (addr.host, addr.port)
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield self.webserver.loseConnection()
 
     def set_render(self, f, d=None):
         def render(request):
@@ -168,6 +158,23 @@ class HttpUtilsTestCase(TestCase):
         self.set_render(err)
         data = yield http_request(self.url, '')
         self.assertEqual(data, "Bad")
+
+    @inlineCallbacks
+    def test_http_request_with_custom_context_factory(self):
+        self.set_render(lambda r: "Yay")
+
+        ctxt = WebClientContextFactory()
+
+        class FakeAgent(Agent):
+            def __init__(slf, reactor, contextFactory=None):
+                self.assertEqual(contextFactory, ctxt)
+                super(FakeAgent, slf).__init__(reactor, contextFactory)
+
+        request = yield http_request_full(self.url, '',
+                                          context_factory=ctxt,
+                                          agent_class=FakeAgent)
+        self.assertEqual(request.delivered_body, "Yay")
+        self.assertEqual(request.code, http.OK)
 
     @inlineCallbacks
     def test_http_request_full_drop(self):
@@ -257,6 +264,15 @@ class HttpUtilsTestCase(TestCase):
 
         d.addBoth(check_response)
         yield d
+
+    @inlineCallbacks
+    def test_http_request_full_ok_with_timeout_set(self):
+        # If we don't cancel the pending timeout check this test will fail with
+        # a dirty reactor.
+        self.set_render(lambda r: "Yay")
+        request = yield http_request_full(self.url, '', timeout=100)
+        self.assertEqual(request.delivered_body, "Yay")
+        self.assertEqual(request.code, http.OK)
 
     @inlineCallbacks
     def test_http_request_full_timeout_before_connect(self):

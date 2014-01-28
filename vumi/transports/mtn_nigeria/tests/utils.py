@@ -1,4 +1,5 @@
-from twisted.internet.defer import Deferred, inlineCallbacks
+from twisted.internet.defer import (
+    Deferred, inlineCallbacks, gatherResults, maybeDeferred)
 from twisted.internet import reactor
 from twisted.internet.protocol import Protocol
 from twisted.internet.protocol import Factory, ClientCreator
@@ -35,19 +36,28 @@ class MockServer(Protocol):
     def connectionMade(self):
         self.factory.deferred_server.callback(self)
 
+    def connectionLost(self, reason):
+        self.factory.on_connection_lost.callback(None)
+
 
 class MockServerMixin(object):
     server_protocol = None
 
     @inlineCallbacks
     def start_server(self):
+        self.server_disconnected = Deferred()
         factory = MockServerFactory()
+        factory.on_connection_lost = self.server_disconnected
         factory.protocol = self.server_protocol
         self.server_port = reactor.listenTCP(0, factory)
         self.server = yield factory.deferred_server
 
     def stop_server(self):
-        return self.server_port.loseConnection()
+        # Turns out stopping these things is tricky.
+        # See http://mumak.net/stuff/twisted-disconnect.html
+        return gatherResults([
+            maybeDeferred(self.server_port.loseConnection),
+            self.server_disconnected])
 
     def get_server_port(self):
         return self.server_port.getHost().port
@@ -76,11 +86,20 @@ class MockClientMixin(object):
 
     @inlineCallbacks
     def start_client(self, port):
+        self.client_disconnected = Deferred()
         self.client_creator = ClientCreator(reactor, self.client_protocol)
         self.client = yield self.client_creator.connectTCP('127.0.0.1', port)
+        conn_lost = self.client.connectionLost
+
+        def connectionLost_wrapper(reason):
+            d = maybeDeferred(conn_lost, reason)
+            d.chainDeferred(self.client_disconnected)
+            return d
+        self.client.connectionLost = connectionLost_wrapper
 
     def stop_client(self):
-        return self.client.transport.loseConnection()
+        self.client.transport.loseConnection()
+        return self.client_disconnected
 
 
 class MockClientServerMixin(MockClientMixin, MockServerMixin):
