@@ -52,7 +52,7 @@ class DispatcherHelper(object):
 
     :param \**msg_helper_args:
         All other keyword params are passed to the underlying
-        :class:`~vumi.tests.helpers.PersistenceHelper`.
+        :class:`~vumi.tests.helpers.MessageHelper`.
     """
 
     implements(IHelper)
