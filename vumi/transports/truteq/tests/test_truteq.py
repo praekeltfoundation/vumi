@@ -9,7 +9,8 @@ from twisted.test.proto_helpers import StringTransportWithDisconnection
 from txssmi import constants as c
 from txssmi.builder import SSMIRequest
 from txssmi.commands import (
-    Ack, USSDMessage, ExtendedUSSDMessage, SendUSSDMessage, MoMessage)
+    Ack, USSDMessage, ExtendedUSSDMessage, SendUSSDMessage, MoMessage,
+    ServerLogout)
 
 from vumi.message import TransportUserMessage
 from vumi.reconnecting_client import ReconnectingClientService
@@ -137,7 +138,7 @@ class TestTruteqTransport(VumiTestCase):
     @inlineCallbacks
     def test_handle_inbound_ussd_new(self):
         yield self.send(USSDMessage(msisdn='27000000000', type=c.USSD_NEW,
-                              message='*678#', phase=c.USSD_PHASE_1))
+                                    message='*678#', phase=c.USSD_PHASE_1))
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assertEqual(msg['to_addr'], '*678#')
         self.assertEqual(msg['session_event'], SESSION_NEW)
@@ -162,6 +163,16 @@ class TestTruteqTransport(VumiTestCase):
                 }
             }
         })
+
+    @inlineCallbacks
+    def test_handle_remote_logout(self):
+        cmd = ServerLogout(ip='127.0.0.1')
+        with LogCatcher() as logger:
+            yield self.send(cmd)
+            [warning] = logger.messages()
+            self.assertEqual(
+                warning,
+                "Received remote logout command, disconnecting: %r" % (cmd,))
 
     @inlineCallbacks
     def test_handle_inbound_ussd_resume(self):
