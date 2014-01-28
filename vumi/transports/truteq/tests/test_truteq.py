@@ -172,7 +172,7 @@ class TestTruteqTransport(VumiTestCase):
             [warning] = logger.messages()
             self.assertEqual(
                 warning,
-                "Received remote logout command, disconnecting: %r" % (cmd,))
+                "Received remote logout command: %r" % (cmd,))
 
     @inlineCallbacks
     def test_handle_inbound_ussd_resume(self):

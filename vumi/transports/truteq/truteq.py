@@ -190,9 +190,8 @@ class TruteqTransport(Transport):
         return protocol.send_ussd_message(msisdn, text, ssmi_session_type)
 
     def handle_remote_logout(self, msg):
-        log.warning('Received remote logout command, disconnecting: %r' % (
+        log.warning('Received remote logout command: %r' % (
             msg,))
-        return self.teardown_transport()
 
     def handle_unhandled_message(self, mo):
         log.warning('Received unsupported message, dropping: %r.' % (
