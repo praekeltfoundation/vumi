@@ -1,14 +1,14 @@
 from datetime import datetime
 
 from twisted.internet.defer import Deferred, succeed, inlineCallbacks
-from twisted.python.failure import Failure
-from twisted.trial.unittest import SkipTest, TestCase
+from twisted.trial.unittest import SkipTest, TestCase, FailTest
 
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.tests.fake_amqp import FakeAMQPBroker, FakeAMQClient
 from vumi.tests.helpers import (
     VumiTestCase, proxyable, generate_proxies, IHelper, import_skip,
-    MessageHelper, WorkerHelper, MessageDispatchHelper, PersistenceHelper)
+    MessageHelper, WorkerHelper, MessageDispatchHelper, PersistenceHelper,
+    success_result_of)
 from vumi.worker import BaseWorker
 
 
@@ -145,6 +145,36 @@ class TestHelperHelpers(TestCase):
             err = self.assertRaises(
                 ImportError, import_skip, import_error, 'nothing')
             self.assertEqual(err, import_error)
+
+    def test_success_result_of_no_result(self):
+        """
+        success_result_of() should raise a FailTest exception if the Deferred
+        has no result.
+        """
+        d = Deferred()
+        err = self.assertRaises(FailTest, success_result_of, d)
+        self.assertEqual(
+            err.args[0], "No result available for deferred: %r" % (d,))
+
+    def test_success_result_of_failure(self):
+        """
+        success_result_of() should raise a FailTest exception if the Deferred
+        has a failure result.
+        """
+        d = Deferred()
+        d.errback(Exception())
+        err = self.assertRaises(FailTest, success_result_of, d)
+        self.assertTrue(err.args[0].startswith(
+            "Expected success from deferred %r, got failure:" % (d,)))
+
+    def test_success_result_of_success(self):
+        """
+        success_result_of() should raise a FailTest exception if the Deferred
+        has no result.
+        """
+        d = Deferred()
+        d.callback('foo')
+        self.assertEqual(success_result_of(d), 'foo')
 
 
 class TestMessageHelper(TestCase):
@@ -588,20 +618,6 @@ class ToyWorker(BaseWorker):
 
 
 class TestWorkerHelper(VumiTestCase):
-    def success_result_of(self, d):
-        """
-        We can't necessarily use TestCase.successResultOf because our Twisted
-        might not be new enough.
-        """
-        results = []
-        d.addBoth(results.append)
-        if not results:
-            self.fail("No result available for deferred: %r" % (d,))
-        if isinstance(results[0], Failure):
-            self.fail("Expected success from deferred %r, got failure: %r" % (
-                d, results[0]))
-        return results[0]
-
     def test_implements_IHelper(self):
         """
         WorkerHelper instances should provide the IHelper interface.
@@ -719,7 +735,7 @@ class TestWorkerHelper(VumiTestCase):
         """
         worker_helper = WorkerHelper()
         worker_d = worker_helper.get_worker(ToyWorker, {'foo': 'bar'})
-        worker = self.success_result_of(worker_d)
+        worker = success_result_of(worker_d)
         self.assertIsInstance(worker, ToyWorker)
         self.assertIsInstance(worker._amqp_client, FakeAMQClient)
         self.assertEqual(worker._amqp_client.broker, worker_helper.broker)
@@ -736,7 +752,7 @@ class TestWorkerHelper(VumiTestCase):
         """
         worker_helper = WorkerHelper()
         worker_d = worker_helper.get_worker(ToyWorker, {}, start=False)
-        worker = self.success_result_of(worker_d)
+        worker = success_result_of(worker_d)
         self.assertIsInstance(worker, ToyWorker)
         self.assertIsInstance(worker._amqp_client, FakeAMQClient)
         self.assertEqual(worker._amqp_client.broker, worker_helper.broker)
@@ -899,7 +915,7 @@ class TestWorkerHelper(VumiTestCase):
         msg = msg_helper.make_ack()
         yield self._add_to_dispatched(
             worker_helper.broker, 'fooconn.event', msg, kick=True)
-        dispatched = self.success_result_of(d)
+        dispatched = success_result_of(d)
         self.assertEqual(dispatched, [msg])
 
     @inlineCallbacks
@@ -915,7 +931,7 @@ class TestWorkerHelper(VumiTestCase):
         msg = msg_helper.make_ack()
         yield self._add_to_dispatched(
             worker_helper.broker, 'fooconn.event', msg, kick=True)
-        dispatched = self.success_result_of(d)
+        dispatched = success_result_of(d)
         self.assertEqual(dispatched, [msg])
 
     @inlineCallbacks
@@ -930,7 +946,7 @@ class TestWorkerHelper(VumiTestCase):
         msg = msg_helper.make_inbound('message')
         yield self._add_to_dispatched(
             worker_helper.broker, 'fooconn.inbound', msg, kick=True)
-        dispatched = self.success_result_of(d)
+        dispatched = success_result_of(d)
         self.assertEqual(dispatched, [msg])
 
     @inlineCallbacks
@@ -945,7 +961,7 @@ class TestWorkerHelper(VumiTestCase):
         msg = msg_helper.make_inbound('message')
         yield self._add_to_dispatched(
             worker_helper.broker, 'fooconn.inbound', msg, kick=True)
-        dispatched = self.success_result_of(d)
+        dispatched = success_result_of(d)
         self.assertEqual(dispatched, [msg])
 
     @inlineCallbacks
@@ -960,7 +976,7 @@ class TestWorkerHelper(VumiTestCase):
         msg = msg_helper.make_outbound('message')
         yield self._add_to_dispatched(
             worker_helper.broker, 'fooconn.outbound', msg, kick=True)
-        dispatched = self.success_result_of(d)
+        dispatched = success_result_of(d)
         self.assertEqual(dispatched, [msg])
 
     @inlineCallbacks
@@ -975,7 +991,7 @@ class TestWorkerHelper(VumiTestCase):
         msg = msg_helper.make_outbound('message')
         yield self._add_to_dispatched(
             worker_helper.broker, 'fooconn.outbound', msg, kick=True)
-        dispatched = self.success_result_of(d)
+        dispatched = success_result_of(d)
         self.assertEqual(dispatched, [msg])
 
     def test_clear_dispatched_events(self):
@@ -1495,20 +1511,6 @@ class FakeRedisManagerForCleanup(object):
 
 
 class TestPersistenceHelper(VumiTestCase):
-    def success_result_of(self, d):
-        """
-        We can't necessarily use TestCase.successResultOf because our Twisted
-        might not be new enough.
-        """
-        results = []
-        d.addBoth(results.append)
-        if not results:
-            self.fail("No result available for deferred: %r" % (d,))
-        if isinstance(results[0], Failure):
-            self.fail("Expected success from deferred %r, got failure: %r" % (
-                d, results[0]))
-        return results[0]
-
     @property
     def _RiakManager(self):
         try:
@@ -1600,7 +1602,7 @@ class TestPersistenceHelper(VumiTestCase):
         self.assertEqual(persistence_helper._patches_applied, True)
         self.assertNotEqual(manager_inits, self.get_manager_inits())
 
-        self.success_result_of(persistence_helper.cleanup())
+        success_result_of(persistence_helper.cleanup())
         self.assertEqual(persistence_helper._patches_applied, False)
         self.assertEqual(manager_inits, self.get_manager_inits())
 
@@ -1751,7 +1753,7 @@ class TestPersistenceHelper(VumiTestCase):
         manager = FakeRedisManagerForCleanup('prefix1')
         self.assertEqual(manager.purged, False)
         self.assertEqual(manager.connected, True)
-        self.success_result_of(persistence_helper._purge_redis(manager))
+        success_result_of(persistence_helper._purge_redis(manager))
         self.assertEqual(manager.purged, True)
         self.assertEqual(manager.connected, False)
 
@@ -1763,7 +1765,7 @@ class TestPersistenceHelper(VumiTestCase):
         manager = FakeRedisManagerForCleanup('prefix1')
         manager.close_manager()
         self.assertEqual(manager.purged, False)
-        self.success_result_of(persistence_helper._purge_redis(manager))
+        success_result_of(persistence_helper._purge_redis(manager))
         self.assertEqual(manager.purged, False)
 
     def test_cleanup_purges_managers(self):
@@ -1778,7 +1780,7 @@ class TestPersistenceHelper(VumiTestCase):
         persistence_helper._riak_managers.extend([riak_purge, riak_nopurge])
         persistence_helper._redis_managers.extend([redis_purge, redis_nopurge])
 
-        self.success_result_of(persistence_helper.cleanup())
+        success_result_of(persistence_helper.cleanup())
         self.assertEqual(
             [True, False], [riak_purge.purged, riak_nopurge.purged])
         self.assertEqual(
@@ -1795,6 +1797,6 @@ class TestPersistenceHelper(VumiTestCase):
         persistence_helper._riak_managers.append(manager)
         self.assertEqual(manager.conns, [conn1, conn2])
         self.assertEqual([conn1.closed, conn2.closed], [False, False])
-        self.success_result_of(persistence_helper.cleanup())
+        success_result_of(persistence_helper.cleanup())
         self.assertEqual(manager.conns, [])
         self.assertEqual([conn1.closed, conn2.closed], [True, True])
