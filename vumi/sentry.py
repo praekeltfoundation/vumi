@@ -41,7 +41,11 @@ def vumi_raven_client(dsn, log_context_sentinel=None):
     """
 
     import raven
-    from raven.transport.base import TwistedHTTPTransport
+    try:
+        from raven.transport.twisted import TwistedHTTPTransport
+    except ImportError:
+        # Prior to 3.6, TwistedHTTPTransport lived elsewhere.
+        from raven.transport.base import TwistedHTTPTransport
     from raven.transport.registry import TransportRegistry
 
     deferreds = set()
