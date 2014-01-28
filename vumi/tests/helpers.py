@@ -3,8 +3,9 @@ from functools import wraps
 
 from twisted.internet.defer import succeed, inlineCallbacks, Deferred
 from twisted.internet.error import ConnectionRefusedError
+from twisted.python.failure import Failure
 from twisted.python.monkey import MonkeyPatcher
-from twisted.trial.unittest import TestCase, SkipTest
+from twisted.trial.unittest import TestCase, SkipTest, FailTest
 
 from zope.interface import Interface, implements
 
@@ -137,6 +138,22 @@ def generate_proxies(target, source):
             raise Exception(
                 'Attribute already exists: %s' % (name,))
         setattr(target, name, attribute)
+
+
+def success_result_of(d):
+    """
+    We can't necessarily use TestCase.successResultOf because our Twisted might
+    not be new enough. This is a standalone copy with some minor message
+    differences.
+    """
+    results = []
+    d.addBoth(results.append)
+    if not results:
+        raise FailTest("No result available for deferred: %r" % (d,))
+    if isinstance(results[0], Failure):
+        raise FailTest("Expected success from deferred %r, got failure: %r" % (
+            d, results[0]))
+    return results[0]
 
 
 def get_timeout():
