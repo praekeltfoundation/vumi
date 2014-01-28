@@ -23,7 +23,7 @@ class TransportHelper(object):
         Set to ``True`` if the test requires Riak. This is passed to the
         underlying :class:`~vumi.tests.helpers.PersistenceHelper`.
 
-    :param \**kw:
+    :param \**msg_helper_args:
         All other keyword params are passed to the underlying
         :class:`~vumi.tests.helpers.PersistenceHelper`.
     """

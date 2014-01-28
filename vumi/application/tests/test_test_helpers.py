@@ -97,8 +97,6 @@ class TestApplicationHelper(VumiTestCase):
         self.assertEqual(app_helper.persistence_helper.cleaned_up, True)
         self.assertEqual(app_helper.worker_helper.cleaned_up, True)
 
-    # TODO: Test cleanup.
-
     @inlineCallbacks
     def test_get_application_defaults(self):
         """
