@@ -15,6 +15,7 @@ from vumi.message import TransportUserMessage
 from vumi.config import ConfigServerEndpoint, ConfigInt, ConfigDict, ConfigText
 
 import sys
+import tempfile
 import os.path
 from . import freeswitchesl
 
@@ -44,9 +45,14 @@ class FreeSwitchESLProtocol(freeswitchesl.FreeSwitchEventProtocol):
 
     @inlineCallbacks
     def createAndStreamTextAsSpeech(self, engine, voice, message):
-        os.system("%s -w /usr/src/freeswitch/pySource/media/test.wav \"%s\"" %
-                  (engine, message))
-        yield self.playback("/usr/src/freeswitch/pySource/media/test.wav")
+        filename=("%s/voice%d.wav"%(tempfile.gettempdir(),hash(message)))
+        log.msg("Looking for file %s"%filename)
+        if (not os.path.isfile(filename)):     
+            os.system("%s -w %s \"%s\"" %(engine, filename, message))
+        else:
+           log.msg("File Found\n")
+            
+        yield self.playback(filename)
 
     @inlineCallbacks
     def sendTextAsSpeech(self, engine, voice, message):
