@@ -1,4 +1,4 @@
-# -*- test-case-name: vumi.transports.smpp.clientserver.tests.test_client -*-
+# -*- test-case-name: vumi.transports.smpp.deprecated.clientserver.tests.test_client -*-
 
 import json
 import uuid

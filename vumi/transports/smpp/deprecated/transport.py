@@ -1,4 +1,6 @@
-# -*- test-case-name: vumi.transports.smpp.tests.test_smpp -*-
+# -*- test-case-name: vumi.transports.smpp.deprecated.tests.test_smpp -*-
+
+import warnings
 
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, returnValue
@@ -7,7 +9,7 @@ from vumi import log
 from vumi.reconnecting_client import ReconnectingClientService
 from vumi.utils import get_operator_number
 from vumi.transports.base import Transport
-from vumi.transports.smpp.clientserver.client import (
+from vumi.transports.smpp.deprecated.clientserver.client import (
     EsmeTransceiverFactory, EsmeTransmitterFactory, EsmeReceiverFactory,
     EsmeCallbacks)
 from vumi.transports.failures import FailureMessage
@@ -199,6 +201,10 @@ class SmppTransport(Transport):
 
     @inlineCallbacks
     def setup_transport(self):
+        warnings.warn(
+            'This SMPP implementation is deprecated. Please use the '
+            'implementations available in vumi.transports.smpp.'
+            'smpp_transport instead.', category=DeprecationWarning)
         config = self.get_static_config()
         log.msg("Starting the SmppTransport for %s" % (
             config.twisted_endpoint))

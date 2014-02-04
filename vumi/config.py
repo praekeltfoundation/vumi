@@ -2,6 +2,7 @@
 
 from copy import deepcopy
 from urllib2 import urlparse
+import inspect
 import textwrap
 import re
 
@@ -98,6 +99,8 @@ class ConfigField(object):
         return self.clean(value) if value is not None else None
 
     def __get__(self, obj, cls):
+        if obj is None:
+            return self
         if obj.static and not self.static:
             self.raise_config_error("is not marked as static.")
         return self.get_value(obj)
@@ -217,8 +220,10 @@ class ConfigServerEndpoint(ConfigText):
 
     def __init__(self, *args, **kws):
         fallbacks = kws.pop('fallbacks', ('host', 'port'))
+        port_fallback_default = kws.pop('port_fallback_default', None)
         super(ConfigServerEndpoint, self).__init__(*args, **kws)
         self._host_fallback, self._port_fallback = fallbacks
+        self._port_fallback_default = port_fallback_default
         self.doc += (" A TCP4 endpoint may be specified using config field"
                      " '%s' for the host and field '%s' for the port but"
                      " this is deprecated"
@@ -237,7 +242,8 @@ class ConfigServerEndpoint(ConfigText):
 
     def _endpoint_from_fallbacks(self, obj):
         host = obj._config_data.get(self._host_fallback, None)
-        port = obj._config_data.get(self._port_fallback, None)
+        port = obj._config_data.get(self._port_fallback,
+                                    self._port_fallback_default)
         if port is None:
             self.raise_fallback_error('port was not given')
         try:
@@ -325,12 +331,10 @@ class ConfigMetaClass(type):
         fields = []
         unified_class_dict = {}
         for base in bases:
-            unified_class_dict.update(base.__dict__)
+            unified_class_dict.update(inspect.getmembers(base))
         unified_class_dict.update(dict)
 
         for key, possible_field in unified_class_dict.items():
-            if key in fields:
-                continue
             if isinstance(possible_field, ConfigField):
                 fields.append(possible_field)
                 possible_field.setup(key)

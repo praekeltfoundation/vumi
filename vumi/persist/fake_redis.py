@@ -417,6 +417,13 @@ class Zset(object):
     def __init__(self):
         self._zval = []
 
+    def _redis_range_to_py_range(self, start, end):
+        if start < 0:
+            start = len(self._zval) + start
+        if end < 0:
+            end = len(self._zval) + end
+        return start, end
+
     def zadd(self, **valscores):
         new_zval = [val for val in self._zval if val[1] not in valscores]
         new_zval.extend((float(score), value) for value, score
@@ -484,6 +491,7 @@ class Zset(object):
                 return score
 
     def zremrangebyrank(self, start, stop):
+        start, stop = self._redis_range_to_py_range(start, stop)
         deleted_keys = self._zval[start:stop + 1]
         del self._zval[start:stop + 1]
         return len(deleted_keys)

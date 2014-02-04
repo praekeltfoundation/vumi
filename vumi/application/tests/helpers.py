@@ -1,3 +1,5 @@
+# -*- test-case-name: vumi.application.tests.test_test_helpers -*-
+
 from twisted.internet.defer import inlineCallbacks
 
 from zope.interface import implements
@@ -9,6 +11,24 @@ from vumi.tests.helpers import (
 
 
 class ApplicationHelper(object):
+    """
+    Test helper for application workers.
+
+    This helper construct and wraps several lower-level helpers and provides
+    higher-level functionality for app worker tests.
+
+    :param application_class:
+        The worker class for the application being tested.
+
+    :param bool use_riak:
+        Set to ``True`` if the test requires Riak. This is passed to the
+        underlying :class:`~vumi.tests.helpers.PersistenceHelper`.
+
+    :param \**msg_helper_args:
+        All other keyword params are passed to the underlying
+        :class:`~vumi.tests.helpers.MessageHelper`.
+    """
+
     implements(IHelper)
 
     def __init__(self, application_class, use_riak=False, **msg_helper_args):
@@ -27,7 +47,8 @@ class ApplicationHelper(object):
         generate_proxies(self, self.persistence_helper)
 
     def setup(self):
-        pass
+        self.persistence_helper.setup()
+        self.worker_helper.setup()
 
     @inlineCallbacks
     def cleanup(self):

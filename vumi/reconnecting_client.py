@@ -153,8 +153,8 @@ class ReconnectingClientService(Service):
 
         if self._protocol is not None:
             self._protocolStoppingDeferred = Deferred()
-            self._protocol.transport.loseConnection()
             waitFor.append(self._protocolStoppingDeferred)
+            self._protocol.transport.loseConnection()
 
         return gatherResults(waitFor)
 
