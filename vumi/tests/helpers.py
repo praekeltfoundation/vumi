@@ -3,8 +3,9 @@ from functools import wraps
 
 from twisted.internet.defer import succeed, inlineCallbacks, Deferred
 from twisted.internet.error import ConnectionRefusedError
+from twisted.python.failure import Failure
 from twisted.python.monkey import MonkeyPatcher
-from twisted.trial.unittest import TestCase, SkipTest
+from twisted.trial.unittest import TestCase, SkipTest, FailTest
 
 from zope.interface import Interface, implements
 
@@ -14,12 +15,19 @@ from vumi.utils import vumi_resource_path, flatten_generator
 from vumi.tests.fake_amqp import FakeAMQPBroker, FakeAMQClient
 
 
-# We can't use `None` as a placeholder for default values because we may want
-# to override the default (non-`None`) value with `None`.
-
-# This is its own class (rather than an instance of `object`) so we can make
-# pretty docs.
 class _Default(object):
+    """
+    Placeholder for default values in helpers.
+
+    We can't use ``None`` as a placeholder for default values because we may
+    want to override the default (non-``None``) value with ``None``.
+
+    This is its own class (rather than using an instance of ``object``) because
+    Sphinx uses ``repr()`` on function parameter defaults when generating API
+    documentation and we'd rather see ``DEFAULT`` in the docs than ``<object
+    object at 0x1010552c0>``.
+    """
+
     def __repr__(self):
         return 'DEFAULT'
 
@@ -130,6 +138,22 @@ def generate_proxies(target, source):
             raise Exception(
                 'Attribute already exists: %s' % (name,))
         setattr(target, name, attribute)
+
+
+def success_result_of(d):
+    """
+    We can't necessarily use TestCase.successResultOf because our Twisted might
+    not be new enough. This is a standalone copy with some minor message
+    differences.
+    """
+    results = []
+    d.addBoth(results.append)
+    if not results:
+        raise FailTest("No result available for deferred: %r" % (d,))
+    if isinstance(results[0], Failure):
+        raise FailTest("Expected success from deferred %r, got failure: %r" % (
+            d, results[0]))
+    return results[0]
 
 
 def get_timeout():
@@ -550,10 +574,10 @@ class WorkerHelper(object):
 
     @inlineCallbacks
     def cleanup(self):
-        # Wait for any pending message deliveries to avoid a race with a dirty
-        # reactor.
+        """
+        Wait for any pending message deliveries and stop all workers.
+        """
         yield self.broker.wait_delivery()
-        # Now stop all the workers we created.
         for worker in self._workers:
             yield worker.stopWorker()
 
@@ -908,6 +932,9 @@ class MessageDispatchHelper(object):
     that, either use :class:`MessageHelper` and :class:`WorkerHelper` directly
     or build a second :class:`MessageDispatchHelper` with a second
     :class:`WorkerHelper`.
+
+    :param msg_helper: A :class:`MessageHelper` instance.
+    :param worker_helper: A :class:`WorkerHelper` instance.
     """
 
     implements(IHelper)
@@ -924,36 +951,97 @@ class MessageDispatchHelper(object):
 
     @proxyable
     def make_dispatch_inbound(self, *args, **kw):
+        """
+        Construct and dispatch an inbound message.
+
+        This is a wrapper around :meth:`MessageHelper.make_inbound` (to which
+        all parameters are passed) and :meth:`WorkerHelper.dispatch_inbound`.
+
+        :returns:
+            A :class:`Deferred` that fires with the constructed message once it
+            has been dispatched.
+        """
         msg = self.msg_helper.make_inbound(*args, **kw)
         d = self.worker_helper.dispatch_inbound(msg)
         return d.addCallback(lambda r: msg)
 
     @proxyable
     def make_dispatch_outbound(self, *args, **kw):
+        """
+        Construct and dispatch an outbound message.
+
+        This is a wrapper around :meth:`MessageHelper.make_outbound` (to which
+        all parameters are passed) and :meth:`WorkerHelper.dispatch_outbound`.
+
+        :returns:
+            A :class:`Deferred` that fires with the constructed message once it
+            has been dispatched.
+        """
         msg = self.msg_helper.make_outbound(*args, **kw)
         d = self.worker_helper.dispatch_outbound(msg)
         return d.addCallback(lambda r: msg)
 
     @proxyable
     def make_dispatch_ack(self, *args, **kw):
+        """
+        Construct and dispatch an ack event.
+
+        This is a wrapper around :meth:`MessageHelper.make_ack` (to which all
+        parameters are passed) and :meth:`WorkerHelper.dispatch_event`.
+
+        :returns:
+            A :class:`Deferred` that fires with the constructed event once it
+            has been dispatched.
+        """
         msg = self.msg_helper.make_ack(*args, **kw)
         d = self.worker_helper.dispatch_event(msg)
         return d.addCallback(lambda r: msg)
 
     @proxyable
     def make_dispatch_nack(self, *args, **kw):
+        """
+        Construct and dispatch a nack event.
+
+        This is a wrapper around :meth:`MessageHelper.make_nack` (to which all
+        parameters are passed) and :meth:`WorkerHelper.dispatch_event`.
+
+        :returns:
+            A :class:`Deferred` that fires with the constructed event once it
+            has been dispatched.
+        """
         msg = self.msg_helper.make_nack(*args, **kw)
         d = self.worker_helper.dispatch_event(msg)
         return d.addCallback(lambda r: msg)
 
     @proxyable
     def make_dispatch_delivery_report(self, *args, **kw):
+        """
+        Construct and dispatch a delivery report event.
+
+        This is a wrapper around :meth:`MessageHelper.make_delivery_report` (to
+        which all parameters are passed) and
+        :meth:`WorkerHelper.dispatch_event`.
+
+        :returns:
+            A :class:`Deferred` that fires with the constructed event once it
+            has been dispatched.
+        """
         msg = self.msg_helper.make_delivery_report(*args, **kw)
         d = self.worker_helper.dispatch_event(msg)
         return d.addCallback(lambda r: msg)
 
     @proxyable
     def make_dispatch_reply(self, *args, **kw):
+        """
+        Construct and dispatch a reply message.
+
+        This is a wrapper around :meth:`MessageHelper.make_reply` (to which all
+        parameters are passed) and :meth:`WorkerHelper.dispatch_outbound`.
+
+        :returns:
+            A :class:`Deferred` that fires with the constructed message once it
+            has been dispatched.
+        """
         msg = self.msg_helper.make_reply(*args, **kw)
         d = self.worker_helper.dispatch_outbound(msg)
         return d.addCallback(lambda r: msg)
@@ -983,6 +1071,13 @@ def import_filter(exc, *expected):
 
 
 def import_skip(exc, *expected):
+    """
+    Raise :class:`SkipTest` if the provided :class:`ImportError` matches a
+    module name in ``expected``, otherwise reraise the :class:`ImportError`.
+
+    This is useful for skipping tests that require optional dependencies which
+    might not be present.
+    """
     module = import_filter(exc, *expected)
     raise SkipTest("Failed to import '%s'." % (module,))
 
@@ -991,8 +1086,8 @@ def maybe_async(sync_attr):
     """
     Decorate a method that may be sync or async.
 
-    This redecorates with the either @inlineCallbacks or @flatten_generator,
-    depending on the `sync_attr`.
+    This redecorates with the either ``@inlineCallbacks`` or
+    ``@flatten_generator``, depending on the value of ``sync_attr``.
     """
     if callable(sync_attr):
         # If we don't get a sync attribute name, default to 'is_sync'.
@@ -1011,7 +1106,7 @@ def maybe_async(sync_attr):
 
 def maybe_async_return(value, maybe_deferred):
     """
-    Return `value` or a deferred that fires with it.
+    Return ``value`` or a deferred that fires with it.
 
     This is useful in cases where we're performing a potentially async
     operation but don't necessarily have enough information to use
@@ -1023,7 +1118,30 @@ def maybe_async_return(value, maybe_deferred):
 
 
 class PersistenceHelper(object):
+    """
+    Test helper for managing persistent storage.
+
+    This helper manages Riak and Redis clients and configs and cleans up after
+    them. It does no setup, but its cleanup may take a while if there's a lot
+    in Riak.
+
+    All configs for objects that build Riak or Redis clients must be passed
+    through :meth:`mk_config`.
+
+    :param bool use_riak:
+        Pass ``True`` if Riak is desired, otherwise it will be disabled in the
+        generated config parameters.
+
+    :param bool is_sync:
+        Pass ``True`` if synchronous Riak and Redis clients are desired,
+        otherwise asynchronous ones will be built. This only applies to clients
+        built by this helper, not those built by other objects using configs
+        from this helper.
+    """
+
     implements(IHelper)
+
+    _patches_applied = False
 
     def __init__(self, use_riak=False, is_sync=False):
         self.use_riak = use_riak
@@ -1042,13 +1160,13 @@ class PersistenceHelper(object):
         }
         if not self.use_riak:
             self._config_overrides['riak_manager'] = RiakDisabledForTest()
+
+    def setup(self):
         self._patch_riak()
         self._patch_txriak()
         self._patch_redis()
         self._patch_txredis()
-
-    def setup(self):
-        pass
+        self._patches_applied = True
 
     @maybe_async
     def cleanup(self):
@@ -1073,8 +1191,7 @@ class PersistenceHelper(object):
                 yield self._purge_redis(manager)
             yield manager.close_manager()
 
-        for patch in reversed(self._patches):
-            patch.restore()
+        self._unpatch()
 
     def _get_riak_managers_for_cleanup(self):
         """
@@ -1125,6 +1242,11 @@ class PersistenceHelper(object):
         self._patches.append(monkey_patch)
         monkey_patch.patch()
         return monkey_patch
+
+    def _unpatch(self):
+        for patch in reversed(self._patches):
+            patch.restore()
+        self._patches_applied = False
 
     def _patch_riak(self):
         try:
@@ -1197,8 +1319,26 @@ class PersistenceHelper(object):
                 raise
         yield manager.close_manager()
 
+    def _check_patches_applied(self):
+        if not self._patches_applied:
+            raise Exception(
+                "setup() must be called before performing this operation.")
+
     @proxyable
     def get_riak_manager(self, config=None):
+        """
+        Build and return a Riak manager.
+
+        :param dict config:
+            Riak manager config. (Not a complete worker config.) If ``None``,
+            the one used by :meth:`mk_config` will be used.
+
+        :returns:
+            A :class:`~vumi.persist.riak_manager.RiakManager` or
+            :class:`~vumi.persist.riak_manager.TxRiakManager`, depending on the
+            value of :attr:`is_sync`.
+        """
+        self._check_patches_applied()
         if config is None:
             config = self._config_overrides['riak_manager'].copy()
 
@@ -1224,6 +1364,22 @@ class PersistenceHelper(object):
 
     @proxyable
     def get_redis_manager(self, config=None):
+        """
+        Build and return a Redis manager.
+
+        This will be backed by an in-memory fake unless the
+        ``VUMITEST_REDIS_DB`` environment variable is set.
+
+        :param dict config:
+            Redis manager config. (Not a complete worker config.) If ``None``,
+            the one used by :meth:`mk_config` will be used.
+
+        :returns:
+            A :class:`~vumi.persist.redis_manager.RedisManager` or
+            :class:`~vumi.persist.redis_manager.TxRedisManager`, depending on
+            the value of :attr:`is_sync`.
+        """
+        self._check_patches_applied()
         if config is None:
             config = self._config_overrides['redis_manager'].copy()
 
@@ -1246,6 +1402,14 @@ class PersistenceHelper(object):
 
     @proxyable
     def mk_config(self, config):
+        """
+        Return a copy of ``config`` with the ``riak_manager`` and
+        ``redis_manager`` fields overridden.
+
+        All configs for things that create Riak or Redis clients should be
+        passed through this method.
+        """
+        self._check_patches_applied()
         config = config.copy()
         config.update(self._config_overrides)
         return config

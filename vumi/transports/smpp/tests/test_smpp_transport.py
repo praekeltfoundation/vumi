@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
 from twisted.test import proto_helpers
-from twisted.internet import reactor
 from twisted.internet.defer import (
     inlineCallbacks, returnValue, Deferred, succeed)
 from twisted.internet.error import ConnectionDone
@@ -13,7 +12,7 @@ from vumi.tests.utils import LogCatcher
 
 from vumi.transports.tests.helpers import TransportHelper
 from vumi.transports.smpp.smpp_transport import (
-    SmppTransceiverTransport, SmppTransceiverProtocol,
+    SmppTransceiverTransport,
     SmppTransceiverTransportWithOldConfig,
     SmppTransmitterTransport, SmppReceiverTransport,
     message_key, remote_message_key)
@@ -34,9 +33,12 @@ class DummyService(Service):
     def __init__(self, endpoint, factory):
         self.factory = factory
         self.protocol = None
+        self.wait_on_protocol_deferreds = []
 
     def startService(self):
         self.protocol = self.factory.buildProtocol(('120.0.0.1', 0))
+        for deferred in self.wait_on_protocol_deferreds:
+            deferred.callback(self.protocol)
 
     def stopService(self):
         if self.protocol and self.protocol.transport:
@@ -44,14 +46,19 @@ class DummyService(Service):
             self.protocol.connectionLost(reason=ConnectionDone)
 
     def get_protocol(self):
-        return self.protocol
+        if self.protocol is not None:
+            return succeed(self.protocol)
+        else:
+            d = Deferred()
+            self.wait_on_protocol_deferreds.append(d)
+            return d
 
 
 class SMPPHelper(object):
-    def __init__(self, string_transport, smpp_transport):
+    def __init__(self, string_transport, transport, protocol):
         self.string_transport = string_transport
-        self.transport = smpp_transport
-        self.protocol = smpp_transport.service.get_protocol()
+        self.transport = transport
+        self.protocol = protocol
 
     def send_pdu(self, pdu):
         """put it on the wire and don't wait for a response"""
@@ -117,26 +124,13 @@ class SmppTransportTestCase(VumiTestCase):
         returnValue(transport)
 
     def create_smpp_bind(self, smpp_transport):
-        d = Deferred()
+        d = smpp_transport.service.get_protocol()
 
-        def cb(smpp_transport):
-            protocol = smpp_transport.service.get_protocol()
-            if protocol is None:
-                # Still setting up factory
-                reactor.callLater(0, cb, smpp_transport)
-                return
+        def cb(protocol):
+            protocol.makeConnection(self.string_transport)
+            return bind_protocol(self.string_transport, protocol)
 
-            if not protocol.transport:
-                # Factory setup, needs bind pdus
-                protocol.makeConnection(self.string_transport)
-                bind_d = bind_protocol(self.string_transport, protocol)
-                bind_d.addCallback(
-                    lambda _: reactor.callLater(0, cb, smpp_transport))
-                return bind_d
-
-            d.callback(smpp_transport)
-
-        cb(smpp_transport)
+        d.addCallback(cb)
         return d
 
     def send_pdu(self, transport, pdu):
@@ -146,7 +140,8 @@ class SmppTransportTestCase(VumiTestCase):
     @inlineCallbacks
     def get_smpp_helper(self, *args, **kwargs):
         transport = yield self.get_transport(*args, **kwargs)
-        returnValue(SMPPHelper(self.string_transport, transport))
+        protocol = yield transport.service.get_protocol()
+        returnValue(SMPPHelper(self.string_transport, transport, protocol))
 
 
 class SmppTransceiverTransportTestCase(SmppTransportTestCase):
@@ -156,7 +151,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
     @inlineCallbacks
     def test_setup_transport(self):
         transport = yield self.get_transport()
-        protocol = transport.service.get_protocol()
+        protocol = yield transport.service.get_protocol()
         self.assertTrue(protocol.is_bound())
 
     @inlineCallbacks
@@ -611,8 +606,8 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         yield transport.set_sequence_number_message_id(3, msg['message_id'])
         yield transport.cache_message(msg)
         yield smpp_helper.handle_pdu(SubmitSMResp(sequence_number=3,
-                                                 message_id='foo',
-                                                 command_status='ESME_ROK'))
+                                                  message_id='foo',
+                                                  command_status='ESME_ROK'))
         self.assertEqual(
             None,
             (yield transport.get_cached_message(msg['message_id'])))
@@ -674,21 +669,31 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_reconnect(self):
-        self.patch(SmppTransceiverProtocol, 'bind', lambda *a: succeed(True))
         smpp_helper = yield self.get_smpp_helper(bind=False)
         transport = smpp_helper.transport
-        protocol = smpp_helper.protocol
         connector = transport.connectors[transport.transport_name]
+        self.assertTrue(connector._consumers['outbound'].paused)
+        yield self.create_smpp_bind(transport)
         self.assertFalse(connector._consumers['outbound'].paused)
-        yield protocol.connectionLost(ConnectionDone)
+        transport.service.stopService()
         self.assertTrue(connector._consumers['outbound'].paused)
-        yield protocol.connectionLost(ConnectionDone)
+        transport.service.startService()
         self.assertTrue(connector._consumers['outbound'].paused)
+        yield self.create_smpp_bind(transport)
+        self.assertFalse(connector._consumers['outbound'].paused)
 
-        yield protocol.connectionMade()
-        self.assertFalse(connector._consumers['outbound'].paused)
-        yield protocol.connectionMade()
-        self.assertFalse(connector._consumers['outbound'].paused)
+    @inlineCallbacks
+    def test_startup_with_backlog(self):
+        smpp_helper = yield self.get_smpp_helper(bind=False)
+
+        for i in range(2):
+            msg = self.tx_helper.make_outbound('hello world %s' % (i,))
+            yield self.tx_helper.dispatch_outbound(msg)
+
+        yield self.create_smpp_bind(smpp_helper.transport)
+        [submit_sm1, submit_sm2] = yield smpp_helper.wait_for_pdus(2)
+        self.assertEqual(short_message(submit_sm1), 'hello world 0')
+        self.assertEqual(short_message(submit_sm2), 'hello world 1')
 
 
 class SmppTransmitterTransportTestCase(SmppTransceiverTransportTestCase):

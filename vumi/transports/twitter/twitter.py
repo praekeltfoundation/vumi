@@ -98,12 +98,15 @@ class TwitterTransport(Transport):
 
     @classmethod
     def tweet_to_addr(cls, tweet):
-        to_screen_name = messagetools.tweet_in_reply_to_screen_name(tweet)
+        mentions = messagetools.tweet_user_mentions(tweet)
+        to_addr = cls.NO_USER_ADDR
 
-        if to_screen_name is not None:
-            to_addr = cls.screen_name_as_addr(to_screen_name)
-        else:
-            to_addr = cls.NO_USER_ADDR
+        if mentions:
+            mention = mentions[0]
+            [start_index, end_index] = mention['indices']
+
+            if start_index == 0:
+                to_addr = cls.screen_name_as_addr(mention['screen_name'])
 
         return to_addr
 
@@ -112,9 +115,19 @@ class TwitterTransport(Transport):
         user = messagetools.tweet_user(tweet)
         return cls.screen_name_as_addr(messagetools.user_screen_name(user))
 
+    @classmethod
+    def tweet_content(cls, tweet):
+        to_addr = cls.tweet_to_addr(tweet)
+        content = messagetools.tweet_text(tweet)
+
+        if to_addr != cls.NO_USER_ADDR and content.startswith(to_addr):
+            content = content[len(to_addr):].lstrip()
+
+        return content
+
     def publish_tweet_message(self, tweet):
         return self.publish_message(
-            content=messagetools.tweet_text(tweet),
+            content=self.tweet_content(tweet),
             to_addr=self.tweet_to_addr(tweet),
             from_addr=self.tweet_from_addr(tweet),
             transport_type=self.transport_type,
