@@ -5,7 +5,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from zope.interface import implements
 
 from vumi.errors import VumiError
-from vumi.tests.helpers import IHelper
+from vumi.tests.helpers import IHelper, generate_proxies
 from vumi.transports.tests.helpers import TransportHelper
 from vumi.utils import http_request_full
 
@@ -14,7 +14,7 @@ class HttpRpcTransportHelperError(VumiError):
     """Error raised when the HttpRpcTransportHelper encouters an error."""
 
 
-class HttpRpcTransportHelper(TransportHelper):
+class HttpRpcTransportHelper(object):
     """
     Test helper for subclasses of
     :class:`~vumi.transports.httprpc.HttpRpcTransport`.
@@ -32,12 +32,15 @@ class HttpRpcTransportHelper(TransportHelper):
 
     def __init__(self, transport_class, use_riak=False, request_defaults=None,
                  **msg_helper_args):
-        super(HttpRpcTransportHelper, self).__init__(
+        self._transport_helper = TransportHelper(
             transport_class, use_riak=use_riak, **msg_helper_args)
+
         if request_defaults is None:
             request_defaults = {}
         self.request_defaults = request_defaults
         self.transport_url = None
+
+        generate_proxies(self, self._transport_helper)
 
     @inlineCallbacks
     def get_transport(self, config, cls=None, start=True):
