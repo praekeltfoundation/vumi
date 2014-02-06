@@ -42,9 +42,15 @@ class HttpRpcTransportHelper(object):
 
         generate_proxies(self, self._transport_helper)
 
+    def setup(self, *args, **kw):
+        return self._transport_helper.setup(*args, **kw)
+
+    def cleanup(self):
+        return self._transport_helper.cleanup()
+
     @inlineCallbacks
     def get_transport(self, config, cls=None, start=True):
-        transport = yield super(HttpRpcTransportHelper, self).get_transport(
+        transport = yield self._transport_helper.get_transport(
             config, cls=cls, start=True)
         self.transport_url = transport.get_transport_url(config['web_path'])
         returnValue(transport)
