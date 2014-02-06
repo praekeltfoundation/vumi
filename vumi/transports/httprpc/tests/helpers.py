@@ -77,7 +77,7 @@ class HttpRpcTransportHelper(object):
         :param str _suffix: Suffix to add to the transport's URL.
         :param str _data: Request body or None for no request body.
         :param str _method: HTTP method to use for the request.
-        :param **kw: URL query string parameters.
+        :param \*\*kw: URL query string parameters.
 
         :raises HttpRpcTransportHelperError:
             When invoked before calling :meth:`get_transport`.
