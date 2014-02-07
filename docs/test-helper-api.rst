@@ -36,6 +36,11 @@ Transport worker test helpers
    :no-show-inheritance:
    :member-order: bysource
 
+.. automodule:: vumi.transports.httprpc.tests.helpers
+   :members:
+   :no-show-inheritance:
+   :member-order: bysource
+
 
 Dispatcher worker test helpers
 ------------------------------

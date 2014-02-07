@@ -44,7 +44,7 @@ class TruteqTransportProtocol(SSMIProtocol):
 
     def connectionMade(self):
         config = self.factory.vumi_transport.get_static_config()
-        self.factory.protocol = self
+        self.factory.protocol_instance = self
         self.noisy = config.debug
         d = self.authenticate(config.username, config.password)
         d.addCallback(
@@ -177,7 +177,7 @@ class TruteqTransport(Transport):
             })
 
     def handle_outbound_message(self, message):
-        protocol = self.client_factory.protocol
+        protocol = self.client_factory.protocol_instance
         text = message.get('content') or ''
 
         # Truteq uses \r as a message delimiter in the protocol.
