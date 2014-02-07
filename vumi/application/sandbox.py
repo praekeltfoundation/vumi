@@ -534,6 +534,35 @@ class LoggingResource(SandboxResource):
 
     @inlineCallbacks
     def handle_log(self, api, command, level=None):
+        """
+        Log a message at the specified severity level.
+
+        The other log commands are identical except that ``level`` need not
+        be specified. Using the log-level specific commands is preferred.
+
+        Command fields:
+            - ``level``: The severity level to log at. Must be an integer
+              log level. Default severity is the ``INFO`` log level.
+            - ``msg``: The message to log.
+
+        Reply fields:
+            - ``success``: ``true`` if the operation was successful, otherwise
+              ``false``.
+
+        Example:
+
+        .. code-block:: javascript
+
+            api.request(
+                'log.log',
+                {level: 20,
+                 msg: 'Abandon ship!'},
+                function(reply) {
+                    api.log_info('New value: ' +
+                                 reply.value);
+                }
+            );
+        """
         level = command.get('level', level)
         if level is None:
             level = logging.INFO
@@ -549,18 +578,43 @@ class LoggingResource(SandboxResource):
         returnValue(self.reply(command, success=True))
 
     def handle_debug(self, api, command):
+        """
+        Logs a message at the ``DEBUG`` log level.
+
+        See :func:``handle_log`` for details.
+        """
         return self.handle_log(api, command, level=logging.DEBUG)
 
     def handle_info(self, api, command):
+        """
+        Logs a message at the ``INFO`` log level.
+
+        See :func:``handle_log`` for details.
+        """
         return self.handle_log(api, command, level=logging.INFO)
 
     def handle_warning(self, api, command):
+        """
+        Logs a message at the ``WARNING`` log level.
+
+        See :func:``handle_log`` for details.
+        """
         return self.handle_log(api, command, level=logging.WARNING)
 
     def handle_error(self, api, command):
+        """
+        Logs a message at the ``ERROR`` log level.
+
+        See :func:``handle_log`` for details.
+        """
         return self.handle_log(api, command, level=logging.ERROR)
 
     def handle_critical(self, api, command):
+        """
+        Logs a message at the ``CRITICAL`` log level.
+
+        See :func:``handle_log`` for details.
+        """
         return self.handle_log(api, command, level=logging.CRITICAL)
 
 
