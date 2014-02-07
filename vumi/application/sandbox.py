@@ -585,7 +585,7 @@ class LoggingResource(SandboxResource):
         """
         Logs a message at the ``DEBUG`` log level.
 
-        See :func:``handle_log`` for details.
+        See :func:`handle_log` for details.
         """
         return self.handle_log(api, command, level=logging.DEBUG)
 
@@ -593,7 +593,7 @@ class LoggingResource(SandboxResource):
         """
         Logs a message at the ``INFO`` log level.
 
-        See :func:``handle_log`` for details.
+        See :func:`handle_log` for details.
         """
         return self.handle_log(api, command, level=logging.INFO)
 
@@ -601,7 +601,7 @@ class LoggingResource(SandboxResource):
         """
         Logs a message at the ``WARNING`` log level.
 
-        See :func:``handle_log`` for details.
+        See :func:`handle_log` for details.
         """
         return self.handle_log(api, command, level=logging.WARNING)
 
@@ -609,7 +609,7 @@ class LoggingResource(SandboxResource):
         """
         Logs a message at the ``ERROR`` log level.
 
-        See :func:``handle_log`` for details.
+        See :func:`handle_log` for details.
         """
         return self.handle_log(api, command, level=logging.ERROR)
 
@@ -617,7 +617,7 @@ class LoggingResource(SandboxResource):
         """
         Logs a message at the ``CRITICAL`` log level.
 
-        See :func:``handle_log`` for details.
+        See :func:`handle_log` for details.
         """
         return self.handle_log(api, command, level=logging.CRITICAL)
 
