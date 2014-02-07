@@ -271,7 +271,8 @@ class SandboxResource(object):
 
 
 class RedisResource(SandboxResource):
-    """Resource that provices access to a simple key-value store.
+    """
+    Resource that provices access to a simple key-value store.
 
     Configuration options:
 
@@ -477,7 +478,8 @@ class RedisResource(SandboxResource):
 
 
 class OutboundResource(SandboxResource):
-    """Resource that provides the ability to send outbound messages.
+    """
+    Resource that provides the ability to send outbound messages.
     """
 
     def handle_reply_to(self, api, command):
@@ -502,7 +504,8 @@ class OutboundResource(SandboxResource):
 
 
 class JsSandboxResource(SandboxResource):
-    """Resource that initializes a Javascript sandbox.
+    """
+    Resource that initializes a Javascript sandbox.
 
     Typically used alongside vumi/applicaiton/sandboxer.js which is
     a simple node.js based Javascript sandbox.
@@ -518,7 +521,8 @@ class JsSandboxResource(SandboxResource):
 
 
 class LoggingResource(SandboxResource):
-    """Resource that allows a sandbox to log messages via Twisted's
+    """
+    Resource that allows a sandbox to log messages via Twisted's
     logging framework.
     """
     def log(self, api, msg, level):
