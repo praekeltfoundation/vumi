@@ -638,7 +638,11 @@ class HttpClientContextFactory(WebClientContextFactory):
 
 
 class HttpClientResource(SandboxResource):
-    """Resource that allows making HTTP calls to outside services.
+    """
+    Resource that allows making HTTP calls to outside services.
+
+    All command on this resource share a common set of command
+    and response fields:
 
     Command fields:
         - ``url``: The URL to request
@@ -728,18 +732,43 @@ class HttpClientResource(SandboxResource):
                           reason=failure.getErrorMessage())
 
     def handle_get(self, api, command):
+        """
+        Make an HTTP GET request.
+
+        See :class:`HttpResource` for details.
+        """
         return self._make_request_from_command('GET', command)
 
     def handle_put(self, api, command):
+        """
+        Make an HTTP PUT request.
+
+        See :class:`HttpResource` for details.
+        """
         return self._make_request_from_command('PUT', command)
 
     def handle_delete(self, api, command):
+        """
+        Make an HTTP DELETE request.
+
+        See :class:`HttpResource` for details.
+        """
         return self._make_request_from_command('DELETE', command)
 
     def handle_head(self, api, command):
+        """
+        Make an HTTP HEAD request.
+
+        See :class:`HttpResource` for details.
+        """
         return self._make_request_from_command('HEAD', command)
 
     def handle_post(self, api, command):
+        """
+        Make an HTTP POST request.
+
+        See :class:`HttpResource` for details.
+        """
         return self._make_request_from_command('POST', command)
 
 
