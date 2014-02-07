@@ -272,7 +272,7 @@ class SandboxResource(object):
 
 class RedisResource(SandboxResource):
     """
-    Resource that provices access to a simple key-value store.
+    Resource that provides access to a simple key-value store.
 
     Configuration options:
 
