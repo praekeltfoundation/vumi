@@ -337,6 +337,29 @@ class RedisResource(SandboxResource):
 
     @inlineCallbacks
     def handle_set(self, api, command):
+        """
+        Set the value of a key.
+
+        Command fields:
+            - ``key``: The key whose value should be set.
+            - ``value``: The value to store. May be any JSON serializable
+              object.
+
+        Reply fields:
+            - ``success``: ``true`` if the operation was successful, otherwise
+              ``false``.
+
+        Example:
+
+        .. code-block:: javascript
+
+            api.request(
+                'kv.set',
+                {key: 'foo',
+                 value: {x: '42'}},
+                function(reply) { api.log_info('Value store: ' +
+                                               reply.success); });
+        """
         key = self._sandboxed_key(api.sandbox_id, command.get('key'))
         if not (yield self.check_keys(api, key)):
             returnValue(self._too_many_keys(command))
@@ -346,6 +369,31 @@ class RedisResource(SandboxResource):
 
     @inlineCallbacks
     def handle_get(self, api, command):
+        """
+        Retrieve the value of a key.
+
+        Command fields:
+            - ``key``: The key whose value should be retrieved.
+
+        Reply fields:
+            - ``success``: ``true`` if the operation was successful, otherwise
+              ``false``.
+            - ``value``: The value retrieved.
+
+        Example:
+
+        .. code-block:: javascript
+
+            api.request(
+                'kv.get',
+                {key: 'foo'},
+                function(reply) {
+                    api.log_info(
+                        'Value retrieved: ' +
+                        JSON.stringify(reply.value));
+                }
+            );
+        """
         key = self._sandboxed_key(api.sandbox_id, command.get('key'))
         raw_value = yield self.redis.get(key)
         value = json.loads(raw_value) if raw_value is not None else None
@@ -354,6 +402,29 @@ class RedisResource(SandboxResource):
 
     @inlineCallbacks
     def handle_delete(self, api, command):
+        """
+        Delete a key.
+
+        Command fields:
+            - ``key``: The key to delete.
+
+        Reply fields:
+            - ``success``: ``true`` if the operation was successful, otherwise
+              ``false``.
+
+        Example:
+
+        .. code-block:: javascript
+
+            api.request(
+                'kv.delete',
+                {key: 'foo'},
+                function(reply) {
+                    api.log_info('Value deleted: ' +
+                                 reply.success);
+                }
+            );
+        """
         key = self._sandboxed_key(api.sandbox_id, command.get('key'))
         existed = bool((yield self.redis.delete(key)))
         if existed:
@@ -364,6 +435,36 @@ class RedisResource(SandboxResource):
 
     @inlineCallbacks
     def handle_incr(self, api, command):
+        """
+        Atomically increment the value of an integer key.
+
+        The current value of the key must be an integer. If the key does not
+        exist, it is set to zero.
+
+        Command fields:
+            - ``key``: The key to delete.
+            - ``amount``: The integer amount to increment the key by. Defaults
+              to 1.
+
+        Reply fields:
+            - ``success``: ``true`` if the operation was successful, otherwise
+              ``false``.
+            - ``value``: The new value of the key.
+
+        Example:
+
+        .. code-block:: javascript
+
+            api.request(
+                'kv.incr',
+                {key: 'foo',
+                 amount: 3},
+                function(reply) {
+                    api.log_info('New value: ' +
+                                 reply.value);
+                }
+            );
+        """
         key = self._sandboxed_key(api.sandbox_id, command.get('key'))
         if not (yield self.check_keys(api, key)):
             returnValue(self._too_many_keys(command))
