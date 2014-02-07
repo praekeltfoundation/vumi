@@ -249,6 +249,15 @@ class MessageStore(object):
         returnValue(event.event if event is not None else None)
 
     @Manager.calls_manager
+    def get_events_for_message(self, message_id):
+        events = []
+        event_keys = yield self.message_event_keys(message_id)
+        for event_id in event_keys:
+            event = yield self.get_event(event_id)
+            events.append(event)
+        returnValue(events)
+
+    @Manager.calls_manager
     def add_inbound_message(self, msg, tag=None, batch_id=None, batch_ids=()):
         msg_id = msg['message_id']
         msg_record = yield self.inbound_messages.load(msg_id)

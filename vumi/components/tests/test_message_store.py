@@ -190,6 +190,28 @@ class TestMessageStore(TestMessageStoreBase):
                          [msg_id])
 
     @inlineCallbacks
+    def test_get_events_for_message(self):
+        msg_id, msg, batch_id = yield self._create_outbound()
+        ack = self.msg_helper.make_ack(msg)
+        ack_id = ack['event_id']
+        yield self.store.add_event(ack)
+
+        dr = self.msg_helper.make_delivery_report(msg)
+        dr_id = ack['event_id']
+        yield self.store.add_event(dr)
+
+        stored_ack = yield self.store.get_event(ack_id)
+        stored_dr = yield self.store.get_event(dr_id)
+
+        events = yield self.store.get_events_for_message(msg_id)
+
+        self.assertTrue(len(events), 2)
+        self.assertTrue(
+            all(isinstance(event, TransportEvent) for event in events))
+        self.assertTrue(stored_ack in events)
+        self.assertTrue(stored_dr in events)
+
+    @inlineCallbacks
     def test_add_ack_event(self):
         msg_id, msg, batch_id = yield self._create_outbound()
         ack = self.msg_helper.make_ack(msg)
