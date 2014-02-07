@@ -515,8 +515,10 @@ class OutboundResource(SandboxResource):
         content = command['content']
         continue_session = command.get('continue_session', True)
         orig_msg = api.get_inbound_message(command['in_reply_to'])
-        self.app_worker.reply_to(orig_msg, content,
-                                 continue_session=continue_session)
+        d = self.app_worker.reply_to(orig_msg, content,
+                                     continue_session=continue_session)
+        d.addCallback(lambda r: self.reply(command, success=True))
+        return d
 
     def handle_reply_to_group(self, api, command):
         """
@@ -547,8 +549,10 @@ class OutboundResource(SandboxResource):
         content = command['content']
         continue_session = command.get('continue_session', True)
         orig_msg = api.get_inbound_message(command['in_reply_to'])
-        self.app_worker.reply_to_group(orig_msg, content,
-                                       continue_session=continue_session)
+        d = self.app_worker.reply_to_group(orig_msg, content,
+                                           continue_session=continue_session)
+        d.addCallback(lambda r: self.reply(command, success=True))
+        return d
 
     def handle_send_to(self, api, command):
         """
@@ -578,7 +582,9 @@ class OutboundResource(SandboxResource):
         content = command['content']
         to_addr = command['to_addr']
         endpoint = command.get('endpoint', 'default')
-        self.app_worker.send_to(to_addr, content, endpoint=endpoint)
+        d = self.app_worker.send_to(to_addr, content, endpoint=endpoint)
+        d.addCallback(lambda r: self.reply(command, success=True))
+        return d
 
 
 class JsSandboxResource(SandboxResource):
