@@ -494,6 +494,7 @@ class DummyAppWorker(object):
 
     def __init__(self):
         self.mock_calls = defaultdict(list)
+        self.mock_returns = {}
 
     def create_sandbox_api(self):
         return self.sandbox_api_cls()
@@ -504,6 +505,7 @@ class DummyAppWorker(object):
     def __getattr__(self, name):
         def mock_method(*args, **kw):
             self.mock_calls[name].append((args, kw))
+            return self.mock_returns.get(name)
         return mock_method
 
 
@@ -553,6 +555,11 @@ class ResourceTestCaseBase(VumiTestCase):
         self.sandbox = self.app_worker.create_sandbox_protocol(self.sandbox_id,
                                                                self.api)
 
+    def check_reply(self, reply, success=True, **kw):
+        self.assertEqual(reply['success'], success)
+        for key, expected_value in kw.iteritems():
+            self.assertEqual(reply[key], expected_value)
+
     @inlineCallbacks
     def create_resource(self, config):
         if self.resource is not None:
@@ -595,11 +602,6 @@ class TestRedisResource(ResourceTestCaseBase):
             'key_prefix': self.r_server._key_prefix,
         })
         return super(TestRedisResource, self).create_resource(config)
-
-    def check_reply(self, reply, success=True, **kw):
-        self.assertEqual(reply['success'], success)
-        for key, expected_value in kw.iteritems():
-            self.assertEqual(reply[key], expected_value)
 
     @inlineCallbacks
     def create_metric(self, metric, value, total_count=1):
@@ -767,30 +769,33 @@ class TestOutboundResource(ResourceTestCaseBase):
 
     @inlineCallbacks
     def test_handle_reply_to(self):
+        self.app_worker.mock_returns['reply_to'] = succeed(None)
         self.api.get_inbound_message = lambda msg_id: msg_id
         reply = yield self.dispatch_command('reply_to', content='hello',
                                             continue_session=True,
                                             in_reply_to='msg1')
-        self.assertEqual(reply, None)
+        self.check_reply(reply, success=True)
         self.assertEqual(self.app_worker.mock_calls['reply_to'],
                          [(('msg1', 'hello'), {'continue_session': True})])
 
     @inlineCallbacks
     def test_handle_reply_to_group(self):
+        self.app_worker.mock_returns['reply_to_group'] = succeed(None)
         self.api.get_inbound_message = lambda msg_id: msg_id
         reply = yield self.dispatch_command('reply_to_group', content='hello',
                                             continue_session=True,
                                             in_reply_to='msg1')
-        self.assertEqual(reply, None)
+        self.check_reply(reply, success=True)
         self.assertEqual(self.app_worker.mock_calls['reply_to_group'],
                          [(('msg1', 'hello'), {'continue_session': True})])
 
     @inlineCallbacks
     def test_handle_send_to(self):
+        self.app_worker.mock_returns['send_to'] = succeed(None)
         reply = yield self.dispatch_command('send_to', content='hello',
                                             to_addr='1234',
                                             tag='default')
-        self.assertEqual(reply, None)
+        self.check_reply(reply, success=True)
         self.assertEqual(self.app_worker.mock_calls['send_to'],
                          [(('1234', 'hello'), {'endpoint': 'default'})])
 
