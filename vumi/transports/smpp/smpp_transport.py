@@ -108,7 +108,7 @@ class SmppService(ReconnectingClientService):
             return d
 
     def stopService(self):
-        protocol = self.get_protocol()
+        protocol = yield self.get_protocol()
         if protocol is not None:
             d = protocol.disconnect()
             d.addCallback(
