@@ -28,20 +28,29 @@ class FreeSwitchESLProtocol(freeswitchesl.FreeSwitchEventProtocol):
         self.vumi_transport = vumi_transport
         freeswitchesl.FreeSwitchEventProtocol.__init__(self)
         self.request_hang_up = False
+        self.current_input = ''
+        self.input_type=None
 
     @inlineCallbacks
     def connectionMade(self):
-        log.msg("start connect")
         yield self.connect()
-        log.msg("done connect")
         yield self.myevents()
         yield self.answer()
         yield self.vumi_transport.register_client(self)
 
-    @inlineCallbacks
+    
     def onDtmf(self, ev):
         print "DTMF:", ev.DTMF_Digit
-        yield self.vumi_transport.handle_input(self, ev.DTMF_Digit)
+        if(self.input_type is None):
+           return self.vumi_transport.handle_input(self, ev.DTMF_Digit)
+        else:
+           if (ev.DTMF_Digit==self.input_type):
+              ret_value=self.current_input
+              self.current_input=''
+              return self.vumi_transport.handle_input(self, ret_value)
+           else:
+              self.current_input=self.current_input+ev.DTMF_Digit
+              
 
     @inlineCallbacks
     def createAndStreamTextAsSpeech(self, engine, voice, message):
@@ -77,6 +86,10 @@ class FreeSwitchESLProtocol(freeswitchesl.FreeSwitchEventProtocol):
 
     def outputMessage(self, text):
         self.streamTextAsSpeech(text)
+    
+    
+    def set_input_type(self,input_type):
+        self.input_type=input_type
 
     def closeCall(self):
         self.request_hang_up = True
@@ -221,7 +234,17 @@ class VoiceServerTransport(Transport):
         client = self._clients.get(client_addr)
 
         text = text.encode('utf-8')
+        overrideURL= None;
+        client.set_input_type(None);
+        if ('helper_metadata' in message):
+            meta=message['helper_metadata']
+            if ('voice' in meta):
+                voicemeta=meta['voice']
+                client.set_input_type(voicemeta.get('wait_for',None))
+                overrideURL=voicemeta.get('speech_url',None)
+            
         client.outputMessage("%s\n" % text)
+        
 
         if message['session_event'] == TransportUserMessage.SESSION_CLOSE:
             client.closeCall()
