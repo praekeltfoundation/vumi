@@ -107,14 +107,12 @@ class SmppService(ReconnectingClientService):
             self.wait_on_protocol_deferreds.append(d)
             return d
 
+    @inlineCallbacks
     def stopService(self):
         protocol = yield self.get_protocol()
         if protocol is not None:
-            d = protocol.disconnect()
-            d.addCallback(
-                lambda _: ReconnectingClientService.stopService(self))
-            return d
-        return ReconnectingClientService.stopService(self)
+            yield protocol.disconnect()
+        returnValue(ReconnectingClientService.stopService(self))
 
 
 class SmppTransceiverTransport(Transport):
