@@ -427,6 +427,31 @@ class JsSandboxTestMixin(object):
             'Done.',
         ])
 
+    @inlineCallbacks
+    def test_js_sandboxer_with_delayed_requests(self):
+        app_js = pkg_resources.resource_filename('vumi.application.tests',
+                                                 'app_delayed_requests.js')
+        javascript = file(app_js).read()
+        app = yield self.setup_app(javascript, extra_config={
+            "app_context": "{setImmediate: setImmediate}",
+        })
+
+        with LogCatcher() as lc:
+            status = yield app.process_message_in_sandbox(
+                self.app_helper.make_inbound("foo", sandbox_id='sandbox1'))
+            failures = [log['failure'].value for log in lc.errors]
+            msgs = lc.messages()
+        self.assertEqual(failures, [])
+        self.assertEqual(status, 0)
+        self.assertEqual(msgs, [
+            'Starting sandbox ...',
+            'Loading sandboxed code ...',
+            'From init!',
+            'From command: inbound-message',
+            'Log successful: true',
+            'Done.',
+        ])
+
 
 class TestJsSandbox(SandboxTestCaseBase, JsSandboxTestMixin):
 
