@@ -1,13 +1,14 @@
 from datetime import datetime
 
 from twisted.internet.defer import Deferred, succeed, inlineCallbacks
-from twisted.trial.unittest import TestCase
+from twisted.trial.unittest import SkipTest, TestCase, FailTest
 
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.tests.fake_amqp import FakeAMQPBroker, FakeAMQClient
 from vumi.tests.helpers import (
-    VumiTestCase, proxyable, generate_proxies, IHelper,
-    MessageHelper, WorkerHelper, MessageDispatchHelper)
+    VumiTestCase, proxyable, generate_proxies, IHelper, import_skip,
+    MessageHelper, WorkerHelper, MessageDispatchHelper, PersistenceHelper,
+    success_result_of)
 from vumi.worker import BaseWorker
 
 
@@ -119,6 +120,62 @@ class TestHelperHelpers(TestCase):
         err = self.assertRaises(Exception, generate_proxies, target, source2)
         self.assertTrue('is_proxyable' in err.args[0])
 
+    def test_import_skip_skips(self):
+        """
+        import_skip() should raise a SkipTest exception if given an ImportError
+        referencing an expected module name.
+        """
+        try:
+            import badmodule
+            self.fail(
+                "Expected ImportError for %r, nothing raised." % (badmodule,))
+        except ImportError as import_error:
+            self.assertRaises(SkipTest, import_skip, import_error, 'badmodule')
+
+    def test_import_skip_reraises(self):
+        """
+        import_skip() should reraise the given ImportError if it does not
+        reference an expected module name.
+        """
+        try:
+            import badmodule
+            self.fail(
+                "Expected ImportError for %r, nothing raised." % (badmodule,))
+        except ImportError as import_error:
+            err = self.assertRaises(
+                ImportError, import_skip, import_error, 'nothing')
+            self.assertEqual(err, import_error)
+
+    def test_success_result_of_no_result(self):
+        """
+        success_result_of() should raise a FailTest exception if the Deferred
+        has no result.
+        """
+        d = Deferred()
+        err = self.assertRaises(FailTest, success_result_of, d)
+        self.assertEqual(
+            err.args[0], "No result available for deferred: %r" % (d,))
+
+    def test_success_result_of_failure(self):
+        """
+        success_result_of() should raise a FailTest exception if the Deferred
+        has a failure result.
+        """
+        d = Deferred()
+        d.errback(Exception())
+        err = self.assertRaises(FailTest, success_result_of, d)
+        self.assertTrue(err.args[0].startswith(
+            "Expected success from deferred %r, got failure:" % (d,)))
+
+    def test_success_result_of_success(self):
+        """
+        success_result_of() should raise a FailTest exception if the Deferred
+        has no result.
+        """
+        d = Deferred()
+        d.callback('foo')
+        self.assertEqual(success_result_of(d), 'foo')
+
 
 class TestMessageHelper(TestCase):
     def assert_message_fields(self, msg, field_dict):
@@ -133,7 +190,7 @@ class TestMessageHelper(TestCase):
 
     def test_defaults(self):
         """
-        MessageHelper instances should have the expected parameters defaults.
+        MessageHelper instances should have the expected parameter defaults.
         """
         msg_helper = MessageHelper()
         self.assertEqual(msg_helper.transport_name, 'sphex')
@@ -561,17 +618,6 @@ class ToyWorker(BaseWorker):
 
 
 class TestWorkerHelper(VumiTestCase):
-    def success_result_of(self, d):
-        """
-        We can't necessarily use TestCase.successResultOf because our Twisted
-        might not be new enough.
-        """
-        self.assertTrue(
-            d.called, "Deferred not called, no result available: %r" % (d,))
-        results = []
-        d.addCallback(results.append)
-        return results[0]
-
     def test_implements_IHelper(self):
         """
         WorkerHelper instances should provide the IHelper interface.
@@ -580,7 +626,7 @@ class TestWorkerHelper(VumiTestCase):
 
     def test_defaults(self):
         """
-        WorkerHelper instances should have the expected parameters defaults.
+        WorkerHelper instances should have the expected parameter defaults.
         """
         worker_helper = WorkerHelper()
         self.assertEqual(worker_helper._connector_name, None)
@@ -689,7 +735,7 @@ class TestWorkerHelper(VumiTestCase):
         """
         worker_helper = WorkerHelper()
         worker_d = worker_helper.get_worker(ToyWorker, {'foo': 'bar'})
-        worker = self.success_result_of(worker_d)
+        worker = success_result_of(worker_d)
         self.assertIsInstance(worker, ToyWorker)
         self.assertIsInstance(worker._amqp_client, FakeAMQClient)
         self.assertEqual(worker._amqp_client.broker, worker_helper.broker)
@@ -706,7 +752,7 @@ class TestWorkerHelper(VumiTestCase):
         """
         worker_helper = WorkerHelper()
         worker_d = worker_helper.get_worker(ToyWorker, {}, start=False)
-        worker = self.success_result_of(worker_d)
+        worker = success_result_of(worker_d)
         self.assertIsInstance(worker, ToyWorker)
         self.assertIsInstance(worker._amqp_client, FakeAMQClient)
         self.assertEqual(worker._amqp_client.broker, worker_helper.broker)
@@ -869,7 +915,7 @@ class TestWorkerHelper(VumiTestCase):
         msg = msg_helper.make_ack()
         yield self._add_to_dispatched(
             worker_helper.broker, 'fooconn.event', msg, kick=True)
-        dispatched = self.success_result_of(d)
+        dispatched = success_result_of(d)
         self.assertEqual(dispatched, [msg])
 
     @inlineCallbacks
@@ -885,7 +931,7 @@ class TestWorkerHelper(VumiTestCase):
         msg = msg_helper.make_ack()
         yield self._add_to_dispatched(
             worker_helper.broker, 'fooconn.event', msg, kick=True)
-        dispatched = self.success_result_of(d)
+        dispatched = success_result_of(d)
         self.assertEqual(dispatched, [msg])
 
     @inlineCallbacks
@@ -900,7 +946,7 @@ class TestWorkerHelper(VumiTestCase):
         msg = msg_helper.make_inbound('message')
         yield self._add_to_dispatched(
             worker_helper.broker, 'fooconn.inbound', msg, kick=True)
-        dispatched = self.success_result_of(d)
+        dispatched = success_result_of(d)
         self.assertEqual(dispatched, [msg])
 
     @inlineCallbacks
@@ -915,7 +961,7 @@ class TestWorkerHelper(VumiTestCase):
         msg = msg_helper.make_inbound('message')
         yield self._add_to_dispatched(
             worker_helper.broker, 'fooconn.inbound', msg, kick=True)
-        dispatched = self.success_result_of(d)
+        dispatched = success_result_of(d)
         self.assertEqual(dispatched, [msg])
 
     @inlineCallbacks
@@ -930,7 +976,7 @@ class TestWorkerHelper(VumiTestCase):
         msg = msg_helper.make_outbound('message')
         yield self._add_to_dispatched(
             worker_helper.broker, 'fooconn.outbound', msg, kick=True)
-        dispatched = self.success_result_of(d)
+        dispatched = success_result_of(d)
         self.assertEqual(dispatched, [msg])
 
     @inlineCallbacks
@@ -945,7 +991,7 @@ class TestWorkerHelper(VumiTestCase):
         msg = msg_helper.make_outbound('message')
         yield self._add_to_dispatched(
             worker_helper.broker, 'fooconn.outbound', msg, kick=True)
-        dispatched = self.success_result_of(d)
+        dispatched = success_result_of(d)
         self.assertEqual(dispatched, [msg])
 
     def test_clear_dispatched_events(self):
@@ -1424,3 +1470,333 @@ class TestMessageDispatchHelper(VumiTestCase):
             'from_addr': msg['to_addr'],
             'in_reply_to': msg['message_id'],
         })
+
+
+class FakeRiakManagerForCleanup(object):
+    purged = False
+
+    def __init__(self, bucket_prefix, conns=None):
+        self.bucket_prefix = bucket_prefix
+        if conns is not None:
+            self._cm = self
+            self.conns = conns
+        self.client = self
+
+    def purge_all(self):
+        self.purged = True
+        return 'maybe async'
+
+
+class FakeRiakClientConnection(object):
+    closed = False
+
+    def close(self):
+        self.closed = True
+
+
+class FakeRedisManagerForCleanup(object):
+    purged = False
+    connected = True
+
+    def __init__(self, key_prefix):
+        self._key_prefix = key_prefix
+
+    def _purge_all(self):
+        if not self.connected:
+            raise RuntimeError('Not connected')
+        self.purged = True
+
+    def close_manager(self):
+        self.connected = False
+
+
+class TestPersistenceHelper(VumiTestCase):
+    @property
+    def _RiakManager(self):
+        try:
+            from vumi.persist.riak_manager import RiakManager
+        except ImportError, e:
+            import_skip(e, 'riak')
+        return RiakManager
+
+    @property
+    def _TxRiakManager(self):
+        try:
+            from vumi.persist.txriak_manager import TxRiakManager
+        except ImportError, e:
+            import_skip(e, 'riakasaurus', 'riakasaurus.riak')
+        return TxRiakManager
+
+    @property
+    def _RedisManager(self):
+        try:
+            from vumi.persist.redis_manager import RedisManager
+        except ImportError, e:
+            import_skip(e, 'redis')
+        return RedisManager
+
+    @property
+    def _TxRedisManager(self):
+        from vumi.persist.txredis_manager import TxRedisManager
+        return TxRedisManager
+
+    def test_implements_IHelper(self):
+        """
+        PersistenceHelper instances should provide the IHelper interface.
+        """
+        self.assertTrue(IHelper.providedBy(PersistenceHelper()))
+
+    def test_defaults(self):
+        """
+        PersistenceHelper instances should have the expected parameter
+        defaults.
+        """
+        persistence_helper = PersistenceHelper()
+        self.assertEqual(persistence_helper.use_riak, False)
+        self.assertEqual(persistence_helper.is_sync, False)
+
+    def test_all_params(self):
+        """
+        PersistenceHelper instances should accept ``use_riak`` and ``is_sync``
+        params.
+        """
+        persistence_helper = PersistenceHelper(use_riak=True, is_sync=True)
+        self.assertEqual(persistence_helper.use_riak, True)
+        self.assertEqual(persistence_helper.is_sync, True)
+
+    def get_manager_inits(self):
+        return (
+            self._RiakManager.__init__,
+            self._TxRiakManager.__init__,
+            self._RedisManager.__init__,
+            self._TxRedisManager.__init__,
+        )
+
+    def test_setup_applies_patches(self):
+        """
+        PersistenceHelper.setup() should apply patches to the persistence
+        managers and return ``None``, not a Deferred.
+        """
+        manager_inits = self.get_manager_inits()
+        persistence_helper = PersistenceHelper()
+        self.assertEqual(persistence_helper._patches_applied, False)
+        self.assertEqual(manager_inits, self.get_manager_inits())
+
+        self.assertEqual(persistence_helper.setup(), None)
+        self.assertEqual(persistence_helper._patches_applied, True)
+        self.assertNotEqual(manager_inits, self.get_manager_inits())
+
+        # Clean up after ourselves.
+        persistence_helper._unpatch()
+        self.assertEqual(persistence_helper._patches_applied, False)
+        self.assertEqual(manager_inits, self.get_manager_inits())
+
+    def test_cleanup_restores_patches(self):
+        """
+        PersistenceHelper.cleanup() should restore any patches applied by
+        PersistenceHelper.setup().
+        """
+        manager_inits = self.get_manager_inits()
+        persistence_helper = PersistenceHelper()
+        self.assertEqual(persistence_helper.setup(), None)
+        self.assertEqual(persistence_helper._patches_applied, True)
+        self.assertNotEqual(manager_inits, self.get_manager_inits())
+
+        success_result_of(persistence_helper.cleanup())
+        self.assertEqual(persistence_helper._patches_applied, False)
+        self.assertEqual(manager_inits, self.get_manager_inits())
+
+    def test_get_riak_manager_unpatched(self):
+        """
+        .get_riak_manager() should fail if .setup() has not been called.
+        """
+        persistence_helper = PersistenceHelper()
+        err = self.assertRaises(Exception, persistence_helper.get_riak_manager)
+        self.assertTrue('setup() must be called' in str(err))
+
+    def test_get_redis_manager_unpatched(self):
+        """
+        .get_redis_manager() should fail if .setup() has not been called.
+        """
+        persistence_helper = PersistenceHelper()
+        err = self.assertRaises(
+            Exception, persistence_helper.get_redis_manager)
+        self.assertTrue('setup() must be called' in str(err))
+
+    def test_mk_config_unpatched(self):
+        """
+        .mk_config() should fail if .setup() has not been called.
+        """
+        persistence_helper = PersistenceHelper()
+        err = self.assertRaises(Exception, persistence_helper.mk_config, {})
+        self.assertTrue('setup() must be called' in str(err))
+
+    def test_get_riak_manager_no_riak(self):
+        """
+        .get_riak_manager() should fail if ``use_riak`` is ``False``.
+        """
+        persistence_helper = self.add_helper(PersistenceHelper())
+        err = self.assertRaises(Exception, persistence_helper.get_riak_manager)
+        self.assertTrue(
+            'Use of Riak has been disabled for this test.' in str(err))
+
+    def test_get_riak_manager_sync(self):
+        """
+        .get_riak_manager() should return a RiakManager if ``is_sync`` is
+        ``True``.
+        """
+        persistence_helper = self.add_helper(
+            PersistenceHelper(use_riak=True, is_sync=True))
+        manager = persistence_helper.get_riak_manager()
+        self.assertIsInstance(manager, self._RiakManager)
+        self.assertEqual(persistence_helper._riak_managers, [manager])
+
+    def test_get_riak_manager_async(self):
+        """
+        .get_riak_manager() should return a TxRiakManager if ``is_sync`` is
+        ``False``.
+        """
+        persistence_helper = self.add_helper(PersistenceHelper(use_riak=True))
+        manager = persistence_helper.get_riak_manager()
+        self.assertIsInstance(manager, self._TxRiakManager)
+        self.assertEqual(persistence_helper._riak_managers, [manager])
+
+    def test_get_redis_manager_sync(self):
+        """
+        .get_redis_manager() should return a RedisManager if ``is_sync`` is
+        ``True``.
+        """
+        persistence_helper = self.add_helper(PersistenceHelper(is_sync=True))
+        manager = persistence_helper.get_redis_manager()
+        self.assertIsInstance(manager, self._RedisManager)
+        self.assertEqual(persistence_helper._redis_managers, [manager])
+
+    @inlineCallbacks
+    def test_get_redis_manager_async(self):
+        """
+        .get_redis_manager() should return a Deferred that fires with a
+        TxRedisManager if ``is_sync`` is ``False``.
+        """
+        persistence_helper = self.add_helper(PersistenceHelper())
+        manager_d = persistence_helper.get_redis_manager()
+        self.assertIsInstance(manager_d, Deferred)
+        manager = yield manager_d
+        self.assertIsInstance(manager, self._TxRedisManager)
+        self.assertEqual(persistence_helper._redis_managers, [manager])
+
+    def test_mk_config(self):
+        """
+        .mk_config() should return a copy of the provided config with
+        riak_manager and redis_manager fields overridden.
+        """
+        persistence_helper = self.add_helper(PersistenceHelper())
+        config = {}
+        new_config = persistence_helper.mk_config(config)
+        self.assertEqual(
+            ['redis_manager', 'riak_manager'], sorted(new_config.keys()))
+        self.assertEqual(config, {})
+
+    def test__get_riak_managers_for_cleanup(self):
+        """
+        ._get_riak_managers_for_cleanup() should return the known Riak managers
+        in reverse order with appropriate boolean determining whether they
+        should be purged or not.
+        """
+        persistence_helper = PersistenceHelper()
+        managers = [
+            FakeRiakManagerForCleanup('bucket1'),
+            FakeRiakManagerForCleanup('bucket2'),
+            FakeRiakManagerForCleanup('bucket2'),
+            FakeRiakManagerForCleanup('bucket1'),
+            FakeRiakManagerForCleanup('bucket3'),
+        ]
+        persistence_helper._riak_managers.extend(managers)
+        self.assertEqual(
+            list(persistence_helper._get_riak_managers_for_cleanup()),
+            list(reversed(zip([True, True, False, False, True], managers))))
+
+    def test__get_redis_managers_for_cleanup(self):
+        """
+        ._get_redis_managers_for_cleanup() should return the known Redis
+        managers in reverse order with appropriate boolean determining whether
+        they should be purged or not.
+        """
+        persistence_helper = PersistenceHelper()
+        managers = [
+            FakeRedisManagerForCleanup('prefix1'),
+            FakeRedisManagerForCleanup('prefix2'),
+            FakeRedisManagerForCleanup('prefix2'),
+            FakeRedisManagerForCleanup('prefix1'),
+            FakeRedisManagerForCleanup('prefix3'),
+        ]
+        persistence_helper._redis_managers.extend(managers)
+        self.assertEqual(
+            list(persistence_helper._get_redis_managers_for_cleanup()),
+            list(reversed(zip([True, True, False, False, True], managers))))
+
+    def test__purge_riak(self):
+        """
+        ._purge_riak() should call manager.purge_all().
+        """
+        persistence_helper = PersistenceHelper()
+        manager = FakeRiakManagerForCleanup('prefix1')
+        self.assertEqual(manager.purged, False)
+        self.assertEqual(
+            persistence_helper._purge_riak(manager), 'maybe async')
+        self.assertEqual(manager.purged, True)
+
+    def test__purge_redis(self):
+        """
+        ._purge_redis() should call manager._purge_all() and disconnect.
+        """
+        persistence_helper = PersistenceHelper()
+        manager = FakeRedisManagerForCleanup('prefix1')
+        self.assertEqual(manager.purged, False)
+        self.assertEqual(manager.connected, True)
+        success_result_of(persistence_helper._purge_redis(manager))
+        self.assertEqual(manager.purged, True)
+        self.assertEqual(manager.connected, False)
+
+    def test__purge_redis_not_connected(self):
+        """
+        ._purge_redis() should ignore riak managers that aren't connected.
+        """
+        persistence_helper = PersistenceHelper()
+        manager = FakeRedisManagerForCleanup('prefix1')
+        manager.close_manager()
+        self.assertEqual(manager.purged, False)
+        success_result_of(persistence_helper._purge_redis(manager))
+        self.assertEqual(manager.purged, False)
+
+    def test_cleanup_purges_managers(self):
+        """
+        .cleanup() should purge the Riak and Redis managers that need purging.
+        """
+        persistence_helper = PersistenceHelper()
+        riak_purge = FakeRiakManagerForCleanup('bucket1')
+        riak_nopurge = FakeRiakManagerForCleanup('bucket1')
+        redis_purge = FakeRedisManagerForCleanup('prefix1')
+        redis_nopurge = FakeRedisManagerForCleanup('prefix1')
+        persistence_helper._riak_managers.extend([riak_purge, riak_nopurge])
+        persistence_helper._redis_managers.extend([redis_purge, redis_nopurge])
+
+        success_result_of(persistence_helper.cleanup())
+        self.assertEqual(
+            [True, False], [riak_purge.purged, riak_nopurge.purged])
+        self.assertEqual(
+            [True, False], [redis_purge.purged, redis_nopurge.purged])
+
+    def test_cleanup_closes_sync_riak_managers(self):
+        """
+        .cleanup() should close sync Riak client connections.
+        """
+        persistence_helper = PersistenceHelper()
+        conn1 = FakeRiakClientConnection()
+        conn2 = FakeRiakClientConnection()
+        manager = FakeRiakManagerForCleanup('bucket1', [conn1, conn2])
+        persistence_helper._riak_managers.append(manager)
+        self.assertEqual(manager.conns, [conn1, conn2])
+        self.assertEqual([conn1.closed, conn2.closed], [False, False])
+        success_result_of(persistence_helper.cleanup())
+        self.assertEqual(manager.conns, [])
+        self.assertEqual([conn1.closed, conn2.closed], [True, True])
