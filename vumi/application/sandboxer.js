@@ -1,10 +1,13 @@
 var vm = require('vm');
 var events = require('events');
+var EventEmitter = events.EventEmitter;
 
 
 var SandboxApi = function () {
     // API for use by applications
     var self = this;
+    self.emitter = new EventEmitter();
+
     self.id = 0;
     self.waiting_requests = [];
 
@@ -56,9 +59,9 @@ var SandboxApi = function () {
 var SandboxRunner = function (api) {
     // Runner for a sandboxed app
     var self = this;
+    self.emitter = new EventEmitter();
 
     self.api = api;
-    self.emitter = new events.EventEmitter();
     self.chunk = "";
     self.pending_requests = {};
     self.loaded = false;
