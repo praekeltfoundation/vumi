@@ -33,8 +33,7 @@ class MessageStoreProxyResource(Resource):
             chunk_size = self.default_chunk_size
         d = self.get_keys(self.message_store, self.batch_id)
         d.addCallback(lambda keys: chunks(keys, chunk_size))
-        d.addCallback(self.get_chunked_messages)
-        d.addCallback(self.write_chunked_messages, request)
+        d.addCallback(self.handle_chunks, request)
         d.addCallback(lambda _: request.finish())
         return NOT_DONE_YET
 
@@ -44,21 +43,23 @@ class MessageStoreProxyResource(Resource):
     def get_message(self, message_store, message_id):
         raise NotImplementedError('To be implemented by sub-class.')
 
-    def get_chunked_messages(self, chunks):
+    def handle_chunks(self, chunks, request):
         return DeferredList([
-            self.get_messages(chunk) for chunk in chunks])
+            self.handle_chunk(chunk, request) for chunk in chunks])
+
+    def handle_chunk(self, message_keys, request):
+        d = self.get_messages(message_keys)
+        d.addCallback(lambda results: [msg for success, msg in results])
+        d.addCallback(self.write_messages, request)
+        return d
 
     def get_messages(self, message_keys):
         return DeferredList([
             self.get_message(self.message_store, key)
             for key in message_keys])
 
-    def write_chunked_messages(self, message_chunks, request):
-        for success, message_chunk in message_chunks:
-            self.write_message_chunk(message_chunk, request)
-
-    def write_message_chunk(self, message_chunk, request):
-        for success, message in message_chunk:
+    def write_messages(self, messages, request):
+        for message in messages:
             request.write((u'%s\n' % (message.to_json(),)).encode('utf-8'))
 
 
