@@ -1,6 +1,6 @@
 # -*- test-case-name: vumi.components.tests.test_message_store_resource -*-
 
-from twisted.internet.defer import DeferredList
+from twisted.internet.defer import DeferredList, inlineCallbacks
 from twisted.web.resource import NoResource, Resource
 from twisted.web.server import NOT_DONE_YET
 
@@ -17,6 +17,7 @@ class MessageStoreProxyResource(Resource):
 
     isLeaf = True
     default_chunk_size = 10
+    default_concurrency = 10
 
     def __init__(self, message_store, batch_id):
         Resource.__init__(self)
@@ -31,10 +32,15 @@ class MessageStoreProxyResource(Resource):
             chunk_size = int(request.args['chunk_size'][0])
         else:
             chunk_size = self.default_chunk_size
+
+        if 'concurrency' in request.args:
+            concurrency = int(request.args['concurrency'][0])
+        else:
+            concurrency = self.default_concurrency
+
         d = self.get_keys(self.message_store, self.batch_id)
-        d.addCallback(lambda keys: chunks(keys, chunk_size))
-        d.addCallback(self.handle_chunks, request)
-        d.addCallback(lambda _: request.finish())
+        d.addCallback(lambda keys: list(chunks(keys, chunk_size)))
+        d.addCallback(self.fetch_chunks, concurrency, request)
         return NOT_DONE_YET
 
     def get_keys(self, message_store, batch_id):
@@ -43,13 +49,22 @@ class MessageStoreProxyResource(Resource):
     def get_message(self, message_store, message_id):
         raise NotImplementedError('To be implemented by sub-class.')
 
+    @inlineCallbacks
+    def fetch_chunks(self, chunked_keys, concurrency, request):
+        while chunked_keys:
+            block, chunked_keys = (
+                chunked_keys[:concurrency], chunked_keys[concurrency:])
+            yield self.handle_chunks(block, request)
+        request.finish()
+
     def handle_chunks(self, chunks, request):
         return DeferredList([
             self.handle_chunk(chunk, request) for chunk in chunks])
 
     def handle_chunk(self, message_keys, request):
         d = self.get_messages(message_keys)
-        d.addCallback(lambda results: [msg for success, msg in results])
+        d.addCallback(
+            lambda results: [msg for success, msg in results if success])
         d.addCallback(self.write_messages, request)
         return d
 
