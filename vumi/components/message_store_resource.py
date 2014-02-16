@@ -1,8 +1,17 @@
 # -*- test-case-name: vumi.components.tests.test_message_store_resource -*-
 
+from twisted.application.internet import StreamServerEndpointService
 from twisted.internet.defer import DeferredList, inlineCallbacks
 from twisted.web.resource import NoResource, Resource
 from twisted.web.server import NOT_DONE_YET
+
+from vumi.components.message_store import MessageStore
+from vumi.config import ConfigDict, ConfigText, ConfigServerEndpoint
+from vumi.persist.txriak_manager import TxRiakManager
+from vumi.persist.txredis_manager import TxRedisManager
+from vumi.transports.httprpc import httprpc
+from vumi.utils import build_web_site
+from vumi.worker import BaseWorker
 
 
 # NOTE: Thanks Ned http://stackoverflow.com/a/312464!
@@ -121,3 +130,46 @@ class MessageStoreResource(Resource):
 
     def getChild(self, path, request):
         return BatchResource(self.message_store, path)
+
+
+class MessageStoreResourceWorker(BaseWorker):
+
+    class CONFIG_CLASS(BaseWorker.CONFIG_CLASS):
+        worker_name = ConfigText(
+            'Name of the this message store resource worker',
+            required=True, static=True)
+        twisted_endpoint = ConfigServerEndpoint(
+            'Twisted endpoint to listen on.', required=True, static=True)
+        web_path = ConfigText(
+            'The path to serve this resource on.', required=True, static=True)
+        health_path = ConfigText(
+            'The path to serve the health resource on.', default='/health/',
+            static=True)
+        riak_manager = ConfigDict(
+            'Riak client configuration.', default={}, static=True)
+        redis_manager = ConfigDict(
+            'Redis client configuration.', default={}, static=True)
+
+    def get_health_response(self):
+        return 'OK'
+
+    @inlineCallbacks
+    def setup_worker(self):
+        config = self.get_static_config()
+        riak = yield TxRiakManager.from_config(config.riak_manager)
+        redis = yield TxRedisManager.from_config(config.redis_manager)
+        self.store = MessageStore(riak, redis)
+
+        site = build_web_site({
+            config.web_path: MessageStoreResource(self.store),
+            config.health_path: httprpc.HttpRpcHealthResource(self),
+        })
+        self.addService(
+            StreamServerEndpointService(config.twisted_endpoint, site))
+
+    def teardown_worker(self):
+        pass
+
+    def setup_connectors(self):
+        # NOTE: not doing anything AMQP
+        pass

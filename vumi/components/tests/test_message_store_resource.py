@@ -10,6 +10,7 @@ from vumi.utils import http_request_full
 
 from vumi.tests.helpers import (
     VumiTestCase, MessageHelper, PersistenceHelper, import_skip,
+    WorkerHelper
 )
 
 
@@ -22,21 +23,33 @@ class TestMessageStoreResource(VumiTestCase):
         self.persistence_helper = self.add_helper(
             PersistenceHelper(use_riak=True))
         try:
-            from vumi.components.message_store import MessageStore
             from vumi.components.message_store_resource import (
-                MessageStoreResource)
+                MessageStoreResourceWorker)
         except ImportError, e:
             import_skip(e, 'riakasaurus', 'riakasaurus.riak')
-        self.redis = yield self.persistence_helper.get_redis_manager()
-        self.manager = self.persistence_helper.get_riak_manager()
-        self.store = MessageStore(self.manager, self.redis)
-        self.store_resource = MessageStoreResource(self.store)
-        self.msg_helper = self.add_helper(MessageHelper())
-        self.site = Site(self.store_resource)
-        port = reactor.listenTCP(0, self.site)
+
+        self.worker_helper = self.add_helper(WorkerHelper())
+
+        # self.redis = yield self.persistence_helper.get_redis_manager()
+        # self.manager = self.persistence_helper.get_riak_manager()
+        # self.store = MessageStore(self.manager, self.redis)
+        # self.store_resource = MessageStoreResource(self.store)
+
+        config = self.persistence_helper.mk_config({
+            'twisted_endpoint': 'tcp:0',
+            'web_path': '/resource_path/',
+        })
+
+        worker = yield self.worker_helper.get_worker(
+            MessageStoreResourceWorker, config)
+        yield worker.startService()
+        port = yield worker.services[0]._waitingForPort
         addr = port.getHost()
-        self.addCleanup(self.stop_server, port)
+
+        self.msg_helper = self.add_helper(MessageHelper())
         self.url = 'http://%s:%s' % (addr.host, addr.port)
+        self.store = worker.store
+        self.addCleanup(self.stop_server, port)
 
     def stop_server(self, port):
         d = port.stopListening()
@@ -59,7 +72,7 @@ class TestMessageStoreResource(VumiTestCase):
         return d
 
     def make_request(self, method, batch_id, leaf):
-        url = '%s/%s/%s' % (self.url, batch_id, leaf)
+        url = '%s/%s/%s/%s' % (self.url, 'resource_path', batch_id, leaf)
         return http_request_full(method=method, url=url)
 
     def get_batch_resource(self, batch_id):
