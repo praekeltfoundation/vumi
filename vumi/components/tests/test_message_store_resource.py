@@ -2,9 +2,7 @@
 
 import json
 
-from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks
-from twisted.web.server import Site
 
 from vumi.utils import http_request_full
 
