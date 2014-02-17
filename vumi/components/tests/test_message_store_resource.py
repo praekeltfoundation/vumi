@@ -28,11 +28,6 @@ class TestMessageStoreResource(VumiTestCase):
 
         self.worker_helper = self.add_helper(WorkerHelper())
 
-        # self.redis = yield self.persistence_helper.get_redis_manager()
-        # self.manager = self.persistence_helper.get_riak_manager()
-        # self.store = MessageStore(self.manager, self.redis)
-        # self.store_resource = MessageStoreResource(self.store)
-
         config = self.persistence_helper.mk_config({
             'twisted_endpoint': 'tcp:0',
             'web_path': '/resource_path/',
