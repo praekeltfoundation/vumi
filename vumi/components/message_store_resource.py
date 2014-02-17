@@ -71,21 +71,17 @@ class MessageStoreProxyResource(Resource):
             self.handle_chunk(chunk, request) for chunk in chunks])
 
     def handle_chunk(self, message_keys, request):
-        d = self.get_messages(message_keys)
-        d.addCallback(
-            lambda results: [msg for success, msg in results if success])
-        d.addCallback(self.write_messages, request)
+        return DeferredList([
+            self.handle_message(key, request) for key in message_keys])
+
+    def handle_message(self, message_key, request):
+        d = self.get_message(self.message_store, message_key)
+        d.addCallback(self.write_message, request)
         return d
 
-    def get_messages(self, message_keys):
-        return DeferredList([
-            self.get_message(self.message_store, key)
-            for key in message_keys])
-
-    def write_messages(self, messages, request):
-        for message in messages:
-            request.write(message.to_json())
-            request.write('\n')
+    def write_message(self, message, request):
+        request.write(message.to_json())
+        request.write('\n')
 
 
 class InboundResource(MessageStoreProxyResource):
