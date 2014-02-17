@@ -14,8 +14,6 @@ from vumi.tests.helpers import (
 
 class TestMessageStoreResource(VumiTestCase):
 
-    timeout = 1
-
     @inlineCallbacks
     def setUp(self):
         self.persistence_helper = self.add_helper(
