@@ -84,7 +84,8 @@ class MessageStoreProxyResource(Resource):
 
     def write_messages(self, messages, request):
         for message in messages:
-            request.write((u'%s\n' % (message.to_json(),)).encode('utf-8'))
+            request.write(message.to_json())
+            request.write('\n')
 
 
 class InboundResource(MessageStoreProxyResource):
