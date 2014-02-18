@@ -346,7 +346,9 @@ class TestMessageStoreCacheWithCounters(MessageStoreCacheTestCase):
     start_batch = False
 
     @inlineCallbacks
-    def test_switching_to_counters(self):
+    def test_switching_to_counters_outbound(self):
+        self.cache.TRUNCATE_MESSAGE_KEY_COUNT_AT = 7
+
         for i in range(10):
             msg = self.msg_helper.make_outbound("outbound")
             yield self.cache.add_outbound_message(self.batch_id, msg)
@@ -360,6 +362,30 @@ class TestMessageStoreCacheWithCounters(MessageStoreCacheTestCase):
         self.assertEqual(
             (yield self.cache.count_outbound_message_keys(self.batch_id)),
             10)
+
+        outbound = yield self.cache.get_outbound_message_keys(self.batch_id)
+        self.assertEqual(len(outbound), 7)
+
+    @inlineCallbacks
+    def test_switching_to_counters_inbound(self):
+        self.cache.TRUNCATE_MESSAGE_KEY_COUNT_AT = 7
+
+        for i in range(10):
+            msg = self.msg_helper.make_inbound("inbound")
+            yield self.cache.add_inbound_message(self.batch_id, msg)
+
+        self.assertFalse((yield self.cache.uses_counters(self.batch_id)))
+        self.assertEqual(
+            (yield self.cache.count_inbound_message_keys(self.batch_id)),
+            10)
+        yield self.cache.switch_to_counters(self.batch_id)
+        self.assertTrue((yield self.cache.uses_counters(self.batch_id)))
+        self.assertEqual(
+            (yield self.cache.count_inbound_message_keys(self.batch_id)),
+            10)
+
+        inbound = yield self.cache.get_inbound_message_keys(self.batch_id)
+        self.assertEqual(len(inbound), 7)
 
     @inlineCallbacks
     def test_inbound_truncate_at_within_limits(self):

@@ -115,6 +115,9 @@ class MessageStoreCache(object):
         yield self.redis.set(self.outbound_count_key(batch_id),
                              outbound_count or 0)
 
+        yield self.truncate_inbound_message_keys(batch_id)
+        yield self.truncate_outbound_message_keys(batch_id)
+
     @Manager.calls_manager
     def truncate_inbound_message_keys(self, batch_id, truncate_at=None):
         # indexes are zero based
