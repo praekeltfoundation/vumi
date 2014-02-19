@@ -33,14 +33,19 @@ class FreeSwitchESLProtocol(freeswitchesl.FreeSwitchEventProtocol):
 
     @inlineCallbacks
     def connectionMade(self):
+        log.msg("TRACE: FreeSwitch Connection Initiated")
         yield self.connect()
+        log.msg("TRACE: Connected..")
         yield self.myevents()
+        log.msg("TRACE: Events filtered")        
         yield self.answer()
+        log.msg("TRACE:Call Taken")                
         yield self.vumi_transport.register_client(self)
+        log.msg("TRACE: Registered")        
+        
 
     
     def onDtmf(self, ev):
-        print "DTMF:", ev.DTMF_Digit
         if(self.input_type is None):
            return self.vumi_transport.handle_input(self, ev.DTMF_Digit)
         else:
@@ -87,6 +92,10 @@ class FreeSwitchESLProtocol(freeswitchesl.FreeSwitchEventProtocol):
     def outputMessage(self, text):
         self.streamTextAsSpeech(text)
     
+    @inlineCallbacks
+    def outputStream(self, url):
+        yield self.playback(url)
+    
     
     def set_input_type(self,input_type):
         self.input_type=input_type
@@ -98,7 +107,6 @@ class FreeSwitchESLProtocol(freeswitchesl.FreeSwitchEventProtocol):
         log.msg("execute complete " + ev.variable_call_uuid)
         if self.request_hang_up:
             self.hangup()
-            self.vumi_transport.deregister_client(self)
 
     def onChannelHangup(self, ev):
         self.vumi_transport.deregister_client(self)
@@ -187,10 +195,18 @@ class VoiceServerTransport(Transport):
         factory = ServerFactory()
         factory.protocol = protocol
 
-        yield reactor.listenTCP(self.config.freeswitch_listenport, factory)
+        self.voice_server=yield reactor.listenTCP(self.config.freeswitch_listenport, factory)
 
     def teardown_transport(self):
-        pass
+        if hasattr(self, 'voice_server'):
+            # We need to wait for all the client connections to be closed (and
+            # their deregistration messages sent) before tearing down the rest
+            # of the transport.
+            wait_for_closed = gatherResults([
+                client.registration_d for client in self._clients.values()])
+            self.voice_server.loseConnection()
+            yield wait_for_closed
+
 
     def register_client(self, client):
         # We add our own Deferred to the client here because we only want to
@@ -243,7 +259,10 @@ class VoiceServerTransport(Transport):
                 client.set_input_type(voicemeta.get('wait_for',None))
                 overrideURL=voicemeta.get('speech_url',None)
             
-        client.outputMessage("%s\n" % text)
+        if (overrideURL is None):
+           client.outputMessage("%s\n" % text)
+        else:
+           client.outputStream(overrideURL)
         
 
         if message['session_event'] == TransportUserMessage.SESSION_CLOSE:
