@@ -1,14 +1,13 @@
 from twisted.internet.task import Clock
-from twisted.internet.defer import inlineCallbacks, returnValue, succeed
+from twisted.internet.defer import inlineCallbacks, returnValue
 from smpp.pdu_builder import DeliverSM, BindTransceiverResp, Unbind
 from smpp.pdu import unpack_pdu
 
 from vumi.tests.utils import LogCatcher
 from vumi.transports.smpp.deprecated.clientserver.client import (
-    EsmeTransceiver, EsmeReceiver, EsmeTransmitter, EsmeCallbacks)
-from vumi.transports.smpp.smpp_utils import unpacked_pdu_opts
-from vumi.transports.smpp.config import SmppTransportConfig
-from vumi.transports.smpp.sequence import RedisSequence
+    EsmeTransceiver, EsmeReceiver, EsmeTransmitter, EsmeCallbacks, ESME,
+    unpacked_pdu_opts)
+from vumi.transports.smpp.deprecated.transport import SmppTransportConfig
 from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 
 
@@ -70,7 +69,6 @@ class EsmeTestCaseBase(VumiTestCase):
             self.assertEqual, self._expected_callbacks, [],
             "Uncalled callbacks.")
 
-    @inlineCallbacks
     def get_unbound_esme(self, host="127.0.0.1", port="0",
                          system_id="1234", password="password",
                          callbacks={}, extra_config={}):
@@ -80,47 +78,23 @@ class EsmeTestCaseBase(VumiTestCase):
             "port": port,
             "system_id": system_id,
             "password": password,
-            'submit_short_message_processor': (
-                'vumi.transports.smpp.deprecated.processors.'
-                'EsmeCallbacksSubmitShortMessageProcessor'
-            ),
-            'deliver_short_message_processor': (
-                'vumi.transports.smpp.deprecated.processors.'
-                'EsmeCallbacksDeliverShortMessageProcessor'
-            ),
-            'delivery_report_processor': (
-                'vumi.transports.smpp.deprecated.processors.'
-                'EsmeCallbacksDeliveryReportProcessor'
-            ),
-            'deliver_short_message_processor_config': {
-                'data_coding_overrides': {
-                    0: 'utf-8'
-                }
-            }
         }
         config_data.update(extra_config)
         config = SmppTransportConfig(config_data)
+        esme_callbacks = EsmeCallbacks(**callbacks)
 
-        redis = yield self.persistence_helper.get_redis_manager()
-        fake_transport = FakeTransport(FakeEsmeMixin())
-        fake_transport.get_static_config = lambda: config
-        fake_transport.redis = redis
-        fake_transport.esme_callbacks = EsmeCallbacks(**callbacks)
-        fake_transport.sequence_generator = RedisSequence(redis)
-        fake_transport.get_smpp_bind_params = lambda: {
-            'system_id': system_id,
-            'password': password,
-        }
+        def purge_manager(redis_manager):
+            d = redis_manager._purge_all()  # just in case
+            d.addCallback(lambda result: redis_manager)
+            return d
 
-        deliver_sm_processor = config.deliver_short_message_processor(
-            fake_transport, config.deliver_short_message_processor_config)
-        dr_processor = config.delivery_report_processor(
-            fake_transport, config.delivery_report_processor_config)
-
-        fake_transport.dr_processor = dr_processor
-        fake_transport.deliver_sm_processor = deliver_sm_processor
-
-        returnValue(self.ESME_CLASS(fake_transport))
+        redis_d = self.persistence_helper.get_redis_manager()
+        redis_d.addCallback(purge_manager)
+        return redis_d.addCallback(
+            lambda r: self.ESME_CLASS(config, {
+                'system_id': system_id,
+                'password': password
+            }, r, esme_callbacks))
 
     @inlineCallbacks
     def get_esme(self, config={}, **callbacks):
@@ -150,7 +124,6 @@ class EsmeTestCaseBase(VumiTestCase):
             for k in message_path:
                 value = value[k]
             self.assertEqual(expected, value)
-            return succeed(True)
 
         return self.make_cb(fun)
 
@@ -223,11 +196,11 @@ class EsmeGenericMixin(object):
     @inlineCallbacks
     def test_sequence_rollover(self):
         esme = yield self.get_unbound_esme()
-        self.assertEqual(1, (yield esme.sequence_generator.next()))
-        self.assertEqual(2, (yield esme.sequence_generator.next()))
+        self.assertEqual(1, (yield esme.get_next_seq()))
+        self.assertEqual(2, (yield esme.get_next_seq()))
         yield esme.redis.set('smpp_last_sequence_number', 0xFFFF0000)
-        self.assertEqual(0xFFFF0001, (yield esme.sequence_generator.next()))
-        self.assertEqual(1, (yield esme.sequence_generator.next()))
+        self.assertEqual(0xFFFF0001, (yield esme.get_next_seq()))
+        self.assertEqual(1, (yield esme.get_next_seq()))
 
     @inlineCallbacks
     def test_unbind(self):
@@ -257,9 +230,7 @@ class EsmeTransmitterMixin(EsmeGenericMixin):
     def test_submit_sm_sms_long(self):
         """Submit a USSD message with a session continue flag."""
         esme = yield self.get_esme(config={
-            'submit_short_message_processor_config': {
-                'send_long_messages': True,
-            }
+            'send_long_messages': True,
         })
         long_message = 'This is a long message.' * 20
         yield esme.submit_sm(short_message=long_message)
@@ -277,9 +248,7 @@ class EsmeTransmitterMixin(EsmeGenericMixin):
     def test_submit_sm_sms_multipart_sar(self):
         """Submit a long SMS message using multipart sar fields."""
         esme = yield self.get_esme(config={
-            'submit_short_message_processor_config': {
-                'send_multipart_sar': True,
-            }
+            'send_multipart_sar': True,
         })
         long_message = 'This is a long message.' * 20
         seq_nums = yield esme.submit_sm(short_message=long_message)
@@ -307,9 +276,7 @@ class EsmeTransmitterMixin(EsmeGenericMixin):
     def test_submit_sm_sms_multipart_udh(self):
         """Submit a long SMS message using multipart user data headers."""
         esme = yield self.get_esme(config={
-            'submit_short_message_processor_config': {
-                'send_multipart_udh': True,
-            }
+            'send_multipart_udh': True,
         })
         long_message = 'This is a long message.' * 20
         seq_nums = yield esme.submit_sm(short_message=long_message)
@@ -396,10 +363,8 @@ class EsmeReceiverMixin(EsmeGenericMixin):
     def test_deliver_sm_data_coding_override(self):
         """A simple message should be delivered."""
         esme = yield self.get_esme(config={
-            'deliver_short_message_processor_config': {
-                'data_coding_overrides': {
-                    0: 'utf-16be'
-                }
+            'data_coding_overrides': {
+                0: 'utf-16be'
             }
         }, deliver_sm=self.assertion_cb(u'hello', 'short_message'))
 
@@ -407,10 +372,8 @@ class EsmeReceiverMixin(EsmeGenericMixin):
             self.get_sm('\x00h\x00e\x00l\x00l\x00o', 0))
 
         esme = yield self.get_esme(config={
-            'deliver_short_message_processor_config': {
-                'data_coding_overrides': {
-                    0: 'ascii'
-                }
+            'data_coding_overrides': {
+                0: 'ascii'
             }
         }, deliver_sm=self.assertion_cb(u'hello', 'short_message'))
         yield esme.handle_deliver_sm(
@@ -428,20 +391,18 @@ class EsmeReceiverMixin(EsmeGenericMixin):
     def test_bad_sm_ucs2(self):
         """An invalid UCS-2 message should be discarded."""
         bad_msg = '\n\x00h\x00e\x00l\x00l\x00o'
-        esme = yield self.get_esme()
+
+        esme = yield self.get_esme(
+            deliver_sm=self.assertion_cb(bad_msg, 'short_message'))
+
         yield esme.handle_deliver_sm(self.get_sm(bad_msg, 8))
-        [failure] = self.flushLoggedErrors(UnicodeDecodeError)
-        message = failure.getErrorMessage()
-        codec, rest = message.split(' ', 1)
-        # CPython calls this 'utf16', pypy calls it 'utf-16'.
-        self.assertEqual(codec.replace('-16', '16'), "'utf16'")
-        self.assertTrue(rest.startswith("codec can't decode byte"))
+        self.flushLoggedErrors()
 
     @inlineCallbacks
     def test_deliver_sm_delivery_report_delivered(self):
         esme = yield self.get_esme(delivery_report=self.assertion_cb({
             'message_id': '1b1720be-5f48-41c4-b3f8-6e59dbf45366',
-            'delivery_status': 'DELIVERED',
+            'message_state': 'DELIVERED',
         }))
 
         sm = DeliverSM(1, short_message='delivery report')
@@ -456,7 +417,7 @@ class EsmeReceiverMixin(EsmeGenericMixin):
     def test_deliver_sm_delivery_report_rejected(self):
         esme = yield self.get_esme(delivery_report=self.assertion_cb({
             'message_id': '1b1720be-5f48-41c4-b3f8-6e59dbf45366',
-            'delivery_status': 'REJECTED',
+            'message_state': 'REJECTED',
         }))
 
         sm = DeliverSM(1, short_message='delivery report')
@@ -471,7 +432,7 @@ class EsmeReceiverMixin(EsmeGenericMixin):
     def test_deliver_sm_delivery_report_regex_fallback(self):
         esme = yield self.get_esme(delivery_report=self.assertion_cb({
             'message_id': '1b1720be-5f48-41c4-b3f8-6e59dbf45366',
-            'delivery_status': 'delivered',
+            'message_state': 'DELIVRD',
         }))
 
         yield esme.handle_deliver_sm(self.get_sm(
@@ -483,7 +444,7 @@ class EsmeReceiverMixin(EsmeGenericMixin):
     def test_deliver_sm_delivery_report_regex_fallback_ucs2(self):
         esme = yield self.get_esme(delivery_report=self.assertion_cb({
             'message_id': '1b1720be-5f48',
-            'delivery_status': 'delivered',
+            'message_state': 'DELIVRD',
         }))
 
         dr_text = (
@@ -496,7 +457,7 @@ class EsmeReceiverMixin(EsmeGenericMixin):
     def test_deliver_sm_delivery_report_regex_fallback_ucs2_long(self):
         esme = yield self.get_esme(delivery_report=self.assertion_cb({
             'message_id': '1b1720be-5f48-41c4-b3f8-6e59dbf45366',
-            'delivery_status': 'delivered',
+            'message_state': 'DELIVRD',
         }))
 
         dr_text = (
@@ -532,10 +493,8 @@ class EsmeReceiverMixin(EsmeGenericMixin):
                 ('\xd8\xa7\xd9\x84\xd9\x84\xd9\x87 '
                  '\xd9\x85\xd8\xb9\xd9\x83').decode('utf-8'), 'short_message'),
             config={
-                'deliver_short_message_processor_config': {
-                    'data_coding_overrides': {
-                        8: 'utf-8'
-                    }
+                'data_coding_overrides': {
+                    8: 'utf-8'
                 }
             })
         yield esme.handle_deliver_sm(self.get_sm(
@@ -549,7 +508,6 @@ class EsmeReceiverMixin(EsmeGenericMixin):
             self.assertEqual('ussd', value['message_type'])
             self.assertEqual('new', value['session_event'])
             self.assertEqual(None, value['short_message'])
-            return succeed(True)
 
         esme = yield self.get_esme(deliver_sm=self.make_cb(assert_ussd))
 
@@ -597,3 +555,24 @@ class TestEsmeReceiver(EsmeTestCaseBase, EsmeReceiverMixin):
             [error] = log.errors
             self.assertTrue(('submit_sm in wrong state' in
                              error['message'][0]))
+
+
+class TestESME(VumiTestCase):
+
+    def setUp(self):
+        config = SmppTransportConfig({
+            "transport_name": "transport_name",
+            "host": 'localhost',
+            "port": 2775,
+            "system_id": 'test_system',
+            "password": 'password',
+        })
+        self.kvs = None
+        self.esme_callbacks = None
+        self.esme = ESME(config, {
+            'system_id': 'test_system',
+            'password': 'password',
+        }, self.kvs, self.esme_callbacks)
+
+    def test_bind_as_transceiver(self):
+        return self.esme.bindTransciever()

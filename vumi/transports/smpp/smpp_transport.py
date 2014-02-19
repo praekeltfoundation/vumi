@@ -5,7 +5,8 @@ from uuid import uuid4
 
 from twisted.internet import reactor
 from twisted.internet.defer import (
-    inlineCallbacks, DeferredQueue, maybeDeferred, returnValue)
+    inlineCallbacks, DeferredQueue, maybeDeferred, returnValue, Deferred,
+    succeed)
 
 from vumi.reconnecting_client import ReconnectingClientService
 from vumi.transports.base import Transport
@@ -13,7 +14,7 @@ from vumi.transports.base import Transport
 from vumi.message import TransportUserMessage
 
 from vumi.transports.smpp.config import SmppTransportConfig
-from vumi.transports.smpp.deprecated.config import (
+from vumi.transports.smpp.deprecated.transport import (
     SmppTransportConfig as OldSmppTransportConfig)
 from vumi.transports.smpp.deprecated.utils import convert_to_new_config
 from vumi.transports.smpp.protocol import EsmeTransceiverFactory
@@ -45,18 +46,19 @@ class SmppTransceiverProtocol(EsmeTransceiverFactory.protocol):
     def connectionMade(self):
         EsmeTransceiverFactory.protocol.connectionMade(self)
         config = self.vumi_transport.get_static_config()
-        d = maybeDeferred(self.vumi_transport.unpause_connectors)
-        d.addCallback(
-            lambda _: self.bind(config.system_id,
-                                config.password,
-                                config.system_type))
-        return d
+        self.bind(config.system_id, config.password, config.system_type)
 
     def connectionLost(self, reason):
         d = maybeDeferred(self.vumi_transport.pause_connectors)
         d.addCallback(
             lambda _: EsmeTransceiverFactory.protocol.connectionLost(
                 self, reason))
+        return d
+
+    def on_smpp_bind(self, sequence_number):
+        d = maybeDeferred(EsmeTransceiverFactory.protocol.on_smpp_bind,
+                          self, sequence_number)
+        d.addCallback(lambda _: self.vumi_transport.unpause_connectors())
         return d
 
     def on_submit_sm_resp(self, sequence_number, smpp_message_id,
@@ -88,8 +90,22 @@ class SmppTransceiverClientFactory(EsmeTransceiverFactory):
 
 class SmppService(ReconnectingClientService):
 
+    def __init__(self, endpoint, factory):
+        ReconnectingClientService.__init__(self, endpoint, factory)
+        self.wait_on_protocol_deferreds = []
+
+    def clientConnected(self, protocol):
+        ReconnectingClientService.clientConnected(self, protocol)
+        for deferred in self.wait_on_protocol_deferreds:
+            deferred.callback(protocol)
+
     def get_protocol(self):
-        return self._protocol
+        if self._protocol is not None:
+            return succeed(self._protocol)
+        else:
+            d = Deferred()
+            self.wait_on_protocol_deferreds.append(d)
+            return d
 
     def stopService(self):
         protocol = self.get_protocol()
@@ -108,6 +124,7 @@ class SmppTransceiverTransport(Transport):
     factory_class = SmppTransceiverClientFactory
     service_class = SmppService
     clock = reactor
+    start_message_consumer = False
 
     @inlineCallbacks
     def setup_transport(self):
@@ -130,7 +147,7 @@ class SmppTransceiverTransport(Transport):
         self.throttled = None
         self.factory = self.factory_class(self)
 
-        self.service = yield self.start_service(self.factory)
+        self.service = self.start_service(self.factory)
 
     def start_service(self, factory):
         config = self.get_static_config()
@@ -144,16 +161,15 @@ class SmppTransceiverTransport(Transport):
             yield self.service.stopService()
         yield self.redis._close()
 
+    @inlineCallbacks
     def handle_outbound_message(self, message):
-        d = self.submit_sm_processor.handle_outbound_message(
-            message, self.service.get_protocol())
-        d.addCallback(
-            lambda sequence_numbers: DeferredQueue([
-                self.set_sequence_number_message_id(sqn, message['message_id'])
-                for sqn in sequence_numbers]))
-        d.addCallback(lambda _: self.cache_message(message))
-        d.addErrback(log.err)
-        return d
+        protocol = yield self.service.get_protocol()
+        seq_nrs = yield self.submit_sm_processor.handle_outbound_message(
+            message, protocol)
+        yield DeferredQueue([
+            self.set_sequence_number_message_id(sqn, message['message_id'])
+            for sqn in seq_nrs])
+        yield self.cache_message(message)
 
     def set_sequence_number_message_id(self, sequence_number, message_id):
         key = sequence_number_key(sequence_number)

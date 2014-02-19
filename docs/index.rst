@@ -21,6 +21,14 @@ Contents:
    roadmap.rst
    release-notes.rst
 
+.. note::
+
+   Looking for documentation for writing Javascript applications for the
+   hosted Vumi Go environment? Visit http://vumi-go.readthedocs.org for
+   documentation on the hosted platform and
+   http://vumi-jssandbox-toolkit.readthedocs.org for documentation on
+   the Javascript sandbox.
+
 Getting Started:
 
 * :doc:`installation`
