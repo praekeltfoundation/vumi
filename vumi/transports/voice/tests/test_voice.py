@@ -27,26 +27,21 @@ class FakeFreeswitchProtocol(LineReceiver):
         log.msg("TRACE:Test client proto connection made")
         self.connect_d.callback(None)
 
-    
-    def sendCommandReply(self,params=""):
-        self.sendLine("Content-Type: command/reply\nReply-Text: +OK\n%s\n\n"%params);
-             
-        
-    
+    def sendCommandReply(self, params=""):
+        self.sendLine("Content-Type: command/reply\nReply-Text: +OK\n%s\n\n" %
+                      params)
 
     def rawDataReceived(self, data):
-        log.msg("TRACE: Client Protocol got raw data: "+data)                
+        log.msg("TRACE: Client Protocol got raw data: " + data)
         if data.startswith("connect"):
-            self.sendCommandReply("variable-call-uuid: TESTTESTTESTTEST")           
+            self.sendCommandReply("variable-call-uuid: TESTTESTTESTTEST")
         if data.startswith("myevents"):
             self.sendCommandReply()
         if data.startswith("sendmsg"):
             self.sendCommandReply()
-        
-            
 
     def lineReceived(self, line):
-        log.msg("TRACE: Client Protocol got line: "+line)
+        log.msg("TRACE: Client Protocol got line: " + line)
         self.queue.put(line)
 
     def connectionLost(self, reason):
@@ -61,31 +56,32 @@ class BaseVoiceServerTransportTestCase(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        log.msg("TRACE:Set Up ");        
+        log.msg("TRACE:Set Up ")
         self.tx_helper = self.add_helper(TransportHelper(self.transport_class))
-        self.worker = yield self.tx_helper.get_transport({'freeswitch_listenport': 8084})
+        self.worker = yield self.tx_helper.get_transport(
+             {'freeswitch_listenport': 8084})
         self.client = yield self.make_client()
         self.add_cleanup(self.wait_for_client_deregistration)
         yield self.wait_for_client_start()
-        log.msg("TRACE:Set Up Copplete");        
-        
+        log.msg("TRACE:Set Up Complete")
 
     @inlineCallbacks
     def wait_for_client_deregistration(self):
         log.msg("TRACE deregister checking")
         if self.client.transport.connected:
-            log.msg("TRACE still connected so disconnect")       
+            log.msg("TRACE still connected so disconnect")
             self.client.transport.loseConnection()
             yield self.client.disconnect_d
             # Kick off the delivery of the deregistration message.
             yield self.tx_helper.kick_delivery()
+            log.msg("TRACE disconnect Complete")
 
     def wait_for_client_start(self):
         return self.client.connect_d
 
     @inlineCallbacks
     def make_client(self):
-        addr = self.worker.voice_server.getHost()        
+        addr = self.worker.voice_server.getHost()
         cc = protocol.ClientCreator(reactor, FakeFreeswitchProtocol)
         client = yield cc.connectTCP("127.0.0.1", addr.port)
         returnValue(client)
@@ -99,16 +95,12 @@ class TestVoiceServerTransport(BaseVoiceServerTransportTestCase):
         self.assertEqual(msg['content'], None)
         self.assertEqual(msg['session_event'],
                          TransportUserMessage.SESSION_NEW)
-        
+
 
     #@inlineCallbacks
-    #def test_client_deregister(self):
+    # def test_client_deregister(self):
     #    self.client.transport.loseConnection()
     #    [reg, msg] = yield self.tx_helper.wait_for_dispatched_inbound(2)
     #    self.assertEqual(msg['content'], None)
     #    self.assertEqual(msg['session_event'],
     #                     TransportUserMessage.SESSION_CLOSE)
-
-    
-
-    
