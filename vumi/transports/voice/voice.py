@@ -108,6 +108,10 @@ class FreeSwitchESLProtocol(freeswitchesl.FreeSwitchEventProtocol):
         log.msg("Channel HangUp")
         self.vumi_transport.deregister_client(self)
 
+    def onDisconnect(self, ev):
+        log.msg("Channel disconnect received")
+        self.vumi_transport.deregister_client(self)
+
     def unboundEvent(self, evdata, evname):
         pass
 
@@ -195,16 +199,23 @@ class VoiceServerTransport(Transport):
         self.voice_server = yield reactor.listenTCP(
             self.config.freeswitch_listenport, factory)
 
+    @inlineCallbacks
     def teardown_transport(self):
-        log.msg("TRACE: Tear Down Transport")
+        log.msg("TRACE: Tear Down Transport Start")
         if hasattr(self, 'voice_server'):
             # We need to wait for all the client connections to be closed (and
             # their deregistration messages sent) before tearing down the rest
             # of the transport.
+            log.msg("TRACE: Tear Down Transport 1")
+            log.msg("TRACE: self._clients=%s"%(self._clients,))
             wait_for_closed = gatherResults([
                 client.registration_d for client in self._clients.values()])
+            log.msg("TRACE: Tear Down Transport 2")
             self.voice_server.loseConnection()
+            log.msg("TRACE: Tear Down Transport 3")
             yield wait_for_closed
+            log.msg("TRACE: Tear Down Transport 4")
+            
 
     def register_client(self, client):
         # We add our own Deferred to the client here because we only want to
@@ -221,8 +232,9 @@ class VoiceServerTransport(Transport):
         log.msg("TRACE: Deregistering client.")
         self.send_inbound_message(
             client, None, TransportUserMessage.SESSION_CLOSE)
-        del self._clients[client.getAddress()]
         client.registration_d.callback(None)
+        del self._clients[client.getAddress()]
+        
 
     def handle_input(self, client, text):
         self.send_inbound_message(client, text,
