@@ -33,15 +33,10 @@ class FreeSwitchESLProtocol(freeswitchesl.FreeSwitchEventProtocol):
 
     @inlineCallbacks
     def connectionMade(self):
-        log.msg("TRACE: FreeSwitch Connection Initiated")
         yield self.connect()
-        log.msg("TRACE: Connected..")
         yield self.myevents()
-        log.msg("TRACE: Events filtered")
         yield self.answer()
-        log.msg("TRACE:Call Taken")
         yield self.vumi_transport.register_client(self)
-        log.msg("TRACE: Registered")
 
     def onDtmf(self, ev):
         if(self.input_type is None):
@@ -206,16 +201,11 @@ class VoiceServerTransport(Transport):
             # We need to wait for all the client connections to be closed (and
             # their deregistration messages sent) before tearing down the rest
             # of the transport.
-            log.msg("TRACE: Tear Down Transport 1")
-            log.msg("TRACE: self._clients=%s"%(self._clients,))
+            log.msg("TRACE: self._clients=%s" % (self._clients,))
             wait_for_closed = gatherResults([
                 client.registration_d for client in self._clients.values()])
-            log.msg("TRACE: Tear Down Transport 2")
             self.voice_server.loseConnection()
-            log.msg("TRACE: Tear Down Transport 3")
             yield wait_for_closed
-            log.msg("TRACE: Tear Down Transport 4")
-            
 
     def register_client(self, client):
         # We add our own Deferred to the client here because we only want to
@@ -234,7 +224,6 @@ class VoiceServerTransport(Transport):
             client, None, TransportUserMessage.SESSION_CLOSE)
         client.registration_d.callback(None)
         del self._clients[client.getAddress()]
-        
 
     def handle_input(self, client, text):
         self.send_inbound_message(client, text,

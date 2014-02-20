@@ -189,7 +189,7 @@ class FreeSwitchEventProtocol(FreeSwitchEventSocket):
 
     def eventReceived(self, ctx):
         content_type = ctx.get("Content_Type", None)
-        log.msg("GOT EVENT: %.100s" % repr(content_type))
+        log.msg("GOT EVENT: %s" % (ctx,))
         if content_type:
             method = self.__EventCallbacks.get(content_type, None)
             if callable(method):
