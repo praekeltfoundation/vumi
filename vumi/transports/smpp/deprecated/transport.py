@@ -1,4 +1,6 @@
-# -*- test-case-name: vumi.transports.smpp.tests.test_smpp -*-
+# -*- test-case-name: vumi.transports.smpp.deprecated.tests.test_smpp -*-
+
+import warnings
 
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, returnValue
@@ -7,7 +9,7 @@ from vumi import log
 from vumi.reconnecting_client import ReconnectingClientService
 from vumi.utils import get_operator_number
 from vumi.transports.base import Transport
-from vumi.transports.smpp.clientserver.client import (
+from vumi.transports.smpp.deprecated.clientserver.client import (
     EsmeTransceiverFactory, EsmeTransmitterFactory, EsmeReceiverFactory,
     EsmeCallbacks)
 from vumi.transports.failures import FailureMessage
@@ -102,6 +104,10 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
         "Mapping from delivery report message state to "
         "(`delivered`, `failed`, `pending`)",
         static=True, default=DELIVERY_REPORT_STATUS_MAPPING)
+    submit_sm_expiry = ConfigInt(
+        'How long (seconds) to wait for the SMSC to return with a '
+        '`submit_sm_resp`. Defaults to 24 hours',
+        default=(60 * 60 * 24), static=True)
     submit_sm_encoding = ConfigText(
         'How to encode the SMS before putting on the wire', static=True,
         default='utf-8')
@@ -195,6 +201,10 @@ class SmppTransport(Transport):
 
     @inlineCallbacks
     def setup_transport(self):
+        warnings.warn(
+            'This SMPP implementation is deprecated. Please use the '
+            'implementations available in vumi.transports.smpp.'
+            'smpp_transport instead.', category=DeprecationWarning)
         config = self.get_static_config()
         log.msg("Starting the SmppTransport for %s" % (
             config.twisted_endpoint))
@@ -278,9 +288,13 @@ class SmppTransport(Transport):
         return "%s#%s" % (self.r_message_prefix, message_id)
 
     def r_set_message(self, message):
+        config = self.get_static_config()
         message_id = message.payload['message_id']
-        return self.redis.set(
-            self.r_message_key(message_id), message.to_json())
+        message_key = self.r_message_key(message_id)
+        d = self.redis.set(message_key, message.to_json())
+        d.addCallback(lambda _: self.redis.expire(message_key,
+                                                  config.submit_sm_expiry))
+        return d
 
     def r_get_message_json(self, message_id):
         return self.redis.get(self.r_message_key(message_id))

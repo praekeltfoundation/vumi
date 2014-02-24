@@ -1,18 +1,2 @@
-zope.interface
-Twisted
-# txAMQP prior to 0.5 does not support modern rabbitMQ versions.
-txAMQP>=0.5
-PyYAML
-iso8601
-supervisor
-pyOpenSSL
-python-ssmi>=0.0.5
-wokkel
-redis
-txredis
-python-smpp
-pytz==2013b
-riakasaurus>=1.1.1
-riak==1.5.2
-https://github.com/dustin/twitty-twister/tarball/master#egg=twittytwister-0.1.1
-txJSON-RPC==0.3.1
+# Our dependencies are all specified in setup.py.
+-e .

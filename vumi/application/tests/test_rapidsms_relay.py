@@ -19,18 +19,18 @@ class TestRapidSMSRelay(VumiTestCase):
         self.app_helper = self.add_helper(ApplicationHelper(RapidSMSRelay))
 
     @inlineCallbacks
-    def setup_resource(self, callback=None, auth=None):
+    def setup_resource(self, callback=None, auth=None, config=None):
         if callback is None:
             callback = lambda r: self.fail("No RapidSMS requests expected.")
         self.mock_server = MockHttpServer(callback)
         self.add_cleanup(self.mock_server.stop)
         yield self.mock_server.start()
         url = '%s%s' % (self.mock_server.url, '/test/resource/path')
-        self.app = yield self.setup_app(url, auth=auth)
+        self.app = yield self.setup_app(url, auth=auth, config=config)
 
-    def setup_app(self, url, auth=None):
+    def setup_app(self, url, auth=None, config=None):
         vumi_username, vumi_password = auth if auth else (None, None)
-        return self.app_helper.get_application({
+        app_config = {
             'rapidsms_url': url,
             'web_path': '/send/',
             'web_port': '0',
@@ -39,7 +39,10 @@ class TestRapidSMSRelay(VumiTestCase):
             'vumi_username': vumi_username,
             'vumi_password': vumi_password,
             'allowed_endpoints': ['default', '10010', '10020'],
-        })
+        }
+        if config:
+            app_config.update(config)
+        return self.app_helper.get_application(app_config)
 
     def get_response_msgs(self, response):
         payloads = from_json(response.delivered_body)
@@ -109,6 +112,18 @@ class TestRapidSMSRelay(VumiTestCase):
                 " status u'delivered'",
                 "Acknowledgement received for message u'1'",
             ])
+        self.assertEqual([], self.app_helper.get_dispatched_outbound())
+
+    @inlineCallbacks
+    def test_rapidsms_relay_with_unicode_rapidsms_http_method(self):
+        def cb(request):
+            msg = TransportUserMessage.from_json(request.content.read())
+            self.assertEqual(msg['content'], 'hello world')
+            self.assertEqual(msg['from_addr'], '+41791234567')
+            return 'OK'
+
+        yield self.setup_resource(cb, config={"rapidsms_http_method": u"POST"})
+        yield self.app_helper.make_dispatch_inbound("hello world")
         self.assertEqual([], self.app_helper.get_dispatched_outbound())
 
     def _call_relay(self, data, auth=None):
@@ -223,7 +238,7 @@ class TestRapidSMSRelay(VumiTestCase):
             'endpoint': '10010',
         })
         self._check_messages(response, [
-            {'to_addr': '+123456', 'content':  u'foo'}])
+            {'to_addr': '+123456', 'content': u'foo'}])
         [msg] = self.app_helper.get_dispatched_outbound()
         self.assertEqual(msg['routing_metadata'], {
             'endpoint_name': '10010',
@@ -237,7 +252,7 @@ class TestRapidSMSRelay(VumiTestCase):
             'content': u'foo',
         })
         self._check_messages(response, [
-            {'to_addr': '+123456', 'content':  u'foo'}])
+            {'to_addr': '+123456', 'content': u'foo'}])
         [msg] = self.app_helper.get_dispatched_outbound()
         self.assertEqual(msg['routing_metadata'], {
             'endpoint_name': 'default',
@@ -254,5 +269,20 @@ class TestRapidSMSRelay(VumiTestCase):
         self.assertEqual([], self.app_helper.get_dispatched_outbound())
         self.assertEqual(response.code, 400)
         self.assertEqual(response.delivered_body,
-                         "Endpoint u'bar' not defined in ALLOWED_ENDPOINTS")
+                         "Endpoint u'bar' not defined in list of allowed"
+                         " endpoints ['default', '10010', '10020']")
+        [err] = self.flushLoggedErrors(BadRequestError)
+
+    @inlineCallbacks
+    def test_rapidsms_relay_outbound_on_invalid_to_addr(self):
+        yield self.setup_resource()
+        response = yield self._call_relay({
+            'to_addr': '+123456',
+            'content': u'foo',
+            'endpoint': u'bar',
+        })
+        self.assertEqual([], self.app_helper.get_dispatched_outbound())
+        self.assertEqual(response.code, 400)
+        self.assertEqual(response.delivered_body,
+                         "Supplied `to_addr` (u'+123456') was not a list.")
         [err] = self.flushLoggedErrors(BadRequestError)

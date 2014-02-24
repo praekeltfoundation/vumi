@@ -48,7 +48,8 @@ class CalculatorApp(ApplicationWorker):
 
         try:
             numeric_input = int(message['content'])
-        except ValueError:
+        except (ValueError, TypeError):
+            self.clear_session(message.user())
             return self.reply_to(
                 message, 'Sorry invalid input!', continue_session=False)
 

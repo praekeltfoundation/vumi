@@ -3,8 +3,9 @@ from twisted.python import log
 from twisted.internet import defer
 
 from vumi.worker import BaseWorker
-from vumi.transports.smpp.clientserver.server import SmscServerFactory
-from vumi.transports.smpp.transport import SmppTransportConfig
+from vumi.transports.smpp.deprecated.clientserver.server import (
+    SmscServerFactory)
+from vumi.transports.smpp.deprecated.transport import SmppTransportConfig
 from vumi.config import ConfigServerEndpoint
 
 

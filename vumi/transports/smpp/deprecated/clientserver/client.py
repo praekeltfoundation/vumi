@@ -1,4 +1,4 @@
-# -*- test-case-name: vumi.transports.smpp.clientserver.tests.test_client -*-
+# -*- test-case-name: vumi.transports.smpp.deprecated.clientserver.tests.test_client -*-
 
 import json
 import uuid
@@ -13,7 +13,7 @@ import binascii
 from smpp.pdu import unpack_pdu
 from smpp.pdu_builder import (
     BindTransceiver, BindTransmitter, BindReceiver, DeliverSMResp, SubmitSM,
-    EnquireLink, EnquireLinkResp, QuerySM, PDU)
+    EnquireLink, EnquireLinkResp, QuerySM, PDU, UnbindResp)
 from smpp.pdu_inspector import (
     MultipartMessage, detect_multipart, multipart_key)
 
@@ -21,13 +21,6 @@ from vumi import log
 
 
 GSM_MAX_SMS_BYTES = 140
-
-
-class UnbindResp(PDU):
-    # pdu_builder doesn't have one of these yet.
-    def __init__(self, sequence_number, **kwargs):
-        super(UnbindResp, self).__init__(
-            'unbind_resp', 'ESME_ROK', sequence_number, **kwargs)
 
 
 def unpacked_pdu_opts(unpacked_pdu):

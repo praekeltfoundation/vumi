@@ -271,7 +271,8 @@ class SandboxResource(object):
 
 
 class RedisResource(SandboxResource):
-    """Resource that provices access to a simple key-value store.
+    """
+    Resource that provides access to a simple key-value store.
 
     Configuration options:
 
@@ -337,6 +338,29 @@ class RedisResource(SandboxResource):
 
     @inlineCallbacks
     def handle_set(self, api, command):
+        """
+        Set the value of a key.
+
+        Command fields:
+            - ``key``: The key whose value should be set.
+            - ``value``: The value to store. May be any JSON serializable
+              object.
+
+        Reply fields:
+            - ``success``: ``true`` if the operation was successful, otherwise
+              ``false``.
+
+        Example:
+
+        .. code-block:: javascript
+
+            api.request(
+                'kv.set',
+                {key: 'foo',
+                 value: {x: '42'}},
+                function(reply) { api.log_info('Value store: ' +
+                                               reply.success); });
+        """
         key = self._sandboxed_key(api.sandbox_id, command.get('key'))
         if not (yield self.check_keys(api, key)):
             returnValue(self._too_many_keys(command))
@@ -346,6 +370,31 @@ class RedisResource(SandboxResource):
 
     @inlineCallbacks
     def handle_get(self, api, command):
+        """
+        Retrieve the value of a key.
+
+        Command fields:
+            - ``key``: The key whose value should be retrieved.
+
+        Reply fields:
+            - ``success``: ``true`` if the operation was successful, otherwise
+              ``false``.
+            - ``value``: The value retrieved.
+
+        Example:
+
+        .. code-block:: javascript
+
+            api.request(
+                'kv.get',
+                {key: 'foo'},
+                function(reply) {
+                    api.log_info(
+                        'Value retrieved: ' +
+                        JSON.stringify(reply.value));
+                }
+            );
+        """
         key = self._sandboxed_key(api.sandbox_id, command.get('key'))
         raw_value = yield self.redis.get(key)
         value = json.loads(raw_value) if raw_value is not None else None
@@ -354,6 +403,29 @@ class RedisResource(SandboxResource):
 
     @inlineCallbacks
     def handle_delete(self, api, command):
+        """
+        Delete a key.
+
+        Command fields:
+            - ``key``: The key to delete.
+
+        Reply fields:
+            - ``success``: ``true`` if the operation was successful, otherwise
+              ``false``.
+
+        Example:
+
+        .. code-block:: javascript
+
+            api.request(
+                'kv.delete',
+                {key: 'foo'},
+                function(reply) {
+                    api.log_info('Value deleted: ' +
+                                 reply.success);
+                }
+            );
+        """
         key = self._sandboxed_key(api.sandbox_id, command.get('key'))
         existed = bool((yield self.redis.delete(key)))
         if existed:
@@ -364,6 +436,36 @@ class RedisResource(SandboxResource):
 
     @inlineCallbacks
     def handle_incr(self, api, command):
+        """
+        Atomically increment the value of an integer key.
+
+        The current value of the key must be an integer. If the key does not
+        exist, it is set to zero.
+
+        Command fields:
+            - ``key``: The key to delete.
+            - ``amount``: The integer amount to increment the key by. Defaults
+              to 1.
+
+        Reply fields:
+            - ``success``: ``true`` if the operation was successful, otherwise
+              ``false``.
+            - ``value``: The new value of the key.
+
+        Example:
+
+        .. code-block:: javascript
+
+            api.request(
+                'kv.incr',
+                {key: 'foo',
+                 amount: 3},
+                function(reply) {
+                    api.log_info('New value: ' +
+                                 reply.value);
+                }
+            );
+        """
         key = self._sandboxed_key(api.sandbox_id, command.get('key'))
         if not (yield self.check_keys(api, key)):
             returnValue(self._too_many_keys(command))
@@ -376,32 +478,118 @@ class RedisResource(SandboxResource):
 
 
 class OutboundResource(SandboxResource):
-    """Resource that provides the ability to send outbound messages.
+    """
+    Resource that provides the ability to send outbound messages.
+
+    Includes support for replying to the sender of the current message,
+    replying to the group the current message was from and sending messages
+    that aren't replies.
     """
 
     def handle_reply_to(self, api, command):
+        """
+        Sends a reply to the individual who sent a received message.
+
+        Command fields:
+            - ``content``: The body of the reply message.
+            - ``in_reply_to``: The ``message id`` of the message being replied
+              to.
+            - ``continue_session``: Whether to continue the session (if any).
+              Defaults to ``true``.
+
+        Reply fields:
+            - ``success``: ``true`` if the operation was successful, otherwise
+              ``false``.
+
+        Example:
+
+        .. code-block:: javascript
+
+            api.request(
+                'outbound.reply_to',
+                {content: 'Welcome!',
+                 in_reply_to: '06233d4eede945a3803bf9f3b78069ec'},
+                function(reply) { api.log_info('Reply sent: ' +
+                                               reply.success); });
+        """
         content = command['content']
         continue_session = command.get('continue_session', True)
         orig_msg = api.get_inbound_message(command['in_reply_to'])
-        self.app_worker.reply_to(orig_msg, content,
-                                 continue_session=continue_session)
+        d = self.app_worker.reply_to(orig_msg, content,
+                                     continue_session=continue_session)
+        d.addCallback(lambda r: self.reply(command, success=True))
+        return d
 
     def handle_reply_to_group(self, api, command):
+        """
+        Sends a reply to the group from which a received message was sent.
+
+        Command fields:
+            - ``content``: The body of the reply message.
+            - ``in_reply_to``: The ``message id`` of the message being replied
+              to.
+            - ``continue_session``: Whether to continue the session (if any).
+              Defaults to ``true``.
+
+        Reply fields:
+            - ``success``: ``true`` if the operation was successful, otherwise
+              ``false``.
+
+        Example:
+
+        .. code-block:: javascript
+
+            api.request(
+                'outbound.reply_to_group',
+                {content: 'Welcome!',
+                 in_reply_to: '06233d4eede945a3803bf9f3b78069ec'},
+                function(reply) { api.log_info('Reply to group sent: ' +
+                                               reply.success); });
+        """
         content = command['content']
         continue_session = command.get('continue_session', True)
         orig_msg = api.get_inbound_message(command['in_reply_to'])
-        self.app_worker.reply_to_group(orig_msg, content,
-                                       continue_session=continue_session)
+        d = self.app_worker.reply_to_group(orig_msg, content,
+                                           continue_session=continue_session)
+        d.addCallback(lambda r: self.reply(command, success=True))
+        return d
 
     def handle_send_to(self, api, command):
+        """
+        Sends a message to a specified address.
+
+        Command fields:
+            - ``content``: The body of the reply message.
+            - ``to_addr``: The address of the recipient (e.g. an MSISDN).
+            - ``endpoint``: The name of the endpoint to send the message via.
+              Optional (default is ``"default"``).
+
+        Reply fields:
+            - ``success``: ``true`` if the operation was successful, otherwise
+              ``false``.
+
+        Example:
+
+        .. code-block:: javascript
+
+            api.request(
+                'outbound.send_to',
+                {content: 'Welcome!', to_addr: '+27831234567',
+                 endpoint: 'default'},
+                function(reply) { api.log_info('Message sent: ' +
+                                               reply.success); });
+        """
         content = command['content']
         to_addr = command['to_addr']
         endpoint = command.get('endpoint', 'default')
-        self.app_worker.send_to(to_addr, content, endpoint=endpoint)
+        d = self.app_worker.send_to(to_addr, content, endpoint=endpoint)
+        d.addCallback(lambda r: self.reply(command, success=True))
+        return d
 
 
 class JsSandboxResource(SandboxResource):
-    """Resource that initializes a Javascript sandbox.
+    """
+    Resource that initializes a Javascript sandbox.
 
     Typically used alongside vumi/applicaiton/sandboxer.js which is
     a simple node.js based Javascript sandbox.
@@ -417,7 +605,8 @@ class JsSandboxResource(SandboxResource):
 
 
 class LoggingResource(SandboxResource):
-    """Resource that allows a sandbox to log messages via Twisted's
+    """
+    Resource that allows a sandbox to log messages via Twisted's
     logging framework.
     """
     def log(self, api, msg, level):
@@ -433,6 +622,35 @@ class LoggingResource(SandboxResource):
 
     @inlineCallbacks
     def handle_log(self, api, command, level=None):
+        """
+        Log a message at the specified severity level.
+
+        The other log commands are identical except that ``level`` need not
+        be specified. Using the log-level specific commands is preferred.
+
+        Command fields:
+            - ``level``: The severity level to log at. Must be an integer
+              log level. Default severity is the ``INFO`` log level.
+            - ``msg``: The message to log.
+
+        Reply fields:
+            - ``success``: ``true`` if the operation was successful, otherwise
+              ``false``.
+
+        Example:
+
+        .. code-block:: javascript
+
+            api.request(
+                'log.log',
+                {level: 20,
+                 msg: 'Abandon ship!'},
+                function(reply) {
+                    api.log_info('New value: ' +
+                                 reply.value);
+                }
+            );
+        """
         level = command.get('level', level)
         if level is None:
             level = logging.INFO
@@ -448,18 +666,43 @@ class LoggingResource(SandboxResource):
         returnValue(self.reply(command, success=True))
 
     def handle_debug(self, api, command):
+        """
+        Logs a message at the ``DEBUG`` log level.
+
+        See :func:`handle_log` for details.
+        """
         return self.handle_log(api, command, level=logging.DEBUG)
 
     def handle_info(self, api, command):
+        """
+        Logs a message at the ``INFO`` log level.
+
+        See :func:`handle_log` for details.
+        """
         return self.handle_log(api, command, level=logging.INFO)
 
     def handle_warning(self, api, command):
+        """
+        Logs a message at the ``WARNING`` log level.
+
+        See :func:`handle_log` for details.
+        """
         return self.handle_log(api, command, level=logging.WARNING)
 
     def handle_error(self, api, command):
+        """
+        Logs a message at the ``ERROR`` log level.
+
+        See :func:`handle_log` for details.
+        """
         return self.handle_log(api, command, level=logging.ERROR)
 
     def handle_critical(self, api, command):
+        """
+        Logs a message at the ``CRITICAL`` log level.
+
+        See :func:`handle_log` for details.
+        """
         return self.handle_log(api, command, level=logging.CRITICAL)
 
 
@@ -479,7 +722,11 @@ class HttpClientContextFactory(WebClientContextFactory):
 
 
 class HttpClientResource(SandboxResource):
-    """Resource that allows making HTTP calls to outside services.
+    """
+    Resource that allows making HTTP calls to outside services.
+
+    All command on this resource share a common set of command
+    and response fields:
 
     Command fields:
         - ``url``: The URL to request
@@ -569,18 +816,43 @@ class HttpClientResource(SandboxResource):
                           reason=failure.getErrorMessage())
 
     def handle_get(self, api, command):
+        """
+        Make an HTTP GET request.
+
+        See :class:`HttpResource` for details.
+        """
         return self._make_request_from_command('GET', command)
 
     def handle_put(self, api, command):
+        """
+        Make an HTTP PUT request.
+
+        See :class:`HttpResource` for details.
+        """
         return self._make_request_from_command('PUT', command)
 
     def handle_delete(self, api, command):
+        """
+        Make an HTTP DELETE request.
+
+        See :class:`HttpResource` for details.
+        """
         return self._make_request_from_command('DELETE', command)
 
     def handle_head(self, api, command):
+        """
+        Make an HTTP HEAD request.
+
+        See :class:`HttpResource` for details.
+        """
         return self._make_request_from_command('HEAD', command)
 
     def handle_post(self, api, command):
+        """
+        Make an HTTP POST request.
+
+        See :class:`HttpResource` for details.
+        """
         return self._make_request_from_command('POST', command)
 
 

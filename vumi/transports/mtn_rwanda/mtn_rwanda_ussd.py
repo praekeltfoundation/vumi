@@ -1,13 +1,15 @@
 # -*- test-case-name: vumi.transports.mtn_rwanda.tests.test_mtn_rwanda_ussd -*-
 from datetime import datetime
 from twisted.internet import reactor
-from twisted.web import xmlrpc, server
+from twisted.web import xmlrpc
 from twisted.internet.defer import inlineCallbacks, Deferred, returnValue
 
 from vumi.message import TransportUserMessage
 from vumi.transports.base import Transport
-from vumi.config import ConfigServerEndpoint, ConfigInt, ConfigDict
+from vumi.config import ConfigServerEndpoint, ConfigInt, ConfigDict, ConfigText
 from vumi.components.session import SessionManager
+from vumi.transports.httprpc.httprpc import HttpRpcHealthResource
+from vumi.utils import build_web_site
 
 
 class MTNRwandaUSSDTransportConfig(Transport.CONFIG_CLASS):
@@ -27,6 +29,11 @@ class MTNRwandaUSSDTransportConfig(Transport.CONFIG_CLASS):
     session_timeout_period = ConfigInt(
         "Maximum length of a USSD session",
         default=600, static=True)
+    web_path = ConfigText(
+        "The path to serve this resource on.", required=True, static=True)
+    health_path = ConfigText(
+        "The path to serve the health resource on.", default='/health/',
+        static=True)
 
 
 class RequestTimedOutError(Exception):
@@ -62,8 +69,12 @@ class MTNRwandaUSSDTransport(Transport):
         self.session_manager = yield SessionManager.from_redis_config(
             config.redis_manager, r_prefix,
             config.session_timeout_period)
-        self.r = MTNRwandaXMLRPCResource(self)
-        self.factory = server.Site(self.r)
+
+        self.factory = build_web_site({
+            config.health_path: HttpRpcHealthResource(self),
+            config.web_path: MTNRwandaXMLRPCResource(self),
+        })
+
         self.xmlrpc_server = yield self.endpoint.listen(self.factory)
 
     @inlineCallbacks
@@ -74,6 +85,9 @@ class MTNRwandaUSSDTransport(Transport):
         self.session_manager.stop()
         if self.xmlrpc_server is not None:
             yield self.xmlrpc_server.stopListening()
+
+    def get_health_response(self):
+        return "OK"
 
     def set_request(self, request_id, request_args):
         self._requests[request_id] = request_args

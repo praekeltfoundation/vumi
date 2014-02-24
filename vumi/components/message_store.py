@@ -3,6 +3,8 @@
 
 """Message store."""
 
+import warnings
+
 from uuid import uuid4
 
 from twisted.internet.defer import returnValue, inlineCallbacks
@@ -247,6 +249,15 @@ class MessageStore(object):
         returnValue(event.event if event is not None else None)
 
     @Manager.calls_manager
+    def get_events_for_message(self, message_id):
+        events = []
+        event_keys = yield self.message_event_keys(message_id)
+        for event_id in event_keys:
+            event = yield self.get_event(event_id)
+            events.append(event)
+        returnValue(events)
+
+    @Manager.calls_manager
     def add_inbound_message(self, msg, tag=None, batch_id=None, batch_ids=()):
         msg_id = msg['message_id']
         msg_record = yield self.inbound_messages.load(msg_id)
@@ -406,7 +417,15 @@ class MessageStore(object):
         return self.cache.is_query_in_progress(batch_id, token)
 
     def get_inbound_message_keys(self, batch_id, start=0, stop=-1,
-                                    with_timestamp=False):
+                                 with_timestamp=False):
+        warnings.warn("get_inbound_message_keys() is deprecated. Use "
+                      "get_cached_inbound_message_keys().",
+                      category=DeprecationWarning)
+        return self.get_cached_inbound_message_keys(batch_id, start, stop,
+                                                    with_timestamp)
+
+    def get_cached_inbound_message_keys(self, batch_id, start=0, stop=-1,
+                                        with_timestamp=False):
         """
         Return the keys ordered by descending timestamp.
 
@@ -420,11 +439,19 @@ class MessageStore(object):
             Whether or not to return a list of (key, timestamp) tuples
             instead of only the list of keys.
         """
-        return self.cache.get_inbound_message_keys(batch_id, start, stop,
-            with_timestamp=with_timestamp)
+        return self.cache.get_inbound_message_keys(
+            batch_id, start, stop, with_timestamp=with_timestamp)
 
     def get_outbound_message_keys(self, batch_id, start=0, stop=-1,
-                                    with_timestamp=False):
+                                  with_timestamp=False):
+        warnings.warn("get_outbound_message_keys() is deprecated. Use "
+                      "get_cached_outbound_message_keys().",
+                      category=DeprecationWarning)
+        return self.get_cached_outbound_message_keys(batch_id, start, stop,
+                                                     with_timestamp)
+
+    def get_cached_outbound_message_keys(self, batch_id, start=0, stop=-1,
+                                         with_timestamp=False):
         """
         Return the keys ordered by descending timestamp.
 
@@ -438,5 +465,5 @@ class MessageStore(object):
             Whether or not to return a list of (key, timestamp) tuples
             instead of only the list of keys.
         """
-        return self.cache.get_outbound_message_keys(batch_id, start, stop,
-            with_timestamp=with_timestamp)
+        return self.cache.get_outbound_message_keys(
+            batch_id, start, stop, with_timestamp=with_timestamp)

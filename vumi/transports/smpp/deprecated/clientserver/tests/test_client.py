@@ -4,10 +4,10 @@ from smpp.pdu_builder import DeliverSM, BindTransceiverResp, Unbind
 from smpp.pdu import unpack_pdu
 
 from vumi.tests.utils import LogCatcher
-from vumi.transports.smpp.clientserver.client import (
+from vumi.transports.smpp.deprecated.clientserver.client import (
     EsmeTransceiver, EsmeReceiver, EsmeTransmitter, EsmeCallbacks, ESME,
     unpacked_pdu_opts)
-from vumi.transports.smpp.transport import SmppTransportConfig
+from vumi.transports.smpp.deprecated.transport import SmppTransportConfig
 from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 
 
