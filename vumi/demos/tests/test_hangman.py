@@ -147,7 +147,8 @@ class TestHangmanWorker(VumiTestCase):
         # it is a sad elephant (as seen in the wild)
         root.putChild("word", Data('\xef\xbb\xbfelephant\r\n', 'text/html'))
         site_factory = Site(root)
-        self.webserver = yield reactor.listenTCP(0, site_factory)
+        self.webserver = yield reactor.listenTCP(
+            0, site_factory, interface='127.0.0.1')
         addr = self.webserver.getHost()
         random_word_url = "http://%s:%s/word" % (addr.host, addr.port)
 

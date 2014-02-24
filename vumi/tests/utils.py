@@ -171,7 +171,8 @@ class MockHttpServer(object):
     def start(self):
         root = MockResource(self._handler)
         site_factory = LogFilterSite(root)
-        self._webserver = yield reactor.listenTCP(0, site_factory)
+        self._webserver = yield reactor.listenTCP(
+            0, site_factory, interface='127.0.0.1')
         self.addr = self._webserver.getHost()
         self.url = "http://%s:%s/" % (self.addr.host, self.addr.port)
 
