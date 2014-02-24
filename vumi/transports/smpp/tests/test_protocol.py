@@ -107,7 +107,7 @@ class EsmeTestCase(VumiTestCase):
 
         default_config = {
             'transport_name': 'sphex_transport',
-            'twisted_endpoint': 'tcp:host=localhost:port=0',
+            'twisted_endpoint': 'tcp:host=127.0.0.1:port=0',
             'deliver_short_message_processor': (
                 'vumi.transports.smpp.processors.'
                 'DeliverShortMessageProcessor'),

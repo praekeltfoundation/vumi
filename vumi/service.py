@@ -385,7 +385,7 @@ class Publisher(object):
             # which may lead to errors if the RabbitMQ Management REST api
             # changes
             resp = yield http_request(
-                "http://localhost:55672/api/bindings", headers={
+                "http://127.0.0.1:55672/api/bindings", headers={
                     'Authorization': basic_auth_string(
                         self.vumi_options['username'],
                         self.vumi_options['password']),

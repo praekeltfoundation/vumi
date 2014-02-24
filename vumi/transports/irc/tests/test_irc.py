@@ -172,7 +172,7 @@ from twisted.words.protocols.irc import IRC
 
 
 class StubbyIrcServerProtocol(IRC):
-    hostname = 'localhost'
+    hostname = '127.0.0.1'
 
     def irc_unknown(self, prefix, command, params):
         self.factory.events.put((prefix, command, params))
