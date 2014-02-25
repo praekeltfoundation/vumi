@@ -3,6 +3,7 @@ from functools import wraps
 
 from twisted.internet.defer import succeed, inlineCallbacks, Deferred
 from twisted.internet.error import ConnectionRefusedError
+from twisted.internet.task import deferLater
 from twisted.python.failure import Failure
 from twisted.python.monkey import MonkeyPatcher
 from twisted.trial.unittest import TestCase, SkipTest, FailTest
@@ -196,6 +197,7 @@ class VumiTestCase(TestCase):
     implements(IHelperEnabledTestCase)
 
     timeout = get_timeout()
+    reactor_check_iterations = 200  # No science behind this number.
 
     _cleanup_funcs = None
 
@@ -210,6 +212,28 @@ class VumiTestCase(TestCase):
         if self._cleanup_funcs is not None:
             for cleanup, args, kw in reversed(self._cleanup_funcs):
                 yield cleanup(*args, **kw)
+        yield self._check_reactor_things()
+
+    @inlineCallbacks
+    def _check_reactor_things(self):
+        from twisted.internet import reactor
+        for i in range(self.reactor_check_iterations):
+            # Give the reactor a chance to do get clean if it needs to.
+            yield deferLater(reactor, 0, lambda: None)
+
+            # There are some internal readers that we want to ignore.
+            # Unfortunately they're private.
+            internal_readers = getattr(reactor, '_internalReaders', set())
+            if len(set(reactor.getReaders()) - internal_readers) > 0:
+                continue
+            elif len(reactor.getWriters()) > 0:
+                continue
+            elif len(reactor.getDelayedCalls()) > 1:
+                # The test timeout has a delayedCall which will always be here.
+                continue
+            else:
+                # The reactor's clean, let's go home.
+                return
 
     def add_cleanup(self, func, *args, **kw):
         """
