@@ -67,7 +67,7 @@ class NoQueueWorkerCreator(WorkerCreator):
 class TestWorkerCreator(VumiTestCase):
     def get_creator(self, **options):
         vumi_options = {
-            "hostname": "localhost",
+            "hostname": "127.0.0.1",
             "port": 5672,
             "username": "vumitest",
             "password": "vumitest",

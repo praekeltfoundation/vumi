@@ -129,7 +129,7 @@ class TestRapidSMSRelay(VumiTestCase):
     def _call_relay(self, data, auth=None):
         data = json.dumps(data)
         host = self.app.web_resource.getHost()
-        send_url = "http://localhost:%d/send" % (host.port,)
+        send_url = "http://127.0.0.1:%d/send" % (host.port,)
         headers = {}
         if auth is not None:
             headers['Authorization'] = basic_auth_string(*auth)

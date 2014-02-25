@@ -123,7 +123,8 @@ class TestHttpUtils(VumiTestCase):
         self.root = Resource()
         self.root.isLeaf = True
         site_factory = Site(self.root)
-        self.webserver = yield reactor.listenTCP(0, site_factory)
+        self.webserver = yield reactor.listenTCP(
+            0, site_factory, interface='127.0.0.1')
         # This is a lambda because we replace self.webserver in a test.
         self.add_cleanup(lambda: self.webserver.loseConnection())
         addr = self.webserver.getHost()
@@ -244,7 +245,8 @@ class TestHttpUtils(VumiTestCase):
             "Content-Type: text/html; charset=utf-8\r\n"
             "\r\n"
             "Yay")
-        self.webserver = yield reactor.listenTCP(0, factory)
+        self.webserver = yield reactor.listenTCP(
+            0, factory, interface='127.0.0.1')
         addr = self.webserver.getHost()
         self.url = "http://%s:%s/" % (addr.host, addr.port)
 

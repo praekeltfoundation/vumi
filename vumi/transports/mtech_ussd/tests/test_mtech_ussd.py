@@ -16,7 +16,7 @@ class TestMtechUssdTransport(VumiTestCase):
             'transport_type': 'ussd',
             'ussd_string_prefix': '*120*666#',
             'web_path': "/foo",
-            'web_host': "localhost",
+            'web_host': "127.0.0.1",
             'web_port': 0,
             'username': 'testuser',
             'password': 'testpass',

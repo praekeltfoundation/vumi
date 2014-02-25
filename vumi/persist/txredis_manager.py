@@ -136,7 +136,7 @@ class TxRedisManager(Manager):
             Key prefix for namespacing.
         """
 
-        host = client_config.pop('host', 'localhost')
+        host = client_config.pop('host', '127.0.0.1')
         port = client_config.pop('port', 6379)
 
         factory = VumiRedisClientFactory(**client_config)
