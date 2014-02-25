@@ -9,13 +9,14 @@ import collections
 from twisted.internet.defer import Deferred, returnValue, inlineCallbacks
 from twisted.internet.task import LoopingCall
 from twisted.internet import reactor
-from twisted.web import xmlrpc, server
+from twisted.web import xmlrpc
 
 from vumi import log
 from vumi.message import TransportUserMessage
 from vumi.transports.base import Transport
 from vumi.components.session import SessionManager
 from vumi.config import ConfigText, ConfigInt, ConfigDict
+from vumi.utils import LogFilterSite
 
 
 class TrueAfricanUssdTransportConfig(Transport.CONFIG_CLASS):
@@ -70,9 +71,10 @@ class TrueAfricanUssdTransport(Transport):
         )
 
         # XMLRPC Resource
+        self._site_factory = LogFilterSite(XmlRpcResource(self))
         self.web_resource = reactor.listenTCP(
             config.port,
-            server.Site(XmlRpcResource(self)),
+            self._site_factory,
             interface=config.interface
         )
 
@@ -94,6 +96,7 @@ class TrueAfricanUssdTransport(Transport):
     @inlineCallbacks
     def teardown_transport(self):
         yield self.web_resource.loseConnection()
+        yield self._site_factory.disconnect_tracker.wait()
         if self.timeout_task.running:
             self.timeout_task.stop()
             yield self.timeout_task_d

@@ -170,9 +170,9 @@ class MockHttpServer(object):
     @inlineCallbacks
     def start(self):
         root = MockResource(self._handler)
-        site_factory = LogFilterSite(root)
+        self._site_factory = LogFilterSite(root)
         self._webserver = yield reactor.listenTCP(
-            0, site_factory, interface='127.0.0.1')
+            0, self._site_factory, interface='127.0.0.1')
         self.addr = self._webserver.getHost()
         self.url = "http://%s:%s/" % (self.addr.host, self.addr.port)
 
@@ -180,6 +180,7 @@ class MockHttpServer(object):
     def stop(self):
         yield self._webserver.stopListening()
         yield self._webserver.loseConnection()
+        yield self._site_factory.disconnect_tracker.wait()
 
 
 def maybe_async(sync_attr):

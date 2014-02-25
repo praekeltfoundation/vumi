@@ -2,9 +2,8 @@
 
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, DeferredQueue
-from twisted.web.server import Site
 
-from vumi.utils import http_request
+from vumi.utils import LogFilterSite, http_request
 from vumi.tests.utils import MockHttpServer
 from vumi.message import TransportUserMessage
 from vumi.transports.integrat.integrat import (IntegratHttpResource,
@@ -47,8 +46,9 @@ class TestIntegratHttpResource(VumiTestCase):
     @inlineCallbacks
     def setUp(self):
         self.msgs = []
-        site_factory = Site(IntegratHttpResource("testgrat", "ussd",
-            self._publish))
+        site_factory = LogFilterSite(
+            IntegratHttpResource("testgrat", "ussd", self._publish))
+        self.add_cleanup(site_factory.disconnect_tracker.wait)
         self.server = yield reactor.listenTCP(
             0, site_factory, interface='127.0.0.1')
         self.add_cleanup(self.server.loseConnection)

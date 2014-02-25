@@ -122,7 +122,8 @@ class TestHttpUtils(VumiTestCase):
     def setUp(self):
         self.root = Resource()
         self.root.isLeaf = True
-        site_factory = Site(self.root)
+        site_factory = LogFilterSite(self.root)
+        self.add_cleanup(site_factory.disconnect_tracker.wait)
         self.webserver = yield reactor.listenTCP(
             0, site_factory, interface='127.0.0.1')
         # This is a lambda because we replace self.webserver in a test.

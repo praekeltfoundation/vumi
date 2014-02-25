@@ -6,7 +6,6 @@ import string
 
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet import reactor
-from twisted.web.server import Site
 from twisted.web.resource import Resource
 from twisted.web.static import Data
 
@@ -14,6 +13,7 @@ from vumi.demos.hangman import HangmanGame, HangmanWorker
 from vumi.message import TransportUserMessage
 from vumi.application.tests.helpers import ApplicationHelper
 from vumi.tests.helpers import VumiTestCase
+from vumi.utils import LogFilterSite
 
 
 def mkstate(word, guesses, msg):
@@ -146,7 +146,8 @@ class TestHangmanWorker(VumiTestCase):
         # data is elephant with a UTF-8 encoded BOM
         # it is a sad elephant (as seen in the wild)
         root.putChild("word", Data('\xef\xbb\xbfelephant\r\n', 'text/html'))
-        site_factory = Site(root)
+        site_factory = LogFilterSite(root)
+        self.add_cleanup(site_factory.disconnect_tracker.wait)
         self.webserver = yield reactor.listenTCP(
             0, site_factory, interface='127.0.0.1')
         addr = self.webserver.getHost()

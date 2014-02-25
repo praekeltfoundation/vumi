@@ -264,7 +264,68 @@ def build_web_site(resources, site_class=None):
     return site_factory
 
 
-class LogFilterSite(Site):
+class ProtocolDisconnectTracker(object):
+    """
+    Track protocol connections so that cleanup handlers can wait for everything
+    to be properly disconnected.
+
+    See http://mumak.net/stuff/twisted-disconnect.html for a description of the
+    problem.
+    """
+
+    def __init__(self):
+        self._pending_disconnects = {}
+
+    def track(self, p):
+        """
+        Track the connection state of a :class:`Protocol` instance.
+
+        This wraps :meth:`p.connectionMade` and :meth:`p.connectionLost` to
+        construct a :class:`Deferred` that will fire when the protocol's
+        connection has been closed.
+
+        :param p: :class:`Protocol` instance to track.
+        :returns: ``p``, so that this method may be used as a passthough.
+        """
+        orig_connectionMade = p.connectionMade
+        orig_connectionLost = p.connectionLost
+
+        def connectionMade_wrapper():
+            d = defer.Deferred()
+            self._pending_disconnects[id(p)] = d
+            return orig_connectionMade()
+
+        def connectionLost_wrapper(reason):
+            orig_connectionLost(reason)
+            d = self._pending_disconnects.pop(id(p))
+            d.callback(p)
+
+        p.connectionMade = connectionMade_wrapper
+        p.connectionLost = connectionLost_wrapper
+        return p
+
+    def wait(self):
+        """
+        Wait for all currently-connected protocol instances to be disconnected.
+        """
+        return defer.gatherResults(self._pending_disconnects.values())
+
+
+class DisconnectTrackingSite(Site):
+    """
+    Factory for HTTP server that tracks disconnections and provides a mechanism
+    to wait for them.
+    """
+
+    def __init__(self, *args, **kw):
+        self.disconnect_tracker = ProtocolDisconnectTracker()
+        Site.__init__(self, *args, **kw)
+
+    def buildProtocol(self, addr):
+        return self.disconnect_tracker.track(Site.buildProtocol(self, addr))
+
+
+class LogFilterSite(DisconnectTrackingSite):
     def log(self, request):
         if getattr(request, 'do_not_log', None):
             return

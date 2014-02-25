@@ -5,12 +5,11 @@
 from txjsonrpc.web.jsonrpc import Proxy
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet import reactor
-from twisted.web.server import Site
 from twisted.python import log
 
 from vumi.components.tagpool_api import TagpoolApiServer, TagpoolApiWorker
 from vumi.components.tagpool import TagpoolManager
-from vumi.utils import http_request
+from vumi.utils import LogFilterSite, http_request
 from vumi.tests.helpers import VumiTestCase, WorkerHelper, PersistenceHelper
 
 
@@ -21,7 +20,8 @@ class TestTagpoolApiServer(VumiTestCase):
         self.persistence_helper = self.add_helper(PersistenceHelper())
         self.redis = yield self.persistence_helper.get_redis_manager()
         self.tagpool = TagpoolManager(self.redis)
-        site = Site(TagpoolApiServer(self.tagpool))
+        site = LogFilterSite(TagpoolApiServer(self.tagpool))
+        self.add_cleanup(site.disconnect_tracker.wait)
         self.server = yield reactor.listenTCP(0, site, interface='127.0.0.1')
         self.add_cleanup(self.server.loseConnection)
         addr = self.server.getHost()
