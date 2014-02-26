@@ -198,6 +198,7 @@ class VumiTestCase(TestCase):
 
     timeout = get_timeout()
     reactor_check_iterations = 200  # No science behind this number.
+    reactor_check_interval = 0.01  # 10ms, no science here either.
 
     _cleanup_funcs = None
 
@@ -217,23 +218,21 @@ class VumiTestCase(TestCase):
     @inlineCallbacks
     def _check_reactor_things(self):
         from twisted.internet import reactor
-        for i in range(self.reactor_check_iterations):
-            # Give the reactor a chance to do get clean if it needs to.
-            yield deferLater(reactor, 0, lambda: None)
+        # Give the reactor a chance to do get clean if it needs to.
+        yield deferLater(reactor, 0, lambda: None)
 
+        for i in range(self.reactor_check_iterations):
             # There are some internal readers that we want to ignore.
             # Unfortunately they're private.
             internal_readers = getattr(reactor, '_internalReaders', set())
-            if len(set(reactor.getReaders()) - internal_readers) > 0:
-                continue
-            elif len(reactor.getWriters()) > 0:
-                continue
-            elif len(reactor.getDelayedCalls()) > 1:
-                # The test timeout has a delayedCall which will always be here.
-                continue
-            else:
+            selectables = set(reactor.getReaders() + reactor.getWriters())
+            if not (selectables - internal_readers):
                 # The reactor's clean, let's go home.
                 return
+
+            # We haven't gone home, so wait a bit for selectables to go away.
+            yield deferLater(
+                reactor, self.reactor_check_interval, lambda: None)
 
     def add_cleanup(self, func, *args, **kw):
         """
