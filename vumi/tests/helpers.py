@@ -217,8 +217,16 @@ class VumiTestCase(TestCase):
 
     @inlineCallbacks
     def _check_reactor_things(self):
+        """
+        Poll the reactor for unclosed connections and wait for them to close.
+
+        Properly waiting for all connections to finish closing requires hooking
+        into :meth:`Protocol.connectionLost` in both client and server. Since
+        this isn't practical in all cases, we check the reactor for any open
+        connections and wait a bit for them to finish closing if we find any.
+        """
         from twisted.internet import reactor
-        # Give the reactor a chance to do get clean if it needs to.
+        # Give the reactor a chance to get clean.
         yield deferLater(reactor, 0, lambda: None)
 
         for i in range(self.reactor_check_iterations):
