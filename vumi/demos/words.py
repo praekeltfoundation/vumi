@@ -42,7 +42,7 @@ class EchoWorker(SimpleAppWorker):
     """Echos text back to the sender."""
 
     def process_message(self, data):
-        return "you wrote: "+data
+        return data
 
     def get_help(self):
         return "Enter text to echo:"

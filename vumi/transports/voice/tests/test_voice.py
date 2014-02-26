@@ -57,11 +57,10 @@ class FakeFreeswitchProtocol(LineReceiver):
         self.disconnect_d.callback(None)
 
 
-class BaseVoiceServerTransportTestCase(VumiTestCase):
+class TestVoiceServerTransport(VumiTestCase):
 
     transport_class = VoiceServerTransport
     transport_type = 'voice'
-    timeout = 1
 
     @inlineCallbacks
     def setUp(self):
@@ -91,9 +90,6 @@ class BaseVoiceServerTransportTestCase(VumiTestCase):
         cc = protocol.ClientCreator(reactor, FakeFreeswitchProtocol)
         client = yield cc.connectTCP("127.0.0.1", addr.port)
         returnValue(client)
-
-
-class TestVoiceServerTransport(BaseVoiceServerTransportTestCase):
 
     @inlineCallbacks
     def test_client_register(self):
@@ -144,4 +140,3 @@ class TestVoiceServerTransport(BaseVoiceServerTransportTestCase):
         self.client.sendDtmfEvent('#')
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assertEqual(msg['content'], '572')
-

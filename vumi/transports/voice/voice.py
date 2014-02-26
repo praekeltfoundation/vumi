@@ -12,17 +12,14 @@ from twisted.python import log
 
 from vumi.transports import Transport
 from vumi.message import TransportUserMessage
-from vumi.config import ConfigServerEndpoint, ConfigInt, ConfigDict, ConfigText
+from vumi.config import ConfigInt, ConfigText
 
-import sys
 import tempfile
 import os.path
 from . import freeswitchesl
 
 
 class FreeSwitchESLProtocol(freeswitchesl.FreeSwitchEventProtocol):
-
-    """Custom implementation of the Freeswitch event socket interface"""
 
     def __init__(self, vumi_transport):
         self.vumi_transport = vumi_transport
@@ -50,7 +47,7 @@ class FreeSwitchESLProtocol(freeswitchesl.FreeSwitchEventProtocol):
                 self.current_input = self.current_input + ev.DTMF_Digit
 
     @inlineCallbacks
-    def createAndStreamTextAsSpeech(self, engine, voice, message):
+    def create_and_stream_text_as_speech(self, engine, voice, message):
         filename = ("%s/voice%d.wav" % (tempfile.gettempdir(), hash(message)))
         log.msg("Looking for file %s" % filename)
         if (not os.path.isfile(filename)):
@@ -61,37 +58,37 @@ class FreeSwitchESLProtocol(freeswitchesl.FreeSwitchEventProtocol):
         yield self.playback(filename)
 
     @inlineCallbacks
-    def sendTextAsSpeech(self, engine, voice, message):
+    def send_text_as_speech(self, engine, voice, message):
         yield self.set("tts_engine=" + engine)
         yield self.set("tts_voice=" + voice)
         yield self.execute("speak", message)
 
-    def streamTextAsSpeech(self, message):
+    def stream_text_as_speech(self, message):
         finalmessage = message.replace("\n", " . ")
         log.msg("TTS: " + finalmessage + "\n")
         if (self.vumi_transport.config.tts_type == "local"):
-            self.createAndStreamTextAsSpeech(
+            self.create_and_stream_text_as_speech(
                 self.vumi_transport.config.tts_engine,
                 self.vumi_transport.config.tts_voice, finalmessage)
         else:
-            self.sendTextAsSpeech(
+            self.send_text_as_speech(
                 self.vumi_transport.config.tts_engine,
                 self.vumi_transport.config.tts_voice, finalmessage)
 
-    def getAddress(self):
+    def get_address(self):
         return self.uniquecallid
 
-    def outputMessage(self, text):
-        self.streamTextAsSpeech(text)
+    def output_message(self, text):
+        self.stream_text_as_speech(text)
 
     @inlineCallbacks
-    def outputStream(self, url):
+    def output_stream(self, url):
         yield self.playback(url)
 
     def set_input_type(self, input_type):
         self.input_type = input_type
 
-    def closeCall(self):
+    def close_call(self):
         self.request_hang_up = True
 
     def onChannelExecuteComplete(self, ev):
@@ -103,7 +100,7 @@ class FreeSwitchESLProtocol(freeswitchesl.FreeSwitchEventProtocol):
         log.msg("Channel HangUp")
         self.vumi_transport.deregister_client(self)
 
-    def onDisconnect(self, ev):
+    def on_disconnect(self, ev):
         log.msg("Channel disconnect received")
         self.vumi_transport.deregister_client(self)
 
@@ -211,7 +208,7 @@ class VoiceServerTransport(Transport):
         # We add our own Deferred to the client here because we only want to
         # fire it after we're finished with our own deregistration process.
         client.registration_d = Deferred()
-        client_addr = client.getAddress()
+        client_addr = client.get_address()
         log.msg("Registering client connected from %r" % client_addr)
         self._clients[client_addr] = client
         self.send_inbound_message(client, None,
@@ -223,7 +220,7 @@ class VoiceServerTransport(Transport):
         self.send_inbound_message(
             client, None, TransportUserMessage.SESSION_CLOSE)
         client.registration_d.callback(None)
-        del self._clients[client.getAddress()]
+        del self._clients[client.get_address()]
 
     def handle_input(self, client, text):
         self.send_inbound_message(client, text,
@@ -231,7 +228,7 @@ class VoiceServerTransport(Transport):
 
     def send_inbound_message(self, client, text, session_event):
         self.publish_message(
-            from_addr=client.getAddress(),
+            from_addr=client.get_address(),
             to_addr=self._to_addr,
             session_event=session_event,
             content=text,
@@ -259,9 +256,9 @@ class VoiceServerTransport(Transport):
                 overrideURL = voicemeta.get('speech_url', None)
 
         if (overrideURL is None):
-            client.outputMessage("%s\n" % text)
+            client.output_message("%s\n" % text)
         else:
-            client.outputStream(overrideURL)
+            client.output_stream(overrideURL)
 
         if message['session_event'] == TransportUserMessage.SESSION_CLOSE:
-            client.closeCall()
+            client.close_call()
