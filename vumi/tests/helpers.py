@@ -224,6 +224,11 @@ class VumiTestCase(TestCase):
         into :meth:`Protocol.connectionLost` in both client and server. Since
         this isn't practical in all cases, we check the reactor for any open
         connections and wait a bit for them to finish closing if we find any.
+
+        NOTE: This will only wait for connections that close on their own. Any
+              connections that have been left open will stay open (unless they
+              time out or something) and will leave the reactor dirty after we
+              stop waiting.
         """
         from twisted.internet import reactor
         # Give the reactor a chance to get clean.
