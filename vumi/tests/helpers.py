@@ -197,8 +197,8 @@ class VumiTestCase(TestCase):
     implements(IHelperEnabledTestCase)
 
     timeout = get_timeout()
-    reactor_check_iterations = 200  # No science behind this number.
-    reactor_check_interval = 0.01  # 10ms, no science here either.
+    reactor_check_interval = 0.01  # 10ms, no science behind this number.
+    reactor_check_iterations = 100  # No science behind this number either.
 
     _cleanup_funcs = None
 
