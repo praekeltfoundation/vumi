@@ -927,6 +927,7 @@ class DummyHTTPClient(object):
     def succeed_next(self, body, code=200):
         response = DummyResponse()
         response.code = code
+        response.headers.addRawHeader('Content-Length', len(body))
         response.content = lambda: succeed(body)
         self._next_http_request_result = succeed(response)
 
