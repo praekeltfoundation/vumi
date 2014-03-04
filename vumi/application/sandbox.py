@@ -815,7 +815,7 @@ class HttpClientResource(SandboxResource):
 
         headers = command.get('headers', {})
         data = command.get('data', None)
-        files = command.get('files', {})
+        files = command.get('files', None)
         authentication = command.get('auth', None)
 
         d = self._make_request(method, url, headers=headers, data=data,
@@ -839,12 +839,13 @@ class HttpClientResource(SandboxResource):
         if data is not None:
             data = data.encode("utf-8")
 
-        files = dict([
-            (key,
-                (value['file_name'],
-                 value['content_type'],
-                 StringIO(base64.b64decode(value['data']))))
-            for key, value in files.iteritems()])
+        if files is not None:
+            files = dict([
+                (key,
+                    (value['file_name'],
+                     value['content_type'],
+                     StringIO(base64.b64decode(value['data']))))
+                for key, value in files.iteritems()])
 
         agent = self.agent_class(reactor, contextFactory=context_factory)
         http_client = self.http_client_class(agent)

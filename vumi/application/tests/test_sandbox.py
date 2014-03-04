@@ -967,7 +967,7 @@ class TestHttpClientResource(ResourceTestCaseBase):
         return self.dummy_client.get_context_factory()
 
     def assert_http_request(self, url, method='GET', headers={}, data=None,
-                            timeout=None, auth=None, files={}):
+                            timeout=None, auth=None, files=None):
         timeout = (timeout if timeout is not None
                    else self.resource.timeout)
         args = (method, url,)
@@ -980,14 +980,16 @@ class TestHttpClientResource(ResourceTestCaseBase):
 
         # NOTE: Files are handed over to treq as file pointer-ish things
         #       which in our case are `StringIO` instances.
-        actual_kw_files = actual_kw.pop('files', {})
-        kw_files = kw.pop('files', {})
-        for name, file_data in actual_kw_files.items():
-            kw_file_data = kw_files[name]
-            file_name, content_type, sio = file_data
-            self.assertEqual(
-                (file_name, content_type, sio.getvalue()),
-                kw_file_data)
+        actual_kw_files = actual_kw.get('files')
+        if actual_kw_files is not None:
+            actual_kw_files = actual_kw.pop('files', None)
+            kw_files = kw.pop('files', {})
+            for name, file_data in actual_kw_files.items():
+                kw_file_data = kw_files[name]
+                file_name, content_type, sio = file_data
+                self.assertEqual(
+                    (file_name, content_type, sio.getvalue()),
+                    kw_file_data)
 
         self.assertEqual((actual_args, actual_kw), (args, kw))
 
