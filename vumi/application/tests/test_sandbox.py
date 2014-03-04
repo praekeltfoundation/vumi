@@ -1,5 +1,6 @@
 """Tests for vumi.application.sandbox."""
 
+import base64
 import os
 import sys
 import json
@@ -15,6 +16,7 @@ from twisted.internet.defer import (
     inlineCallbacks, fail, succeed, DeferredQueue)
 from twisted.internet.error import ProcessTerminated
 from twisted.trial.unittest import SkipTest
+from twisted.web.http_headers import Headers
 
 from vumi.application.sandbox import (
     Sandbox, SandboxApi, SandboxCommand, SandboxResources,
@@ -901,55 +903,78 @@ class TestLoggingResource(ResourceTestCaseBase):
         self.assertEqual(msgs, ['Zo\xc3\xab'])
 
 
+class DummyResponse(object):
+
+    def __init__(self):
+        self.headers = Headers({})
+
+
+class DummyHTTPClient(object):
+
+    def __init__(self):
+        self._next_http_request_result = None
+        self.http_requests = []
+
+    def set_agent(self, agent):
+        self.agent = agent
+
+    def get_context_factory(self):
+        return self.agent._contextFactory
+
+    def fail_next(self, error):
+        self._next_http_request_result = fail(error)
+
+    def succeed_next(self, body, code=200):
+        response = DummyResponse()
+        response.code = code
+        response.content = lambda: succeed(body)
+        self._next_http_request_result = succeed(response)
+
+    def request(self, *args, **kw):
+        self.http_requests.append((args, kw))
+        return self._next_http_request_result
+
+
 class TestHttpClientResource(ResourceTestCaseBase):
 
     resource_cls = HttpClientResource
-
-    class DummyResponse(object):
-        pass
 
     @inlineCallbacks
     def setUp(self):
         super(TestHttpClientResource, self).setUp()
         yield self.create_resource({})
-        self.patch(self.resource_cls,
-                   '_make_request', self.dummy_http_request)
-        self._next_http_request_result = None
-        self._http_requests = []
 
-    def dummy_http_request(self, *args, **kw):
-        self._http_requests.append((args, kw))
-        return self._next_http_request_result
+        self.dummy_client = DummyHTTPClient()
+
+        self.patch(self.resource_cls,
+                   'http_client_class', self.get_dummy_client)
+
+    def get_dummy_client(self, agent):
+        self.dummy_client.set_agent(agent)
+        return self.dummy_client
 
     def http_request_fail(self, error):
-        self._next_http_request_result = fail(error)
+        self.dummy_client.fail_next(error)
 
     def http_request_succeed(self, body, code=200):
-        response = self.DummyResponse()
-        response.code = code
-        response.content = lambda: succeed(body)
-        self._next_http_request_result = succeed(response)
+        self.dummy_client.succeed_next(body, code)
 
     def assert_not_unicode(self, arg):
         self.assertFalse(isinstance(arg, unicode))
 
     def get_context_factory(self):
-        return self._context_factory
+        return self.dummy_client.get_context_factory()
 
     def assert_http_request(self, url, method='GET', headers={}, data=None,
-                            timeout=None, data_limit=None, auth=None,
-                            files=[]):
+                            timeout=None, auth=None, files={}):
         timeout = (timeout if timeout is not None
                    else self.resource.timeout)
-        data_limit = (data_limit if data_limit is not None
-                      else self.resource.data_limit)
         args = (method, url,)
         kw = dict(headers=headers, data=data,
-                  timeout=timeout, data_limit=data_limit, auth=None,
-                  files=[])
-        [(actual_args, actual_kw)] = self._http_requests
-        self._context_factory = actual_kw.pop('context_factory')
-        self.assertTrue(isinstance(self._context_factory,
+                  timeout=timeout, auth=None, files=files)
+        [(actual_args, actual_kw)] = self.dummy_client.http_requests
+        context_factory = self.dummy_client.get_context_factory()
+        self.assertTrue(isinstance(context_factory,
                                    HttpClientContextFactory))
         self.assertEqual((actual_args, actual_kw), (args, kw))
 
@@ -1059,3 +1084,22 @@ class TestHttpClientResource(ResourceTestCaseBase):
         self.assertEqual(
             ctxt.verify_options,
             VERIFY_PEER | VERIFY_FAIL_IF_NO_PEER_CERT)
+
+    @inlineCallbacks
+    def test_handle_post_files(self):
+        self.http_request_succeed('')
+        reply = yield self.dispatch_command(
+            'post', url='https://www.example.com', files=[
+            {
+                'name': 'foo',
+                'file_name': 'foo.json',
+                'content_type': 'application/json',
+                'data': base64.b64encode(json.dumps({'foo': 'bar'})),
+            }])
+
+        self.assertTrue(reply['success'])
+        self.assert_http_request(
+            'https://www.example.com', method='POST', files={
+                'foo': ('foo.json', 'application/json',
+                        json.dumps({'foo': 'bar'})),
+            })

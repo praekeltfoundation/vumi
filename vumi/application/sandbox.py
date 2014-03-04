@@ -2,6 +2,7 @@
 
 """An application for sandboxing message processing."""
 
+import base64
 import resource
 import os
 import json
@@ -779,6 +780,7 @@ class HttpClientResource(SandboxResource):
     DEFAULT_TIMEOUT = 30  # seconds
     DEFAULT_DATA_LIMIT = 128 * 1024  # 128 KB
     agent_class = Agent
+    http_client_class = HTTPClient
 
     def setup(self):
         self.timeout = self.config.get('timeout', self.DEFAULT_TIMEOUT)
@@ -837,11 +839,13 @@ class HttpClientResource(SandboxResource):
 
         files = dict([
             (file_['name'],
-                (file_['file_name'], file_['content_type'], file_['data']))
+                (file_['file_name'],
+                 file_['content_type'],
+                 base64.b64decode(file_['data'])))
             for file_ in files])
 
         agent = self.agent_class(reactor, contextFactory=context_factory)
-        http_client = HTTPClient(agent)
+        http_client = self.http_client_class(agent)
 
         d = http_client.request(method, url, headers=headers, data=data,
                                 files=files, timeout=timeout,
