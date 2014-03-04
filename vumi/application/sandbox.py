@@ -744,13 +744,14 @@ class HttpClientResource(SandboxResource):
         - ``headers``: A dictionary of keys for the header name and a list
             of values to provide as header values.
         - ``data``: The payload to submit as part of the request.
-        - ``files``: A list of dictionaries, submited as multipart/form-data
+        - ``files``: A dictionary, submited as multipart/form-data
             in the request:
-                [{
-                    "name": "field name",
-                    "file_name": "the file name",
-                    "content_type": "content-type",
-                    "data": "data to submit, encoded as base64",
+                {
+                    field name": {
+                        "file_name": "the file name",
+                        "content_type": "content-type",
+                        "data": "data to submit, encoded as base64",
+                    }
                 }, ...]
 
             The ``data`` field in the dictionary will be base64 decoded
@@ -814,7 +815,7 @@ class HttpClientResource(SandboxResource):
 
         headers = command.get('headers', {})
         data = command.get('data', None)
-        files = command.get('files', [])
+        files = command.get('files', {})
         authentication = command.get('auth', None)
 
         d = self._make_request(method, url, headers=headers, data=data,
@@ -839,11 +840,11 @@ class HttpClientResource(SandboxResource):
             data = data.encode("utf-8")
 
         files = dict([
-            (file_['name'],
-                (file_['file_name'],
-                 file_['content_type'],
-                 StringIO(base64.b64decode(file_['data']))))
-            for file_ in files])
+            (key,
+                (value['file_name'],
+                 value['content_type'],
+                 StringIO(base64.b64decode(value['data']))))
+            for key, value in files.iteritems()])
 
         agent = self.agent_class(reactor, contextFactory=context_factory)
         http_client = self.http_client_class(agent)

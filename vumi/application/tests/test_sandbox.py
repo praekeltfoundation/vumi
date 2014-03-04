@@ -1102,13 +1102,13 @@ class TestHttpClientResource(ResourceTestCaseBase):
     def test_handle_post_files(self):
         self.http_request_succeed('')
         reply = yield self.dispatch_command(
-            'post', url='https://www.example.com', files=[
-            {
-                'name': 'foo',
-                'file_name': 'foo.json',
-                'content_type': 'application/json',
-                'data': base64.b64encode(json.dumps({'foo': 'bar'})),
-            }])
+            'post', url='https://www.example.com', files={
+                'foo': {
+                    'file_name': 'foo.json',
+                    'content_type': 'application/json',
+                    'data': base64.b64encode(json.dumps({'foo': 'bar'})),
+                }
+            })
 
         self.assertTrue(reply['success'])
         self.assert_http_request(
