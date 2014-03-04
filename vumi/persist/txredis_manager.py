@@ -56,12 +56,11 @@ class VumiRedis(txr.Redis):
         anything useful about that here.
         """
         self.factory.stopTrying()
+        d = succeed(None)
         if not self._client_shutdown_called:
             self._client_shutdown_called = True
-            # We don't wait for the response here because we don't care what it
-            # is. Instead, we wait for the server to disconnect us.
-            self.quit()
-        return self._disconnected_d
+            d.addCallback(lambda _: self.quit())
+        return d.addCallback(lambda _: self._disconnected_d)
 
     def hget(self, key, field):
         d = super(VumiRedis, self).hget(key, field)
