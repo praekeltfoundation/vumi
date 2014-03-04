@@ -32,7 +32,7 @@ from vumi.message import Message
 from vumi.errors import ConfigError
 from vumi.persist.txredis_manager import TxRedisManager
 from vumi.utils import (
-    load_class_by_string, http_request_full, HttpDataLimitError)
+    load_class_by_string, HttpDataLimitError)
 from vumi import log
 from vumi.application.sandbox_rlimiter import SandboxRlimiter
 
