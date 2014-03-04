@@ -867,11 +867,12 @@ class HttpClientResource(SandboxResource):
         content_length = header[0]
         return maybeDeferred(data_limit_check, response, int(content_length))
 
-    def _make_success_reply(self, result, command):
-        response, body = result
-        return self.reply(command, success=True,
-                          body=body,
-                          code=response.code)
+    def _make_success_reply(self, response, command):
+        d = response.content()
+        d.addCallback(
+            lambda body: self.reply(command, success=True, body=body,
+                                    code=response.code))
+        return d
 
     def _make_failure_reply(self, failure, command):
         return self.reply(command, success=False,
