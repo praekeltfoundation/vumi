@@ -927,7 +927,8 @@ class TestHttpClientResource(ResourceTestCaseBase):
     def http_request_succeed(self, body, code=200):
         response = self.DummyResponse()
         response.code = code
-        self._next_http_request_result = succeed((response, body))
+        response.content = lambda: succeed(body)
+        self._next_http_request_result = succeed(response)
 
     def assert_not_unicode(self, arg):
         self.assertFalse(isinstance(arg, unicode))
