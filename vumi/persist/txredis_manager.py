@@ -14,7 +14,6 @@ except ImportError:
 from twisted.internet import reactor
 from twisted.internet.defer import (
     inlineCallbacks, DeferredList, succeed, Deferred)
-from twisted.internet.error import ConnectionDone
 
 from vumi.persist.redis_base import Manager
 from vumi.persist.fake_redis import FakeRedis
@@ -35,11 +34,33 @@ class VumiRedis(txr.Redis):
     def __init__(self, *args, **kw):
         super(VumiRedis, self).__init__(*args, **kw)
         self.connected_d = Deferred()
+        self._disconnected_d = Deferred()
+        self._client_shutdown_called = False
 
     def connectionMade(self):
         d = super(VumiRedis, self).connectionMade()
         d.addCallback(lambda _: self)
         return d.chainDeferred(self.connected_d)
+
+    def connectionLost(self, reason):
+        super(VumiRedis, self).connectionLost(reason)
+        self._disconnected_d.callback(None)
+
+    def _client_shutdown(self):
+        """
+        Issue a ``QUIT`` command and wait for the connection to close.
+
+        A single client may be used by multiple manager instances, so we only
+        issue the ``QUIT`` once. This still leaves us with a potential race
+        condition if the connection is being used elsewhere, but we can't do
+        anything useful about that here.
+        """
+        self.factory.stopTrying()
+        d = succeed(None)
+        if not self._client_shutdown_called:
+            self._client_shutdown_called = True
+            d.addCallback(lambda _: self.quit())
+        return d.addCallback(lambda _: self._disconnected_d)
 
     def hget(self, key, field):
         d = super(VumiRedis, self).hget(key, field)
@@ -165,22 +186,11 @@ class TxRedisManager(Manager):
         manager._client.factory.deferred.addCallback(reconnect)
         return manager
 
-    @inlineCallbacks
     def _close(self):
-        """Close redis connection."""
-        yield self._client.factory.stopTrying()
-        try:
-            # This sends a Redis "QUIT" command, but it isn't implemented on
-            # our wrapper because it's about connection management rather than
-            # data.
-            yield self._client.quit()
-        except RuntimeError as e:
-            # Reraise errors that aren't caused by not being connected.
-            if e.args != ('Not connected',):
-                raise
-        except ConnectionDone:
-            # Swallow ConnectionDone here because we're closing anyway.
-            pass
+        """
+        Close redis connection.
+        """
+        return self._client._client_shutdown()
 
     @inlineCallbacks
     def _purge_all(self):
