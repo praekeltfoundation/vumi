@@ -10,6 +10,8 @@ import logging
 import operator
 from uuid import uuid4
 
+from treq.client import HTTPClient
+
 from twisted.internet import reactor
 from twisted.internet.protocol import ProcessProtocol
 from twisted.internet.defer import (
@@ -17,7 +19,7 @@ from twisted.internet.defer import (
     succeed)
 from twisted.internet.error import ProcessDone
 from twisted.python.failure import Failure
-from twisted.web.client import WebClientContextFactory
+from twisted.web.client import WebClientContextFactory, Agent
 
 from OpenSSL.SSL import (
     VERIFY_PEER, VERIFY_FAIL_IF_NO_PEER_CERT, VERIFY_CLIENT_ONCE, VERIFY_NONE)
@@ -27,7 +29,8 @@ from vumi.application.base import ApplicationWorker
 from vumi.message import Message
 from vumi.errors import ConfigError
 from vumi.persist.txredis_manager import TxRedisManager
-from vumi.utils import load_class_by_string, http_request_full
+from vumi.utils import (
+    load_class_by_string, http_request_full, HttpDataLimitError)
 from vumi import log
 from vumi.application.sandbox_rlimiter import SandboxRlimiter
 
@@ -739,6 +742,19 @@ class HttpClientResource(SandboxResource):
         - ``headers``: A dictionary of keys for the header name and a list
             of values to provide as header values.
         - ``data``: The payload to submit as part of the request.
+        - ``files``: A list of dictionaries, submited as multipart/form-data
+            in the request:
+                [{
+                    "name": "field name",
+                    "file_name": "the file name",
+                    "content_type": "content-type",
+                    "data": "data to submit, encoded as base64",
+                }, ...]
+
+            The ``data`` field in the dictionary will be base64 decoded
+            before the HTTP request is made.
+        - ``auth``: A tuple of (username, password) for Basic Authentication.
+
 
     Success reply fields:
         - ``success``: Set to ``true``
@@ -762,6 +778,7 @@ class HttpClientResource(SandboxResource):
 
     DEFAULT_TIMEOUT = 30  # seconds
     DEFAULT_DATA_LIMIT = 128 * 1024  # 128 KB
+    agent_class = Agent
 
     def setup(self):
         self.timeout = self.config.get('timeout', self.DEFAULT_TIMEOUT)
@@ -784,7 +801,7 @@ class HttpClientResource(SandboxResource):
 
         if 'verify_options' in command:
             verify_options = [verify_map[key] for key in
-                                command.get('verify_options', [])]
+                              command.get('verify_options', [])]
             verify_options = reduce(operator.or_, verify_options)
         else:
             verify_options = None
@@ -793,22 +810,67 @@ class HttpClientResource(SandboxResource):
             verify_options=verify_options)
 
         headers = command.get('headers', {})
-        headers = dict((k.encode("utf-8"), [x.encode("utf-8") for x in v])
-                       for k, v in headers.items())
         data = command.get('data', None)
-        if data is not None:
-            data = data.encode("utf-8")
-        d = http_request_full(url, data=data, headers=headers,
-                              method=method, timeout=self.timeout,
-                              data_limit=self.data_limit,
-                              context_factory=context_factory)
+        files = command.get('files', [])
+        authentication = command.get('auth', None)
+
+        d = self._make_request(method, url, headers=headers, data=data,
+                               files=files, timeout=self.timeout,
+                               auth=authentication,
+                               context_factory=context_factory,
+                               data_limit=self.data_limit)
         d.addCallback(self._make_success_reply, command)
         d.addErrback(self._make_failure_reply, command)
         return d
 
-    def _make_success_reply(self, response, command):
+    def _make_request(self, method, url, headers=None, data=None, files=None,
+                      timeout=None, auth=None, context_factory=None,
+                      data_limit=None):
+        context_factory = (context_factory if context_factory is not None
+                           else WebClientContextFactory())
+
+        headers = dict((k.encode("utf-8"), [x.encode("utf-8") for x in v])
+                       for k, v in headers.items())
+
+        if data is not None:
+            data = data.encode("utf-8")
+
+        files = dict([
+            (file_['name'],
+                (file_['file_name'], file_['content_type'], file_['data']))
+            for file_ in files])
+
+        agent = self.agent_class(reactor, contextFactory=context_factory)
+        http_client = HTTPClient(agent)
+
+        d = http_client.request(method, url, headers=headers, data=data,
+                                files=files, timeout=timeout,
+                                auth=auth)
+
+        d.addCallback(self._ensure_data_limit, data_limit)
+        return d
+
+    def _ensure_data_limit(self, response, data_limit):
+        header = response.headers.getRawHeaders('Content-Length')
+
+        def data_limit_check(response, length):
+            if data_limit is not None and length > data_limit:
+                raise HttpDataLimitError("More than %d bytes received"
+                                         % (data_limit,))
+            return response
+
+        if header is None:
+            d = response.content()
+            d.addCallback(lambda body: data_limit_check(response, len(body)))
+            return d
+
+        content_length = header[0]
+        return maybeDeferred(data_limit_check, response, int(content_length))
+
+    def _make_success_reply(self, result, command):
+        response, body = result
         return self.reply(command, success=True,
-                          body=response.delivered_body,
+                          body=body,
                           code=response.code)
 
     def _make_failure_reply(self, failure, command):

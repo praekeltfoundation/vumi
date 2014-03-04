@@ -912,9 +912,8 @@ class TestHttpClientResource(ResourceTestCaseBase):
     def setUp(self):
         super(TestHttpClientResource, self).setUp()
         yield self.create_resource({})
-        import vumi.application.sandbox
-        self.patch(vumi.application.sandbox,
-                   'http_request_full', self.dummy_http_request)
+        self.patch(self.resource_cls,
+                   '_make_request', self.dummy_http_request)
         self._next_http_request_result = None
         self._http_requests = []
 
@@ -927,9 +926,8 @@ class TestHttpClientResource(ResourceTestCaseBase):
 
     def http_request_succeed(self, body, code=200):
         response = self.DummyResponse()
-        response.delivered_body = body
         response.code = code
-        self._next_http_request_result = succeed(response)
+        self._next_http_request_result = succeed((response, body))
 
     def assert_not_unicode(self, arg):
         self.assertFalse(isinstance(arg, unicode))
@@ -938,14 +936,16 @@ class TestHttpClientResource(ResourceTestCaseBase):
         return self._context_factory
 
     def assert_http_request(self, url, method='GET', headers={}, data=None,
-                            timeout=None, data_limit=None):
+                            timeout=None, data_limit=None, auth=None,
+                            files=[]):
         timeout = (timeout if timeout is not None
                    else self.resource.timeout)
         data_limit = (data_limit if data_limit is not None
                       else self.resource.data_limit)
-        args = (url,)
-        kw = dict(method=method, headers=headers, data=data,
-                  timeout=timeout, data_limit=data_limit)
+        args = (method, url,)
+        kw = dict(headers=headers, data=data,
+                  timeout=timeout, data_limit=data_limit, auth=None,
+                  files=[])
         [(actual_args, actual_kw)] = self._http_requests
         self._context_factory = actual_kw.pop('context_factory')
         self.assertTrue(isinstance(self._context_factory,

@@ -19,7 +19,7 @@ setup(
     include_package_data=True,
     install_requires=[
         'zope.interface',
-        'Twisted>=12.0.0',
+        'Twisted>=12.1.0',
         'txAMQP>=0.5',
         'PyYAML',
         'iso8601',
@@ -34,6 +34,7 @@ setup(
         'riak==1.5.2',
         'txJSON-RPC==0.3.1',
         'txTwitter>=0.1.0a',
+        'treq==0.2.0',
     ],
     classifiers=[
         'Development Status :: 4 - Beta',
