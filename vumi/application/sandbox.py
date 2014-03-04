@@ -10,6 +10,7 @@ import pkg_resources
 import logging
 import operator
 from uuid import uuid4
+from StringIO import StringIO
 
 from treq.client import HTTPClient
 
@@ -841,7 +842,7 @@ class HttpClientResource(SandboxResource):
             (file_['name'],
                 (file_['file_name'],
                  file_['content_type'],
-                 base64.b64decode(file_['data'])))
+                 StringIO(base64.b64decode(file_['data']))))
             for file_ in files])
 
         agent = self.agent_class(reactor, contextFactory=context_factory)

@@ -976,6 +976,18 @@ class TestHttpClientResource(ResourceTestCaseBase):
         context_factory = self.dummy_client.get_context_factory()
         self.assertTrue(isinstance(context_factory,
                                    HttpClientContextFactory))
+
+        # NOTE: Files are handed over to treq as file pointer-ish things
+        #       which in our case are `StringIO` instances.
+        actual_kw_files = actual_kw.pop('files', {})
+        kw_files = kw.pop('files', {})
+        for name, file_data in actual_kw_files.items():
+            kw_file_data = kw_files[name]
+            file_name, content_type, sio = file_data
+            self.assertEqual(
+                (file_name, content_type, sio.getvalue()),
+                kw_file_data)
+
         self.assertEqual((actual_args, actual_kw), (args, kw))
 
         self.assert_not_unicode(actual_args[0])
