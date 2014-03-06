@@ -974,12 +974,12 @@ class TestHttpClientResource(ResourceTestCaseBase):
         return self.dummy_client.get_context_factory()
 
     def assert_http_request(self, url, method='GET', headers={}, data=None,
-                            timeout=None, auth=None, files=None):
+                            timeout=None, files=None):
         timeout = (timeout if timeout is not None
                    else self.resource.timeout)
         args = (method, url,)
         kw = dict(headers=headers, data=data,
-                  timeout=timeout, auth=None, files=files)
+                  timeout=timeout, files=files)
         [(actual_args, actual_kw)] = self.dummy_client.http_requests
         context_factory = self.dummy_client.get_context_factory()
         self.assertTrue(isinstance(context_factory,

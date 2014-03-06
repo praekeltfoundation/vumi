@@ -756,7 +756,6 @@ class HttpClientResource(SandboxResource):
 
             The ``data`` field in the dictionary will be base64 decoded
             before the HTTP request is made.
-        - ``auth``: A tuple of (username, password) for Basic Authentication.
 
 
     Success reply fields:
@@ -816,11 +815,9 @@ class HttpClientResource(SandboxResource):
         headers = command.get('headers', {})
         data = command.get('data', None)
         files = command.get('files', None)
-        authentication = command.get('auth', None)
 
         d = self._make_request(method, url, headers=headers, data=data,
                                files=files, timeout=self.timeout,
-                               auth=authentication,
                                context_factory=context_factory,
                                data_limit=self.data_limit)
         d.addCallback(self._make_success_reply, command)
@@ -828,7 +825,7 @@ class HttpClientResource(SandboxResource):
         return d
 
     def _make_request(self, method, url, headers=None, data=None, files=None,
-                      timeout=None, auth=None, context_factory=None,
+                      timeout=None, context_factory=None,
                       data_limit=None):
         context_factory = (context_factory if context_factory is not None
                            else WebClientContextFactory())
@@ -851,8 +848,7 @@ class HttpClientResource(SandboxResource):
         http_client = self.http_client_class(agent)
 
         d = http_client.request(method, url, headers=headers, data=data,
-                                files=files, timeout=timeout,
-                                auth=auth)
+                                files=files, timeout=timeout)
 
         d.addCallback(self._ensure_data_limit, data_limit)
         return d
