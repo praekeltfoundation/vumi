@@ -34,7 +34,7 @@ setup(
         'riak==1.5.2',
         'txJSON-RPC==0.3.1',
         'txTwitter>=0.1.0a',
-        'treq==0.2.0',
+        'treq==0.2.1',
     ],
     classifiers=[
         'Development Status :: 4 - Beta',
