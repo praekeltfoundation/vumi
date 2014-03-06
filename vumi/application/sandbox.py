@@ -830,8 +830,9 @@ class HttpClientResource(SandboxResource):
         context_factory = (context_factory if context_factory is not None
                            else WebClientContextFactory())
 
-        headers = dict((k.encode("utf-8"), [x.encode("utf-8") for x in v])
-                       for k, v in headers.items())
+        if headers is not None:
+            headers = dict((k.encode("utf-8"), [x.encode("utf-8") for x in v])
+                           for k, v in headers.items())
 
         if data is not None:
             data = data.encode("utf-8")
