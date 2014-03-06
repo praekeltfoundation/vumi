@@ -862,8 +862,9 @@ class HttpClientResource(SandboxResource):
 
         def data_limit_check(response, length):
             if data_limit is not None and length > data_limit:
-                raise HttpDataLimitError("More than %d bytes received"
-                                         % (data_limit,))
+                raise HttpDataLimitError(
+                    "Received %d bytes, maximum of %d bytes allowed."
+                    % (length, data_limit,))
             return response
 
         if header is None:

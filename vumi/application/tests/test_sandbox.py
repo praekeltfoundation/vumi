@@ -1136,7 +1136,8 @@ class TestHttpClientResource(ResourceTestCaseBase):
         self.assertFalse(reply['success'])
         self.assertEqual(
             reply['reason'],
-            'More than %s bytes received' % (
+            'Received %d bytes, maximum of %s bytes allowed.' % (
+                self.resource.DEFAULT_DATA_LIMIT + 1,
                 self.resource.DEFAULT_DATA_LIMIT,))
 
     @inlineCallbacks
@@ -1147,5 +1148,6 @@ class TestHttpClientResource(ResourceTestCaseBase):
         self.assertFalse(reply['success'])
         self.assertEqual(
             reply['reason'],
-            'More than %s bytes received' % (
+            'Received %d bytes, maximum of %s bytes allowed.' % (
+                self.resource.DEFAULT_DATA_LIMIT + 1,
                 self.resource.DEFAULT_DATA_LIMIT,))
