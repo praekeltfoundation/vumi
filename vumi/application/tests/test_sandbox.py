@@ -924,10 +924,17 @@ class DummyHTTPClient(object):
     def fail_next(self, error):
         self._next_http_request_result = fail(error)
 
-    def succeed_next(self, body, code=200):
+    def succeed_next(self, body, code=200, headers={}):
+
+        default_headers = {
+            'Content-Length': len(body),
+        }
+        default_headers.update(headers)
+
         response = DummyResponse()
         response.code = code
-        response.headers.addRawHeader('Content-Length', len(body))
+        for header, value in default_headers.items():
+            response.headers.addRawHeader(header, value)
         response.content = lambda: succeed(body)
         self._next_http_request_result = succeed(response)
 
@@ -957,8 +964,8 @@ class TestHttpClientResource(ResourceTestCaseBase):
     def http_request_fail(self, error):
         self.dummy_client.fail_next(error)
 
-    def http_request_succeed(self, body, code=200):
-        self.dummy_client.succeed_next(body, code)
+    def http_request_succeed(self, body, code=200, headers={}):
+        self.dummy_client.succeed_next(body, code, headers)
 
     def assert_not_unicode(self, arg):
         self.assertFalse(isinstance(arg, unicode))
@@ -1118,3 +1125,27 @@ class TestHttpClientResource(ResourceTestCaseBase):
                 'foo': ('foo.json', 'application/json',
                         json.dumps({'foo': 'bar'})),
             })
+
+    @inlineCallbacks
+    def test_data_limit_exceeded_using_header(self):
+        self.http_request_succeed('', headers={
+            'Content-Length': self.resource.DEFAULT_DATA_LIMIT + 1,
+        })
+        reply = yield self.dispatch_command(
+            'get', url='https://www.example.com',)
+        self.assertFalse(reply['success'])
+        self.assertEqual(
+            reply['reason'],
+            'More than %s bytes received' % (
+                self.resource.DEFAULT_DATA_LIMIT,))
+
+    @inlineCallbacks
+    def test_data_limit_exceeded_inferred_from_body(self):
+        self.http_request_succeed('1' * (self.resource.DEFAULT_DATA_LIMIT + 1))
+        reply = yield self.dispatch_command(
+            'get', url='https://www.example.com',)
+        self.assertFalse(reply['success'])
+        self.assertEqual(
+            reply['reason'],
+            'More than %s bytes received' % (
+                self.resource.DEFAULT_DATA_LIMIT,))
