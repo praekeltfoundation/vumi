@@ -812,7 +812,7 @@ class HttpClientResource(SandboxResource):
         context_factory = HttpClientContextFactory(
             verify_options=verify_options)
 
-        headers = command.get('headers', {})
+        headers = command.get('headers', None)
         data = command.get('data', None)
         files = command.get('files', None)
 

@@ -973,7 +973,7 @@ class TestHttpClientResource(ResourceTestCaseBase):
     def get_context_factory(self):
         return self.dummy_client.get_context_factory()
 
-    def assert_http_request(self, url, method='GET', headers={}, data=None,
+    def assert_http_request(self, url, method='GET', headers=None, data=None,
                             timeout=None, files=None):
         timeout = (timeout if timeout is not None
                    else self.resource.timeout)
@@ -1002,10 +1002,12 @@ class TestHttpClientResource(ResourceTestCaseBase):
 
         self.assert_not_unicode(actual_args[0])
         self.assert_not_unicode(actual_kw.get('data'))
-        for key, values in actual_kw.get('headers', {}).items():
-            self.assert_not_unicode(key)
-            for value in values:
-                self.assert_not_unicode(value)
+        headers = actual_kw.get('headers')
+        if headers is not None:
+            for key, values in headers.items():
+                self.assert_not_unicode(key)
+                for value in values:
+                    self.assert_not_unicode(value)
 
     @inlineCallbacks
     def test_handle_get(self):
