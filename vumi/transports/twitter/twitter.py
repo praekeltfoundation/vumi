@@ -8,7 +8,7 @@ from vumi.transports.base import Transport
 from vumi.config import ConfigText, ConfigList
 
 
-class TwitterTransportConfig(Transport.CONFIG_CLASS):
+class BaseTwitterTransportConfig(Transport.CONFIG_CLASS):
     screen_name = ConfigText(
         "The screen name for the twitter account",
         required=True, static=True)
@@ -24,6 +24,9 @@ class TwitterTransportConfig(Transport.CONFIG_CLASS):
     access_token_secret = ConfigText(
         "The OAuth access token secret for the twitter account",
         required=True, static=True)
+
+
+class TwitterTransportConfig(BaseTwitterTransportConfig):
     terms = ConfigList(
         "A list of terms to be tracked by the transport",
         default=[], static=True)
