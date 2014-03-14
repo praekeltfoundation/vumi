@@ -29,6 +29,10 @@ class TwitterTransportConfig(Transport.CONFIG_CLASS):
         default=[], static=True)
 
 
+def screen_name_as_addr(screen_name):
+    return u'@%s' % (screen_name,)
+
+
 class TwitterTransport(Transport):
     """Twitter transport."""
 
@@ -93,10 +97,6 @@ class TwitterTransport(Transport):
         return self.screen_name == messagetools.user_screen_name(user)
 
     @classmethod
-    def screen_name_as_addr(cls, addr):
-        return u'@%s' % (addr,)
-
-    @classmethod
     def tweet_to_addr(cls, tweet):
         mentions = messagetools.tweet_user_mentions(tweet)
         to_addr = cls.NO_USER_ADDR
@@ -106,14 +106,14 @@ class TwitterTransport(Transport):
             [start_index, end_index] = mention['indices']
 
             if start_index == 0:
-                to_addr = cls.screen_name_as_addr(mention['screen_name'])
+                to_addr = screen_name_as_addr(mention['screen_name'])
 
         return to_addr
 
     @classmethod
     def tweet_from_addr(cls, tweet):
         user = messagetools.tweet_user(tweet)
-        return cls.screen_name_as_addr(messagetools.user_screen_name(user))
+        return screen_name_as_addr(messagetools.user_screen_name(user))
 
     @classmethod
     def tweet_content(cls, tweet):
