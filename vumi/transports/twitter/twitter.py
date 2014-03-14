@@ -196,6 +196,44 @@ class DMTwitterTransport(Transport):
             config.consumer_key,
             config.consumer_secret)
 
+        self.user_stream = self.client.userstream_user(
+            self.handle_user_stream, with_='user')
+        self.user_stream.startService()
+
+    @inlineCallbacks
+    def teardown_transport(self):
+        yield self.user_stream.stopService()
+
+    def is_own_dm(self, message):
+        sender = messagetools.dm_sender(message)
+        return self.screen_name == messagetools.user_screen_name(sender)
+
+    def publish_dm_message(self, dm):
+        sender = messagetools.dm_sender(dm)
+        recipient = messagetools.dm_recipient(dm)
+
+        return self.publish_message(
+            content=messagetools.dm_text(dm),
+            to_addr=screen_name_as_addr(recipient['screen_name']),
+            from_addr=screen_name_as_addr(sender['screen_name']),
+            transport_type=self.transport_type,
+            helper_metadata={
+                'dm_twitter': {
+                    'id': messagetools.dm_id(dm),
+                    'user_mentions': messagetools.dm_user_mentions(dm),
+                }
+            })
+
+    def handle_user_stream(self, message):
+        if messagetools.is_dm(message):
+            if self.is_own_dm(message):
+                log.msg("Received own DM on user stream: %r" % (message,))
+            else:
+                log.msg("Received DM on user stream: %r" % (message,))
+                self.publish_dm_message(message)
+        else:
+            log.msg("Received non-DM from user stream: %r" % message)
+
     @inlineCallbacks
     def handle_outbound_message(self, message):
         log.msg("DM twitter transport sending %r" % (message,))
