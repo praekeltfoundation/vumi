@@ -1,9 +1,10 @@
 from twisted.internet.defer import inlineCallbacks
 from txtwitter.tests.fake_twitter import FakeTwitter
+from txtwitter import messagetools
 
 from vumi.tests.utils import LogCatcher
 from vumi.tests.helpers import VumiTestCase
-from vumi.transports.twitter import TwitterTransport
+from vumi.transports.twitter import TwitterTransport, DMTwitterTransport
 from vumi.transports.tests.helpers import TransportHelper
 
 
@@ -277,3 +278,43 @@ class TestTwitterTransport(VumiTestCase):
                 'user_mentions': []
             },
         }))
+
+
+class TestDMTwitterTransport(VumiTestCase):
+    @inlineCallbacks
+    def setUp(self):
+        self.twitter = FakeTwitter()
+        self.user = self.twitter.new_user('me', 'me')
+        self.client = self.twitter.get_client(self.user.id_str)
+
+        self.patch(
+            DMTwitterTransport, 'get_client', lambda *a, **kw: self.client)
+
+        self.tx_helper = self.add_helper(TransportHelper(DMTwitterTransport))
+
+        self.transport = yield self.tx_helper.get_transport({
+            'screen_name': 'me',
+            'consumer_key': 'consumer1',
+            'consumer_secret': 'consumersecret1',
+            'access_token': 'token1',
+            'access_token_secret': 'tokensecret1',
+        })
+
+    @inlineCallbacks
+    def test_sending(self):
+        self.twitter.new_user('someone', 'someone')
+
+        msg = yield self.tx_helper.make_dispatch_outbound(
+            'hello', to_addr='@someone')
+        [ack] = yield self.tx_helper.wait_for_dispatched_events(1)
+
+        self.assertEqual(ack['user_message_id'], msg['message_id'])
+
+        dm = self.twitter.get_dm(ack['sent_message_id'])
+        dm = dm.to_dict(self.twitter)
+        sender = messagetools.dm_sender(dm)
+        recipient = messagetools.dm_recipient(dm)
+
+        self.assertEqual(messagetools.dm_text(dm), 'hello')
+        self.assertEqual(messagetools.user_screen_name(sender), 'me')
+        self.assertEqual(messagetools.user_screen_name(recipient), 'someone')

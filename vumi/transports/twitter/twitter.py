@@ -36,6 +36,10 @@ def screen_name_as_addr(screen_name):
     return u'@%s' % (screen_name,)
 
 
+def addr_as_screen_name(addr):
+    return addr[1:] if addr.startswith('@') else addr
+
+
 class TwitterTransport(Transport):
     """Twitter transport."""
 
@@ -167,3 +171,45 @@ class TwitterTransport(Transport):
                 self.publish_tweet_message(message)
         else:
             log.msg("Received non-tweet from user stream: %r" % message)
+
+
+class DMTwitterTransportConfig(BaseTwitterTransportConfig):
+    pass
+
+
+class DMTwitterTransport(Transport):
+    """Twitter transport for direct messages."""
+
+    transport_type = 'twitter'
+    CONFIG_CLASS = DMTwitterTransportConfig
+
+    def get_client(self, *a, **kw):
+        return TwitterClient(*a, **kw)
+
+    def setup_transport(self):
+        config = self.get_static_config()
+        self.screen_name = config.screen_name
+
+        self.client = self.get_client(
+            config.access_token,
+            config.access_token_secret,
+            config.consumer_key,
+            config.consumer_secret)
+
+    @inlineCallbacks
+    def handle_outbound_message(self, message):
+        log.msg("DM twitter transport sending %r" % (message,))
+
+        try:
+            dm = yield self.client.direct_messages_new(
+                screen_name=addr_as_screen_name(message['to_addr']),
+                text=message['content'])
+
+            yield self.publish_ack(
+                user_message_id=message['message_id'],
+                sent_message_id=messagetools.dm_id(dm))
+        except Exception, e:
+            yield self.publish_nack(
+                user_message_id=message['message_id'],
+                sent_message_id=message['message_id'],
+                reason='%s' % (e,))
