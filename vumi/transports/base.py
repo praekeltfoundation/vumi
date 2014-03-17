@@ -102,8 +102,8 @@ class Transport(BaseWorker):
             failure_code = getattr(exception, "failure_code",
                                    FailureMessage.FC_UNSPECIFIED)
             failure_msg = FailureMessage(
-                    message=message.payload, failure_code=failure_code,
-                    reason=traceback)
+                message=message.payload, failure_code=failure_code,
+                reason=traceback)
             connector = self.connectors[self.transport_name]
             d = connector._middlewares.apply_publish(
                 "failure", failure_msg, self.transport_name)

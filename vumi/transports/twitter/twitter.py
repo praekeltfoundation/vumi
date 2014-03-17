@@ -35,7 +35,6 @@ class TwitterTransport(Transport):
     transport_type = 'twitter'
 
     CONFIG_CLASS = TwitterTransportConfig
-    ENCODING = 'utf8'
     NO_USER_ADDR = 'NO_USER'
 
     def get_client(self, *a, **kw):
