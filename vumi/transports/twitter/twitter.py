@@ -125,6 +125,10 @@ class TwitterTransport(Transport):
         user = messagetools.tweet_user(message)
         return self.screen_name == messagetools.user_screen_name(user)
 
+    def is_own_dm(self, message):
+        sender = messagetools.dm_sender(message)
+        return self.screen_name == messagetools.user_screen_name(sender)
+
     @classmethod
     def tweet_to_addr(cls, tweet):
         mentions = messagetools.tweet_user_mentions(tweet)
@@ -176,6 +180,22 @@ class TwitterTransport(Transport):
                 }
             })
 
+    def publish_dm(self, dm):
+        sender = messagetools.dm_sender(dm)
+        recipient = messagetools.dm_recipient(dm)
+
+        return self.publish_message(
+            content=messagetools.dm_text(dm),
+            to_addr=self.screen_name_as_addr(recipient['screen_name']),
+            from_addr=self.screen_name_as_addr(sender['screen_name']),
+            transport_type=self.transport_type,
+            helper_metadata={
+                'dm_twitter': {
+                    'id': messagetools.dm_id(dm),
+                    'user_mentions': messagetools.dm_user_mentions(dm),
+                }
+            })
+
     def handle_track_stream(self, message):
         if messagetools.is_tweet(message):
             if self.is_own_tweet(message):
@@ -193,11 +213,19 @@ class TwitterTransport(Transport):
             self.handle_inbound_dm(message)
         else:
             log.msg(
-                "Received something from user stream that is not a dm or "
+                "Received something from user stream that is not a DM or "
                 "tweet: %r" % message)
 
     def handle_inbound_dm(self, dm):
-        pass
+        if self.is_own_dm(dm):
+            log.msg("Received own DM on user stream: %r" % (dm,))
+        elif 'dms' not in self.endpoints:
+            log.msg(
+                "Discarding DM received on user stream, no endpoint "
+                "configured for DMs: %r" % (dm,))
+        else:
+            log.msg("Received DM on user stream: %r" % (dm,))
+            self.publish_dm(dm)
 
     def handle_inbound_tweet(self, tweet):
         if self.is_own_tweet(tweet):
