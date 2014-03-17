@@ -6,7 +6,7 @@ from vumi.tests.helpers import VumiTestCase
 from vumi.config import Config
 from vumi.errors import ConfigError
 from vumi.transports.twitter import (
-    ConfigTwitterEndpoints, TwitterTransport, DMTwitterTransport)
+    ConfigTwitterEndpoints, TwitterTransport)
 from vumi.transports.tests.helpers import TransportHelper
 
 
@@ -297,82 +297,3 @@ class TestTwitterTransport(VumiTestCase):
                 'user_mentions': []
             },
         }))
-
-
-class TestDMTwitterTransport(VumiTestCase):
-    @inlineCallbacks
-    def setUp(self):
-        self.twitter = FakeTwitter()
-        self.user = self.twitter.new_user('me', 'me')
-        self.client = self.twitter.get_client(self.user.id_str)
-
-        self.patch(
-            DMTwitterTransport, 'get_client', lambda *a, **kw: self.client)
-
-        self.tx_helper = self.add_helper(TransportHelper(DMTwitterTransport))
-
-        self.transport = yield self.tx_helper.get_transport({
-            'screen_name': 'me',
-            'consumer_key': 'consumer1',
-            'consumer_secret': 'consumersecret1',
-            'access_token': 'token1',
-            'access_token_secret': 'tokensecret1',
-        })
-
-    @inlineCallbacks
-    def test_sending(self):
-        self.twitter.new_user('someone', 'someone')
-
-        msg = yield self.tx_helper.make_dispatch_outbound(
-            'hello', to_addr='@someone')
-        [ack] = yield self.tx_helper.wait_for_dispatched_events(1)
-
-        self.assertEqual(ack['user_message_id'], msg['message_id'])
-
-        dm = self.twitter.get_dm(ack['sent_message_id'])
-        sender = self.twitter.get_user(dm.sender_id_str)
-        recipient = self.twitter.get_user(dm.recipient_id_str)
-
-        self.assertEqual(dm.text, 'hello')
-        self.assertEqual(sender.screen_name, 'me')
-        self.assertEqual(recipient.screen_name, 'someone')
-
-    @inlineCallbacks
-    def test_inbound_user_message(self):
-        someone = self.twitter.new_user('someone', 'someone')
-        dm = self.twitter.new_dm('hello @me', someone.id_str, self.user.id_str)
-
-        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
-
-        self.assertEqual(msg['from_addr'], '@someone')
-        self.assertEqual(msg['to_addr'], '@me')
-        self.assertEqual(msg['content'], 'hello @me')
-
-        self.assertEqual(msg['helper_metadata'], {
-            'dm_twitter': {
-                'id': dm.id_str,
-                'user_mentions': [{
-                    'id_str': self.user.id_str,
-                    'id': int(self.user.id_str),
-                    'indices': [6, 9],
-                    'screen_name': self.user.screen_name,
-                    'name': self.user.name,
-                }]
-            }
-        })
-
-    def test_user_stream_for_non_dm(self):
-        with LogCatcher() as lc:
-            self.transport.handle_user_stream({'foo': 'bar'})
-
-            self.assertEqual(
-                lc.messages(),
-                ["Received non-DM from user stream: {'foo': 'bar'}"])
-
-    def test_user_stream_for_own_dm(self):
-        with LogCatcher() as lc:
-            someone = self.twitter.new_user('someone', 'someone')
-            self.twitter.new_dm('hello', self.user.id_str, someone.id_str)
-
-            [message] = lc.messages()
-            self.assertTrue("Received own DM on user stream" in message)

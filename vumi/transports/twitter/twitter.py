@@ -26,7 +26,7 @@ class ConfigTwitterEndpoints(ConfigDict):
         return endpoints_dict
 
 
-class BaseTwitterTransportConfig(Transport.CONFIG_CLASS):
+class TwitterTransportConfig(Transport.CONFIG_CLASS):
     screen_name = ConfigText(
         "The screen name for the twitter account",
         required=True, static=True)
@@ -44,10 +44,7 @@ class BaseTwitterTransportConfig(Transport.CONFIG_CLASS):
         required=True, static=True)
     endpoints = ConfigTwitterEndpoints(
         "Which endpoints to use for dms and tweets",
-        required=True, static=True)
-
-
-class TwitterTransportConfig(BaseTwitterTransportConfig):
+        required=False, static=True)
     terms = ConfigList(
         "A list of terms to be tracked by the transport",
         default=[], static=True)
@@ -194,83 +191,3 @@ class TwitterTransport(Transport):
                 self.publish_tweet_message(message)
         else:
             log.msg("Received non-tweet from user stream: %r" % message)
-
-
-class DMTwitterTransportConfig(BaseTwitterTransportConfig):
-    pass
-
-
-class DMTwitterTransport(Transport):
-    """Twitter transport for direct messages."""
-
-    transport_type = 'twitter'
-    CONFIG_CLASS = DMTwitterTransportConfig
-
-    def get_client(self, *a, **kw):
-        return TwitterClient(*a, **kw)
-
-    def setup_transport(self):
-        config = self.get_static_config()
-        self.screen_name = config.screen_name
-
-        self.client = self.get_client(
-            config.access_token,
-            config.access_token_secret,
-            config.consumer_key,
-            config.consumer_secret)
-
-        self.user_stream = self.client.userstream_user(
-            self.handle_user_stream, with_='user')
-        self.user_stream.startService()
-
-    @inlineCallbacks
-    def teardown_transport(self):
-        yield self.user_stream.stopService()
-
-    def is_own_dm(self, message):
-        sender = messagetools.dm_sender(message)
-        return self.screen_name == messagetools.user_screen_name(sender)
-
-    def publish_dm_message(self, dm):
-        sender = messagetools.dm_sender(dm)
-        recipient = messagetools.dm_recipient(dm)
-
-        return self.publish_message(
-            content=messagetools.dm_text(dm),
-            to_addr=screen_name_as_addr(recipient['screen_name']),
-            from_addr=screen_name_as_addr(sender['screen_name']),
-            transport_type=self.transport_type,
-            helper_metadata={
-                'dm_twitter': {
-                    'id': messagetools.dm_id(dm),
-                    'user_mentions': messagetools.dm_user_mentions(dm),
-                }
-            })
-
-    def handle_user_stream(self, message):
-        if messagetools.is_dm(message):
-            if self.is_own_dm(message):
-                log.msg("Received own DM on user stream: %r" % (message,))
-            else:
-                log.msg("Received DM on user stream: %r" % (message,))
-                self.publish_dm_message(message)
-        else:
-            log.msg("Received non-DM from user stream: %r" % message)
-
-    @inlineCallbacks
-    def handle_outbound_message(self, message):
-        log.msg("DM twitter transport sending %r" % (message,))
-
-        try:
-            dm = yield self.client.direct_messages_new(
-                screen_name=addr_as_screen_name(message['to_addr']),
-                text=message['content'])
-
-            yield self.publish_ack(
-                user_message_id=message['message_id'],
-                sent_message_id=messagetools.dm_id(dm))
-        except Exception, e:
-            yield self.publish_nack(
-                user_message_id=message['message_id'],
-                sent_message_id=message['message_id'],
-                reason='%s' % (e,))

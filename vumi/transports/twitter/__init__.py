@@ -1,4 +1,4 @@
 from vumi.transports.twitter.twitter import (
-    ConfigTwitterEndpoints, TwitterTransport, DMTwitterTransport)
+    ConfigTwitterEndpoints, TwitterTransport)
 
-__all__ = ['ConfigTwitterEndpoints', 'TwitterTransport', 'DMTwitterTransport']
+__all__ = ['ConfigTwitterEndpoints', 'TwitterTransport']
