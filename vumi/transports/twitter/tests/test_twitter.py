@@ -298,6 +298,39 @@ class TestTwitterTransport(VumiTestCase):
         self.assertEqual(nack['sent_message_id'], msg['message_id'])
         self.assertEqual(nack['nack_reason'], ':(')
 
+    @inlineCallbacks
+    def test_dm_sending(self):
+        self.twitter.new_user('someone', 'someone')
+
+        msg = yield self.tx_helper.make_dispatch_outbound(
+            'hello', to_addr='@someone', endpoint='dm_endpoint')
+        [ack] = yield self.tx_helper.wait_for_dispatched_events(1)
+
+        self.assertEqual(ack['user_message_id'], msg['message_id'])
+
+        dm = self.twitter.get_dm(ack['sent_message_id'])
+        sender = self.twitter.get_user(dm.sender_id_str)
+        recipient = self.twitter.get_user(dm.recipient_id_str)
+
+        self.assertEqual(dm.text, 'hello')
+        self.assertEqual(sender.screen_name, 'me')
+        self.assertEqual(recipient.screen_name, 'someone')
+
+    @inlineCallbacks
+    def test_dm_sending_failure(self):
+        def fail(*a, **kw):
+            raise Exception(':(')
+
+        self.patch(self.client, 'direct_messages_new', fail)
+
+        msg = yield self.tx_helper.make_dispatch_outbound(
+            'hello', endpoint='dm_endpoint')
+        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
+
+        self.assertEqual(nack['user_message_id'], msg['message_id'])
+        self.assertEqual(nack['sent_message_id'], msg['message_id'])
+        self.assertEqual(nack['nack_reason'], ':(')
+
     def test_track_stream_for_non_tweet(self):
         with LogCatcher() as lc:
             self.transport.handle_track_stream({'foo': 'bar'})

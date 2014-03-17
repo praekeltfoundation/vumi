@@ -244,7 +244,9 @@ class TwitterTransport(Transport):
             self.publish_tweet(tweet)
 
     def handle_outbound_dm(self, message):
-        pass
+        return self.client.direct_messages_new(
+            screen_name=self.addr_as_screen_name(message['to_addr']),
+            text=message['content'])
 
     def handle_outbound_tweet(self, message):
         log.msg("Twitter transport sending tweet %r" % (message,))
