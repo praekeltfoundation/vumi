@@ -126,7 +126,7 @@ class WeChatParserTestCase(TestCase):
 
         self.assertEqual(msg.ToUserName, 'toUser')
         self.assertEqual(msg.FromUserName, 'fromUser')
-        self.assertEqual(msg.CreateTime, datetime(2012, 9, 28, 13, 31))
+        self.assertEqual(msg.CreateTime, datetime.fromtimestamp(1348831860))
         self.assertEqual(msg.MsgId, '1234567890123456')
         self.assertTrue(isinstance(msg, message_types.TextMessage))
 
@@ -135,7 +135,7 @@ class WeChatParserTestCase(TestCase):
         msg1 = message_types.TextMessage({
             'ToUserName': 'toUser',
             'FromUserName': 'fromUser',
-            'CreateTime': datetime(2012, 9, 28, 13, 31),
+            'CreateTime': datetime.fromtimestamp(1348831860),
             'Content': 'this is a test',
             'MsgId': '1234567890123456',
         })
