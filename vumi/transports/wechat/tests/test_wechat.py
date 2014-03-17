@@ -91,6 +91,23 @@ class WeChatTestCase(VumiTestCase):
             })
         self.assertNotEqual(resp.delivered_body, 'success')
 
+    @inlineCallbacks
+    def test_inbound_text_message(self):
+        transport = yield self.get_transport()
+
+        resp = yield request(
+            transport, 'POST', data="""
+            <xml>
+            <ToUserName><![CDATA[toUser]]></ToUserName>
+            <FromUserName><![CDATA[fromUser]]></FromUserName>
+            <CreateTime>1348831860</CreateTime>
+            <MsgType><![CDATA[text]]></MsgType>
+            <Content><![CDATA[this is a test]]></Content>
+            <MsgId>1234567890123456</MsgId>
+            </xml>
+            """.strip())
+        print resp.delivered_body
+
 
 class WeChatParserTestCase(TestCase):
 

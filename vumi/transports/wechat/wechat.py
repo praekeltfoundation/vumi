@@ -2,13 +2,17 @@
 
 import hashlib
 
+from twisted.internet import reactor
+from twisted.internet.defer import inlineCallbacks, Deferred
+from twisted.web.resource import Resource
+from twisted.web.server import NOT_DONE_YET
+
 from vumi.config import ConfigText, ConfigServerEndpoint
 from vumi.transports import Transport
 from vumi.transports.httprpc.httprpc import HttpRpcHealthResource
+from vumi.transports.wechat.parser import WeChatParser
 from vumi.utils import build_web_site
-
-from twisted.internet.defer import inlineCallbacks
-from twisted.web.resource import Resource
+from vumi import log
 
 
 class WeChatConfig(Transport.CONFIG_CLASS):
@@ -45,6 +49,13 @@ class WeChatResource(Resource):
         if all([lambda key: key in request.args,
                 ['signature', 'timestamp', 'nonce', 'echostr']]):
             return self.verify(request)
+        return ''
+
+    def render_POST(self, request):
+        d = Deferred()
+        d.addCallback(self.handle_request)
+        reactor.callLater(0, d.callback, request)
+        return NOT_DONE_YET
 
     def verify(self, request):
         signature = request.args['signature'][0]
@@ -58,6 +69,11 @@ class WeChatResource(Resource):
         if hash_.hexdigest() == signature:
             return echostr
         return ''
+
+    def handle_request(self, request):
+        wc_msg = WeChatParser.parse(request.content.read())
+        request.write(wc_msg.to_xml())
+        request.finish()
 
 
 class WeChatTransport(Transport):
