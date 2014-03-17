@@ -164,7 +164,9 @@ class TwitterTransport(Transport):
             to_addr=self.tweet_to_addr(tweet),
             from_addr=self.tweet_from_addr(tweet),
             transport_type=self.transport_type,
-            endpoint=self.endpoints['tweets'],
+            routing_metadata={
+                'endpoint_name': self.endpoints['tweets']
+            },
             transport_metadata={
                 'twitter': {
                     'status_id': messagetools.tweet_id(tweet)
@@ -189,6 +191,9 @@ class TwitterTransport(Transport):
             to_addr=self.screen_name_as_addr(recipient['screen_name']),
             from_addr=self.screen_name_as_addr(sender['screen_name']),
             transport_type=self.transport_type,
+            routing_metadata={
+                'endpoint_name': self.endpoints['dms']
+            },
             helper_metadata={
                 'dm_twitter': {
                     'id': messagetools.dm_id(dm),

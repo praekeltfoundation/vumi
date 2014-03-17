@@ -47,8 +47,8 @@ class TestTwitterTransport(VumiTestCase):
             'access_token_secret': 'tokensecret1',
             'terms': ['arnold', 'the', 'term'],
             'endpoints': {
-                'tweets': 'default',
-                'dms': 'dm'
+                'tweets': 'tweet_endpoint',
+                'dms': 'dm_endpoint'
             }
         }
 
@@ -127,6 +127,7 @@ class TestTwitterTransport(VumiTestCase):
         self.assertEqual(msg['from_addr'], '@someone')
         self.assertEqual(msg['to_addr'], '@me')
         self.assertEqual(msg['content'], 'hello')
+        self.assertEqual(msg.get_routing_endpoint(), 'tweet_endpoint')
 
         self.assertEqual(
             msg['transport_metadata'],
@@ -209,6 +210,7 @@ class TestTwitterTransport(VumiTestCase):
         self.assertEqual(msg['from_addr'], '@someone')
         self.assertEqual(msg['to_addr'], '@me')
         self.assertEqual(msg['content'], 'hello @me')
+        self.assertEqual(msg.get_routing_endpoint(), 'dm_endpoint')
 
         self.assertEqual(msg['helper_metadata'], {
             'dm_twitter': {
@@ -250,7 +252,7 @@ class TestTwitterTransport(VumiTestCase):
     def test_tweet_sending(self):
         self.twitter.new_user('someone', 'someone')
         msg = yield self.tx_helper.make_dispatch_outbound(
-            'hello', to_addr='@someone')
+            'hello', to_addr='@someone', endpoint='tweet_endpoint')
         [ack] = yield self.tx_helper.wait_for_dispatched_events(1)
 
         self.assertEqual(ack['user_message_id'], msg['message_id'])
@@ -261,11 +263,13 @@ class TestTwitterTransport(VumiTestCase):
 
     @inlineCallbacks
     def test_tweet_reply_sending(self):
-        tweet1 = self.twitter.new_tweet('hello', self.user.id_str)
+        tweet1 = self.twitter.new_tweet(
+            'hello', self.user.id_str, endpoint='tweet_endpoint')
 
         inbound_msg = self.tx_helper.make_inbound(
             'hello',
             from_addr='@someone',
+            endpoint='tweet_endpoint',
             transport_metadata={
                 'twitter': {'status_id': tweet1.id_str}
             })
@@ -286,7 +290,8 @@ class TestTwitterTransport(VumiTestCase):
 
         self.patch(self.client, 'statuses_update', fail)
 
-        msg = yield self.tx_helper.make_dispatch_outbound('hello')
+        msg = yield self.tx_helper.make_dispatch_outbound(
+            'hello', endpoint='tweet_endpoint')
         [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
 
         self.assertEqual(nack['user_message_id'], msg['message_id'])
