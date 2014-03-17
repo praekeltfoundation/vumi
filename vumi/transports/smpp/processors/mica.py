@@ -1,3 +1,5 @@
+# -*- test-case-name: vumi.transports.smpp.tests.test_mica -*-
+
 from vumi.config import ConfigInt
 from vumi.components.session import SessionManager
 from vumi.message import TransportUserMessage
@@ -70,7 +72,7 @@ class DeliverShortMessageProcessor(default.DeliverShortMessageProcessor):
             # PSSR request. Let's assume it means a new session.
             session_event = 'new'
             ussd_code = pdu_params['short_message']
-            content = ''
+            content = None
 
             yield self.session_manager.create_session(
                 session_identifier, ussd_code=ussd_code)
@@ -82,7 +84,7 @@ class DeliverShortMessageProcessor(default.DeliverShortMessageProcessor):
             session = yield self.session_manager.load_session(
                 session_identifier)
             ussd_code = session['ussd_code']
-            content = ''
+            content = None
 
             yield self.session_manager.clear_session(session_identifier)
 
