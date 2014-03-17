@@ -50,14 +50,6 @@ class TwitterTransportConfig(Transport.CONFIG_CLASS):
         default=[], static=True)
 
 
-def screen_name_as_addr(screen_name):
-    return u'@%s' % (screen_name,)
-
-
-def addr_as_screen_name(addr):
-    return addr[1:] if addr.startswith('@') else addr
-
-
 class TwitterTransport(Transport):
     """Twitter transport."""
 
@@ -118,6 +110,14 @@ class TwitterTransport(Transport):
                 sent_message_id=message['message_id'],
                 reason='%s' % (e,))
 
+    @classmethod
+    def screen_name_as_addr(cls, screen_name):
+        return u'@%s' % (screen_name,)
+
+    @classmethod
+    def addr_as_screen_name(cls, addr):
+        return addr[1:] if addr.startswith('@') else addr
+
     def is_own_tweet(self, message):
         user = messagetools.tweet_user(message)
         return self.screen_name == messagetools.user_screen_name(user)
@@ -132,14 +132,14 @@ class TwitterTransport(Transport):
             [start_index, end_index] = mention['indices']
 
             if start_index == 0:
-                to_addr = screen_name_as_addr(mention['screen_name'])
+                to_addr = cls.screen_name_as_addr(mention['screen_name'])
 
         return to_addr
 
     @classmethod
     def tweet_from_addr(cls, tweet):
         user = messagetools.tweet_user(tweet)
-        return screen_name_as_addr(messagetools.user_screen_name(user))
+        return cls.screen_name_as_addr(messagetools.user_screen_name(user))
 
     @classmethod
     def tweet_content(cls, tweet):
