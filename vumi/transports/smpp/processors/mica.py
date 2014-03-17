@@ -122,8 +122,6 @@ class SubmitShortMessageProcessor(default.SubmitShortMessageProcessor):
         from_addr = message['from_addr']
         text = message['content']
 
-        # TODO: this should probably be handled by a processor as these
-        #       USSD fields & params are TATA (India) specific
         session_event = message['session_event']
         transport_type = message['transport_type']
         optional_parameters = {}
