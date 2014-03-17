@@ -5,7 +5,25 @@ from txtwitter.twitter import TwitterClient
 from txtwitter import messagetools
 
 from vumi.transports.base import Transport
-from vumi.config import ConfigText, ConfigList
+from vumi.config import ConfigText, ConfigList, ConfigDict
+
+
+class ConfigTwitterEndpoints(ConfigDict):
+    field_type = 'twitter_endpoints'
+
+    def clean(self, value):
+        endpoints_dict = super(ConfigTwitterEndpoints, self).clean(value)
+
+        if 'dms' not in endpoints_dict and 'tweets' not in endpoints_dict:
+            self.raise_config_error(
+                "needs configuration for either dms, tweets or both")
+
+        if endpoints_dict.get('dms') == endpoints_dict.get('tweets'):
+            self.raise_config_error(
+                "has the same endpoint for dms and tweets: '%s'"
+                % endpoints_dict['dms'])
+
+        return endpoints_dict
 
 
 class BaseTwitterTransportConfig(Transport.CONFIG_CLASS):
@@ -23,6 +41,9 @@ class BaseTwitterTransportConfig(Transport.CONFIG_CLASS):
         required=True, static=True)
     access_token_secret = ConfigText(
         "The OAuth access token secret for the twitter account",
+        required=True, static=True)
+    endpoints = ConfigTwitterEndpoints(
+        "Which endpoints to use for dms and tweets",
         required=True, static=True)
 
 
@@ -60,6 +81,8 @@ class TwitterTransport(Transport):
             config.access_token_secret,
             config.consumer_key,
             config.consumer_secret)
+
+        self.endpoints = config.endpoints
 
         self.track_stream = self.client.stream_filter(
             self.handle_track_stream, track=config.terms)

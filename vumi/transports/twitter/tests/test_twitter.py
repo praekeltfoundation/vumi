@@ -3,8 +3,28 @@ from txtwitter.tests.fake_twitter import FakeTwitter
 
 from vumi.tests.utils import LogCatcher
 from vumi.tests.helpers import VumiTestCase
-from vumi.transports.twitter import TwitterTransport, DMTwitterTransport
+from vumi.config import Config
+from vumi.errors import ConfigError
+from vumi.transports.twitter import (
+    ConfigTwitterEndpoints, TwitterTransport, DMTwitterTransport)
 from vumi.transports.tests.helpers import TransportHelper
+
+
+class TestTwitterEndpointsConfig(VumiTestCase):
+    def test_clean_no_endpoints(self):
+        class ToyConfig(Config):
+            endpoints = ConfigTwitterEndpoints("test endpoints")
+
+        self.assertRaises(ConfigError, ToyConfig, {'endpoints': {}})
+
+    def test_clean_same_endpoints(self):
+        class ToyConfig(Config):
+            endpoints = ConfigTwitterEndpoints("test endpoints")
+
+        self.assertRaises(ConfigError, ToyConfig, {'endpoints': {
+            'dms': 'default',
+            'tweets': 'default'
+        }})
 
 
 class TestTwitterTransport(VumiTestCase):
