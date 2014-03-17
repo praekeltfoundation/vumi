@@ -52,7 +52,9 @@ class Transport(BaseWorker):
         d = self.setup_ro_connector(self.transport_name)
 
         def cb(connector):
-            connector.set_outbound_handler(self._process_message)
+            self.add_outbound_handler(
+                lambda msg: self.handle_outbound_message(msg),
+                connector=connector)
             return connector
 
         return d.addCallback(cb)
@@ -102,8 +104,8 @@ class Transport(BaseWorker):
             failure_code = getattr(exception, "failure_code",
                                    FailureMessage.FC_UNSPECIFIED)
             failure_msg = FailureMessage(
-                    message=message.payload, failure_code=failure_code,
-                    reason=traceback)
+                message=message.payload, failure_code=failure_code,
+                reason=traceback)
             connector = self.connectors[self.transport_name]
             d = connector._middlewares.apply_publish(
                 "failure", failure_msg, self.transport_name)
@@ -165,17 +167,27 @@ class Transport(BaseWorker):
                                   delivery_status=delivery_status,
                                   event_type='delivery_report', **kw)
 
-    def _process_message(self, message):
-        def _send_failure(f):
-            self.send_failure(message, f.value, f.getTraceback())
-            log.err(f)
-            if self.SUPPRESS_FAILURE_EXCEPTIONS:
-                return None
-            return f
+    def _make_message_processor(self, handler):
+        def processor(message):
+            def _send_failure(f):
+                self.send_failure(message, f.value, f.getTraceback())
+                log.err(f)
+                if self.SUPPRESS_FAILURE_EXCEPTIONS:
+                    return None
+                return f
 
-        d = maybeDeferred(self.handle_outbound_message, message)
-        d.addErrback(_send_failure)
-        return d
+            d = maybeDeferred(handler, message)
+            d.addErrback(_send_failure)
+            return d
+
+        return processor
+
+    def add_outbound_handler(self, handler, endpoint=None, connector=None):
+        if connector is None:
+            connector = self.connectors[self.transport_name]
+
+        processor = self._make_message_processor(handler)
+        connector.set_outbound_handler(processor, endpoint_name=endpoint)
 
     def handle_outbound_message(self, message):
         """
