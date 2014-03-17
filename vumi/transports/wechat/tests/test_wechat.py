@@ -1,3 +1,6 @@
+import hashlib
+from urllib import urlencode
+
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet.task import Clock
@@ -7,6 +10,19 @@ from vumi.tests.helpers import VumiTestCase
 from vumi.tests.utils import MockHttpServer
 from vumi.transports.tests.helpers import TransportHelper
 from vumi.transports.wechat import WeChatTransport
+from vumi.utils import http_request_full
+
+
+def request(transport, method, path='', params={}, data=None):
+    addr = transport.server.getHost()
+    if params:
+        path += '?%s' % (urlencode(params),)
+    url = 'http://%s:%s%s%s' % (
+        addr.host,
+        addr.port,
+        transport.get_static_config().web_path,
+        path)
+    return http_request_full(url, method=method, data=data)
 
 
 class WeChatTestCase(VumiTestCase):
@@ -36,6 +52,37 @@ class WeChatTestCase(VumiTestCase):
         return NOT_DONE_YET
 
     @inlineCallbacks
-    def test_auth(self):
+    def test_auth_success(self):
         transport = yield self.get_transport()
-        print transport
+
+        nonce = '1234'
+        timestamp = '2014-01-01T00:00:00'
+        good_signature = hashlib.sha1(
+            ''.join(sorted([timestamp, nonce, 'token']))).hexdigest()
+
+        resp = yield request(
+            transport, "GET", params={
+                'signature': good_signature,
+                'timestamp': timestamp,
+                'nonce': nonce,
+                'echostr': 'success'
+            })
+        self.assertEqual(resp.delivered_body, 'success')
+
+    @inlineCallbacks
+    def test_auth_fail(self):
+        transport = yield self.get_transport()
+
+        nonce = '1234'
+        timestamp = '2014-01-01T00:00:00'
+        bad_signature = hashlib.sha1(
+            ''.join(sorted([timestamp, nonce, 'bad_token']))).hexdigest()
+
+        resp = yield request(
+            transport, "GET", params={
+                'signature': bad_signature,
+                'timestamp': timestamp,
+                'nonce': nonce,
+                'echostr': 'success'
+            })
+        self.assertNotEqual(resp.delivered_body, 'success')

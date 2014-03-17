@@ -1,5 +1,7 @@
 # -*- test-case-name: vumi.transports.wechat.tests.test_wechat -*-
 
+import hashlib
+
 from vumi.config import ConfigText, ConfigServerEndpoint
 from vumi.transports import Transport
 from vumi.transports.httprpc.httprpc import HttpRpcHealthResource
@@ -32,11 +34,30 @@ class WeChatConfig(Transport.CONFIG_CLASS):
 
 class WeChatResource(Resource):
 
+    isLeaf = True
+
     def __init__(self, transport):
         Resource.__init__(self)
         self.transport = transport
+        self.config = transport.get_static_config()
 
-    isLeaf = True
+    def render_GET(self, request):
+        if all([lambda key: key in request.args,
+                ['signature', 'timestamp', 'nonce', 'echostr']]):
+            return self.verify(request)
+
+    def verify(self, request):
+        signature = request.args['signature'][0]
+        timestamp = request.args['timestamp'][0]
+        nonce = request.args['nonce'][0]
+        echostr = request.args['echostr'][0]
+        token = self.config.auth_token
+
+        hash_ = hashlib.sha1(''.join(sorted([timestamp, nonce, token])))
+
+        if hash_.hexdigest() == signature:
+            return echostr
+        return ''
 
 
 class WeChatTransport(Transport):
@@ -56,7 +77,7 @@ class WeChatTransport(Transport):
         self.server = yield self.endpoint.listen(self.factory)
 
     def teardown_transport(self):
-        print self.server
+        return self.server.stopListening()
 
     def get_health_response(self):
         return "OK"
