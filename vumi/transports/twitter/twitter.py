@@ -44,7 +44,7 @@ class TwitterTransportConfig(Transport.CONFIG_CLASS):
         required=True, static=True)
     endpoints = ConfigTwitterEndpoints(
         "Which endpoints to use for dms and tweets",
-        required=False, static=True)
+        required=True, static=True)
     terms = ConfigList(
         "A list of terms to be tracked by the transport",
         default=[], static=True)
@@ -57,6 +57,11 @@ class TwitterTransport(Transport):
 
     CONFIG_CLASS = TwitterTransportConfig
     NO_USER_ADDR = 'NO_USER'
+
+    OUTBOUND_HANDLERS = {
+        'tweets': 'handle_outbound_tweet',
+        'dms': 'handle_outbound_dm',
+    }
 
     def get_client(self, *a, **kw):
         return TwitterClient(*a, **kw)
@@ -73,6 +78,11 @@ class TwitterTransport(Transport):
 
         self.endpoints = config.endpoints
 
+        for msg_type, endpoint in self.endpoints.iteritems():
+            handler = getattr(self, self.OUTBOUND_HANDLERS[msg_type])
+            handler = self.make_outbound_handler(handler)
+            self.add_outbound_handler(handler, endpoint=endpoint)
+
         self.track_stream = self.client.stream_filter(
             self.handle_track_stream, track=config.terms)
         self.track_stream.startService()
@@ -86,29 +96,22 @@ class TwitterTransport(Transport):
         yield self.user_stream.stopService()
         yield self.track_stream.stopService()
 
-    @inlineCallbacks
-    def handle_outbound_message(self, message):
-        log.msg("Twitter transport sending %r" % (message,))
+    def make_outbound_handler(self, twitter_handler):
+        @inlineCallbacks
+        def handler(message):
+            try:
+                twitter_message = yield twitter_handler(message)
 
-        metadata = message['transport_metadata'].get(self.transport_type, {})
-        in_reply_to_status_id = metadata.get('status_id')
+                yield self.publish_ack(
+                    user_message_id=message['message_id'],
+                    sent_message_id=twitter_message['id_str'])
+            except Exception, e:
+                yield self.publish_nack(
+                    user_message_id=message['message_id'],
+                    sent_message_id=message['message_id'],
+                    reason='%s' % (e,))
 
-        try:
-            content = message['content']
-            if message['to_addr'] != self.NO_USER_ADDR:
-                content = "%s %s" % (message['to_addr'], content)
-
-            response = yield self.client.statuses_update(
-                content, in_reply_to_status_id=in_reply_to_status_id)
-
-            yield self.publish_ack(
-                user_message_id=message['message_id'],
-                sent_message_id=response['id_str'])
-        except Exception, e:
-            yield self.publish_nack(
-                user_message_id=message['message_id'],
-                sent_message_id=message['message_id'],
-                reason='%s' % (e,))
+        return handler
 
     @classmethod
     def screen_name_as_addr(cls, screen_name):
@@ -151,12 +154,13 @@ class TwitterTransport(Transport):
 
         return content
 
-    def publish_tweet_message(self, tweet):
+    def publish_tweet(self, tweet):
         return self.publish_message(
             content=self.tweet_content(tweet),
             to_addr=self.tweet_to_addr(tweet),
             from_addr=self.tweet_from_addr(tweet),
             transport_type=self.transport_type,
+            endpoint=self.endpoints['tweets'],
             transport_metadata={
                 'twitter': {
                     'status_id': messagetools.tweet_id(tweet)
@@ -178,16 +182,46 @@ class TwitterTransport(Transport):
                 log.msg("Tracked own tweet: %r" % (message,))
             else:
                 log.msg("Tracked a tweet: %r" % (message,))
-                self.publish_tweet_message(message)
+                self.publish_tweet(message)
         else:
             log.msg("Received non-tweet from tracking stream: %r" % message)
 
     def handle_user_stream(self, message):
         if messagetools.is_tweet(message):
-            if self.is_own_tweet(message):
-                log.msg("Received own tweet on user stream: %r" % (message,))
-            else:
-                log.msg("Received tweet on user stream: %r" % (message,))
-                self.publish_tweet_message(message)
+            self.handle_inbound_tweet(message)
+        elif messagetools.is_dm(message):
+            self.handle_inbound_dm(message)
         else:
-            log.msg("Received non-tweet from user stream: %r" % message)
+            log.msg(
+                "Received something from user stream that is not a dm or "
+                "tweet: %r" % message)
+
+    def handle_inbound_dm(self, dm):
+        pass
+
+    def handle_inbound_tweet(self, tweet):
+        if self.is_own_tweet(tweet):
+            log.msg("Received own tweet on user stream: %r" % (tweet,))
+        elif 'tweets' not in self.endpoints:
+            log.msg(
+                "Discarding tweet received on user stream, no endpoint "
+                "configured for tweets: %r" % (tweet,))
+        else:
+            log.msg("Received tweet on user stream: %r" % (tweet,))
+            self.publish_tweet(tweet)
+
+    def handle_outbound_dm(self, message):
+        pass
+
+    def handle_outbound_tweet(self, message):
+        log.msg("Twitter transport sending tweet %r" % (message,))
+
+        metadata = message['transport_metadata'].get(self.transport_type, {})
+        in_reply_to_status_id = metadata.get('status_id')
+
+        content = message['content']
+        if message['to_addr'] != self.NO_USER_ADDR:
+            content = "%s %s" % (message['to_addr'], content)
+
+        return self.client.statuses_update(
+            content, in_reply_to_status_id=in_reply_to_status_id)

@@ -39,17 +39,23 @@ class TestTwitterTransport(VumiTestCase):
 
         self.tx_helper = self.add_helper(TransportHelper(TwitterTransport))
 
-        self.transport = yield self.tx_helper.get_transport({
+        self.config = {
             'screen_name': 'me',
             'consumer_key': 'consumer1',
             'consumer_secret': 'consumersecret1',
             'access_token': 'token1',
             'access_token_secret': 'tokensecret1',
             'terms': ['arnold', 'the', 'term'],
-        })
+            'endpoints': {
+                'tweets': 'default',
+                'dms': 'dm'
+            }
+        }
+
+        self.transport = yield self.tx_helper.get_transport(self.config)
 
     @inlineCallbacks
-    def test_tracking_messages(self):
+    def test_tracking_tweets(self):
         someone = self.twitter.new_user('someone', 'someone')
         tweet = self.twitter.new_tweet('arnold', someone.id_str)
 
@@ -72,7 +78,7 @@ class TestTwitterTransport(VumiTestCase):
         })
 
     @inlineCallbacks
-    def test_tracking_reply_messages(self):
+    def test_tracking_reply_tweets(self):
         someone = self.twitter.new_user('someone', 'someone')
         someone_else = self.twitter.new_user('someone_else', 'someone_else')
         tweet1 = self.twitter.new_tweet('@someone_else hello', someone.id_str)
@@ -112,7 +118,7 @@ class TestTwitterTransport(VumiTestCase):
                 "Tracked own tweet:" in msg for msg in lc.messages()))
 
     @inlineCallbacks
-    def test_inbound_user_message(self):
+    def test_inbound_tweet(self):
         someone = self.twitter.new_user('someone', 'someone')
         tweet = self.twitter.new_tweet('@me hello', someone.id_str)
 
@@ -141,7 +147,7 @@ class TestTwitterTransport(VumiTestCase):
         })
 
     @inlineCallbacks
-    def test_inbound_user_reply_message(self):
+    def test_inbound_tweet_reply(self):
         someone = self.twitter.new_user('someone', 'someone')
         tweet1 = self.twitter.new_tweet('@someone hello', self.user.id_str)
         tweet2 = self.twitter.new_tweet(
@@ -180,7 +186,21 @@ class TestTwitterTransport(VumiTestCase):
                 for msg in lc.messages()))
 
     @inlineCallbacks
-    def test_sending(self):
+    def test_inbound_tweet_no_endpoint(self):
+        self.config['endpoints'] = {'dms': 'default'}
+        yield self.tx_helper.get_transport(self.config)
+        someone = self.twitter.new_user('someone', 'someone')
+
+        with LogCatcher() as lc:
+            self.twitter.new_tweet('@me hello', someone.id_str)
+
+            self.assertTrue(any(
+                "Discarding tweet received on user stream, no endpoint "
+                "configured for tweets" in msg
+                for msg in lc.messages()))
+
+    @inlineCallbacks
+    def test_tweet_sending(self):
         self.twitter.new_user('someone', 'someone')
         msg = yield self.tx_helper.make_dispatch_outbound(
             'hello', to_addr='@someone')
@@ -193,7 +213,7 @@ class TestTwitterTransport(VumiTestCase):
         self.assertEqual(tweet.reply_to, None)
 
     @inlineCallbacks
-    def test_reply_sending(self):
+    def test_tweet_reply_sending(self):
         tweet1 = self.twitter.new_tweet('hello', self.user.id_str)
 
         inbound_msg = self.tx_helper.make_inbound(
@@ -213,7 +233,7 @@ class TestTwitterTransport(VumiTestCase):
         self.assertEqual(tweet2.reply_to, tweet1.id_str)
 
     @inlineCallbacks
-    def test_sending_failure(self):
+    def test_tweet_sending_failure(self):
         def fail(*a, **kw):
             raise Exception(':(')
 
@@ -240,7 +260,8 @@ class TestTwitterTransport(VumiTestCase):
 
             self.assertEqual(
                 lc.messages(),
-                ["Received non-tweet from user stream: {'foo': 'bar'}"])
+                ["Received something from user stream that is not a dm or "
+                 "tweet: {'foo': 'bar'}"])
 
     def test_tweet_content_with_mention_at_start(self):
         self.assertEqual('hello', self.transport.tweet_content({
