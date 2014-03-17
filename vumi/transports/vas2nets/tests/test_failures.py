@@ -103,7 +103,8 @@ class TestVas2NetsFailureWorker(VumiTestCase):
     @inlineCallbacks
     def test_send_sms_success(self):
         yield self.mk_mock_server("Result_code: 00, Message OK")
-        yield self.worker._process_message(self.make_outbound("outbound"))
+        msg = self.make_outbound("outbound")
+        yield self.worker_helper.dispatch_outbound(msg)
         self.assertEqual(1, len(self.worker_helper.get_dispatched_events()))
         self.assertEqual(0, len(self.get_dispatched_failures()))
 
@@ -116,7 +117,8 @@ class TestVas2NetsFailureWorker(VumiTestCase):
         yield self.mk_mock_server("Result_code: 04, Internal system error "
                                       "occurred while processing message",
                                       {})
-        yield self.worker._process_message(self.make_outbound("outbound"))
+        msg = self.make_outbound("outbound")
+        yield self.worker_helper.dispatch_outbound(msg)
         yield self.worker.failure_published.deferred
         yield self.worker_helper.kick_delivery()
         self.assertEqual(1, len(self.worker_helper.get_dispatched_events()))
@@ -149,7 +151,7 @@ class TestVas2NetsFailureWorker(VumiTestCase):
 
         self.worker.failure_published = FailureCounter(1)
         msg = self.make_outbound("outbound")
-        yield self.worker._process_message(msg)
+        yield self.worker_helper.dispatch_outbound(msg)
         yield self.worker.failure_published.deferred
         self.assertEqual(0, len(self.worker_helper.get_dispatched_events()))
         self.assertEqual(1, len(self.get_dispatched_failures()))
