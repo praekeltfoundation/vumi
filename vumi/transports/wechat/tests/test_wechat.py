@@ -1,15 +1,19 @@
 import hashlib
 from urllib import urlencode
+from datetime import datetime
 
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet.task import Clock
+from twisted.trial.unittest import TestCase
 from twisted.web.server import NOT_DONE_YET
 
 from vumi.tests.helpers import VumiTestCase
 from vumi.tests.utils import MockHttpServer
 from vumi.transports.tests.helpers import TransportHelper
 from vumi.transports.wechat import WeChatTransport
+from vumi.transports.wechat.parser import WeChatParser
+from vumi.transports.wechat import message_types
 from vumi.utils import http_request_full
 
 
@@ -86,3 +90,48 @@ class WeChatTestCase(VumiTestCase):
                 'echostr': 'success'
             })
         self.assertNotEqual(resp.delivered_body, 'success')
+
+
+class WeChatParserTestCase(TestCase):
+
+    def test_parse_text_message(self):
+        msg = WeChatParser.parse(
+            """
+            <xml>
+            <ToUserName><![CDATA[toUser]]></ToUserName>
+            <FromUserName><![CDATA[fromUser]]></FromUserName>
+            <CreateTime>1348831860</CreateTime>
+            <MsgType><![CDATA[text]]></MsgType>
+            <Content><![CDATA[this is a test]]></Content>
+            <MsgId>1234567890123456</MsgId>
+            </xml>
+            """)
+
+        self.assertEqual(msg.ToUserName, 'toUser')
+        self.assertEqual(msg.FromUserName, 'fromUser')
+        self.assertEqual(msg.CreateTime, datetime(2012, 9, 28, 13, 31))
+        self.assertEqual(msg.MsgId, '1234567890123456')
+        self.assertTrue(isinstance(msg, message_types.TextMessage))
+
+    def test_parse_both_ways(self):
+        # this is what we generate
+        msg1 = message_types.TextMessage({
+            'ToUserName': 'toUser',
+            'FromUserName': 'fromUser',
+            'CreateTime': datetime(2012, 9, 28, 13, 31),
+            'Content': 'this is a test',
+            'MsgId': '1234567890123456',
+        })
+        # this is what wechat gives us
+        msg2 = WeChatParser.parse(
+            """
+            <xml>
+            <ToUserName><![CDATA[toUser]]></ToUserName>
+            <FromUserName><![CDATA[fromUser]]></FromUserName>
+            <CreateTime>1348831860</CreateTime>
+            <MsgType><![CDATA[text]]></MsgType>
+            <Content><![CDATA[this is a test]]></Content>
+            <MsgId>1234567890123456</MsgId>
+            </xml>
+            """)
+        self.assertEqual(msg1, msg2)
