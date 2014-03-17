@@ -100,3 +100,14 @@ class TestBaseTransport(VumiTestCase):
         self.assertEqual(1, len(consumers))
         for consumer in consumers:
             self.assertEqual(consumer.channel.qos_prefetch_count, 20)
+
+    @inlineCallbacks
+    def test_add_outbound_handler(self):
+        transport = yield self.tx_helper.get_transport({})
+
+        msgs = []
+        msg = transport.add_outbound_handler(msgs.append, endpoint='foo')
+
+        msg = yield self.tx_helper.make_dispatch_outbound(
+            "outbound", endpoint='foo')
+        self.assertEqual(msgs, [msg])
