@@ -312,6 +312,10 @@ class VumiTestCase(TestCase):
         Override trial's ``_runFixturesAndTest()`` method to detect test
         methods that are generator functions, indicating a missing
         ``@inlineCallbacks`` decorator.
+
+        NOTE: This should probably be removed when
+              https://twistedmatrix.com/trac/ticket/3917 is merged and the next
+              Twisted version (probably 14.0) is released.
         """
         method = getattr(self, self._testMethodName)
         if method.func_code.co_flags & CO_GENERATOR:
