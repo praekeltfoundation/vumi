@@ -81,7 +81,7 @@ class TwitterTransport(Transport):
         for msg_type, endpoint in self.endpoints.iteritems():
             handler = getattr(self, self.OUTBOUND_HANDLERS[msg_type])
             handler = self.make_outbound_handler(handler)
-            self.add_outbound_handler(handler, endpoint=endpoint)
+            self.add_outbound_handler(handler, endpoint_name=endpoint)
 
         self.track_stream = self.client.stream_filter(
             self.handle_track_stream, track=config.terms)
