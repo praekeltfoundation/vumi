@@ -5,6 +5,7 @@ import hashlib
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, Deferred
 from twisted.web.resource import Resource
+from twisted.web import http
 from twisted.web.server import NOT_DONE_YET
 
 from vumi.config import ConfigText, ConfigServerEndpoint
@@ -44,6 +45,7 @@ class WeChatResource(Resource):
         Resource.__init__(self)
         self.transport = transport
         self.config = transport.get_static_config()
+        self.request_map = {}
 
     def render_GET(self, request):
         if all([lambda key: key in request.args,
@@ -54,6 +56,7 @@ class WeChatResource(Resource):
     def render_POST(self, request):
         d = Deferred()
         d.addCallback(self.handle_request)
+        d.addCallback(self.set_request, request)
         reactor.callLater(0, d.callback, request)
         return NOT_DONE_YET
 
@@ -72,8 +75,13 @@ class WeChatResource(Resource):
 
     def handle_request(self, request):
         wc_msg = WeChatParser.parse(request.content.read())
-        request.write(wc_msg.to_xml())
-        request.finish()
+        return self.transport.handle_raw_inbound_message(wc_msg)
+
+    def set_request(self, message, request):
+        self.request_map[message['message_id']] = request
+
+    def get_request(self, message_id):
+        return self.request_map.get(message_id)
 
 
 class WeChatTransport(Transport):
@@ -85,12 +93,29 @@ class WeChatTransport(Transport):
         config = self.get_static_config()
 
         self.endpoint = config.twisted_endpoint
+        self.resource = WeChatResource(self)
         self.factory = build_web_site({
             config.health_path: HttpRpcHealthResource(self),
-            config.web_path: WeChatResource(self),
+            config.web_path: self.resource,
         })
 
         self.server = yield self.endpoint.listen(self.factory)
+
+    def handle_raw_inbound_message(self, wc_msg):
+        return self.publish_message(
+            content=wc_msg.Content,
+            from_addr=wc_msg.FromUserName,
+            to_addr=wc_msg.ToUserName,
+            transport_type='wechat')
+
+    def handle_outbound_message(self, message):
+        """
+        Read outbound message and do what needs to be done with them.
+        """
+        request_id = message['in_reply_to']
+        request = self.resource.get_request(request_id)
+        request.write(message['content'].encode('utf-8'))
+        request.finish()
 
     def teardown_transport(self):
         return self.server.stopListening()

@@ -95,7 +95,7 @@ class WeChatTestCase(VumiTestCase):
     def test_inbound_text_message(self):
         transport = yield self.get_transport()
 
-        resp = yield request(
+        resp_d = request(
             transport, 'POST', data="""
             <xml>
             <ToUserName><![CDATA[toUser]]></ToUserName>
@@ -106,6 +106,12 @@ class WeChatTestCase(VumiTestCase):
             <MsgId>1234567890123456</MsgId>
             </xml>
             """.strip())
+
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        self.tx_helper.make_dispatch_reply(
+            msg, 'foo')
+
+        resp = yield resp_d
         print resp.delivered_body
 
 
