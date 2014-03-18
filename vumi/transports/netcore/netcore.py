@@ -24,11 +24,6 @@ class NetcoreTransportConfig(Transport.CONFIG_CLASS):
         default='/health/', static=True)
 
 
-def has_all_params(request):
-    params = ['to_addr', 'from_addr', 'content', 'circle', 'source']
-    return all([(key in request.args) for key in params])
-
-
 class NetcoreResource(Resource):
 
     isLeaf = True
