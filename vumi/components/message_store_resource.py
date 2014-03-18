@@ -1,4 +1,5 @@
 # -*- test-case-name: vumi.components.tests.test_message_store_resource -*-
+from functools import partial
 
 from twisted.application.internet import StreamServerEndpointService
 from twisted.internet.defer import DeferredList, inlineCallbacks
@@ -6,20 +7,13 @@ from twisted.web.resource import NoResource, Resource
 from twisted.web.server import NOT_DONE_YET
 
 from vumi.components.message_store import MessageStore
+from vumi.components.message_store_exporter import MessageStoreExporter
 from vumi.config import ConfigDict, ConfigText, ConfigServerEndpoint
 from vumi.persist.txriak_manager import TxRiakManager
 from vumi.persist.txredis_manager import TxRedisManager
 from vumi.transports.httprpc import httprpc
 from vumi.utils import build_web_site
 from vumi.worker import BaseWorker
-
-
-# NOTE: Thanks Ned http://stackoverflow.com/a/312464!
-def chunks(l, n):
-    """ Yield successive n-sized chunks from l.
-    """
-    for i in xrange(0, len(l), n):
-        yield l[i:i + n]
 
 
 class MessageStoreProxyResource(Resource):
@@ -48,36 +42,16 @@ class MessageStoreProxyResource(Resource):
             concurrency = self.default_concurrency
 
         d = self.get_keys(self.message_store, self.batch_id)
-        d.addCallback(lambda keys: list(chunks(keys, chunk_size)))
-        d.addCallback(self.fetch_chunks, concurrency, request)
+        d.addCallback(
+            self.export, self.message_store, chunk_size, concurrency, request)
+        d.addCallback(lambda _: request.finish())
         return NOT_DONE_YET
+
+    def export(self, keys, message_store, chunk_size, concurrency, request):
+        raise NotImplemented('To be implemented by sub-class.')
 
     def get_keys(self, message_store, batch_id):
         raise NotImplementedError('To be implemented by sub-class.')
-
-    def get_message(self, message_store, message_id):
-        raise NotImplementedError('To be implemented by sub-class.')
-
-    @inlineCallbacks
-    def fetch_chunks(self, chunked_keys, concurrency, request):
-        while chunked_keys:
-            block, chunked_keys = (
-                chunked_keys[:concurrency], chunked_keys[concurrency:])
-            yield self.handle_chunks(block, request)
-        request.finish()
-
-    def handle_chunks(self, chunks, request):
-        return DeferredList([
-            self.handle_chunk(chunk, request) for chunk in chunks])
-
-    def handle_chunk(self, message_keys, request):
-        return DeferredList([
-            self.handle_message(key, request) for key in message_keys])
-
-    def handle_message(self, message_key, request):
-        d = self.get_message(self.message_store, message_key)
-        d.addCallback(self.write_message, request)
-        return d
 
     def write_message(self, message, request):
         request.write(message.to_json())
@@ -89,8 +63,15 @@ class InboundResource(MessageStoreProxyResource):
     def get_keys(self, message_store, batch_id):
         return message_store.batch_inbound_keys(batch_id)
 
-    def get_message(self, message_store, message_id):
-        return message_store.get_inbound_message(message_id)
+    def export(self, keys, message_store, chunk_size, concurrency, request):
+        exporter = MessageStoreExporter(chunk_size, concurrency)
+        return exporter.export(
+            keys, partial(self.handle_key, message_store, request))
+
+    def handle_key(self, message_store, request, message_id):
+        d = message_store.get_inbound_message(message_id)
+        d.addCallback(self.write_message, request)
+        return d
 
 
 class OutboundResource(MessageStoreProxyResource):
@@ -98,8 +79,15 @@ class OutboundResource(MessageStoreProxyResource):
     def get_keys(self, message_store, batch_id):
         return message_store.batch_outbound_keys(batch_id)
 
-    def get_message(self, message_store, message_id):
-        return message_store.get_outbound_message(message_id)
+    def export(self, keys, message_store, chunk_size, concurrency, request):
+        exporter = MessageStoreExporter(chunk_size, concurrency)
+        return exporter.export(
+            keys, partial(self.handle_key, message_store, request))
+
+    def handle_key(self, message_store, request, message_id):
+        d = message_store.get_outbound_message(message_id)
+        d.addCallback(self.write_message, request)
+        return d
 
 
 class BatchResource(Resource):
