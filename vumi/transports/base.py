@@ -53,7 +53,7 @@ class Transport(BaseWorker):
 
         def cb(connector):
             self.add_outbound_handler(
-                lambda msg: self.handle_outbound_message(msg),
+                self.handle_outbound_message,
                 connector=connector)
             return connector
 
