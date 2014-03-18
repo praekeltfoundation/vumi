@@ -38,9 +38,21 @@ class NetcoreResource(Resource):
         self.transport = transport
 
     def render_POST(self, request):
-        if not has_all_params(request):
+        expected_keys = [
+            'to_addr',
+            'from_addr',
+            'content',
+            'circle',
+            'source',
+        ]
+
+        received = set(request.args.keys())
+        expected = set(expected_keys)
+        if received != expected:
             request.setResponseCode(http.BAD_REQUEST)
-            return ''
+            return ('Not all expected parameters received. '
+                    'Only allowing: %r, received: %r' % (
+                        expected_keys, request.args.keys()))
 
         self.handle_request(request)
         return NOT_DONE_YET

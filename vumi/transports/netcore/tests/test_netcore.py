@@ -41,6 +41,10 @@ class NetCoreTestCase(VumiTestCase):
             'foo': 'bar'
         })
         self.assertEqual(resp.code, http.BAD_REQUEST)
+        self.assertEqual(resp.delivered_body, (
+            "Not all expected parameters received. Only allowing: "
+            "['to_addr', 'from_addr', 'content', 'circle', 'source'], "
+            "received: ['foo']"))
         self.assertEqual(
             [], self.tx_helper.get_dispatched_inbound())
 
