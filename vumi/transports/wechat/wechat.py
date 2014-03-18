@@ -17,6 +17,21 @@ from vumi.utils import build_web_site
 from vumi.message import TransportUserMessage
 
 
+def is_verifiable(request):
+    params = ['signature', 'timestamp', 'nonce']
+    return all([(key in request.args) for key in params])
+
+
+def verify(token, request):
+    signature = request.args['signature'][0]
+    timestamp = request.args['timestamp'][0]
+    nonce = request.args['nonce'][0]
+
+    hash_ = hashlib.sha1(''.join(sorted([timestamp, nonce, token])))
+
+    return hash_.hexdigest() == signature
+
+
 class WeChatConfig(Transport.CONFIG_CLASS):
 
     api_url = ConfigText(
@@ -48,30 +63,22 @@ class WeChatResource(Resource):
         self.config = transport.get_static_config()
 
     def render_GET(self, request):
-        if all([lambda key: key in request.args,
-                ['signature', 'timestamp', 'nonce', 'echostr']]):
-            return self.verify(request)
+        if is_verifiable(request) and verify(self.config.auth_token, request):
+            return request.args['echostr'][0]
+        request.setResponseCode(http.BAD_REQUEST)
         return ''
 
     def render_POST(self, request):
+        if not (is_verifiable(request)
+                and verify(self.config.auth_token, request)):
+            request.setResponseCode(http.BAD_REQUEST)
+            return ''
+
         d = Deferred()
         d.addCallback(self.handle_request)
         d.addCallback(self.transport.queue_request, request)
         reactor.callLater(0, d.callback, request)
         return NOT_DONE_YET
-
-    def verify(self, request):
-        signature = request.args['signature'][0]
-        timestamp = request.args['timestamp'][0]
-        nonce = request.args['nonce'][0]
-        echostr = request.args['echostr'][0]
-        token = self.config.auth_token
-
-        hash_ = hashlib.sha1(''.join(sorted([timestamp, nonce, token])))
-
-        if hash_.hexdigest() == signature:
-            return echostr
-        return ''
 
     def handle_request(self, request):
         wc_msg = WeChatParser.parse(request.content.read())
@@ -127,7 +134,7 @@ class WeChatTransport(Transport):
             session_event=(
                 TransportUserMessage.SESSION_NEW
                 if wc_msg.Event == 'subscribe'
-                else TransportUserMessage.SESSION_END),
+                else TransportUserMessage.SESSION_CLOSE),
             transport_type='wechat',
             transport_metadata={
                 'wechat': {
@@ -157,10 +164,12 @@ class WeChatTransport(Transport):
         request_id = message['in_reply_to']
         request = self.pop_request(request_id)
 
+        metadata = message['transport_metadata']['wechat']
+
         wc_msg = TextMessage(
             {
-                'ToUserName': message['to_addr'],
-                'FromUserName': message['from_addr'],
+                'ToUserName': metadata['FromUserName'],
+                'FromUserName': metadata['ToUserName'],
                 'CreateTime': message['timestamp'],
                 'Content': message['content']
             })

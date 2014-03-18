@@ -20,8 +20,21 @@ from vumi.message import TransportUserMessage
 
 def request(transport, method, path='', params={}, data=None):
     addr = transport.server.getHost()
-    if params:
-        path += '?%s' % (urlencode(params),)
+    token = transport.get_static_config().auth_token
+
+    nonce = '1234'
+    timestamp = '2014-01-01T00:00:00'
+    good_signature = hashlib.sha1(
+        ''.join(sorted([timestamp, nonce, token]))).hexdigest()
+
+    default_params = {
+        'signature': good_signature,
+        'timestamp': timestamp,
+        'nonce': nonce,
+    }
+
+    default_params.update(params)
+    path += '?%s' % (urlencode(default_params),)
     url = 'http://%s:%s%s%s' % (
         addr.host,
         addr.port,
@@ -59,17 +72,8 @@ class WeChatTestCase(VumiTestCase):
     @inlineCallbacks
     def test_auth_success(self):
         transport = yield self.get_transport()
-
-        nonce = '1234'
-        timestamp = '2014-01-01T00:00:00'
-        good_signature = hashlib.sha1(
-            ''.join(sorted([timestamp, nonce, 'token']))).hexdigest()
-
         resp = yield request(
             transport, "GET", params={
-                'signature': good_signature,
-                'timestamp': timestamp,
-                'nonce': nonce,
                 'echostr': 'success'
             })
         self.assertEqual(resp.delivered_body, 'success')
@@ -77,17 +81,9 @@ class WeChatTestCase(VumiTestCase):
     @inlineCallbacks
     def test_auth_fail(self):
         transport = yield self.get_transport()
-
-        nonce = '1234'
-        timestamp = '2014-01-01T00:00:00'
-        bad_signature = hashlib.sha1(
-            ''.join(sorted([timestamp, nonce, 'bad_token']))).hexdigest()
-
         resp = yield request(
             transport, "GET", params={
-                'signature': bad_signature,
-                'timestamp': timestamp,
-                'nonce': nonce,
+                'signature': 'foo',
                 'echostr': 'success'
             })
         self.assertNotEqual(resp.delivered_body, 'success')
