@@ -1,5 +1,6 @@
 import os
 from functools import wraps
+from inspect import CO_GENERATOR
 
 from twisted.internet.defer import succeed, inlineCallbacks, Deferred
 from twisted.internet.error import ConnectionRefusedError
@@ -305,6 +306,25 @@ class VumiTestCase(TestCase):
         self.add_cleanup(helper_object.cleanup)
         return maybe_async_return(
             helper_object, helper_object.setup(*args, **kw))
+
+    def _runFixturesAndTest(self, result):
+        """
+        Override trial's ``_runFixturesAndTest()`` method to detect test
+        methods that are generator functions, indicating a missing
+        ``@inlineCallbacks`` decorator.
+
+        NOTE: This should probably be removed when
+              https://twistedmatrix.com/trac/ticket/3917 is merged and the next
+              Twisted version (probably 14.0) is released.
+        """
+        method = getattr(self, self._testMethodName)
+        if method.func_code.co_flags & CO_GENERATOR:
+            # We have a generator that isn't wrapped in @inlineCallbacks
+            e = ValueError(
+                "Test method is a generator. Missing @inlineCallbacks?")
+            result.addError(self, Failure(e))
+            return
+        return super(VumiTestCase, self)._runFixturesAndTest(result)
 
 
 class MessageHelper(object):
