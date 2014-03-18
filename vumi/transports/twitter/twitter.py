@@ -44,7 +44,7 @@ class TwitterTransportConfig(Transport.CONFIG_CLASS):
         required=True, static=True)
     endpoints = ConfigTwitterEndpoints(
         "Which endpoints to use for dms and tweets",
-        required=True, static=True)
+        default={'tweets': 'default'}, static=True)
     terms = ConfigList(
         "A list of terms to be tracked by the transport",
         default=[], static=True)
