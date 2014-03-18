@@ -166,17 +166,17 @@ class Transport(BaseWorker):
                                   delivery_status=delivery_status,
                                   event_type='delivery_report', **kw)
 
+    def _send_failure(self, f, message):
+        self.send_failure(message, f.value, f.getTraceback())
+        log.err(f)
+        if self.SUPPRESS_FAILURE_EXCEPTIONS:
+            return None
+        return f
+
     def _make_message_processor(self, handler):
         def processor(message):
-            def _send_failure(f):
-                self.send_failure(message, f.value, f.getTraceback())
-                log.err(f)
-                if self.SUPPRESS_FAILURE_EXCEPTIONS:
-                    return None
-                return f
-
             d = maybeDeferred(handler, message)
-            d.addErrback(_send_failure)
+            d.addErrback(self._send_failure, message)
             return d
 
         return processor
