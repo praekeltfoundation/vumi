@@ -213,13 +213,15 @@ class TwitterTransport(Transport):
 
     def handle_user_stream(self, message):
         if messagetools.is_tweet(message):
-            self.handle_inbound_tweet(message)
-        elif messagetools.is_dm(message):
-            self.handle_inbound_dm(message)
-        else:
-            log.msg(
-                "Received something from user stream that is not a DM or "
-                "tweet: %r" % message)
+            return self.handle_inbound_tweet(message)
+
+        dm = message.get('direct_message', {})
+        if messagetools.is_dm(dm):
+            return self.handle_inbound_dm(message['direct_message'])
+
+        log.msg(
+            "Received something from user stream that is not a DM or "
+            "tweet: %r" % message)
 
     def handle_inbound_dm(self, dm):
         if self.is_own_dm(dm):
