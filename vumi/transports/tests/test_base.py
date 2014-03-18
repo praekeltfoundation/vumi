@@ -67,11 +67,13 @@ class TestBaseTransport(VumiTestCase):
 
     @inlineCallbacks
     def test_middleware_for_outbound_messages(self):
+        msgs = []
         transport = yield self.tx_helper.get_transport(
             self.TEST_MIDDLEWARE_CONFIG)
-        msgs = []
-        transport.handle_outbound_message = msgs.append
+        transport.add_outbound_handler(msgs.append)
+
         yield self.tx_helper.make_dispatch_outbound("outbound")
+
         [msg] = msgs
         self.assertEqual(msg['record'], [
             ('mw1', 'outbound', self.tx_helper.transport_name),
@@ -100,3 +102,14 @@ class TestBaseTransport(VumiTestCase):
         self.assertEqual(1, len(consumers))
         for consumer in consumers:
             self.assertEqual(consumer.channel.qos_prefetch_count, 20)
+
+    @inlineCallbacks
+    def test_add_outbound_handler(self):
+        transport = yield self.tx_helper.get_transport({})
+
+        msgs = []
+        msg = transport.add_outbound_handler(msgs.append, endpoint_name='foo')
+
+        msg = yield self.tx_helper.make_dispatch_outbound(
+            "outbound", endpoint='foo')
+        self.assertEqual(msgs, [msg])
