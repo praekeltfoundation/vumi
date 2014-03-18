@@ -5,14 +5,6 @@ from vumi.transports.base import Transport
 from vumi.transports.tests.helpers import TransportHelper
 
 
-class ToyTransport(Transport):
-    def setup_transport(self):
-        self.msgs = []
-
-    def handle_outbound_message(self, msg):
-        self.msgs.append(msg)
-
-
 class TestBaseTransport(VumiTestCase):
 
     TEST_MIDDLEWARE_CONFIG = {
@@ -23,7 +15,7 @@ class TestBaseTransport(VumiTestCase):
     }
 
     def setUp(self):
-        self.tx_helper = self.add_helper(TransportHelper(ToyTransport))
+        self.tx_helper = self.add_helper(TransportHelper(Transport))
 
     @inlineCallbacks
     def test_start_transport(self):
@@ -75,10 +67,14 @@ class TestBaseTransport(VumiTestCase):
 
     @inlineCallbacks
     def test_middleware_for_outbound_messages(self):
+        msgs = []
         transport = yield self.tx_helper.get_transport(
             self.TEST_MIDDLEWARE_CONFIG)
+        transport.add_outbound_handler(msgs.append)
+
         yield self.tx_helper.make_dispatch_outbound("outbound")
-        [msg] = transport.msgs
+
+        [msg] = msgs
         self.assertEqual(msg['record'], [
             ('mw1', 'outbound', self.tx_helper.transport_name),
             ('mw2', 'outbound', self.tx_helper.transport_name),
