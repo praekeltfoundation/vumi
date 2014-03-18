@@ -112,7 +112,11 @@ class WeChatTestCase(VumiTestCase):
             msg, 'foo')
 
         resp = yield resp_d
-        print resp.delivered_body
+        reply = WeChatParser.parse(resp.delivered_body)
+        self.assertEqual(reply.ToUserName, 'fromUser')
+        self.assertEqual(reply.FromUserName, 'toUser')
+        self.assertTrue(reply.CreateTime > datetime.fromtimestamp(1348831860))
+        self.assertTrue(isinstance(reply, message_types.TextMessage))
 
 
 class WeChatParserTestCase(TestCase):

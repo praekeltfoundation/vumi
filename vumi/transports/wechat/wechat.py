@@ -12,6 +12,7 @@ from vumi.config import ConfigText, ConfigServerEndpoint
 from vumi.transports import Transport
 from vumi.transports.httprpc.httprpc import HttpRpcHealthResource
 from vumi.transports.wechat.parser import WeChatParser
+from vumi.transports.wechat.message_types import TextMessage
 from vumi.utils import build_web_site
 from vumi import log
 
@@ -45,7 +46,6 @@ class WeChatResource(Resource):
         Resource.__init__(self)
         self.transport = transport
         self.config = transport.get_static_config()
-        self.request_map = {}
 
     def render_GET(self, request):
         if all([lambda key: key in request.args,
@@ -56,7 +56,7 @@ class WeChatResource(Resource):
     def render_POST(self, request):
         d = Deferred()
         d.addCallback(self.handle_request)
-        d.addCallback(self.set_request, request)
+        d.addCallback(self.transport.queue_request, request)
         reactor.callLater(0, d.callback, request)
         return NOT_DONE_YET
 
@@ -77,12 +77,6 @@ class WeChatResource(Resource):
         wc_msg = WeChatParser.parse(request.content.read())
         return self.transport.handle_raw_inbound_message(wc_msg)
 
-    def set_request(self, message, request):
-        self.request_map[message['message_id']] = request
-
-    def get_request(self, message_id):
-        return self.request_map.get(message_id)
-
 
 class WeChatTransport(Transport):
 
@@ -91,7 +85,7 @@ class WeChatTransport(Transport):
     @inlineCallbacks
     def setup_transport(self):
         config = self.get_static_config()
-
+        self.request_queue = {}
         self.endpoint = config.twisted_endpoint
         self.resource = WeChatResource(self)
         self.factory = build_web_site({
@@ -106,15 +100,42 @@ class WeChatTransport(Transport):
             content=wc_msg.Content,
             from_addr=wc_msg.FromUserName,
             to_addr=wc_msg.ToUserName,
-            transport_type='wechat')
+            timestamp=wc_msg.CreateTime,
+            transport_type='wechat',
+            transport_metadata={
+                'wechat': {
+                    'MsgType': wc_msg.MsgType,
+                    'MsgId': wc_msg.MsgId,
+                }
+            })
+
+    def force_close(self, message):
+        request = self.pop_request(message['message_id'])
+        request.setResponseCode(http.INTERNAL_SERVER_ERROR)
+        request.finish()
+
+    def queue_request(self, message, request):
+        self.request_queue[message['message_id']] = request
+
+    def pop_request(self, message_id):
+        return self.request_queue.pop(message_id)
 
     def handle_outbound_message(self, message):
         """
         Read outbound message and do what needs to be done with them.
         """
         request_id = message['in_reply_to']
-        request = self.resource.get_request(request_id)
-        request.write(message['content'].encode('utf-8'))
+        request = self.pop_request(request_id)
+
+        wc_msg = TextMessage(
+            {
+                'ToUserName': message['to_addr'],
+                'FromUserName': message['from_addr'],
+                'CreateTime': message['timestamp'],
+                'Content': message['content']
+            })
+
+        request.write(wc_msg.to_xml().encode('utf-8'))
         request.finish()
 
     def teardown_transport(self):

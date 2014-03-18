@@ -9,10 +9,10 @@ class Message(object):
     def __init__(self, data):
         self.fields = []
         for field in self.field_types:
-            self.fields.append(
-                Field(field.name,
-                      value=data[field.name],
-                      timestamp=field.timestamp))
+            if field.name in data:
+                field = Field(field.name, value=data[field.name],
+                              timestamp=field.timestamp)
+                self.fields.append(field)
 
     def to_xml(self):
         xml = Element('xml')
