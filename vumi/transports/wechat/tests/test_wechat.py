@@ -15,6 +15,7 @@ from vumi.transports.wechat import WeChatTransport
 from vumi.transports.wechat.parser import WeChatParser
 from vumi.transports.wechat import message_types
 from vumi.utils import http_request_full
+from vumi.message import TransportUserMessage
 
 
 def request(transport, method, path='', params={}, data=None):
@@ -118,6 +119,54 @@ class WeChatTestCase(VumiTestCase):
         self.assertTrue(reply.CreateTime > datetime.fromtimestamp(1348831860))
         self.assertTrue(isinstance(reply, message_types.TextMessage))
 
+    @inlineCallbacks
+    def test_inbound_event_subscribe_message(self):
+        transport = yield self.get_transport()
+
+        resp_d = request(
+            transport, 'POST', data="""
+                <xml>
+                    <ToUserName>
+                        <![CDATA[toUser]]>
+                    </ToUserName>
+                    <FromUserName>
+                        <![CDATA[fromUser]]>
+                    </FromUserName>
+                    <CreateTime>1395130515</CreateTime>
+                    <MsgType>
+                        <![CDATA[event]]>
+                    </MsgType>
+                    <Event>
+                        <![CDATA[subscribe]]>
+                    </Event>
+                    <EventKey>
+                        <![CDATA[]]>
+                    </EventKey>
+                </xml>
+                """)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        self.assertEqual(
+            msg['session_event'], TransportUserMessage.SESSION_NEW)
+        self.assertEqual(msg['transport_metadata'], {
+            'wechat': {
+                'Event': 'subscribe',
+                'EventKey': None,
+                'FromUserName': 'fromUser',
+                'MsgType': 'event',
+                'ToUserName': 'toUser'
+            }
+        })
+
+        self.tx_helper.make_dispatch_reply(
+            msg, 'foo')
+
+        resp = yield resp_d
+        reply = WeChatParser.parse(resp.delivered_body)
+        self.assertEqual(reply.ToUserName, 'fromUser')
+        self.assertEqual(reply.FromUserName, 'toUser')
+        self.assertTrue(reply.CreateTime > datetime.fromtimestamp(1348831860))
+        self.assertTrue(isinstance(reply, message_types.TextMessage))
+
 
 class WeChatParserTestCase(TestCase):
 
@@ -162,3 +211,32 @@ class WeChatParserTestCase(TestCase):
             </xml>
             """)
         self.assertEqual(msg1, msg2)
+
+    def test_parse_event_message(self):
+        event = WeChatParser.parse(
+            """
+            <xml>
+                <ToUserName>
+                    <![CDATA[toUser]]>
+                </ToUserName>
+                <FromUserName>
+                    <![CDATA[fromUser]]>
+                </FromUserName>
+                <CreateTime>1395130515</CreateTime>
+                <MsgType>
+                    <![CDATA[event]]>
+                </MsgType>
+                <Event>
+                    <![CDATA[subscribe]]>
+                </Event>
+                <EventKey>
+                    <![CDATA[]]>
+                </EventKey>
+            </xml>
+            """)
+        self.assertEqual(event.ToUserName, 'toUser')
+        self.assertEqual(event.FromUserName, 'fromUser')
+        self.assertEqual(event.CreateTime, datetime.fromtimestamp(1395130515))
+        self.assertEqual(event.Event, 'subscribe')
+        self.assertEqual(event.EventKey, None)
+        self.assertTrue(isinstance(event, message_types.EventMessage))

@@ -12,9 +12,9 @@ from vumi.config import ConfigText, ConfigServerEndpoint
 from vumi.transports import Transport
 from vumi.transports.httprpc.httprpc import HttpRpcHealthResource
 from vumi.transports.wechat.parser import WeChatParser
-from vumi.transports.wechat.message_types import TextMessage
+from vumi.transports.wechat.message_types import TextMessage, EventMessage
 from vumi.utils import build_web_site
-from vumi import log
+from vumi.message import TransportUserMessage
 
 
 class WeChatConfig(Transport.CONFIG_CLASS):
@@ -96,6 +96,12 @@ class WeChatTransport(Transport):
         self.server = yield self.endpoint.listen(self.factory)
 
     def handle_raw_inbound_message(self, wc_msg):
+        return {
+            TextMessage: self.handle_inbound_text_message,
+            EventMessage: self.handle_inbound_event_message,
+        }.get(wc_msg.__class__)(wc_msg)
+
+    def handle_inbound_text_message(self, wc_msg):
         return self.publish_message(
             content=wc_msg.Content,
             from_addr=wc_msg.FromUserName,
@@ -104,8 +110,32 @@ class WeChatTransport(Transport):
             transport_type='wechat',
             transport_metadata={
                 'wechat': {
+                    'FromUserName': wc_msg.FromUserName,
+                    'ToUserName': wc_msg.ToUserName,
                     'MsgType': wc_msg.MsgType,
                     'MsgId': wc_msg.MsgId,
+                }
+            })
+
+    def handle_inbound_event_message(self, wc_msg):
+
+        return self.publish_message(
+            content=None,
+            from_addr=wc_msg.FromUserName,
+            to_addr=wc_msg.ToUserName,
+            timestamp=wc_msg.CreateTime,
+            session_event=(
+                TransportUserMessage.SESSION_NEW
+                if wc_msg.Event == 'subscribe'
+                else TransportUserMessage.SESSION_END),
+            transport_type='wechat',
+            transport_metadata={
+                'wechat': {
+                    'FromUserName': wc_msg.FromUserName,
+                    'ToUserName': wc_msg.ToUserName,
+                    'MsgType': wc_msg.msg_type,
+                    'Event': wc_msg.Event,
+                    'EventKey': wc_msg.EventKey
                 }
             })
 

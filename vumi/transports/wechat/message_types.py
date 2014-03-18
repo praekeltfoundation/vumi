@@ -56,3 +56,15 @@ class TextMessage(Message):
         Field('Content'),
         Field('MsgId'),
     ]
+
+
+class EventMessage(Message):
+
+    msg_type = 'event'
+    field_types = [
+        Field('ToUserName'),
+        Field('FromUserName'),
+        Field('CreateTime', timestamp=True),
+        Field('Event'),
+        Field('EventType'),
+    ]
