@@ -894,6 +894,7 @@ class TestLoggingResource(ResourceTestCaseBase):
     def test_handle_log_defaults_to_info(self):
         return self.check_logs('log', 'foo', logging.INFO)
 
+    @inlineCallbacks
     def test_with_unicode(self):
         with LogCatcher() as lc:
             reply = yield self.dispatch_command('log', msg=u'Zo\u00eb')
