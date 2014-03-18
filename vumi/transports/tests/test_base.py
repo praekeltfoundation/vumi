@@ -112,7 +112,7 @@ class TestBaseTransport(VumiTestCase):
         transport = yield self.tx_helper.get_transport({})
 
         msgs = []
-        msg = transport.add_outbound_handler(msgs.append, endpoint='foo')
+        msg = transport.add_outbound_handler(msgs.append, endpoint_name='foo')
 
         msg = yield self.tx_helper.make_dispatch_outbound(
             "outbound", endpoint='foo')

@@ -53,8 +53,7 @@ class Transport(BaseWorker):
 
         def cb(connector):
             self.add_outbound_handler(
-                self.handle_outbound_message,
-                connector=connector)
+                self.handle_outbound_message, connector=connector)
             return connector
 
         return d.addCallback(cb)
@@ -182,12 +181,13 @@ class Transport(BaseWorker):
 
         return processor
 
-    def add_outbound_handler(self, handler, endpoint=None, connector=None):
+    def add_outbound_handler(self, handler, endpoint_name=None,
+                             connector=None):
         if connector is None:
             connector = self.connectors[self.transport_name]
 
         processor = self._make_message_processor(handler)
-        connector.set_outbound_handler(processor, endpoint_name=endpoint)
+        connector.set_outbound_handler(processor, endpoint_name=endpoint_name)
 
     def handle_outbound_message(self, message):
         """
