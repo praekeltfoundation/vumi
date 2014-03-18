@@ -54,6 +54,12 @@ class TestTwitterTransport(VumiTestCase):
 
         self.transport = yield self.tx_helper.get_transport(self.config)
 
+    def test_config_endpoints_default(self):
+        del self.config['endpoints']
+        self.config['transport_name'] = 'twitter'
+        config = TwitterTransport.CONFIG_CLASS(self.config)
+        self.assertEqual(config.endpoints, {'tweets': 'default'})
+
     @inlineCallbacks
     def test_tracking_tweets(self):
         someone = self.twitter.new_user('someone', 'someone')
