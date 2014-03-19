@@ -1117,6 +1117,13 @@ class RiakDisabledForTest(object):
             "Use of Riak has been disabled for this test. Please set "
             "'use_riak = True' on the test class to enable it.")
 
+    def __deepcopy__(self, memo):
+        """
+        We have no state, but ``deepcopy()`` triggers our :meth:`__getattr__`.
+        We return ``self`` so the copy compares equal.
+        """
+        return self
+
 
 def import_filter(exc, *expected):
     msg = exc.args[0]
