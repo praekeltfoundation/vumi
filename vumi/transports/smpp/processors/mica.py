@@ -62,8 +62,6 @@ class DeliverShortMessageProcessor(default.DeliverShortMessageProcessor):
 
     @inlineCallbacks
     def handle_deliver_sm_ussd(self, pdu, pdu_params, pdu_opts):
-        # Some of this stuff might be specific to Tata's setup.
-
         service_op = pdu_opts['ussd_service_op']
         session_identifier = pdu_opts['user_message_reference']
 
