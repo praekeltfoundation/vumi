@@ -1,9 +1,9 @@
 import hashlib
+import json
 from urllib import urlencode
 from datetime import datetime
 
-from twisted.internet import reactor
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, DeferredQueue
 from twisted.internet.task import Clock
 from twisted.trial.unittest import TestCase
 from twisted.web import http
@@ -48,14 +48,17 @@ class WeChatTestCase(VumiTestCase):
 
     transport_class = WeChatTransport
 
-    @inlineCallbacks
     def setUp(self):
         self.tx_helper = self.add_helper(TransportHelper(self.transport_class))
-        self.mock_server = MockHttpServer(self.handle_inbound_request)
+        self.request_queue = DeferredQueue()
+        self.mock_server = MockHttpServer(self.handle_api_request)
         self.add_cleanup(self.mock_server.stop)
         self.clock = Clock()
+        return self.mock_server.start()
 
-        yield self.mock_server.start()
+    def handle_api_request(self, request):
+        self.request_queue.put(request)
+        return NOT_DONE_YET
 
     def get_transport(self, **config):
         defaults = {
@@ -65,10 +68,6 @@ class WeChatTestCase(VumiTestCase):
         }
         defaults.update(config)
         return self.tx_helper.get_transport(defaults)
-
-    def handle_inbound_request(self, request):
-        reactor.callLater(0, request.finish)
-        return NOT_DONE_YET
 
     @inlineCallbacks
     def test_auth_success(self):
@@ -106,7 +105,7 @@ class WeChatTestCase(VumiTestCase):
             """.strip())
 
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
-        self.tx_helper.make_dispatch_reply(
+        reply_msg = yield self.tx_helper.make_dispatch_reply(
             msg, 'foo')
 
         resp = yield resp_d
@@ -115,6 +114,11 @@ class WeChatTestCase(VumiTestCase):
         self.assertEqual(reply.FromUserName, 'toUser')
         self.assertTrue(reply.CreateTime > datetime.fromtimestamp(1348831860))
         self.assertTrue(isinstance(reply, message_types.TextMessage))
+
+        [ack] = yield self.tx_helper.wait_for_dispatched_events(1)
+        self.assertEqual(ack['event_type'], 'ack')
+        self.assertEqual(ack['user_message_id'], reply_msg['message_id'])
+        self.assertEqual(ack['sent_message_id'], reply_msg['message_id'])
 
     @inlineCallbacks
     def test_inbound_event_subscribe_message(self):
@@ -189,6 +193,121 @@ class WeChatTestCase(VumiTestCase):
         self.assertEqual(
             [],
             self.tx_helper.get_dispatched_inbound())
+
+    @inlineCallbacks
+    def test_push_invalid_message(self):
+        transport = yield self.get_transport()
+        msg = yield self.tx_helper.make_dispatch_outbound('foo')
+        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
+        self.assertEqual(nack['nack_reason'], 'Missing MsgType')
+
+    def dispatch_push_message(self, content, wechat_md, **kwargs):
+        helper_metadata = kwargs.get('helper_metadata', {})
+        wechat_metadata = helper_metadata.setdefault('wechat', {})
+        wechat_metadata.update(wechat_md)
+        return self.tx_helper.make_dispatch_outbound(
+            content, helper_metadata=helper_metadata, **kwargs)
+
+    @inlineCallbacks
+    def test_push_unsupported_message(self):
+        transport = yield self.get_transport()
+        msg = yield self.dispatch_push_message('foo', {
+            'MsgType': 'foo'
+        })
+        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
+        self.assertEqual(
+            nack['nack_reason'], "Unsupported MsgType: u'foo'")
+
+    @inlineCallbacks
+    def test_ack_push_text_message(self):
+        transport = yield self.get_transport()
+
+        msg_d = self.dispatch_push_message('foo', {
+            'MsgType': 'text',
+        }, to_addr='toaddr')
+
+        request = yield self.request_queue.get()
+        self.assertEqual(request.path, '/message/custom/send')
+        self.assertEqual(request.args, {
+            'access_token': ['foo']
+        })
+        self.assertEqual(json.load(request.content), {
+            'touser': 'toaddr',
+            'msgtype': 'text',
+            'text': {
+                'content': 'foo'
+            }
+        })
+        request.finish()
+
+        [ack] = yield self.tx_helper.wait_for_dispatched_events(1)
+        msg = yield msg_d
+        self.assertEqual(ack['event_type'], 'ack')
+        self.assertEqual(ack['user_message_id'], msg['message_id'])
+
+    @inlineCallbacks
+    def test_nack_push_text_message(self):
+        transport = yield self.get_transport()
+
+        self.dispatch_push_message('foo', {
+            'MsgType': 'text'
+        })
+
+        # fail the API request
+        request = yield self.request_queue.get()
+        request.setResponseCode(http.BAD_REQUEST)
+        request.finish()
+
+        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
+        self.assertEqual(nack['event_type'], 'nack')
+        self.assertEqual(nack['nack_reason'], 'Received status code: 400')
+
+    @inlineCallbacks
+    def test_ack_push_news_message(self):
+        transport = yield self.get_transport()
+
+        # news is a collection or URLs apparently
+        msg_d = self.dispatch_push_message(
+            'foo', {
+                'MsgType': 'news',
+                'news': {
+                    'articles': [
+                        {
+                            'title': 'title',
+                            'description': 'description',
+                            'url': 'http://url',
+                            'picurl': 'http://picurl',
+                        }
+                    ]
+                }
+            }, to_addr='toaddr')
+
+        request = yield self.request_queue.get()
+        self.assertEqual(request.path, '/message/custom/send')
+        self.assertEqual(request.args, {
+            'access_token': ['foo']
+        })
+        self.assertEqual(json.load(request.content), {
+            'touser': 'toaddr',
+            'msgtype': 'news',
+            'news': {
+                'articles': [
+                    {
+                        'title': 'title',
+                        'description': 'description',
+                        'url': 'http://url',
+                        'picurl': 'http://picurl',
+                    }
+                ]
+            }
+        })
+
+        request.finish()
+
+        [ack] = yield self.tx_helper.wait_for_dispatched_events(1)
+        msg = yield msg_d
+        self.assertEqual(ack['event_type'], 'ack')
+        self.assertEqual(ack['user_message_id'], msg['message_id'])
 
 
 class WeChatParserTestCase(TestCase):

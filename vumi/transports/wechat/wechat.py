@@ -1,9 +1,11 @@
 # -*- test-case-name: vumi.transports.wechat.tests.test_wechat -*-
 
 import hashlib
+import urllib
+import json
 
 from twisted.internet import reactor
-from twisted.internet.defer import inlineCallbacks, Deferred
+from twisted.internet.defer import inlineCallbacks, Deferred, succeed
 from twisted.web.resource import Resource
 from twisted.web import http
 from twisted.web.server import NOT_DONE_YET
@@ -14,13 +16,17 @@ from vumi.transports.httprpc.httprpc import HttpRpcHealthResource
 from vumi.transports.wechat.errors import WeChatException
 from vumi.transports.wechat.message_types import TextMessage, EventMessage
 from vumi.transports.wechat.parser import WeChatParser
-from vumi.utils import build_web_site
+from vumi.utils import build_web_site, http_request_full
 from vumi.message import TransportUserMessage
 
 
 def is_verifiable(request):
     params = ['signature', 'timestamp', 'nonce']
     return all([(key in request.args) for key in params])
+
+
+def http_ok(request):
+    return 200 <= request.code < 300
 
 
 def verify(token, request):
@@ -135,7 +141,6 @@ class WeChatTransport(Transport):
             })
 
     def handle_inbound_event_message(self, wc_msg):
-
         return self.publish_message(
             content=None,
             from_addr=wc_msg.FromUserName,
@@ -165,7 +170,7 @@ class WeChatTransport(Transport):
         self.request_queue[message['message_id']] = request
 
     def pop_request(self, message_id):
-        return self.request_queue.pop(message_id)
+        return self.request_queue.pop(message_id, None)
 
     def handle_outbound_message(self, message):
         """
@@ -173,6 +178,12 @@ class WeChatTransport(Transport):
         """
         request_id = message['in_reply_to']
         request = self.pop_request(request_id)
+
+        if request is None:
+            # There's no pending request object for this message which
+            # means we need to treat this as a customer service message
+            # and hit WeChat's Push API (window available for 24hrs)
+            return self.push_message(message)
 
         metadata = message['transport_metadata']['wechat']
 
@@ -186,6 +197,84 @@ class WeChatTransport(Transport):
 
         request.write(wc_msg.to_xml().encode('utf-8'))
         request.finish()
+
+        return self.publish_ack(user_message_id=message['message_id'],
+                                sent_message_id=message['message_id'])
+
+    def get_metadata(self, message):
+        """
+        It will either be grabbed from `helper_metadata` if this is an
+        outbound message that is not a reply and `transport_metadata`
+        if this is an outbound reply that took too long or for
+        whatever reason the request was dropped.
+        """
+        return (message['helper_metadata'].get('wechat', {}) or
+                message['transport_metadata'].get('wechat', {}))
+
+    def push_message(self, message):
+        metadata = self.get_metadata(message)
+        msg_type = metadata.get('MsgType')
+        if msg_type is None:
+            return self.publish_nack(
+                message['message_id'], reason='Missing MsgType')
+
+        handler = {
+            'text': self.push_text_message,
+            'news': self.push_news_message,
+        }.get(msg_type, None)
+
+        if handler is None:
+            return self.publish_nack(
+                message['message_id'], reason='Unsupported MsgType: %r' % (
+                    msg_type,))
+
+        d = self.get_access_token()
+        d.addCallback(handler, message)
+        d.addCallback(self.handle_api_response, message)
+        return d
+
+    def handle_api_response(self, response, message):
+        if http_ok(response):
+            return self.publish_ack(user_message_id=message['message_id'],
+                                   sent_message_id=message['message_id'])
+        return self.publish_nack(
+            message['message_id'],
+            reason='Received status code: %s' % (response.code,))
+
+    def get_access_token(self):
+        return succeed('foo')
+
+    def make_url(self, path, params):
+        config = self.get_static_config()
+        return '%s%s?%s' % (
+            config.api_url, 'message/custom/send', urllib.urlencode(params))
+
+    def push_text_message(self, access_token, message):
+        url = self.make_url('message/custom/send', {
+            'access_token': access_token
+        })
+        return http_request_full(
+            url, method='POST', data=json.dumps({
+                'touser': message['to_addr'],
+                'msgtype': 'text',
+                'text': {
+                    'content': message['content'],
+                }
+            }), headers={
+                'Content-Type': ['application/json']
+            })
+
+    def push_news_message(self, access_token, message):
+        url = self.make_url('message/custom/send', {
+            'access_token': access_token
+        })
+        metadata = self.get_metadata(message)
+        return http_request_full(
+            url, method='POST', data=json.dumps({
+                'touser': message['to_addr'],
+                'msgtype': 'news',
+                'news': metadata.get('news')
+            }))
 
     def teardown_transport(self):
         return self.server.stopListening()
