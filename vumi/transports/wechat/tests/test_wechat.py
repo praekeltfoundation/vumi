@@ -196,10 +196,12 @@ class WeChatTestCase(VumiTestCase):
 
     @inlineCallbacks
     def test_push_invalid_message(self):
-        transport = yield self.get_transport()
+        yield self.get_transport()
         msg = yield self.tx_helper.make_dispatch_outbound('foo')
         [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(nack['nack_reason'], 'Missing MsgType')
+        self.assertEqual(
+            nack['user_message_id'], msg['message_id'])
 
     def dispatch_push_message(self, content, wechat_md, **kwargs):
         helper_metadata = kwargs.get('helper_metadata', {})
@@ -210,17 +212,19 @@ class WeChatTestCase(VumiTestCase):
 
     @inlineCallbacks
     def test_push_unsupported_message(self):
-        transport = yield self.get_transport()
+        yield self.get_transport()
         msg = yield self.dispatch_push_message('foo', {
             'MsgType': 'foo'
         })
         [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(
+            nack['user_message_id'], msg['message_id'])
+        self.assertEqual(
             nack['nack_reason'], "Unsupported MsgType: u'foo'")
 
     @inlineCallbacks
     def test_ack_push_text_message(self):
-        transport = yield self.get_transport()
+        yield self.get_transport()
 
         msg_d = self.dispatch_push_message('foo', {
             'MsgType': 'text',
@@ -247,9 +251,8 @@ class WeChatTestCase(VumiTestCase):
 
     @inlineCallbacks
     def test_nack_push_text_message(self):
-        transport = yield self.get_transport()
-
-        self.dispatch_push_message('foo', {
+        yield self.get_transport()
+        msg_d = self.dispatch_push_message('foo', {
             'MsgType': 'text'
         })
 
@@ -258,14 +261,16 @@ class WeChatTestCase(VumiTestCase):
         request.setResponseCode(http.BAD_REQUEST)
         request.finish()
 
+        msg = yield msg_d
         [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
+        self.assertEqual(
+            nack['user_message_id'], msg['message_id'])
         self.assertEqual(nack['event_type'], 'nack')
         self.assertEqual(nack['nack_reason'], 'Received status code: 400')
 
     @inlineCallbacks
     def test_ack_push_news_message(self):
-        transport = yield self.get_transport()
-
+        yield self.get_transport()
         # news is a collection or URLs apparently
         msg_d = self.dispatch_push_message(
             'foo', {
