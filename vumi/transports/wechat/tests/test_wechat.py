@@ -6,6 +6,7 @@ from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet.task import Clock
 from twisted.trial.unittest import TestCase
+from twisted.web import http
 from twisted.web.server import NOT_DONE_YET
 
 from vumi.tests.helpers import VumiTestCase
@@ -162,6 +163,32 @@ class WeChatTestCase(VumiTestCase):
         self.assertEqual(reply.FromUserName, 'toUser')
         self.assertTrue(reply.CreateTime > datetime.fromtimestamp(1348831860))
         self.assertTrue(isinstance(reply, message_types.TextMessage))
+
+    @inlineCallbacks
+    def test_unsupported_message_type(self):
+        transport = yield self.get_transport()
+
+        response = yield request(
+            transport, 'POST', data="""
+            <xml>
+            <ToUserName><![CDATA[toUser]]></ToUserName>
+            <FromUserName><![CDATA[fromUser]]></FromUserName>
+            <CreateTime>1348831860</CreateTime>
+            <MsgType><![CDATA[THIS_IS_UNSUPPORTED]]></MsgType>
+            <Content><![CDATA[this is a test]]></Content>
+            <MsgId>1234567890123456</MsgId>
+            </xml>
+            """.strip())
+
+        self.assertEqual(
+            response.code, http.BAD_REQUEST)
+        self.assertEqual(
+            response.delivered_body,
+            ("Unparseable WeChat Message Element "
+             "u'MsgType': u'THIS_IS_UNSUPPORTED'"))
+        self.assertEqual(
+            [],
+            self.tx_helper.get_dispatched_inbound())
 
 
 class WeChatParserTestCase(TestCase):

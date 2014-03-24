@@ -2,6 +2,7 @@ from twisted.web import microdom
 from datetime import datetime
 
 from vumi.transports.wechat import message_types
+from vumi.transports.wechat.errors import UnsupportedWechatMessage
 
 
 FIELD_PARSERS = {
@@ -17,7 +18,13 @@ def get_cdata(node):
     for child in node.childNodes:
         value += child.value
     parser = FIELD_PARSERS.get(node.nodeName, IDENTITY)
-    return parser(value)
+    try:
+        return parser(value)
+    # raised when we try & get a MsgType from the message_types module
+    except AttributeError:
+        raise UnsupportedWechatMessage(
+            'Unparseable WeChat Message Element %r: %r' % (
+                node.nodeName, value,))
 
 
 class WeChatParser(object):

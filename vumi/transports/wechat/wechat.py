@@ -11,8 +11,9 @@ from twisted.web.server import NOT_DONE_YET
 from vumi.config import ConfigText, ConfigServerEndpoint
 from vumi.transports import Transport
 from vumi.transports.httprpc.httprpc import HttpRpcHealthResource
-from vumi.transports.wechat.parser import WeChatParser
+from vumi.transports.wechat.errors import WeChatException
 from vumi.transports.wechat.message_types import TextMessage, EventMessage
+from vumi.transports.wechat.parser import WeChatParser
 from vumi.utils import build_web_site
 from vumi.message import TransportUserMessage
 
@@ -77,8 +78,17 @@ class WeChatResource(Resource):
         d = Deferred()
         d.addCallback(self.handle_request)
         d.addCallback(self.transport.queue_request, request)
+        d.addErrback(self.handle_error, request)
         reactor.callLater(0, d.callback, request)
         return NOT_DONE_YET
+
+    def handle_error(self, failure, request):
+        if not failure.trap(WeChatException):
+            raise failure
+
+        request.setResponseCode(http.BAD_REQUEST)
+        request.write(failure.getErrorMessage())
+        request.finish()
 
     def handle_request(self, request):
         wc_msg = WeChatParser.parse(request.content.read())
