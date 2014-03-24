@@ -102,6 +102,30 @@ class WeChatResource(Resource):
 
 
 class WeChatTransport(Transport):
+    """
+
+    A Transport for the WeChat API.
+
+    Inbound Messaging
+    ~~~~~~~~~~~~~~~~~
+
+    Supported Common Message types:
+
+        - Text Message
+
+    Supported Event Message types:
+
+        - Following / subscribe
+        - Unfollowing / unsubscribe
+
+    Outbound Messaging
+    ~~~~~~~~~~~~~~~~~~
+
+    Supported Callback Message types:
+
+        - Text Message
+
+    """
 
     CONFIG_CLASS = WeChatConfig
 
@@ -236,7 +260,7 @@ class WeChatTransport(Transport):
     def handle_api_response(self, response, message):
         if http_ok(response):
             return self.publish_ack(user_message_id=message['message_id'],
-                                   sent_message_id=message['message_id'])
+                                    sent_message_id=message['message_id'])
         return self.publish_nack(
             message['message_id'],
             reason='Received status code: %s' % (response.code,))
