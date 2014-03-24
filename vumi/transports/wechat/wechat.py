@@ -10,6 +10,7 @@ from twisted.web.resource import Resource
 from twisted.web import http
 from twisted.web.server import NOT_DONE_YET
 
+from vumi import log
 from vumi.config import ConfigText, ConfigServerEndpoint, ConfigDict
 from vumi.transports import Transport
 from vumi.transports.httprpc.httprpc import HttpRpcHealthResource
@@ -67,6 +68,8 @@ class WeChatConfig(Transport.CONFIG_CLASS):
     wechat_secret = ConfigText(
         'The WeChat secret. Issued by WeChat for developer accounts '
         'to allow push API access.', required=True, static=True)
+    wechat_menu = ConfigDict(
+        'The menu structure to create at boot.', required=False, static=True)
 
 
 class WeChatResource(Resource):
@@ -153,6 +156,28 @@ class WeChatTransport(Transport):
         # What key to store the `access_token` under in Redis
         self.access_token_key = 'access_token'
         self.server = yield self.endpoint.listen(self.factory)
+
+        if config.wechat_menu:
+            # not yielding because this shouldn't block startup
+            d = self.get_access_token()
+            d.addCallback(self.create_wechat_menu, config.wechat_menu)
+
+    @inlineCallbacks
+    def create_wechat_menu(self, access_token, menu_structure):
+        url = self.make_url('menu/create', {'access_token': access_token})
+        response = yield http_request_full(
+            url, method='POST', data=json.dumps(menu_structure),
+            headers={'Content-Type': ['application/json']})
+        if not http_ok(response):
+            raise WeChatApiException(
+                'Received HTTP code: %r when creating the menu.' % (
+                    response.code,))
+        data = json.loads(response.delivered_body)
+        if data['errcode'] != 0:
+            raise WeChatApiException(
+                'Received errcode: %(errcode)s, errmsg: %(errmsg)s '
+                'when creating WeChat Menu.' % data)
+        log.info('WeChat Menu created succesfully.')
 
     def handle_raw_inbound_message(self, wc_msg):
         return {

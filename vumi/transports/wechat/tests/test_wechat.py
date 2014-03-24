@@ -1,5 +1,6 @@
 import hashlib
 import json
+import yaml
 from urllib import urlencode
 from datetime import datetime
 
@@ -10,9 +11,10 @@ from twisted.web import http
 from twisted.web.server import NOT_DONE_YET
 
 from vumi.tests.helpers import VumiTestCase
-from vumi.tests.utils import MockHttpServer
+from vumi.tests.utils import MockHttpServer, LogCatcher
 from vumi.transports.tests.helpers import TransportHelper
 from vumi.transports.wechat import WeChatTransport
+from vumi.transports.wechat.errors import WeChatApiException
 from vumi.transports.wechat.parser import WeChatParser
 from vumi.transports.wechat import message_types
 from vumi.utils import http_request_full
@@ -365,6 +367,72 @@ class WeChatAccessTokenTestCase(WeChatBaseTestCase):
         self.assertEqual(access_token, 'foo')
         # Empty request queue means no WeChat API calls were made
         self.assertEqual(self.request_queue.size, None)
+
+
+class WeChatMenuCreationTestCase(WeChatBaseTestCase):
+
+    MENU_TEMPLATE = """
+    button:
+      - name: Daily Song
+        type: click
+        key: V1001_TODAY_MUSIC
+
+      - name: ' Artist Profile'
+        type: click
+        key: V1001_TODAY_SINGER
+
+      - name: Menu
+        sub_button:
+          - name: Search
+            type: view
+            url: 'http://www.soso.com/'
+          - name: Video
+            type: view
+            url: 'http://v.qq.com/'
+          - name: Like us
+            type: click
+            key: V1001_GOOD
+    """
+    MENU = yaml.load(MENU_TEMPLATE)
+
+    @inlineCallbacks
+    def setUp(self):
+        yield super(WeChatMenuCreationTestCase, self).setUp()
+        # Patch the get_access_token stuff to always return `foo`
+        # for this set of tests.
+        self.patch(self.transport_class, 'get_access_token',
+                   lambda *a: succeed('foo'))
+
+    @inlineCallbacks
+    def test_create_new_menu_success(self):
+        yield self.get_transport(wechat_menu=self.MENU)
+        req = yield self.request_queue.get()
+        self.assertEqual(req.path, '/menu/create')
+        self.assertEqual(req.args, {
+            'access_token': ['foo'],
+        })
+
+        self.assertEqual(json.load(req.content), self.MENU)
+        req.write(json.dumps({'errcode': 0, 'errmsg': 'ok'}))
+        req.finish()
+
+    @inlineCallbacks
+    def test_create_new_menu_failure(self):
+        transport = yield self.get_transport()
+        d = transport.create_wechat_menu('foo', self.MENU)
+
+        req = yield self.request_queue.get()
+        req.write(json.dumps({
+            'errcode': 40018,
+            'errmsg': 'invalid button name size',
+        }))
+        req.finish()
+
+        exception = yield self.assertFailure(d, WeChatApiException)
+        self.assertEqual(
+            exception.message,
+            ('Received errcode: 40018, errmsg: invalid button name '
+             'size when creating WeChat Menu.'))
 
 
 class WeChatParserTestCase(TestCase):
