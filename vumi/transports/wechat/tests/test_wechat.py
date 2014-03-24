@@ -11,7 +11,7 @@ from twisted.web import http
 from twisted.web.server import NOT_DONE_YET
 
 from vumi.tests.helpers import VumiTestCase
-from vumi.tests.utils import MockHttpServer, LogCatcher
+from vumi.tests.utils import MockHttpServer
 from vumi.transports.tests.helpers import TransportHelper
 from vumi.transports.wechat import WeChatTransport
 from vumi.transports.wechat.errors import WeChatApiException
@@ -203,7 +203,7 @@ class WeChatTestCase(WeChatBaseTestCase):
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
 
         self.assertEqual(
-            msg['session_event'], TransportUserMessage.SESSION_NONE)
+            msg['session_event'], TransportUserMessage.SESSION_NEW)
         self.assertEqual(msg['transport_metadata'], {
             'wechat': {
                 'Event': 'CLICK',
@@ -562,6 +562,39 @@ class WeChatMenuCreationTestCase(WeChatBaseTestCase):
             exception.message,
             ('Received errcode: 40018, errmsg: invalid button name '
              'size when creating WeChat Menu.'))
+
+
+class WeChatInferMessageType(WeChatTestCase):
+
+    access_token = 'foo'
+    timeout = 1
+
+    @inlineCallbacks
+    def test_infer_rich_media_message(self):
+        transport = yield self.get_transport()
+
+        resp_d = request(
+            transport, 'POST', data="""
+            <xml>
+            <ToUserName><![CDATA[toUser]]></ToUserName>
+            <FromUserName><![CDATA[fromUser]]></FromUserName>
+            <CreateTime>1348831860</CreateTime>
+            <MsgType><![CDATA[text]]></MsgType>
+            <Content><![CDATA[this is a test]]></Content>
+            <MsgId>1234567890123456</MsgId>
+            </xml>
+            """.strip())
+
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        reply = yield self.tx_helper.make_dispatch_reply(
+            msg, 'This is an awesome link for you! http://www.wechat.com/')
+
+        resp = yield resp_d
+        self.assertTrue(
+            '<Url>http://www.wechat.com/</Url>' in resp.delivered_body)
+        self.assertTrue(
+            '<Description>This is an awesome link for you! </Description>'
+            in resp.delivered_body)
 
 
 class WeChatParserTestCase(TestCase):

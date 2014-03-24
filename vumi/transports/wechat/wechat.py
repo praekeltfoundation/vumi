@@ -3,6 +3,7 @@
 import hashlib
 import urllib
 import json
+from functools import partial
 
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, Deferred, returnValue
@@ -11,11 +12,13 @@ from twisted.web import http
 from twisted.web.server import NOT_DONE_YET
 
 from vumi import log
-from vumi.config import ConfigText, ConfigServerEndpoint, ConfigDict
+from vumi.config import (
+    ConfigText, ConfigServerEndpoint, ConfigDict, ConfigBool)
 from vumi.transports import Transport
 from vumi.transports.httprpc.httprpc import HttpRpcHealthResource
 from vumi.transports.wechat.errors import WeChatException, WeChatApiException
-from vumi.transports.wechat.message_types import TextMessage, EventMessage
+from vumi.transports.wechat.message_types import (
+    TextMessage, EventMessage, RichMediaMessage)
 from vumi.transports.wechat.parser import WeChatParser
 from vumi.utils import build_web_site, http_request_full
 from vumi.message import TransportUserMessage
@@ -70,6 +73,9 @@ class WeChatConfig(Transport.CONFIG_CLASS):
         'to allow push API access.', required=True, static=True)
     wechat_menu = ConfigDict(
         'The menu structure to create at boot.', required=False, static=True)
+    infer_message_types = ConfigBool(
+        'Actively guess what type of WeChat message an outbound Vumi '
+        'message is best represented as.', default=False, static=True)
 
 
 class WeChatResource(Resource):
@@ -129,6 +135,7 @@ class WeChatTransport(Transport):
 
         - Following / subscribe
         - Unfollowing / unsubscribe
+        - Text Message (in response to Menu keypress events)
 
     Outbound Messaging
     ~~~~~~~~~~~~~~~~~~
@@ -141,6 +148,10 @@ class WeChatTransport(Transport):
 
     CONFIG_CLASS = WeChatConfig
     DEFAULT_MASK = 'default'
+    MESSAGE_TYPES = [
+        RichMediaMessage,
+    ]
+    DEFAULT_MESSAGE_TYPE = TextMessage
 
     @inlineCallbacks
     def setup_transport(self):
@@ -266,6 +277,13 @@ class WeChatTransport(Transport):
     def pop_request(self, message_id):
         return self.request_queue.pop(message_id, None)
 
+    def infer_message_type(self, message):
+        for message_type in self.MESSAGE_TYPES:
+            result = message_type.accepts(message)
+            if result is not None:
+                return partial(message_type.build, result)
+        return self.DEFAULT_MESSAGE_TYPE.build
+
     def handle_outbound_message(self, message):
         """
         Read outbound message and do what needs to be done with them.
@@ -279,15 +297,8 @@ class WeChatTransport(Transport):
             # and hit WeChat's Push API (window available for 24hrs)
             return self.push_message(message)
 
-        metadata = message['transport_metadata']['wechat']
-
-        wc_msg = TextMessage(
-            {
-                'ToUserName': metadata['FromUserName'],
-                'FromUserName': metadata['ToUserName'],
-                'CreateTime': message['timestamp'],
-                'Content': message['content']
-            })
+        builder = self.infer_message_type(message)
+        wc_msg = builder(message)
 
         request.write(wc_msg.to_xml().encode('utf-8'))
         request.finish()
