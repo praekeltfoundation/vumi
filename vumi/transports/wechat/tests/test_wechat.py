@@ -166,7 +166,7 @@ class WeChatTestCase(WeChatBaseTestCase):
         self.assertEqual(msg['transport_metadata'], {
             'wechat': {
                 'Event': 'subscribe',
-                'EventKey': None,
+                'EventKey': '',
                 'FromUserName': 'fromUser',
                 'MsgType': 'event',
                 'ToUserName': 'toUser'
@@ -211,6 +211,8 @@ class WeChatTestCase(WeChatBaseTestCase):
                 'ToUserName': 'toUser'
             }
         })
+
+        self.assertEqual(msg['to_addr'], 'toUser@EVENTKEY')
 
         self.tx_helper.make_dispatch_reply(msg, 'foo')
 
@@ -539,5 +541,5 @@ class WeChatParserTestCase(TestCase):
         self.assertEqual(event.FromUserName, 'fromUser')
         self.assertEqual(event.CreateTime, datetime.fromtimestamp(1395130515))
         self.assertEqual(event.Event, 'subscribe')
-        self.assertEqual(event.EventKey, None)
+        self.assertEqual(event.EventKey, '')
         self.assertTrue(isinstance(event, message_types.EventMessage))

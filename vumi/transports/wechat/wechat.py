@@ -210,10 +210,12 @@ class WeChatTransport(Transport):
         else:
             session_event = TransportUserMessage.SESSION_NONE
 
+        to_addr = '@'.join([wc_msg.ToUserName, wc_msg.EventKey])
+
         return self.publish_message(
             content=None,
             from_addr=wc_msg.FromUserName,
-            to_addr=wc_msg.ToUserName,
+            to_addr=to_addr,
             timestamp=wc_msg.CreateTime,
             session_event=session_event,
             transport_type='wechat',
