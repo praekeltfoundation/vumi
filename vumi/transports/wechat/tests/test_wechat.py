@@ -49,6 +49,7 @@ def request(transport, method, path='', params={}, data=None):
 class WeChatBaseTestCase(VumiTestCase):
 
     transport_class = WeChatTransport
+    access_token = None
 
     def setUp(self):
         self.tx_helper = self.add_helper(TransportHelper(self.transport_class))
@@ -56,6 +57,13 @@ class WeChatBaseTestCase(VumiTestCase):
         self.mock_server = MockHttpServer(self.handle_api_request)
         self.add_cleanup(self.mock_server.stop)
         self.clock = Clock()
+
+        if self.access_token is not None:
+            # Patch the get_access_token stuff to always return `foo`
+            # for this set of tests.
+            self.patch(self.transport_class, 'get_access_token',
+                       lambda *a: succeed(self.access_token))
+
         return self.mock_server.start()
 
     def handle_api_request(self, request):
@@ -76,13 +84,7 @@ class WeChatBaseTestCase(VumiTestCase):
 
 class WeChatTestCase(WeChatBaseTestCase):
 
-    @inlineCallbacks
-    def setUp(self):
-        yield super(WeChatTestCase, self).setUp()
-        # Patch the get_access_token stuff to always return `foo`
-        # for this set of tests.
-        self.patch(self.transport_class, 'get_access_token',
-                   lambda *a: succeed('foo'))
+    access_token = 'foo'
 
     @inlineCallbacks
     def test_auth_success(self):
@@ -405,6 +407,104 @@ class WeChatAccessTokenTestCase(WeChatBaseTestCase):
         self.assertEqual(self.request_queue.size, None)
 
 
+class WeChatAddrMaskingTestCase(WeChatBaseTestCase):
+    access_token = 'foo'
+
+    @inlineCallbacks
+    def test_default_mask(self):
+        transport = yield self.get_transport()
+
+        resp_d = request(
+            transport, 'POST', data="""
+            <xml>
+            <ToUserName><![CDATA[toUser]]></ToUserName>
+            <FromUserName><![CDATA[fromUser]]></FromUserName>
+            <CreateTime>1348831860</CreateTime>
+            <MsgType><![CDATA[text]]></MsgType>
+            <Content><![CDATA[this is a test]]></Content>
+            <MsgId>1234567890123456</MsgId>
+            </xml>
+            """.strip())
+
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        yield self.tx_helper.make_dispatch_reply(msg, 'foo')
+
+        self.assertEqual(
+            (yield transport.get_addr_mask()), transport.DEFAULT_MASK)
+        self.assertEqual(msg['to_addr'], 'toUser@default')
+
+    @inlineCallbacks
+    def test_mask_switching_on_event_key(self):
+        transport = yield self.get_transport()
+
+        resp_d = request(
+            transport, 'POST', data="""
+                <xml>
+                <ToUserName><![CDATA[toUser]]></ToUserName>
+                <FromUserName><![CDATA[fromUser]]></FromUserName>
+                <CreateTime>123456789</CreateTime>
+                <MsgType><![CDATA[event]]></MsgType>
+                <Event><![CDATA[CLICK]]></Event>
+                <EventKey><![CDATA[EVENTKEY]]></EventKey>
+                </xml>
+                """.strip())
+
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        self.assertEqual(
+            msg['session_event'], TransportUserMessage.SESSION_NEW)
+        yield self.tx_helper.make_dispatch_reply(msg, 'foo')
+
+        self.assertEqual((yield transport.get_addr_mask()), 'EVENTKEY')
+        self.assertEqual(msg['to_addr'], 'toUser@EVENTKEY')
+
+    @inlineCallbacks
+    def test_mask_caching_on_text_message(self):
+        transport = yield self.get_transport()
+        yield transport.cache_addr_mask('foo')
+
+        resp_d = request(
+            transport, 'POST', data="""
+            <xml>
+            <ToUserName><![CDATA[toUser]]></ToUserName>
+            <FromUserName><![CDATA[fromUser]]></FromUserName>
+            <CreateTime>1348831860</CreateTime>
+            <MsgType><![CDATA[text]]></MsgType>
+            <Content><![CDATA[this is a test]]></Content>
+            <MsgId>1234567890123456</MsgId>
+            </xml>
+            """.strip())
+
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        yield self.tx_helper.make_dispatch_reply(msg, 'foo')
+
+        self.assertEqual(msg['to_addr'], 'toUser@foo')
+
+    @inlineCallbacks
+    def test_mask_clearing_on_session_end(self):
+        transport = yield self.get_transport()
+        yield transport.cache_addr_mask('foo')
+
+        resp_d = request(
+            transport, 'POST', data="""
+            <xml>
+            <ToUserName><![CDATA[toUser]]></ToUserName>
+            <FromUserName><![CDATA[fromUser]]></FromUserName>
+            <CreateTime>1348831860</CreateTime>
+            <MsgType><![CDATA[text]]></MsgType>
+            <Content><![CDATA[this is a test]]></Content>
+            <MsgId>1234567890123456</MsgId>
+            </xml>
+            """.strip())
+
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        yield self.tx_helper.make_dispatch_reply(
+            msg, 'foo', session_event=TransportUserMessage.SESSION_CLOSE)
+
+        self.assertEqual(msg['to_addr'], 'toUser@foo')
+        self.assertEqual(
+            (yield transport.get_addr_mask()), transport.DEFAULT_MASK)
+
+
 class WeChatMenuCreationTestCase(WeChatBaseTestCase):
 
     MENU_TEMPLATE = """
@@ -430,14 +530,7 @@ class WeChatMenuCreationTestCase(WeChatBaseTestCase):
             key: V1001_GOOD
     """
     MENU = yaml.load(MENU_TEMPLATE)
-
-    @inlineCallbacks
-    def setUp(self):
-        yield super(WeChatMenuCreationTestCase, self).setUp()
-        # Patch the get_access_token stuff to always return `foo`
-        # for this set of tests.
-        self.patch(self.transport_class, 'get_access_token',
-                   lambda *a: succeed('foo'))
+    access_token = 'foo'
 
     @inlineCallbacks
     def test_create_new_menu_success(self):
