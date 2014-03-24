@@ -395,7 +395,7 @@ class WeChatAccessTokenTestCase(WeChatBaseTestCase):
         cached_token = yield transport.redis.get(transport.access_token_key)
         self.assertEqual(cached_token, 'the_access_token')
         expiry = yield transport.redis.ttl(transport.access_token_key)
-        self.assertTrue(int(7200 * 0.8) < expiry < int(7200 * 0.9))
+        self.assertTrue(int(7200 * 0.8) < expiry <= int(7200 * 0.9))
 
     @inlineCallbacks
     def test_get_cached_access_token(self):
@@ -581,7 +581,7 @@ class WeChatInferMessageType(WeChatTestCase):
             <CreateTime>1348831860</CreateTime>
             <MsgType><![CDATA[text]]></MsgType>
             <Content><![CDATA[this is a test]]></Content>
-            <MsgId>1234567890123456</MsgId>
+            <MsgId>10234567890123456</MsgId>
             </xml>
             """.strip())
 
