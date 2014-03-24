@@ -184,6 +184,40 @@ class WeChatTestCase(WeChatBaseTestCase):
         self.assertTrue(isinstance(reply, message_types.TextMessage))
 
     @inlineCallbacks
+    def test_inbound_menu_event_click_message(self):
+        transport = yield self.get_transport()
+
+        resp_d = request(
+            transport, 'POST', data="""
+                <xml>
+                <ToUserName><![CDATA[toUser]]></ToUserName>
+                <FromUserName><![CDATA[fromUser]]></FromUserName>
+                <CreateTime>123456789</CreateTime>
+                <MsgType><![CDATA[event]]></MsgType>
+                <Event><![CDATA[CLICK]]></Event>
+                <EventKey><![CDATA[EVENTKEY]]></EventKey>
+                </xml>
+                """.strip())
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+
+        self.assertEqual(
+            msg['session_event'], TransportUserMessage.SESSION_NONE)
+        self.assertEqual(msg['transport_metadata'], {
+            'wechat': {
+                'Event': 'CLICK',
+                'EventKey': 'EVENTKEY',
+                'FromUserName': 'fromUser',
+                'MsgType': 'event',
+                'ToUserName': 'toUser'
+            }
+        })
+
+        self.tx_helper.make_dispatch_reply(msg, 'foo')
+
+        resp = yield resp_d
+        self.assertEqual(resp.code, 200)
+
+    @inlineCallbacks
     def test_unsupported_message_type(self):
         transport = yield self.get_transport()
 

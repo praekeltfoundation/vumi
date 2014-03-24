@@ -67,4 +67,5 @@ class EventMessage(Message):
         Field('CreateTime', timestamp=True),
         Field('Event'),
         Field('EventType'),
+        Field('EventKey'),
     ]

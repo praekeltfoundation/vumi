@@ -202,15 +202,20 @@ class WeChatTransport(Transport):
             })
 
     def handle_inbound_event_message(self, wc_msg):
+
+        if wc_msg.Event == 'subscribe':
+            session_event = TransportUserMessage.SESSION_NEW
+        elif wc_msg.Event == 'unsubscribe':
+            session_event = TransportUserMessage.SESSION_CLOSE
+        else:
+            session_event = TransportUserMessage.SESSION_NONE
+
         return self.publish_message(
             content=None,
             from_addr=wc_msg.FromUserName,
             to_addr=wc_msg.ToUserName,
             timestamp=wc_msg.CreateTime,
-            session_event=(
-                TransportUserMessage.SESSION_NEW
-                if wc_msg.Event == 'subscribe'
-                else TransportUserMessage.SESSION_CLOSE),
+            session_event=session_event,
             transport_type='wechat',
             transport_metadata={
                 'wechat': {
