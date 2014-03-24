@@ -5,19 +5,20 @@ import urllib
 import json
 
 from twisted.internet import reactor
-from twisted.internet.defer import inlineCallbacks, Deferred, succeed
+from twisted.internet.defer import inlineCallbacks, Deferred, returnValue
 from twisted.web.resource import Resource
 from twisted.web import http
 from twisted.web.server import NOT_DONE_YET
 
-from vumi.config import ConfigText, ConfigServerEndpoint
+from vumi.config import ConfigText, ConfigServerEndpoint, ConfigDict
 from vumi.transports import Transport
 from vumi.transports.httprpc.httprpc import HttpRpcHealthResource
-from vumi.transports.wechat.errors import WeChatException
+from vumi.transports.wechat.errors import WeChatException, WeChatApiException
 from vumi.transports.wechat.message_types import TextMessage, EventMessage
 from vumi.transports.wechat.parser import WeChatParser
 from vumi.utils import build_web_site, http_request_full
 from vumi.message import TransportUserMessage
+from vumi.persist.txredis_manager import TxRedisManager
 
 
 def is_verifiable(request):
@@ -58,6 +59,14 @@ class WeChatConfig(Transport.CONFIG_CLASS):
     health_path = ConfigText(
         "The path to serve the health resource on.",
         default='/health/', static=True)
+    redis_manager = ConfigDict('Parameters to connect to Redis with.',
+                               default={}, required=False, static=True)
+    wechat_appid = ConfigText(
+        'The WeChat app_id. Issued by WeChat for developer accounts '
+        'to allow push API access.', required=True, static=True)
+    wechat_secret = ConfigText(
+        'The WeChat secret. Issued by WeChat for developer accounts '
+        'to allow push API access.', required=True, static=True)
 
 
 class WeChatResource(Resource):
@@ -140,6 +149,9 @@ class WeChatTransport(Transport):
             config.web_path: self.resource,
         })
 
+        self.redis = yield TxRedisManager.from_config(config.redis_manager)
+        # What key to store the `access_token` under in Redis
+        self.access_token_key = 'access_token'
         self.server = yield self.endpoint.listen(self.factory)
 
     def handle_raw_inbound_message(self, wc_msg):
@@ -265,13 +277,43 @@ class WeChatTransport(Transport):
             message['message_id'],
             reason='Received status code: %s' % (response.code,))
 
+    @inlineCallbacks
     def get_access_token(self):
-        return succeed('foo')
+        access_token = yield self.redis.get(self.access_token_key)
+        if access_token is None:
+            access_token = yield self.request_new_access_token()
+        returnValue(access_token)
+
+    @inlineCallbacks
+    def request_new_access_token(self):
+        config = self.get_static_config()
+        response = yield http_request_full(self.make_url('token', {
+            'grant_type': 'client_credential',
+            'appid': config.wechat_appid,
+            'secret': config.wechat_secret,
+        }), method='GET')
+        if not http_ok(response):
+            raise WeChatApiException(
+                ('Received HTTP status code %r when '
+                 'requesting access token.') % (response.code,))
+
+        data = json.loads(response.delivered_body)
+        if 'errcode' in data:
+            raise WeChatApiException(
+                'Error when requesting access token. '
+                'Errcode: %(errcode)s, Errmsg: %(errmsg)s.' % data)
+
+        # make sure we're always ahead of the WeChat expiry
+        access_token = data['access_token']
+        expiry = int(data['expires_in']) * 0.90
+        yield self.redis.setex(
+            self.access_token_key, int(expiry), access_token)
+        returnValue(access_token)
 
     def make_url(self, path, params):
         config = self.get_static_config()
         return '%s%s?%s' % (
-            config.api_url, 'message/custom/send', urllib.urlencode(params))
+            config.api_url, path, urllib.urlencode(params))
 
     def push_text_message(self, access_token, message):
         url = self.make_url('message/custom/send', {

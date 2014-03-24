@@ -3,7 +3,7 @@ import json
 from urllib import urlencode
 from datetime import datetime
 
-from twisted.internet.defer import inlineCallbacks, DeferredQueue
+from twisted.internet.defer import inlineCallbacks, DeferredQueue, succeed
 from twisted.internet.task import Clock
 from twisted.trial.unittest import TestCase
 from twisted.web import http
@@ -44,7 +44,7 @@ def request(transport, method, path='', params={}, data=None):
     return http_request_full(url, method=method, data=data)
 
 
-class WeChatTestCase(VumiTestCase):
+class WeChatBaseTestCase(VumiTestCase):
 
     transport_class = WeChatTransport
 
@@ -64,10 +64,23 @@ class WeChatTestCase(VumiTestCase):
         defaults = {
             'api_url': self.mock_server.url,
             'auth_token': 'token',
-            'twisted_endpoint': 'tcp:0'
+            'twisted_endpoint': 'tcp:0',
+            'wechat_appid': 'appid',
+            'wechat_secret': 'secret',
         }
         defaults.update(config)
         return self.tx_helper.get_transport(defaults)
+
+
+class WeChatTestCase(WeChatBaseTestCase):
+
+    @inlineCallbacks
+    def setUp(self):
+        yield super(WeChatTestCase, self).setUp()
+        # Patch the get_access_token stuff to always return `foo`
+        # for this set of tests.
+        self.patch(self.transport_class, 'get_access_token',
+                   lambda *a: succeed('foo'))
 
     @inlineCallbacks
     def test_auth_success(self):
@@ -313,6 +326,45 @@ class WeChatTestCase(VumiTestCase):
         msg = yield msg_d
         self.assertEqual(ack['event_type'], 'ack')
         self.assertEqual(ack['user_message_id'], msg['message_id'])
+
+
+class WeChatAccessTokenTestCase(WeChatBaseTestCase):
+
+    @inlineCallbacks
+    def test_request_new_access_token(self):
+        transport = yield self.get_transport()
+        config = transport.get_static_config()
+
+        d = transport.request_new_access_token()
+
+        req = yield self.request_queue.get()
+        self.assertEqual(req.path, '/token')
+        self.assertEqual(req.args, {
+            'grant_type': ['client_credential'],
+            'appid': [config.wechat_appid],
+            'secret': [config.wechat_secret],
+        })
+        req.write(json.dumps({
+            'access_token': 'the_access_token',
+            'expires_in': 7200
+        }))
+        req.finish()
+
+        access_token = yield d
+        self.assertEqual(access_token, 'the_access_token')
+        cached_token = yield transport.redis.get(transport.access_token_key)
+        self.assertEqual(cached_token, 'the_access_token')
+        expiry = yield transport.redis.ttl(transport.access_token_key)
+        self.assertTrue(int(7200 * 0.8) < expiry < int(7200 * 0.9))
+
+    @inlineCallbacks
+    def test_get_cached_access_token(self):
+        transport = yield self.get_transport()
+        yield transport.redis.set(transport.access_token_key, 'foo')
+        access_token = yield transport.get_access_token()
+        self.assertEqual(access_token, 'foo')
+        # Empty request queue means no WeChat API calls were made
+        self.assertEqual(self.request_queue.size, None)
 
 
 class WeChatParserTestCase(TestCase):
