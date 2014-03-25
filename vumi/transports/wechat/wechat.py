@@ -4,7 +4,6 @@ import hashlib
 import urllib
 import json
 from datetime import datetime
-from functools import partial
 
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, Deferred, returnValue
@@ -19,7 +18,7 @@ from vumi.transports import Transport
 from vumi.transports.httprpc.httprpc import HttpRpcHealthResource
 from vumi.transports.wechat.errors import WeChatException, WeChatApiException
 from vumi.transports.wechat.new_message_types import (
-    TextMessage, EventMessage, NewsMessage)
+    TextMessage, EventMessage)
 from vumi.transports.wechat.parser import WeChatXMLParser
 from vumi.utils import build_web_site, http_request_full
 from vumi.message import TransportUserMessage

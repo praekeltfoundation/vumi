@@ -13,7 +13,7 @@ from vumi.tests.utils import MockHttpServer
 from vumi.transports.tests.helpers import TransportHelper
 from vumi.transports.wechat import WeChatTransport
 from vumi.transports.wechat.errors import WeChatApiException
-from vumi.transports.wechat.parser import WeChatParser
+from vumi.transports.wechat.parser import WeChatXMLParser
 from vumi.transports.wechat import message_types
 from vumi.utils import http_request_full
 from vumi.message import TransportUserMessage
@@ -123,11 +123,11 @@ class WeChatTestCase(WeChatBaseTestCase):
             msg, 'foo')
 
         resp = yield resp_d
-        reply = WeChatParser.parse(resp.delivered_body)
-        self.assertEqual(reply.ToUserName, 'fromUser')
-        self.assertEqual(reply.FromUserName, 'toUser')
-        self.assertTrue(reply.CreateTime > datetime.fromtimestamp(1348831860))
-        self.assertTrue(isinstance(reply, message_types.TextMessage))
+        reply = WeChatXMLParser.parse(resp.delivered_body)
+        self.assertEqual(reply.to_user_name, 'fromUser')
+        self.assertEqual(reply.from_user_name, 'toUser')
+        self.assertTrue(int(reply.create_time) > 1348831860)
+        self.assertTrue(isinstance(reply, new_message_types.TextMessage))
 
         [ack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(ack['event_type'], 'ack')
@@ -177,10 +177,10 @@ class WeChatTestCase(WeChatBaseTestCase):
             msg, 'foo')
 
         resp = yield resp_d
-        reply = WeChatParser.parse(resp.delivered_body)
-        self.assertEqual(reply.ToUserName, 'fromUser')
-        self.assertEqual(reply.FromUserName, 'toUser')
-        self.assertTrue(reply.CreateTime > datetime.fromtimestamp(1348831860))
+        reply = WeChatXMLParser.parse(resp.delivered_body)
+        self.assertEqual(reply.to_user_name, 'fromUser')
+        self.assertEqual(reply.from_addr, 'toUser')
+        self.assertTrue(int(reply.create_time) > 1348831860)
         self.assertTrue(isinstance(reply, message_types.TextMessage))
 
     @inlineCallbacks
