@@ -528,7 +528,7 @@ class WeChatMenuCreationTestCase(WeChatBaseTestCase):
             type: click
             key: V1001_GOOD
     """
-    MENU = yaml.load(MENU_TEMPLATE)
+    MENU = yaml.safe_load(MENU_TEMPLATE)
     access_token = 'foo'
 
     @inlineCallbacks
