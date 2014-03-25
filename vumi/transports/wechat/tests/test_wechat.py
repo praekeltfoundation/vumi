@@ -433,6 +433,7 @@ class WeChatAddrMaskingTestCase(WeChatBaseTestCase):
         self.assertEqual(
             (yield transport.get_addr_mask()), transport.DEFAULT_MASK)
         self.assertEqual(msg['to_addr'], 'toUser@default')
+        yield resp_d
 
     @inlineCallbacks
     def test_mask_switching_on_event_key(self):
@@ -458,6 +459,7 @@ class WeChatAddrMaskingTestCase(WeChatBaseTestCase):
 
         self.assertEqual((yield transport.get_addr_mask()), 'EVENTKEY')
         self.assertEqual(msg['to_addr'], 'toUser@EVENTKEY')
+        yield resp_d
 
     @inlineCallbacks
     def test_mask_caching_on_text_message(self):
@@ -481,6 +483,7 @@ class WeChatAddrMaskingTestCase(WeChatBaseTestCase):
         yield self.tx_helper.make_dispatch_reply(msg, 'foo')
 
         self.assertEqual(msg['to_addr'], 'toUser@foo')
+        yield resp_d
 
     @inlineCallbacks
     def test_mask_clearing_on_session_end(self):
@@ -507,6 +510,7 @@ class WeChatAddrMaskingTestCase(WeChatBaseTestCase):
         self.assertEqual(msg['to_addr'], 'toUser@foo')
         self.assertEqual(
             (yield transport.get_addr_mask()), transport.DEFAULT_MASK)
+        yield resp_d
 
 
 class WeChatMenuCreationTestCase(WeChatBaseTestCase):
@@ -552,6 +556,8 @@ class WeChatMenuCreationTestCase(WeChatBaseTestCase):
         req.write(json.dumps({'errcode': 0, 'errmsg': 'ok'}))
         req.finish()
 
+        yield d
+
     @inlineCallbacks
     def test_create_new_menu_failure(self):
         transport = yield self.get_transport_with_access_token(
@@ -592,7 +598,7 @@ class WeChatInferMessageType(WeChatTestCase):
             """.strip())
 
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
-        reply = yield self.tx_helper.make_dispatch_reply(
+        yield self.tx_helper.make_dispatch_reply(
             msg, 'This is an awesome link for you! http://www.wechat.com/')
 
         resp = yield resp_d
@@ -601,5 +607,3 @@ class WeChatInferMessageType(WeChatTestCase):
         self.assertTrue(
             '<Description>This is an awesome link for you! </Description>'
             in resp.delivered_body)
-
-
