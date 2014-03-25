@@ -1,3 +1,5 @@
+import json
+
 from twisted.trial.unittest import TestCase
 
 from vumi.transports.wechat import message_types
@@ -51,6 +53,19 @@ class TestWeChatXMLParser(TestCase):
             "</xml>"
             ]))
 
+    def test_text_message_to_json(self):
+        msg = message_types.TextMessage(
+            'to_addr', 'from_addr', '1348831860', 'this is a test')
+        self.assertEqual(
+            msg.to_json(),
+            json.dumps({
+                'touser': 'to_addr',
+                'msgtype': 'text',
+                'text': {
+                    'content': 'this is a test'
+                }
+            }))
+
     def test_news_message_to_xml(self):
         msg = message_types.NewsMessage(
             'to_addr', 'from_addr', '1348831860', [{
@@ -81,6 +96,31 @@ class TestWeChatXMLParser(TestCase):
                 "</Articles>",
                 "</xml>",
             ]))
+
+    def test_news_message_to_json(self):
+        msg = message_types.NewsMessage(
+            'to_addr', 'from_addr', '1348831860', [{
+                'title': 'title1',
+                'description': 'description1',
+            }, {
+                'picurl': 'picurl',
+                'url': 'url',
+            }])
+        self.assertEqual(
+            msg.to_json(),
+            json.dumps({
+                'touser': 'to_addr',
+                'msgtype': 'news',
+                'news': {
+                    'articles': [{
+                        'title': 'title1',
+                        'description': 'description1'
+                    }, {
+                        'picurl': 'picurl',
+                        'url': 'url'
+                    }]
+                }
+            }))
 
     def test_event_message_parse(self):
         msg = WeChatXMLParser.parse(
