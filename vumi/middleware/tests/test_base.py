@@ -202,6 +202,7 @@ class TestUtilityFunctions(VumiTestCase):
                          {"param_foo": 1, "param_bar": 2})
         self.assertEqual(middlewares[1].config, {})
 
+    @inlineCallbacks
     def test_setup_middleware_from_config(self):
         worker = object()
         middlewares = yield setup_middlewares_from_config(worker,

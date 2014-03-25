@@ -196,6 +196,13 @@ class TestApplicationWorker(VumiTestCase):
         for consumer in self.get_app_consumers(app):
             self.assertFalse(consumer.channel.qos_prefetch_count)
 
+    def assertNotRaises(self, error_class, f, *args, **kw):
+        try:
+            f(*args, **kw)
+        except error_class as e:
+            self.fail("%s unexpectedly raised: %s" % (error_class, e))
+
+    @inlineCallbacks
     def test_check_endpoints(self):
         app = yield self.app_helper.get_application({})
         check = app.check_endpoint

@@ -52,7 +52,8 @@ class Transport(BaseWorker):
         d = self.setup_ro_connector(self.transport_name)
 
         def cb(connector):
-            connector.set_outbound_handler(self._process_message)
+            self.add_outbound_handler(
+                self.handle_outbound_message, connector=connector)
             return connector
 
         return d.addCallback(cb)
@@ -165,17 +166,28 @@ class Transport(BaseWorker):
                                   delivery_status=delivery_status,
                                   event_type='delivery_report', **kw)
 
-    def _process_message(self, message):
-        def _send_failure(f):
-            self.send_failure(message, f.value, f.getTraceback())
-            log.err(f)
-            if self.SUPPRESS_FAILURE_EXCEPTIONS:
-                return None
-            return f
+    def _send_failure_eb(self, f, message):
+        self.send_failure(message, f.value, f.getTraceback())
+        log.err(f)
+        if self.SUPPRESS_FAILURE_EXCEPTIONS:
+            return None
+        return f
 
-        d = maybeDeferred(self.handle_outbound_message, message)
-        d.addErrback(_send_failure)
-        return d
+    def _make_message_processor(self, handler):
+        def processor(message):
+            d = maybeDeferred(handler, message)
+            d.addErrback(self._send_failure_eb, message)
+            return d
+
+        return processor
+
+    def add_outbound_handler(self, handler, endpoint_name=None,
+                             connector=None):
+        if connector is None:
+            connector = self.connectors[self.transport_name]
+
+        processor = self._make_message_processor(handler)
+        connector.set_outbound_handler(processor, endpoint_name=endpoint_name)
 
     def handle_outbound_message(self, message):
         """

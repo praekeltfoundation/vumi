@@ -32,9 +32,11 @@ class TestWindowManager(VumiTestCase):
             self.wm.create_window(self.window_id, strict=True),
                                     WindowException)
 
+    @inlineCallbacks
     def test_window_recreation(self):
+        orig_clock_time = self.clock.seconds()
         clock_time = yield self.wm.create_window(self.window_id)
-        self.assertTrue(clock_time)
+        self.assertEqual(clock_time, orig_clock_time)
 
     @inlineCallbacks
     def test_window_removal(self):
