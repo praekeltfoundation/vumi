@@ -51,11 +51,11 @@ class Message(object):
 
 class Field(object):
 
-    def __init__(self, name, timestamp=False, value=None, children=[]):
+    def __init__(self, name, timestamp=False, value=None, children=None):
         self.name = name
         self.timestamp = timestamp
         self.value = value
-        self.children = children
+        self.children = [] if children is None else children
 
 
 class TextMessage(Message):
