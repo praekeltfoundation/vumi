@@ -567,7 +567,6 @@ class WeChatMenuCreationTestCase(WeChatBaseTestCase):
 class WeChatInferMessageType(WeChatTestCase):
 
     access_token = 'foo'
-    timeout = 1
 
     @inlineCallbacks
     def test_infer_rich_media_message(self):
