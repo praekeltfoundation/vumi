@@ -241,8 +241,7 @@ class WeChatTestCase(WeChatBaseTestCase):
             response.code, http.BAD_REQUEST)
         self.assertEqual(
             response.delivered_body,
-            ("Unparseable WeChat Message Element "
-             "u'MsgType': u'THIS_IS_UNSUPPORTED'"))
+            "Unsupported MsgType: this_is_unsupported")
         self.assertEqual(
             [],
             self.tx_helper.get_dispatched_inbound())
@@ -579,7 +578,9 @@ class WeChatMenuCreationTestCase(WeChatBaseTestCase):
              'size when creating WeChat Menu.'))
 
 
-class WeChatInferMessageType(WeChatTestCase):
+class WeChatInferMessageType(WeChatBaseTestCase):
+
+    access_token = 'foo'
 
     @inlineCallbacks
     def test_infer_rich_media_message(self):

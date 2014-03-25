@@ -8,3 +8,7 @@ class UnsupportedWeChatMessage(WeChatException):
 
 class WeChatApiException(WeChatException):
     pass
+
+
+class WeChatParserException(WeChatException):
+    pass

@@ -3,6 +3,7 @@
 import hashlib
 import urllib
 import json
+from datetime import datetime
 from functools import partial
 
 from twisted.internet import reactor
@@ -17,9 +18,9 @@ from vumi.config import (
 from vumi.transports import Transport
 from vumi.transports.httprpc.httprpc import HttpRpcHealthResource
 from vumi.transports.wechat.errors import WeChatException, WeChatApiException
-from vumi.transports.wechat.message_types import (
-    TextMessage, EventMessage, RichMediaMessage)
-from vumi.transports.wechat.parser import WeChatParser
+from vumi.transports.wechat.new_message_types import (
+    TextMessage, EventMessage, NewsMessage)
+from vumi.transports.wechat.parser import WeChatXMLParser
 from vumi.utils import build_web_site, http_request_full
 from vumi.message import TransportUserMessage
 from vumi.persist.txredis_manager import TxRedisManager
@@ -115,7 +116,7 @@ class WeChatResource(Resource):
         request.finish()
 
     def handle_request(self, request):
-        wc_msg = WeChatParser.parse(request.content.read())
+        wc_msg = WeChatXMLParser.parse(request.content.read())
         return self.transport.handle_raw_inbound_message(wc_msg)
 
 
@@ -149,7 +150,7 @@ class WeChatTransport(Transport):
     CONFIG_CLASS = WeChatConfig
     DEFAULT_MASK = 'default'
     MESSAGE_TYPES = [
-        RichMediaMessage,
+        # RichMediaMessage,
     ]
     DEFAULT_MESSAGE_TYPE = TextMessage
     # What key to store the `access_token` under in Redis
@@ -219,49 +220,49 @@ class WeChatTransport(Transport):
     def handle_inbound_text_message(self, wc_msg):
         mask = yield self.get_addr_mask()
         msg = yield self.publish_message(
-            content=wc_msg.Content,
-            from_addr=wc_msg.FromUserName,
-            to_addr=self.mask_addr(wc_msg.ToUserName, mask),
-            timestamp=wc_msg.CreateTime,
+            content=wc_msg.content,
+            from_addr=wc_msg.from_user_name,
+            to_addr=self.mask_addr(wc_msg.to_user_name, mask),
+            timestamp=datetime.fromtimestamp(int(wc_msg.create_time)),
             transport_type='wechat',
             transport_metadata={
                 'wechat': {
-                    'FromUserName': wc_msg.FromUserName,
-                    'ToUserName': wc_msg.ToUserName,
-                    'MsgType': wc_msg.MsgType,
-                    'MsgId': wc_msg.MsgId,
+                    'FromUserName': wc_msg.from_user_name,
+                    'ToUserName': wc_msg.to_user_name,
+                    'MsgType': 'text',
+                    'MsgId': wc_msg.msg_id,
                 }
             })
         returnValue(msg)
 
     @inlineCallbacks
     def handle_inbound_event_message(self, wc_msg):
-        if wc_msg.EventKey:
-            mask = yield self.cache_addr_mask(wc_msg.EventKey)
+        if wc_msg.event_key:
+            mask = yield self.cache_addr_mask(wc_msg.event_key)
         else:
             mask = yield self.get_addr_mask()
 
-        if wc_msg.Event in ('subscribe', 'CLICK'):
+        if wc_msg.event.lower() in ('subscribe', 'click'):
             session_event = TransportUserMessage.SESSION_NEW
-        elif wc_msg.Event == 'unsubscribe':
+        elif wc_msg.event.lower() == 'unsubscribe':
             session_event = TransportUserMessage.SESSION_CLOSE
         else:
             session_event = TransportUserMessage.SESSION_NONE
 
         msg = yield self.publish_message(
             content=None,
-            from_addr=wc_msg.FromUserName,
-            to_addr=self.mask_addr(wc_msg.ToUserName, mask),
-            timestamp=wc_msg.CreateTime,
+            from_addr=wc_msg.from_user_name,
+            to_addr=self.mask_addr(wc_msg.to_user_name, mask),
+            timestamp=datetime.fromtimestamp(int(wc_msg.create_time)),
             session_event=session_event,
             transport_type='wechat',
             transport_metadata={
                 'wechat': {
-                    'FromUserName': wc_msg.FromUserName,
-                    'ToUserName': wc_msg.ToUserName,
-                    'MsgType': wc_msg.msg_type,
-                    'Event': wc_msg.Event,
-                    'EventKey': wc_msg.EventKey
+                    'FromUserName': wc_msg.from_user_name,
+                    'ToUserName': wc_msg.to_user_name,
+                    'MsgType': 'event',
+                    'Event': wc_msg.event,
+                    'EventKey': wc_msg.event_key
                 }
             })
         returnValue(msg)
@@ -281,8 +282,8 @@ class WeChatTransport(Transport):
         for message_type in self.MESSAGE_TYPES:
             result = message_type.accepts(message)
             if result is not None:
-                return partial(message_type.build, result)
-        return self.DEFAULT_MESSAGE_TYPE.build
+                return message_type
+        return self.DEFAULT_MESSAGE_TYPE
 
     def handle_outbound_message(self, message):
         """
@@ -297,8 +298,8 @@ class WeChatTransport(Transport):
             # and hit WeChat's Push API (window available for 24hrs)
             return self.push_message(message)
 
-        builder = self.infer_message_type(message)
-        wc_msg = builder(message)
+        wc_message_class = self.infer_message_type(message)
+        wc_msg = wc_message_class.from_vumi_message(message)
 
         request.write(wc_msg.to_xml().encode('utf-8'))
         request.finish()
