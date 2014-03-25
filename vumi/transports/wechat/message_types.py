@@ -1,140 +1,116 @@
-import re
-
 from xml.etree.ElementTree import Element, SubElement, tostring
 
+from vumi.transports.wechat.errors import WeChatException
 
-class WeChatMessage(object):
 
-    field_types = ()
-    msg_type = None
+def get_children(node, name):
+    return node.getElementsByTagName(name)
 
-    def __init__(self, data):
-        self.fields = []
-        for field in self.field_types:
-            if field.name in data:
-                field = Field(field.name, value=data[field.name],
-                              timestamp=field.timestamp)
-                self.fields.append(field)
 
-    def build_field(self, parent, field):
-        node = SubElement(parent, field.name)
-        if isinstance(field.value, list):
-            for child in field.value:
-                for child_name, values in child.items():
-                    field = Field(child_name, value=values)
-                    self.build_field(node, field)
+def get_child(node, name):
+    [child] = get_children(node, name)
+    return child
 
-        elif field.timestamp:
-            node.text = field.value.strftime('%s')
-        else:
-            node.text = field.value
+
+def get_child_value(node, name, default=None):
+    try:
+        child = get_child(node, name)
+        return ''.join([grandchild.value for grandchild in child.childNodes])
+    except ValueError:
+        return default
+
+
+def append(node, tag, value):
+    el = SubElement(node, tag)
+    el.text = value
+
+
+class TextMessage(object):
+
+    def __init__(self, to_user_name, from_user_name, create_time, content,
+                 msg_id=None):
+        self.to_user_name = to_user_name
+        self.from_user_name = from_user_name
+        self.create_time = create_time
+        self.content = content
+        self.msg_id = msg_id
+
+    @classmethod
+    def from_xml(cls, doc):
+        root = doc.firstChild()
+        return cls(*[get_child_value(root, name)
+                     for name in ['ToUserName',
+                                  'FromUserName',
+                                  'CreateTime',
+                                  'Content',
+                                  'MsgId']])
+
+    @classmethod
+    def from_vumi_message(cls, message):
+        return cls(message['to_addr'], message['from_addr'],
+                   message['timestamp'].strftime('%s'),
+                   message['content'])
 
     def to_xml(self):
         xml = Element('xml')
-        for field in self.fields:
-            self.build_field(xml, field)
-
-        msg_type = SubElement(xml, 'MsgType')
-        msg_type.text = self.msg_type
+        append(xml, 'ToUserName', self.to_user_name)
+        append(xml, 'FromUserName', self.from_user_name)
+        append(xml, 'CreateTime', self.create_time)
+        append(xml, 'MsgType', 'text')
+        append(xml, 'Content', self.content)
         return tostring(xml)
 
-    def __getattr__(self, attr):
-        for field in self.fields:
-            if field.name == attr:
-                return field.value
 
-    def __eq__(self, other):
-        return (self.msg_type == other.msg_type and
-                [(f.name, f.value) for f in self.fields] ==
-                [(f.name, f.value) for f in other.fields])
+class NewsMessage(object):
 
+    def __init__(self, to_user_name, from_user_name, create_time,
+                 items=None):
+        self.to_user_name = to_user_name
+        self.from_user_name = from_user_name
+        self.create_time = create_time
+        self.items = ([] if items is None else items)
 
-class Field(object):
+    def to_xml(self):
+        xml = Element('xml')
+        append(xml, 'ToUserName', self.to_user_name)
+        append(xml, 'FromUserName', self.from_user_name)
+        append(xml, 'CreateTime', self.create_time)
+        append(xml, 'MsgType', 'news')
+        append(xml, 'ArticleCount', str(len(self.items)))
+        articles = SubElement(xml, 'Articles')
+        for item in self.items:
+            if not any(item.values()):
+                raise WeChatException(
+                    'News items must have some values.')
 
-    def __init__(self, name, timestamp=False, value=None, children=None):
-        self.name = name
-        self.timestamp = timestamp
-        self.value = value
-        self.children = [] if children is None else children
-
-
-class TextMessage(WeChatMessage):
-
-    msg_type = 'text'
-    field_types = (
-        Field('ToUserName'),
-        Field('FromUserName'),
-        Field('CreateTime', timestamp=True),
-        Field('Content'),
-        Field('MsgId'),
-    )
-
-    @classmethod
-    def build(cls, message):
-        metadata = message['transport_metadata']['wechat']
-        return cls({
-            'ToUserName': metadata['FromUserName'],
-            'FromUserName': metadata['ToUserName'],
-            'CreateTime': message['timestamp'],
-            'Content': message['content']
-        })
+            item_element = SubElement(articles, 'item')
+            if 'title' in item:
+                append(item_element, 'Title', item['title'])
+            if 'description' in item:
+                append(item_element, 'Description', item['description'])
+            if 'pic_url' in item:
+                append(item_element, 'PicUrl', item['pic_url'])
+            if 'url' in item:
+                append(item_element, 'Url', item['url'])
+        return tostring(xml)
 
 
-class RichMediaMessage(WeChatMessage):
+class EventMessage(object):
 
-    msg_type = 'news'  # WAT?! WeChat?
-    field_types = (
-        Field('ToUserName'),
-        Field('FromUserName'),
-        Field('CreateTime', timestamp=True),
-        Field('ArticleCount'),
-        Field('Articles', children=(
-            Field('item', children=(
-                Field('Title'),
-                Field('Description'),
-                Field('PicUrl'),
-                Field('Url'),
-            ))
-        )),
-    )
-
-    # Has something URL-ish in it
-    URLISH = re.compile(
-        r'(?P<before>.*)'
-        r'(?P<schema>[a-zA-Z]{4,5})\://'
-        r'(?P<domain>[^\s]+)'
-        r'(?P<after>.*)')
+    def __init__(self, to_user_name, from_user_name, create_time, event,
+                 event_key=None):
+        self.to_user_name = to_user_name
+        self.from_user_name = from_user_name
+        self.create_time = create_time
+        self.event = event
+        self.event_key = event_key
 
     @classmethod
-    def accepts(cls, msg):
-        return cls.URLISH.match(msg['content'])
-
-    @classmethod
-    def build(cls, match, message):
-        url_data = match.groupdict()
-        metadata = message['transport_metadata']['wechat']
-        return cls({
-            'ToUserName': metadata['FromUserName'],
-            'FromUserName': metadata['ToUserName'],
-            'CreateTime': message['timestamp'],
-            'ArticleCount': '1',
-            'Articles': [{
-                'item': [{
-                    'Url': '%(schema)s://%(domain)s' % url_data,
-                    'Description': '%(before)s%(after)s' % url_data,
-                }]
-            }]
-        })
-
-
-class EventMessage(WeChatMessage):
-
-    msg_type = 'event'
-    field_types = (
-        Field('ToUserName'),
-        Field('FromUserName'),
-        Field('CreateTime', timestamp=True),
-        Field('Event'),
-        Field('EventType'),
-        Field('EventKey'),
-    )
+    def from_xml(cls, doc):
+        root = doc.firstChild()
+        return cls(*[get_child_value(root, name)
+                     for name in ['ToUserName',
+                                  'FromUserName',
+                                  'CreateTime',
+                                  'Event',
+                                  'EventKey']])

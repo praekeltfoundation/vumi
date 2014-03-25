@@ -127,7 +127,7 @@ class WeChatTestCase(WeChatBaseTestCase):
         self.assertEqual(reply.to_user_name, 'fromUser')
         self.assertEqual(reply.from_user_name, 'toUser')
         self.assertTrue(int(reply.create_time) > 1348831860)
-        self.assertTrue(isinstance(reply, new_message_types.TextMessage))
+        self.assertTrue(isinstance(reply, message_types.TextMessage))
 
         [ack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(ack['event_type'], 'ack')
