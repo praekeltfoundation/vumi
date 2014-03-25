@@ -3,7 +3,7 @@ import re
 from xml.etree.ElementTree import Element, SubElement, tostring
 
 
-class Message(object):
+class WeChatMessage(object):
 
     field_types = ()
     msg_type = None
@@ -58,7 +58,7 @@ class Field(object):
         self.children = [] if children is None else children
 
 
-class TextMessage(Message):
+class TextMessage(WeChatMessage):
 
     msg_type = 'text'
     field_types = (
@@ -80,7 +80,7 @@ class TextMessage(Message):
         })
 
 
-class RichMediaMessage(Message):
+class RichMediaMessage(WeChatMessage):
 
     msg_type = 'news'  # WAT?! WeChat?
     field_types = (
@@ -127,7 +127,7 @@ class RichMediaMessage(Message):
         })
 
 
-class EventMessage(Message):
+class EventMessage(WeChatMessage):
 
     msg_type = 'event'
     field_types = (
