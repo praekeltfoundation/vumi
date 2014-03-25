@@ -1,3 +1,4 @@
+import re
 from xml.etree.ElementTree import Element, SubElement, tostring
 
 from vumi.transports.wechat.errors import WeChatException
@@ -47,7 +48,9 @@ class TextMessage(object):
 
     @classmethod
     def from_vumi_message(cls, message):
-        return cls(message['to_addr'], message['from_addr'],
+        md = message['transport_metadata'].get('wechat', {})
+        from_addr = md.get('ToUserName') or message['from_addr']
+        return cls(message['to_addr'], from_addr,
                    message['timestamp'].strftime('%s'),
                    message['content'])
 
@@ -63,12 +66,35 @@ class TextMessage(object):
 
 class NewsMessage(object):
 
+    # Has something URL-ish in it
+    URLISH = re.compile(
+        r'(?P<before>.*)'
+        r'(?P<schema>[a-zA-Z]{4,5})\://'
+        r'(?P<domain>[^\s]+)'
+        r'(?P<after>.*)')
+
     def __init__(self, to_user_name, from_user_name, create_time,
                  items=None):
         self.to_user_name = to_user_name
         self.from_user_name = from_user_name
         self.create_time = create_time
         self.items = ([] if items is None else items)
+
+    @classmethod
+    def accepts(cls, vumi_message):
+        return cls.URLISH.match(vumi_message['content'])
+
+    @classmethod
+    def from_vumi_message(cls, match, vumi_message):
+        url_data = match.groupdict()
+        return cls(
+            vumi_message['to_addr'],
+            vumi_message['from_addr'],
+            vumi_message['timestamp'].strftime('%s'),
+            [{
+                'url': '%(schema)s://%(domain)s' % url_data,
+                'description': '%(before)s%(after)s' % url_data,
+            }])
 
     def to_xml(self):
         xml = Element('xml')
@@ -88,8 +114,8 @@ class NewsMessage(object):
                 append(item_element, 'Title', item['title'])
             if 'description' in item:
                 append(item_element, 'Description', item['description'])
-            if 'pic_url' in item:
-                append(item_element, 'PicUrl', item['pic_url'])
+            if 'picurl' in item:
+                append(item_element, 'PicUrl', item['picurl'])
             if 'url' in item:
                 append(item_element, 'Url', item['url'])
         return tostring(xml)

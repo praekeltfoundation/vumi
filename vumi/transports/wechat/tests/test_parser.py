@@ -57,7 +57,7 @@ class TestWeChatXMLParser(TestCase):
                 'title': 'title1',
                 'description': 'description1',
             }, {
-                'pic_url': 'picurl',
+                'picurl': 'picurl',
                 'url': 'url',
             }])
         self.assertEqual(

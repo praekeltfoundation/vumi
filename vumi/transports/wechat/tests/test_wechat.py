@@ -179,7 +179,7 @@ class WeChatTestCase(WeChatBaseTestCase):
         resp = yield resp_d
         reply = WeChatXMLParser.parse(resp.delivered_body)
         self.assertEqual(reply.to_user_name, 'fromUser')
-        self.assertEqual(reply.from_addr, 'toUser')
+        self.assertEqual(reply.from_user_name, 'toUser')
         self.assertTrue(int(reply.create_time) > 1348831860)
         self.assertTrue(isinstance(reply, message_types.TextMessage))
 
@@ -246,15 +246,6 @@ class WeChatTestCase(WeChatBaseTestCase):
             [],
             self.tx_helper.get_dispatched_inbound())
 
-    @inlineCallbacks
-    def test_push_invalid_message(self):
-        yield self.get_transport_with_access_token(self.access_token)
-        msg = yield self.tx_helper.make_dispatch_outbound('foo')
-        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
-        self.assertEqual(nack['nack_reason'], 'Missing MsgType')
-        self.assertEqual(
-            nack['user_message_id'], msg['message_id'])
-
     def dispatch_push_message(self, content, wechat_md, **kwargs):
         helper_metadata = kwargs.get('helper_metadata', {})
         wechat_metadata = helper_metadata.setdefault('wechat', {})
@@ -263,24 +254,10 @@ class WeChatTestCase(WeChatBaseTestCase):
             content, helper_metadata=helper_metadata, **kwargs)
 
     @inlineCallbacks
-    def test_push_unsupported_message(self):
-        yield self.get_transport_with_access_token(self.access_token)
-        msg = yield self.dispatch_push_message('foo', {
-            'MsgType': 'foo'
-        })
-        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
-        self.assertEqual(
-            nack['user_message_id'], msg['message_id'])
-        self.assertEqual(
-            nack['nack_reason'], "Unsupported MsgType: u'foo'")
-
-    @inlineCallbacks
     def test_ack_push_text_message(self):
         yield self.get_transport_with_access_token(self.access_token)
 
-        msg_d = self.dispatch_push_message('foo', {
-            'MsgType': 'text',
-        }, to_addr='toaddr')
+        msg_d = self.dispatch_push_message('foo', {}, to_addr='toaddr')
 
         request = yield self.request_queue.get()
         self.assertEqual(request.path, '/message/custom/send')
@@ -304,9 +281,7 @@ class WeChatTestCase(WeChatBaseTestCase):
     @inlineCallbacks
     def test_nack_push_text_message(self):
         yield self.get_transport_with_access_token(self.access_token)
-        msg_d = self.dispatch_push_message('foo', {
-            'MsgType': 'text'
-        })
+        msg_d = self.dispatch_push_message('foo', {})
 
         # fail the API request
         request = yield self.request_queue.get()
@@ -321,23 +296,12 @@ class WeChatTestCase(WeChatBaseTestCase):
         self.assertEqual(nack['nack_reason'], 'Received status code: 400')
 
     @inlineCallbacks
-    def test_ack_push_news_message(self):
+    def test_ack_push_inferred_news_message(self):
         yield self.get_transport_with_access_token(self.access_token)
         # news is a collection or URLs apparently
         msg_d = self.dispatch_push_message(
-            'foo', {
-                'MsgType': 'news',
-                'news': {
-                    'articles': [
-                        {
-                            'title': 'title',
-                            'description': 'description',
-                            'url': 'http://url',
-                            'picurl': 'http://picurl',
-                        }
-                    ]
-                }
-            }, to_addr='toaddr')
+            'This is an awesome link for you! http://www.wechat.com/', {},
+            to_addr='toaddr')
 
         request = yield self.request_queue.get()
         self.assertEqual(request.path, '/message/custom/send')
@@ -350,10 +314,8 @@ class WeChatTestCase(WeChatBaseTestCase):
             'news': {
                 'articles': [
                     {
-                        'title': 'title',
-                        'description': 'description',
-                        'url': 'http://url',
-                        'picurl': 'http://picurl',
+                        'description': 'This is an awesome link for you! ',
+                        'url': 'http://www.wechat.com/',
                     }
                 ]
             }

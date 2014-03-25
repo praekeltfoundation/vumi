@@ -4,6 +4,7 @@ import hashlib
 import urllib
 import json
 from datetime import datetime
+from functools import partial
 
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, Deferred, returnValue
@@ -17,7 +18,8 @@ from vumi.config import (
 from vumi.transports import Transport
 from vumi.transports.httprpc.httprpc import HttpRpcHealthResource
 from vumi.transports.wechat.errors import WeChatException, WeChatApiException
-from vumi.transports.wechat.message_types import TextMessage, EventMessage
+from vumi.transports.wechat.message_types import (
+    TextMessage, EventMessage, NewsMessage)
 from vumi.transports.wechat.parser import WeChatXMLParser
 from vumi.utils import build_web_site, http_request_full
 from vumi.message import TransportUserMessage
@@ -148,7 +150,7 @@ class WeChatTransport(Transport):
     CONFIG_CLASS = WeChatConfig
     DEFAULT_MASK = 'default'
     MESSAGE_TYPES = [
-        # RichMediaMessage,
+        NewsMessage,
     ]
     DEFAULT_MESSAGE_TYPE = TextMessage
     # What key to store the `access_token` under in Redis
@@ -280,8 +282,8 @@ class WeChatTransport(Transport):
         for message_type in self.MESSAGE_TYPES:
             result = message_type.accepts(message)
             if result is not None:
-                return message_type
-        return self.DEFAULT_MESSAGE_TYPE
+                return partial(message_type.from_vumi_message, result)
+        return self.DEFAULT_MESSAGE_TYPE.from_vumi_message
 
     def handle_outbound_message(self, message):
         """
@@ -290,16 +292,16 @@ class WeChatTransport(Transport):
         request_id = message['in_reply_to']
         request = self.pop_request(request_id)
 
+        builder = self.infer_message_type(message)
+        wc_msg = builder(message)
+
         if request is None:
             # There's no pending request object for this message which
             # means we need to treat this as a customer service message
             # and hit WeChat's Push API (window available for 24hrs)
-            return self.push_message(message)
+            return self.push_message(wc_msg, message)
 
-        wc_message_class = self.infer_message_type(message)
-        wc_msg = wc_message_class.from_vumi_message(message)
-
-        request.write(wc_msg.to_xml().encode('utf-8'))
+        request.write(wc_msg.to_xml())
         request.finish()
 
         d = self.publish_ack(user_message_id=message['message_id'],
@@ -318,27 +320,27 @@ class WeChatTransport(Transport):
         return (message['helper_metadata'].get('wechat', {}) or
                 message['transport_metadata'].get('wechat', {}))
 
-    def push_message(self, message):
-        metadata = self.get_metadata(message)
-        msg_type = metadata.get('MsgType')
-        if msg_type is None:
-            return self.publish_nack(
-                message['message_id'], reason='Missing MsgType')
+    def push_message(self, wc_message, vumi_message):
+        # metadata = self.get_metadata(message)
+        # msg_type = metadata.get('MsgType')
+        # if msg_type is None:
+        #     return self.publish_nack(
+        #         vumi_message['message_id'], reason='Missing MsgType')
 
         handler = {
-            'text': self.push_text_message,
-            'news': self.push_news_message,
-        }.get(msg_type, None)
+            TextMessage: self.push_text_message,
+            NewsMessage: self.push_news_message,
+        }.get(wc_message.__class__, None)
 
         if handler is None:
             return self.publish_nack(
-                message['message_id'], reason='Unsupported MsgType: %r' % (
-                    msg_type,))
+                vumi_message['message_id'],
+                reason='Unsupported MsgType: %r' % (wc_message.__class__,))
 
         d = self.get_access_token()
-        d.addCallback(handler, message)
-        d.addCallback(self.handle_api_response, message)
-        if message['session_event'] == TransportUserMessage.SESSION_CLOSE:
+        d.addCallback(handler, wc_message)
+        d.addCallback(self.handle_api_response, vumi_message)
+        if vumi_message['session_event'] == TransportUserMessage.SESSION_CLOSE:
             d.addCallback(lambda ack: self.clear_addr_mask())
         return d
 
@@ -388,31 +390,32 @@ class WeChatTransport(Transport):
         return '%s%s?%s' % (
             config.api_url, path, urllib.urlencode(params))
 
-    def push_text_message(self, access_token, message):
+    def push_text_message(self, access_token, wc_message):
         url = self.make_url('message/custom/send', {
             'access_token': access_token
         })
         return http_request_full(
             url, method='POST', data=json.dumps({
-                'touser': message['to_addr'],
+                'touser': wc_message.to_user_name,
                 'msgtype': 'text',
                 'text': {
-                    'content': message['content'],
+                    'content': wc_message.content,
                 }
             }), headers={
                 'Content-Type': ['application/json']
             })
 
-    def push_news_message(self, access_token, message):
+    def push_news_message(self, access_token, wc_message):
         url = self.make_url('message/custom/send', {
             'access_token': access_token
         })
-        metadata = self.get_metadata(message)
         return http_request_full(
             url, method='POST', data=json.dumps({
-                'touser': message['to_addr'],
+                'touser': wc_message.to_user_name,
                 'msgtype': 'news',
-                'news': metadata.get('news')
+                'news': {
+                    'articles': wc_message.items
+                }
             }))
 
     def teardown_transport(self):
