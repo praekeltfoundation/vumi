@@ -392,15 +392,16 @@ class WeChatAccessTokenTestCase(WeChatBaseTestCase):
 
         access_token = yield d
         self.assertEqual(access_token, 'the_access_token')
-        cached_token = yield transport.redis.get(transport.access_token_key)
+        cached_token = yield transport.redis.get(
+            WeChatTransport.ACCESS_TOKEN_KEY)
         self.assertEqual(cached_token, 'the_access_token')
-        expiry = yield transport.redis.ttl(transport.access_token_key)
+        expiry = yield transport.redis.ttl(WeChatTransport.ACCESS_TOKEN_KEY)
         self.assertTrue(int(7200 * 0.8) < expiry <= int(7200 * 0.9))
 
     @inlineCallbacks
     def test_get_cached_access_token(self):
         transport = yield self.get_transport()
-        yield transport.redis.set(transport.access_token_key, 'foo')
+        yield transport.redis.set(WeChatTransport.ACCESS_TOKEN_KEY, 'foo')
         access_token = yield transport.get_access_token()
         self.assertEqual(access_token, 'foo')
         # Empty request queue means no WeChat API calls were made
