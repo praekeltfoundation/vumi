@@ -1,4 +1,5 @@
 import re
+import json
 from xml.etree.ElementTree import Element, SubElement, tostring
 
 from vumi.transports.wechat.errors import WeChatException
@@ -63,6 +64,15 @@ class TextMessage(object):
         append(xml, 'Content', self.content)
         return tostring(xml)
 
+    def to_json(self):
+        return json.dumps({
+            'touser': self.to_user_name,
+            'msgtype': 'text',
+            'text': {
+                'content': self.content,
+            }
+        })
+
 
 class NewsMessage(object):
 
@@ -119,6 +129,15 @@ class NewsMessage(object):
             if 'url' in item:
                 append(item_element, 'Url', item['url'])
         return tostring(xml)
+
+    def to_json(self):
+        return json.dumps({
+            'touser': self.to_user_name,
+            'msgtype': 'news',
+            'news': {
+                'articles': self.items
+            }
+        })
 
 
 class EventMessage(object):

@@ -321,24 +321,16 @@ class WeChatTransport(Transport):
                 message['transport_metadata'].get('wechat', {}))
 
     def push_message(self, wc_message, vumi_message):
-        # metadata = self.get_metadata(message)
-        # msg_type = metadata.get('MsgType')
-        # if msg_type is None:
-        #     return self.publish_nack(
-        #         vumi_message['message_id'], reason='Missing MsgType')
-
-        handler = {
-            TextMessage: self.push_text_message,
-            NewsMessage: self.push_news_message,
-        }.get(wc_message.__class__, None)
-
-        if handler is None:
-            return self.publish_nack(
-                vumi_message['message_id'],
-                reason='Unsupported MsgType: %r' % (wc_message.__class__,))
-
         d = self.get_access_token()
-        d.addCallback(handler, wc_message)
+        d.addCallback(
+            lambda access_token: self.make_url('message/custom/send', {
+                'access_token': access_token
+            }))
+        d.addCallback(
+            lambda url: http_request_full(
+                url, method='POST', data=wc_message.to_json(), headers={
+                    'Content-Type': ['application/json']
+                }))
         d.addCallback(self.handle_api_response, vumi_message)
         if vumi_message['session_event'] == TransportUserMessage.SESSION_CLOSE:
             d.addCallback(lambda ack: self.clear_addr_mask())
@@ -389,34 +381,6 @@ class WeChatTransport(Transport):
         config = self.get_static_config()
         return '%s%s?%s' % (
             config.api_url, path, urllib.urlencode(params))
-
-    def push_text_message(self, access_token, wc_message):
-        url = self.make_url('message/custom/send', {
-            'access_token': access_token
-        })
-        return http_request_full(
-            url, method='POST', data=json.dumps({
-                'touser': wc_message.to_user_name,
-                'msgtype': 'text',
-                'text': {
-                    'content': wc_message.content,
-                }
-            }), headers={
-                'Content-Type': ['application/json']
-            })
-
-    def push_news_message(self, access_token, wc_message):
-        url = self.make_url('message/custom/send', {
-            'access_token': access_token
-        })
-        return http_request_full(
-            url, method='POST', data=json.dumps({
-                'touser': wc_message.to_user_name,
-                'msgtype': 'news',
-                'news': {
-                    'articles': wc_message.items
-                }
-            }))
 
     def teardown_transport(self):
         return self.server.stopListening()
