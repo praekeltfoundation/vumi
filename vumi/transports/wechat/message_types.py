@@ -5,7 +5,7 @@ from xml.etree.ElementTree import Element, SubElement, tostring
 
 class Message(object):
 
-    field_types = []
+    field_types = ()
     msg_type = None
 
     def __init__(self, data):
@@ -61,13 +61,13 @@ class Field(object):
 class TextMessage(Message):
 
     msg_type = 'text'
-    field_types = [
+    field_types = (
         Field('ToUserName'),
         Field('FromUserName'),
         Field('CreateTime', timestamp=True),
         Field('Content'),
         Field('MsgId'),
-    ]
+    )
 
     @classmethod
     def build(cls, message):
@@ -83,20 +83,20 @@ class TextMessage(Message):
 class RichMediaMessage(Message):
 
     msg_type = 'news'  # WAT?! WeChat?
-    field_types = [
+    field_types = (
         Field('ToUserName'),
         Field('FromUserName'),
         Field('CreateTime', timestamp=True),
         Field('ArticleCount'),
-        Field('Articles', children=[
-            Field('item', children=[
+        Field('Articles', children=(
+            Field('item', children=(
                 Field('Title'),
                 Field('Description'),
                 Field('PicUrl'),
                 Field('Url'),
-            ])
-        ]),
-    ]
+            ))
+        )),
+    )
 
     # Has something URL-ish in it
     URLISH = re.compile(
@@ -130,11 +130,11 @@ class RichMediaMessage(Message):
 class EventMessage(Message):
 
     msg_type = 'event'
-    field_types = [
+    field_types = (
         Field('ToUserName'),
         Field('FromUserName'),
         Field('CreateTime', timestamp=True),
         Field('Event'),
         Field('EventType'),
         Field('EventKey'),
-    ]
+    )
