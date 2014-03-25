@@ -1,3 +1,4 @@
+# -*- test-case-name: vumi.transports.wechat.tests.test_parser -*-
 from twisted.web import microdom
 from datetime import datetime
 
