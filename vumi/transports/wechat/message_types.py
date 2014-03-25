@@ -14,12 +14,9 @@ def get_child(node, name):
     return child
 
 
-def get_child_value(node, name, default=None):
-    try:
-        child = get_child(node, name)
-        return ''.join([grandchild.value for grandchild in child.childNodes])
-    except ValueError:
-        return default
+def get_child_value(node, name):
+    child = get_child(node, name)
+    return ''.join([grandchild.value for grandchild in child.childNodes])
 
 
 def append(node, tag, value):
@@ -27,7 +24,38 @@ def append(node, tag, value):
     el.text = value
 
 
-class TextMessage(object):
+class WeChatMessage(object):
+
+    mandatory_fields = ()
+    optional_fields = ()
+
+    @classmethod
+    def from_xml(cls, doc):
+        root = doc.firstChild()
+        params = [get_child_value(root, name)
+                  for name in cls.mandatory_fields]
+
+        for field in cls.optional_fields:
+            try:
+                params.append(get_child_value(root, field))
+            except ValueError:
+                # element not present
+                continue
+        return cls(*params)
+
+
+class TextMessage(WeChatMessage):
+
+    mandatory_fields = (
+        'ToUserName',
+        'FromUserName',
+        'CreateTime',
+        'Content',
+    )
+
+    optional_fields = (
+        'MsgId',
+    )
 
     def __init__(self, to_user_name, from_user_name, create_time, content,
                  msg_id=None):
@@ -36,16 +64,6 @@ class TextMessage(object):
         self.create_time = create_time
         self.content = content
         self.msg_id = msg_id
-
-    @classmethod
-    def from_xml(cls, doc):
-        root = doc.firstChild()
-        return cls(*[get_child_value(root, name)
-                     for name in ['ToUserName',
-                                  'FromUserName',
-                                  'CreateTime',
-                                  'Content',
-                                  'MsgId']])
 
     @classmethod
     def from_vumi_message(cls, message):
@@ -74,6 +92,8 @@ class TextMessage(object):
         })
 
 
+# NOTE: NewsMessage doesn't subclass WeChatMessage because this message
+#       is never received as XML, it is outbound only.
 class NewsMessage(object):
 
     # Has something URL-ish in it
@@ -140,7 +160,19 @@ class NewsMessage(object):
         })
 
 
-class EventMessage(object):
+class EventMessage(WeChatMessage):
+
+    mandatory_fields = (
+        'ToUserName',
+        'FromUserName',
+        'CreateTime',
+        'Event',
+    )
+
+    optional_fields = (
+        'MsgId',
+        'EventKey',
+    )
 
     def __init__(self, to_user_name, from_user_name, create_time, event,
                  event_key=None):
@@ -149,13 +181,3 @@ class EventMessage(object):
         self.create_time = create_time
         self.event = event
         self.event_key = event_key
-
-    @classmethod
-    def from_xml(cls, doc):
-        root = doc.firstChild()
-        return cls(*[get_child_value(root, name)
-                     for name in ['ToUserName',
-                                  'FromUserName',
-                                  'CreateTime',
-                                  'Event',
-                                  'EventKey']])
