@@ -2,7 +2,7 @@ class WeChatException(Exception):
     pass
 
 
-class UnsupportedWechatMessage(WeChatException):
+class UnsupportedWeChatMessage(WeChatException):
     pass
 
 
