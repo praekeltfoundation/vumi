@@ -2,7 +2,6 @@ import hashlib
 import json
 import yaml
 from urllib import urlencode
-from datetime import datetime
 
 from twisted.internet.defer import inlineCallbacks, DeferredQueue, returnValue
 from twisted.web import http
@@ -545,7 +544,7 @@ class WeChatInferMessageType(WeChatBaseTestCase):
     access_token = 'foo'
 
     @inlineCallbacks
-    def test_infer_rich_media_message(self):
+    def test_infer_news_message(self):
         transport = yield self.get_transport_with_access_token(
             self.access_token)
 

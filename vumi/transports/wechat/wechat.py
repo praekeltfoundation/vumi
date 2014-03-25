@@ -74,9 +74,6 @@ class WeChatConfig(Transport.CONFIG_CLASS):
         'to allow push API access.', required=True, static=True)
     wechat_menu = ConfigDict(
         'The menu structure to create at boot.', required=False, static=True)
-    infer_message_types = ConfigBool(
-        'Actively guess what type of WeChat message an outbound Vumi '
-        'message is best represented as.', default=False, static=True)
 
 
 class WeChatResource(Resource):
