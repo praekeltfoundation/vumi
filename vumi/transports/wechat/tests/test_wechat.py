@@ -43,7 +43,7 @@ def request(transport, method, path='', params={}, data=None):
     return http_request_full(url, method=method, data=data)
 
 
-class WeChatBaseTestCase(VumiTestCase):
+class WeChatTestCase(VumiTestCase):
 
     transport_class = WeChatTransport
 
@@ -76,7 +76,7 @@ class WeChatBaseTestCase(VumiTestCase):
         returnValue(transport)
 
 
-class WeChatTestCase(WeChatBaseTestCase):
+class TestWeChatInboundMessaging(WeChatTestCase):
 
     access_token = 'foo'
 
@@ -245,6 +245,11 @@ class WeChatTestCase(WeChatBaseTestCase):
             [],
             self.tx_helper.get_dispatched_inbound())
 
+
+class TestWeChatOutboundMessaging(WeChatTestCase):
+
+    access_token = 'foo'
+
     def dispatch_push_message(self, content, wechat_md, **kwargs):
         helper_metadata = kwargs.get('helper_metadata', {})
         wechat_metadata = helper_metadata.setdefault('wechat', {})
@@ -328,7 +333,7 @@ class WeChatTestCase(WeChatBaseTestCase):
         self.assertEqual(ack['user_message_id'], msg['message_id'])
 
 
-class WeChatAccessTokenTestCase(WeChatBaseTestCase):
+class TestWeChatAccessToken(WeChatTestCase):
 
     @inlineCallbacks
     def test_request_new_access_token(self):
@@ -368,7 +373,7 @@ class WeChatAccessTokenTestCase(WeChatBaseTestCase):
         self.assertEqual(self.request_queue.size, None)
 
 
-class WeChatAddrMaskingTestCase(WeChatBaseTestCase):
+class TestWeChatAddrMasking(WeChatTestCase):
     access_token = 'foo'
 
     @inlineCallbacks
@@ -474,7 +479,7 @@ class WeChatAddrMaskingTestCase(WeChatBaseTestCase):
         yield resp_d
 
 
-class WeChatMenuCreationTestCase(WeChatBaseTestCase):
+class TestWeChatMenuCreation(WeChatTestCase):
 
     MENU_TEMPLATE = """
     button:
@@ -539,7 +544,7 @@ class WeChatMenuCreationTestCase(WeChatBaseTestCase):
              'size when creating WeChat Menu.'))
 
 
-class WeChatInferMessageType(WeChatBaseTestCase):
+class TestWeChatInferMessage(WeChatTestCase):
 
     access_token = 'foo'
 
