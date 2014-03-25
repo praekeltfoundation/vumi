@@ -152,6 +152,10 @@ class WeChatTransport(Transport):
         RichMediaMessage,
     ]
     DEFAULT_MESSAGE_TYPE = TextMessage
+    # What key to store the `access_token` under in Redis
+    ACCESS_TOKEN_KEY = 'access_token'
+    # What key to store the `addr_mask` under in Redis
+    ADDR_MASK_KEY = 'addr_mask'
 
     @inlineCallbacks
     def setup_transport(self):
@@ -165,10 +169,6 @@ class WeChatTransport(Transport):
         })
 
         self.redis = yield TxRedisManager.from_config(config.redis_manager)
-        # What key to store the `access_token` under in Redis
-        self.access_token_key = 'access_token'
-        # What key to store the `addr_mask` under in Redis
-        self.addr_mask_key = 'addr_mask'
         self.server = yield self.endpoint.listen(self.factory)
 
         if config.wechat_menu:
@@ -197,17 +197,17 @@ class WeChatTransport(Transport):
         return '@'.join([to_addr, mask])
 
     def cache_addr_mask(self, mask):
-        d = self.redis.set(self.addr_mask_key, mask)
+        d = self.redis.set(self.ADDR_MASK_KEY, mask)
         d.addCallback(lambda *a: mask)
         return d
 
     def get_addr_mask(self):
-        d = self.redis.get(self.addr_mask_key)
+        d = self.redis.get(self.ADDR_MASK_KEY)
         d.addCallback(lambda mask: mask or self.DEFAULT_MASK)
         return d
 
     def clear_addr_mask(self):
-        return self.redis.delete(self.addr_mask_key)
+        return self.redis.delete(self.ADDR_MASK_KEY)
 
     def handle_raw_inbound_message(self, wc_msg):
         return {
@@ -353,7 +353,7 @@ class WeChatTransport(Transport):
 
     @inlineCallbacks
     def get_access_token(self):
-        access_token = yield self.redis.get(self.access_token_key)
+        access_token = yield self.redis.get(self.ACCESS_TOKEN_KEY)
         if access_token is None:
             access_token = yield self.request_new_access_token()
         returnValue(access_token)
@@ -381,7 +381,7 @@ class WeChatTransport(Transport):
         access_token = data['access_token']
         expiry = int(data['expires_in']) * 0.90
         yield self.redis.setex(
-            self.access_token_key, int(expiry), access_token)
+            self.ACCESS_TOKEN_KEY, int(expiry), access_token)
         returnValue(access_token)
 
     def make_url(self, path, params):

@@ -4,8 +4,7 @@ import yaml
 from urllib import urlencode
 from datetime import datetime
 
-from twisted.internet.defer import inlineCallbacks, DeferredQueue, succeed
-from twisted.internet.task import Clock
+from twisted.internet.defer import inlineCallbacks, DeferredQueue, returnValue
 from twisted.web import http
 from twisted.web.server import NOT_DONE_YET
 
@@ -48,21 +47,12 @@ def request(transport, method, path='', params={}, data=None):
 class WeChatBaseTestCase(VumiTestCase):
 
     transport_class = WeChatTransport
-    access_token = None
 
     def setUp(self):
         self.tx_helper = self.add_helper(TransportHelper(self.transport_class))
         self.request_queue = DeferredQueue()
         self.mock_server = MockHttpServer(self.handle_api_request)
         self.add_cleanup(self.mock_server.stop)
-        self.clock = Clock()
-
-        if self.access_token is not None:
-            # Patch the get_access_token stuff to always return `foo`
-            # for this set of tests.
-            self.patch(self.transport_class, 'get_access_token',
-                       lambda *a: succeed(self.access_token))
-
         return self.mock_server.start()
 
     def handle_api_request(self, request):
@@ -80,6 +70,12 @@ class WeChatBaseTestCase(VumiTestCase):
         defaults.update(config)
         return self.tx_helper.get_transport(defaults)
 
+    @inlineCallbacks
+    def get_transport_with_access_token(self, access_token, **config):
+        transport = yield self.get_transport(**config)
+        transport.redis.set(WeChatTransport.ACCESS_TOKEN_KEY, access_token)
+        returnValue(transport)
+
 
 class WeChatTestCase(WeChatBaseTestCase):
 
@@ -96,7 +92,8 @@ class WeChatTestCase(WeChatBaseTestCase):
 
     @inlineCallbacks
     def test_auth_fail(self):
-        transport = yield self.get_transport()
+        transport = yield self.get_transport_with_access_token(
+            self.access_token)
         resp = yield request(
             transport, "GET", params={
                 'signature': 'foo',
@@ -106,7 +103,8 @@ class WeChatTestCase(WeChatBaseTestCase):
 
     @inlineCallbacks
     def test_inbound_text_message(self):
-        transport = yield self.get_transport()
+        transport = yield self.get_transport_with_access_token(
+            self.access_token)
 
         resp_d = request(
             transport, 'POST', data="""
@@ -138,7 +136,8 @@ class WeChatTestCase(WeChatBaseTestCase):
 
     @inlineCallbacks
     def test_inbound_event_subscribe_message(self):
-        transport = yield self.get_transport()
+        transport = yield self.get_transport_with_access_token(
+            self.access_token)
 
         resp_d = request(
             transport, 'POST', data="""
@@ -186,7 +185,8 @@ class WeChatTestCase(WeChatBaseTestCase):
 
     @inlineCallbacks
     def test_inbound_menu_event_click_message(self):
-        transport = yield self.get_transport()
+        transport = yield self.get_transport_with_access_token(
+            self.access_token)
 
         resp_d = request(
             transport, 'POST', data="""
@@ -222,7 +222,8 @@ class WeChatTestCase(WeChatBaseTestCase):
 
     @inlineCallbacks
     def test_unsupported_message_type(self):
-        transport = yield self.get_transport()
+        transport = yield self.get_transport_with_access_token(
+            self.access_token)
 
         response = yield request(
             transport, 'POST', data="""
@@ -248,7 +249,7 @@ class WeChatTestCase(WeChatBaseTestCase):
 
     @inlineCallbacks
     def test_push_invalid_message(self):
-        yield self.get_transport()
+        yield self.get_transport_with_access_token(self.access_token)
         msg = yield self.tx_helper.make_dispatch_outbound('foo')
         [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(nack['nack_reason'], 'Missing MsgType')
@@ -264,7 +265,7 @@ class WeChatTestCase(WeChatBaseTestCase):
 
     @inlineCallbacks
     def test_push_unsupported_message(self):
-        yield self.get_transport()
+        yield self.get_transport_with_access_token(self.access_token)
         msg = yield self.dispatch_push_message('foo', {
             'MsgType': 'foo'
         })
@@ -276,7 +277,7 @@ class WeChatTestCase(WeChatBaseTestCase):
 
     @inlineCallbacks
     def test_ack_push_text_message(self):
-        yield self.get_transport()
+        yield self.get_transport_with_access_token(self.access_token)
 
         msg_d = self.dispatch_push_message('foo', {
             'MsgType': 'text',
@@ -303,7 +304,7 @@ class WeChatTestCase(WeChatBaseTestCase):
 
     @inlineCallbacks
     def test_nack_push_text_message(self):
-        yield self.get_transport()
+        yield self.get_transport_with_access_token(self.access_token)
         msg_d = self.dispatch_push_message('foo', {
             'MsgType': 'text'
         })
@@ -322,7 +323,7 @@ class WeChatTestCase(WeChatBaseTestCase):
 
     @inlineCallbacks
     def test_ack_push_news_message(self):
-        yield self.get_transport()
+        yield self.get_transport_with_access_token(self.access_token)
         # news is a collection or URLs apparently
         msg_d = self.dispatch_push_message(
             'foo', {
@@ -411,7 +412,8 @@ class WeChatAddrMaskingTestCase(WeChatBaseTestCase):
 
     @inlineCallbacks
     def test_default_mask(self):
-        transport = yield self.get_transport()
+        transport = yield self.get_transport_with_access_token(
+            self.access_token)
 
         resp_d = request(
             transport, 'POST', data="""
@@ -434,7 +436,8 @@ class WeChatAddrMaskingTestCase(WeChatBaseTestCase):
 
     @inlineCallbacks
     def test_mask_switching_on_event_key(self):
-        transport = yield self.get_transport()
+        transport = yield self.get_transport_with_access_token(
+            self.access_token)
 
         resp_d = request(
             transport, 'POST', data="""
@@ -458,7 +461,8 @@ class WeChatAddrMaskingTestCase(WeChatBaseTestCase):
 
     @inlineCallbacks
     def test_mask_caching_on_text_message(self):
-        transport = yield self.get_transport()
+        transport = yield self.get_transport_with_access_token(
+            self.access_token)
         yield transport.cache_addr_mask('foo')
 
         resp_d = request(
@@ -480,7 +484,8 @@ class WeChatAddrMaskingTestCase(WeChatBaseTestCase):
 
     @inlineCallbacks
     def test_mask_clearing_on_session_end(self):
-        transport = yield self.get_transport()
+        transport = yield self.get_transport_with_access_token(
+            self.access_token)
         yield transport.cache_addr_mask('foo')
 
         resp_d = request(
@@ -533,7 +538,10 @@ class WeChatMenuCreationTestCase(WeChatBaseTestCase):
 
     @inlineCallbacks
     def test_create_new_menu_success(self):
-        yield self.get_transport(wechat_menu=self.MENU)
+        transport = yield self.get_transport_with_access_token(
+            self.access_token)
+
+        d = transport.create_wechat_menu('foo', self.MENU)
         req = yield self.request_queue.get()
         self.assertEqual(req.path, '/menu/create')
         self.assertEqual(req.args, {
@@ -546,7 +554,8 @@ class WeChatMenuCreationTestCase(WeChatBaseTestCase):
 
     @inlineCallbacks
     def test_create_new_menu_failure(self):
-        transport = yield self.get_transport()
+        transport = yield self.get_transport_with_access_token(
+            self.access_token)
         d = transport.create_wechat_menu('foo', self.MENU)
 
         req = yield self.request_queue.get()
@@ -565,11 +574,10 @@ class WeChatMenuCreationTestCase(WeChatBaseTestCase):
 
 class WeChatInferMessageType(WeChatTestCase):
 
-    access_token = 'foo'
-
     @inlineCallbacks
     def test_infer_rich_media_message(self):
-        transport = yield self.get_transport()
+        transport = yield self.get_transport_with_access_token(
+            self.access_token)
 
         resp_d = request(
             transport, 'POST', data="""
