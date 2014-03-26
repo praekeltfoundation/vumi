@@ -232,7 +232,7 @@ class TestWeChatInboundMessaging(WeChatTestCase):
             response.code, http.BAD_REQUEST)
         self.assertEqual(
             response.delivered_body,
-            "Unsupported MsgType: this_is_unsupported")
+            "Unsupported MsgType: THIS_IS_UNSUPPORTED")
         self.assertEqual(
             [],
             self.tx_helper.get_dispatched_inbound())

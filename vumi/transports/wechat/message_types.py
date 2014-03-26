@@ -2,17 +2,15 @@
 
 import re
 import json
-from xml.etree.ElementTree import Element, SubElement, tostring
-
-from twisted.web import microdom
+from xml.etree.ElementTree import Element, SubElement, tostring, fromstring
 
 from vumi.transports.wechat.errors import (
     WeChatParserException, WeChatException)
 
 
 def get_child_value(node, name):
-    [child] = node.getElementsByTagName(name)
-    return ''.join([grandchild.value for grandchild in child.childNodes])
+    [child] = node.findall(name)
+    return child.text.strip()
 
 
 def append(node, tag, value):
@@ -27,13 +25,12 @@ class WeChatMessage(object):
 
     @classmethod
     def from_xml(cls, doc):
-        root = doc.firstChild()
-        params = [get_child_value(root, name)
+        params = [get_child_value(doc, name)
                   for name in cls.mandatory_fields]
 
         for field in cls.optional_fields:
             try:
-                params.append(get_child_value(root, field))
+                params.append(get_child_value(doc, field))
             except ValueError:
                 # element not present
                 continue
@@ -188,14 +185,13 @@ class WeChatXMLParser(object):
 
     @classmethod
     def parse(cls, string):
-        doc = microdom.parseXMLString(string.decode(cls.ENCODING))
+        doc = fromstring(string.decode(cls.ENCODING))
         klass = cls.get_class(doc)
         return klass.from_xml(doc)
 
     @classmethod
     def get_class(cls, doc):
-        root = doc.firstChild()
-        msg_types = root.getElementsByTagName('MsgType')
+        msg_types = doc.findall('MsgType')
         if not msg_types:
             raise WeChatParserException('No MsgType found.')
 
@@ -203,12 +199,9 @@ class WeChatXMLParser(object):
             raise WeChatParserException('More than 1 MsgType found.')
 
         [msg_type_element] = msg_types
-        msg_type = ''.join([child.value.lower()
-                            for child in msg_type_element.childNodes])
+        msg_type = msg_type_element.text.strip()
         if msg_type not in cls.CLASS_MAP:
             raise WeChatParserException(
                 'Unsupported MsgType: %s' % (msg_type,))
 
         return cls.CLASS_MAP[msg_type]
-
-
