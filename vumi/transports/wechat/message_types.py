@@ -83,9 +83,7 @@ class TextMessage(WeChatMessage):
         })
 
 
-# NOTE: NewsMessage doesn't subclass WeChatMessage because this message
-#       is never received as XML, it is outbound only.
-class NewsMessage(object):
+class NewsMessage(WeChatMessage):
 
     # Has something URL-ish in it
     URLISH = re.compile(
