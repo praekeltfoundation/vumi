@@ -116,7 +116,7 @@ class WeChatResource(Resource):
 
     def handle_request(self, request):
         d = request.notifyFinish()
-        d.addCallback(
+        d.addBoth(
             lambda _: self.transport.handle_finished_request(request))
 
         wc_msg = WeChatXMLParser.parse(request.content.read())
