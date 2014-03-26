@@ -1,8 +1,13 @@
+# -*- test-case-name: vumi.transports.wechat.tests.test_message_types -*-
+
 import re
 import json
 from xml.etree.ElementTree import Element, SubElement, tostring
 
-from vumi.transports.wechat.errors import WeChatException
+from twisted.web import microdom
+
+from vumi.transports.wechat.errors import (
+    WeChatParserException, WeChatException)
 
 
 def get_child_value(node, name):
@@ -170,3 +175,40 @@ class EventMessage(WeChatMessage):
         self.create_time = create_time
         self.event = event
         self.event_key = event_key
+
+
+class WeChatXMLParser(object):
+
+    ENCODING = 'utf-8'
+    CLASS_MAP = {
+        'text': TextMessage,
+        'news': NewsMessage,
+        'event': EventMessage,
+    }
+
+    @classmethod
+    def parse(cls, string):
+        doc = microdom.parseXMLString(string.decode(cls.ENCODING))
+        klass = cls.get_class(doc)
+        return klass.from_xml(doc)
+
+    @classmethod
+    def get_class(cls, doc):
+        root = doc.firstChild()
+        msg_types = root.getElementsByTagName('MsgType')
+        if not msg_types:
+            raise WeChatParserException('No MsgType found.')
+
+        if len(msg_types) > 1:
+            raise WeChatParserException('More than 1 MsgType found.')
+
+        [msg_type_element] = msg_types
+        msg_type = ''.join([child.value.lower()
+                            for child in msg_type_element.childNodes])
+        if msg_type not in cls.CLASS_MAP:
+            raise WeChatParserException(
+                'Unsupported MsgType: %s' % (msg_type,))
+
+        return cls.CLASS_MAP[msg_type]
+
+

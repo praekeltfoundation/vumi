@@ -2,8 +2,8 @@ import json
 
 from twisted.trial.unittest import TestCase
 
-from vumi.transports.wechat import message_types
-from vumi.transports.wechat.parser import WeChatXMLParser
+from vumi.transports.wechat.message_types import (
+    WeChatXMLParser, TextMessage, NewsMessage)
 from vumi.transports.wechat.errors import WeChatParserException
 
 
@@ -36,10 +36,10 @@ class TestWeChatXMLParser(TestCase):
         self.assertEqual(msg.create_time, '1348831860')
         self.assertEqual(msg.msg_id, '1234567890123456')
         self.assertEqual(msg.content, 'this is a test')
-        self.assertTrue(isinstance(msg, message_types.TextMessage))
+        self.assertTrue(isinstance(msg, TextMessage))
 
     def test_text_message_to_xml(self):
-        msg = message_types.TextMessage(
+        msg = TextMessage(
             'to_addr', 'from_addr', '1348831860', 'this is a test')
         self.assertEqual(
             msg.to_xml(),
@@ -54,7 +54,7 @@ class TestWeChatXMLParser(TestCase):
             ]))
 
     def test_text_message_to_json(self):
-        msg = message_types.TextMessage(
+        msg = TextMessage(
             'to_addr', 'from_addr', '1348831860', 'this is a test')
         self.assertEqual(
             json.loads(msg.to_json()),
@@ -67,7 +67,7 @@ class TestWeChatXMLParser(TestCase):
             })
 
     def test_news_message_to_xml(self):
-        msg = message_types.NewsMessage(
+        msg = NewsMessage(
             'to_addr', 'from_addr', '1348831860', [{
                 'title': 'title1',
                 'description': 'description1',
@@ -98,7 +98,7 @@ class TestWeChatXMLParser(TestCase):
             ]))
 
     def test_news_message_to_json(self):
-        msg = message_types.NewsMessage(
+        msg = NewsMessage(
             'to_addr', 'from_addr', '1348831860', [{
                 'title': 'title1',
                 'description': 'description1',
