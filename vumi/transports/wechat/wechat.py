@@ -173,6 +173,7 @@ class WeChatTransport(Transport):
     ACCESS_TOKEN_KEY = 'access_token'
     # What key to store the `addr_mask` under in Redis
     ADDR_MASK_KEY = 'addr_mask'
+    transport_type = 'wechat'
 
     @inlineCallbacks
     def setup_transport(self):
@@ -248,7 +249,6 @@ class WeChatTransport(Transport):
             from_addr=wc_msg.from_user_name,
             to_addr=self.mask_addr(wc_msg.to_user_name, mask),
             timestamp=datetime.fromtimestamp(int(wc_msg.create_time)),
-            transport_type='wechat',
             transport_metadata={
                 'wechat': {
                     'FromUserName': wc_msg.from_user_name,
@@ -280,7 +280,6 @@ class WeChatTransport(Transport):
             to_addr=self.mask_addr(wc_msg.to_user_name, mask),
             timestamp=datetime.fromtimestamp(int(wc_msg.create_time)),
             session_event=session_event,
-            transport_type='wechat',
             transport_metadata={
                 'wechat': {
                     'FromUserName': wc_msg.from_user_name,
