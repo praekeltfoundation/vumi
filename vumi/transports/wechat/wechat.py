@@ -122,6 +122,12 @@ class WeChatTransport(Transport):
 
     A Transport for the WeChat API.
 
+    API documentation
+    ~~~~~~~~~~~~~~~~~
+
+    http://admin.wechat.com/wiki/index.php?title=Main_Page
+
+
     Inbound Messaging
     ~~~~~~~~~~~~~~~~~
 
@@ -135,12 +141,19 @@ class WeChatTransport(Transport):
         - Unfollowing / unsubscribe
         - Text Message (in response to Menu keypress events)
 
+
     Outbound Messaging
     ~~~~~~~~~~~~~~~~~~
 
     Supported Callback Message types:
 
         - Text Message
+        - News Message
+
+    Supported Customer Service Message types:
+
+        - Text Message
+        - News Message
 
     """
 
