@@ -173,7 +173,7 @@ class WeChatTransport(Transport):
     @inlineCallbacks
     def setup_transport(self):
         config = self.get_static_config()
-        self.request_queue = {}
+        self.request_dict = {}
         self.endpoint = config.twisted_endpoint
         self.resource = WeChatResource(self)
         self.factory = build_web_site({
@@ -287,10 +287,10 @@ class WeChatTransport(Transport):
         request.finish()
 
     def queue_request(self, message, request):
-        self.request_queue[message['message_id']] = request
+        self.request_dict[message['message_id']] = request
 
     def pop_request(self, message_id):
-        return self.request_queue.pop(message_id, None)
+        return self.request_dict.pop(message_id, None)
 
     def infer_message_type(self, message):
         for message_type in self.MESSAGE_TYPES:
