@@ -325,21 +325,17 @@ class WeChatTransport(Transport):
         builder = self.infer_message_type(message)
         wc_msg = builder(message)
 
-        if request is None:
+        if request is None or request.finished:
             # There's no pending request object for this message which
             # means we need to treat this as a customer service message
             # and hit WeChat's Push API (window available for 24hrs)
             return self.push_message(wc_msg, message)
 
-        if request.finished:
-            d = self.publish_nack(
-                message['message_id'], 'Request closed when trying to reply.')
-        else:
-            request.write(wc_msg.to_xml())
-            request.finish()
+        request.write(wc_msg.to_xml())
+        request.finish()
 
-            d = self.publish_ack(user_message_id=message['message_id'],
-                                 sent_message_id=message['message_id'])
+        d = self.publish_ack(user_message_id=message['message_id'],
+                             sent_message_id=message['message_id'])
 
         if message['session_event'] == TransportUserMessage.SESSION_CLOSE:
             d.addCallback(
