@@ -249,6 +249,7 @@ class WeChatTransport(Transport):
             from_addr=wc_msg.from_user_name,
             to_addr=self.mask_addr(wc_msg.to_user_name, mask),
             timestamp=datetime.fromtimestamp(int(wc_msg.create_time)),
+            transport_type=self.transport_type,
             transport_metadata={
                 'wechat': {
                     'FromUserName': wc_msg.from_user_name,
@@ -279,6 +280,7 @@ class WeChatTransport(Transport):
             from_addr=wc_msg.from_user_name,
             to_addr=self.mask_addr(wc_msg.to_user_name, mask),
             timestamp=datetime.fromtimestamp(int(wc_msg.create_time)),
+            transport_type=self.transport_type,
             session_event=session_event,
             transport_metadata={
                 'wechat': {
