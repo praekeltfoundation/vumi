@@ -74,6 +74,9 @@ class WeChatConfig(Transport.CONFIG_CLASS):
         'to allow push API access.', required=True, static=True)
     wechat_menu = ConfigDict(
         'The menu structure to create at boot.', required=False, static=True)
+    wechat_mask_lifetime = ConfigInt(
+        'How long, in seconds, to maintain an address mask for. '
+        '(default 1 hour)', default=60 * 60 * 1, static=True)
 
 
 class WeChatResource(Resource):
@@ -208,7 +211,9 @@ class WeChatTransport(Transport):
         return '@'.join([to_addr, mask])
 
     def cache_addr_mask(self, mask):
-        d = self.redis.set(self.ADDR_MASK_KEY, mask)
+        config = self.get_static_config()
+        d = self.redis.setex(
+            self.ADDR_MASK_KEY, config.wechat_mask_lifetime, mask)
         d.addCallback(lambda *a: mask)
         return d
 
