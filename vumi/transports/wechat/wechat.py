@@ -324,16 +324,6 @@ class WeChatTransport(Transport):
             d.addCallback(lambda ack: self.clear_addr_mask())
         return d
 
-    def get_metadata(self, message):
-        """
-        It will either be grabbed from `helper_metadata` if this is an
-        outbound message that is not a reply and `transport_metadata`
-        if this is an outbound reply that took too long or for
-        whatever reason the request was dropped.
-        """
-        return (message['helper_metadata'].get('wechat', {}) or
-                message['transport_metadata'].get('wechat', {}))
-
     def push_message(self, wc_message, vumi_message):
         d = self.get_access_token()
         d.addCallback(
