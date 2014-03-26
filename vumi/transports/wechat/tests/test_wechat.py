@@ -76,8 +76,6 @@ class WeChatTestCase(VumiTestCase):
 
 class TestWeChatInboundMessaging(WeChatTestCase):
 
-    access_token = 'foo'
-
     @inlineCallbacks
     def test_auth_success(self):
         transport = yield self.get_transport()
@@ -89,8 +87,7 @@ class TestWeChatInboundMessaging(WeChatTestCase):
 
     @inlineCallbacks
     def test_auth_fail(self):
-        transport = yield self.get_transport_with_access_token(
-            self.access_token)
+        transport = yield self.get_transport_with_access_token('foo')
         resp = yield request(
             transport, "GET", params={
                 'signature': 'foo',
@@ -100,8 +97,7 @@ class TestWeChatInboundMessaging(WeChatTestCase):
 
     @inlineCallbacks
     def test_inbound_text_message(self):
-        transport = yield self.get_transport_with_access_token(
-            self.access_token)
+        transport = yield self.get_transport_with_access_token('foo')
 
         resp_d = request(
             transport, 'POST', data="""
@@ -133,8 +129,7 @@ class TestWeChatInboundMessaging(WeChatTestCase):
 
     @inlineCallbacks
     def test_inbound_event_subscribe_message(self):
-        transport = yield self.get_transport_with_access_token(
-            self.access_token)
+        transport = yield self.get_transport_with_access_token('foo')
 
         resp_d = request(
             transport, 'POST', data="""
@@ -182,8 +177,7 @@ class TestWeChatInboundMessaging(WeChatTestCase):
 
     @inlineCallbacks
     def test_inbound_menu_event_click_message(self):
-        transport = yield self.get_transport_with_access_token(
-            self.access_token)
+        transport = yield self.get_transport_with_access_token('foo')
 
         resp_d = request(
             transport, 'POST', data="""
@@ -219,8 +213,7 @@ class TestWeChatInboundMessaging(WeChatTestCase):
 
     @inlineCallbacks
     def test_unsupported_message_type(self):
-        transport = yield self.get_transport_with_access_token(
-            self.access_token)
+        transport = yield self.get_transport_with_access_token('foo')
 
         response = yield request(
             transport, 'POST', data="""
@@ -246,8 +239,6 @@ class TestWeChatInboundMessaging(WeChatTestCase):
 
 class TestWeChatOutboundMessaging(WeChatTestCase):
 
-    access_token = 'foo'
-
     def dispatch_push_message(self, content, wechat_md, **kwargs):
         helper_metadata = kwargs.get('helper_metadata', {})
         wechat_metadata = helper_metadata.setdefault('wechat', {})
@@ -257,7 +248,7 @@ class TestWeChatOutboundMessaging(WeChatTestCase):
 
     @inlineCallbacks
     def test_ack_push_text_message(self):
-        yield self.get_transport_with_access_token(self.access_token)
+        yield self.get_transport_with_access_token('foo')
 
         msg_d = self.dispatch_push_message('foo', {}, to_addr='toaddr')
 
@@ -282,7 +273,7 @@ class TestWeChatOutboundMessaging(WeChatTestCase):
 
     @inlineCallbacks
     def test_nack_push_text_message(self):
-        yield self.get_transport_with_access_token(self.access_token)
+        yield self.get_transport_with_access_token('foo')
         msg_d = self.dispatch_push_message('foo', {})
 
         # fail the API request
@@ -299,7 +290,7 @@ class TestWeChatOutboundMessaging(WeChatTestCase):
 
     @inlineCallbacks
     def test_ack_push_inferred_news_message(self):
-        yield self.get_transport_with_access_token(self.access_token)
+        yield self.get_transport_with_access_token('foo')
         # news is a collection or URLs apparently
         msg_d = self.dispatch_push_message(
             'This is an awesome link for you! http://www.wechat.com/', {},
@@ -372,12 +363,10 @@ class TestWeChatAccessToken(WeChatTestCase):
 
 
 class TestWeChatAddrMasking(WeChatTestCase):
-    access_token = 'foo'
 
     @inlineCallbacks
     def test_default_mask(self):
-        transport = yield self.get_transport_with_access_token(
-            self.access_token)
+        transport = yield self.get_transport_with_access_token('foo')
 
         resp_d = request(
             transport, 'POST', data="""
@@ -401,8 +390,7 @@ class TestWeChatAddrMasking(WeChatTestCase):
 
     @inlineCallbacks
     def test_mask_switching_on_event_key(self):
-        transport = yield self.get_transport_with_access_token(
-            self.access_token)
+        transport = yield self.get_transport_with_access_token('foo')
 
         resp_d = request(
             transport, 'POST', data="""
@@ -427,8 +415,7 @@ class TestWeChatAddrMasking(WeChatTestCase):
 
     @inlineCallbacks
     def test_mask_caching_on_text_message(self):
-        transport = yield self.get_transport_with_access_token(
-            self.access_token)
+        transport = yield self.get_transport_with_access_token('foo')
         yield transport.cache_addr_mask('foo')
 
         resp_d = request(
@@ -451,8 +438,7 @@ class TestWeChatAddrMasking(WeChatTestCase):
 
     @inlineCallbacks
     def test_mask_clearing_on_session_end(self):
-        transport = yield self.get_transport_with_access_token(
-            self.access_token)
+        transport = yield self.get_transport_with_access_token('foo')
         yield transport.cache_addr_mask('foo')
 
         resp_d = request(
@@ -502,12 +488,10 @@ class TestWeChatMenuCreation(WeChatTestCase):
             key: V1001_GOOD
     """
     MENU = yaml.safe_load(MENU_TEMPLATE)
-    access_token = 'foo'
 
     @inlineCallbacks
     def test_create_new_menu_success(self):
-        transport = yield self.get_transport_with_access_token(
-            self.access_token)
+        transport = yield self.get_transport_with_access_token('foo')
 
         d = transport.create_wechat_menu('foo', self.MENU)
         req = yield self.request_queue.get()
@@ -524,8 +508,7 @@ class TestWeChatMenuCreation(WeChatTestCase):
 
     @inlineCallbacks
     def test_create_new_menu_failure(self):
-        transport = yield self.get_transport_with_access_token(
-            self.access_token)
+        transport = yield self.get_transport_with_access_token('foo')
         d = transport.create_wechat_menu('foo', self.MENU)
 
         req = yield self.request_queue.get()
@@ -544,12 +527,9 @@ class TestWeChatMenuCreation(WeChatTestCase):
 
 class TestWeChatInferMessage(WeChatTestCase):
 
-    access_token = 'foo'
-
     @inlineCallbacks
     def test_infer_news_message(self):
-        transport = yield self.get_transport_with_access_token(
-            self.access_token)
+        transport = yield self.get_transport_with_access_token('foo')
 
         resp_d = request(
             transport, 'POST', data="""
