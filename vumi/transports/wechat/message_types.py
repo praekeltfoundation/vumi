@@ -59,7 +59,7 @@ class TextMessage(WeChatMessage):
     @classmethod
     def from_vumi_message(cls, message):
         md = message['transport_metadata'].get('wechat', {})
-        from_addr = md.get('ToUserName') or message['from_addr']
+        from_addr = md.get('ToUserName', message['from_addr'])
         return cls(message['to_addr'], from_addr,
                    message['timestamp'].strftime('%s'),
                    message['content'])
