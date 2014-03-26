@@ -57,14 +57,14 @@ class TestWeChatXMLParser(TestCase):
         msg = message_types.TextMessage(
             'to_addr', 'from_addr', '1348831860', 'this is a test')
         self.assertEqual(
-            msg.to_json(),
-            json.dumps({
+            json.loads(msg.to_json()),
+            {
                 'touser': 'to_addr',
                 'msgtype': 'text',
                 'text': {
                     'content': 'this is a test'
                 }
-            }))
+            })
 
     def test_news_message_to_xml(self):
         msg = message_types.NewsMessage(
@@ -107,8 +107,8 @@ class TestWeChatXMLParser(TestCase):
                 'url': 'url',
             }])
         self.assertEqual(
-            msg.to_json(),
-            json.dumps({
+            json.loads(msg.to_json()),
+            {
                 'touser': 'to_addr',
                 'msgtype': 'news',
                 'news': {
@@ -120,7 +120,7 @@ class TestWeChatXMLParser(TestCase):
                         'url': 'url'
                     }]
                 }
-            }))
+            })
 
     def test_event_message_parse(self):
         msg = WeChatXMLParser.parse(
