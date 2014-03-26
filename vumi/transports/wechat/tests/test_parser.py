@@ -44,13 +44,13 @@ class TestWeChatXMLParser(TestCase):
         self.assertEqual(
             msg.to_xml(),
             "".join([
-            "<xml>"
-            "<ToUserName>to_addr</ToUserName>"
-            "<FromUserName>from_addr</FromUserName>"
-            "<CreateTime>1348831860</CreateTime>"
-            "<MsgType>text</MsgType>"
-            "<Content>this is a test</Content>"
-            "</xml>"
+                "<xml>",
+                "<ToUserName>to_addr</ToUserName>",
+                "<FromUserName>from_addr</FromUserName>",
+                "<CreateTime>1348831860</CreateTime>",
+                "<MsgType>text</MsgType>",
+                "<Content>this is a test</Content>",
+                "</xml>",
             ]))
 
     def test_text_message_to_json(self):
