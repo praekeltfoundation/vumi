@@ -70,7 +70,8 @@ class WeChatTestCase(VumiTestCase):
     @inlineCallbacks
     def get_transport_with_access_token(self, access_token, **config):
         transport = yield self.get_transport(**config)
-        transport.redis.set(WeChatTransport.ACCESS_TOKEN_KEY, access_token)
+        yield transport.redis.set(WeChatTransport.ACCESS_TOKEN_KEY,
+                                  access_token)
         returnValue(transport)
 
 
