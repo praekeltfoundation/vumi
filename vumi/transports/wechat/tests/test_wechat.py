@@ -385,7 +385,8 @@ class TestWeChatAddrMasking(WeChatTestCase):
         yield self.tx_helper.make_dispatch_reply(msg, 'foo')
 
         self.assertEqual(
-            (yield transport.get_addr_mask()), transport.DEFAULT_MASK)
+            (yield transport.get_addr_mask('fromUser')),
+            transport.DEFAULT_MASK)
         self.assertEqual(msg['to_addr'], 'toUser@default')
         yield resp_d
 
@@ -410,14 +411,15 @@ class TestWeChatAddrMasking(WeChatTestCase):
             msg['session_event'], TransportUserMessage.SESSION_NEW)
         yield self.tx_helper.make_dispatch_reply(msg, 'foo')
 
-        self.assertEqual((yield transport.get_addr_mask()), 'EVENTKEY')
+        self.assertEqual(
+            (yield transport.get_addr_mask('fromUser')), 'EVENTKEY')
         self.assertEqual(msg['to_addr'], 'toUser@EVENTKEY')
         yield resp_d
 
     @inlineCallbacks
     def test_mask_caching_on_text_message(self):
         transport = yield self.get_transport_with_access_token('foo')
-        yield transport.cache_addr_mask('foo')
+        yield transport.cache_addr_mask('fromUser', 'foo')
 
         resp_d = request(
             transport, 'POST', data="""
@@ -440,7 +442,7 @@ class TestWeChatAddrMasking(WeChatTestCase):
     @inlineCallbacks
     def test_mask_clearing_on_session_end(self):
         transport = yield self.get_transport_with_access_token('foo')
-        yield transport.cache_addr_mask('foo')
+        yield transport.cache_addr_mask('fromUser', 'foo')
 
         resp_d = request(
             transport, 'POST', data="""
@@ -460,7 +462,8 @@ class TestWeChatAddrMasking(WeChatTestCase):
 
         self.assertEqual(msg['to_addr'], 'toUser@foo')
         self.assertEqual(
-            (yield transport.get_addr_mask()), transport.DEFAULT_MASK)
+            (yield transport.get_addr_mask('fromUser')),
+            transport.DEFAULT_MASK)
         yield resp_d
 
 

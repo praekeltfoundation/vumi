@@ -206,23 +206,29 @@ class WeChatTransport(Transport):
                 'when creating WeChat Menu.' % data)
         log.info('WeChat Menu created succesfully.')
 
+    def mask_key(self, user):
+        return '@'.join([
+            self.ADDR_MASK_KEY,
+            user,
+        ])
+
     def mask_addr(self, to_addr, mask):
         return '@'.join([to_addr, mask])
 
-    def cache_addr_mask(self, mask):
+    def cache_addr_mask(self, user, mask):
         config = self.get_static_config()
         d = self.redis.setex(
-            self.ADDR_MASK_KEY, config.wechat_mask_lifetime, mask)
+            self.mask_key(user), config.wechat_mask_lifetime, mask)
         d.addCallback(lambda *a: mask)
         return d
 
-    def get_addr_mask(self):
-        d = self.redis.get(self.ADDR_MASK_KEY)
+    def get_addr_mask(self, user):
+        d = self.redis.get(self.mask_key(user))
         d.addCallback(lambda mask: mask or self.DEFAULT_MASK)
         return d
 
-    def clear_addr_mask(self):
-        return self.redis.delete(self.ADDR_MASK_KEY)
+    def clear_addr_mask(self, user):
+        return self.redis.delete(self.mask_key(user))
 
     def handle_raw_inbound_message(self, wc_msg):
         return {
@@ -232,7 +238,7 @@ class WeChatTransport(Transport):
 
     @inlineCallbacks
     def handle_inbound_text_message(self, wc_msg):
-        mask = yield self.get_addr_mask()
+        mask = yield self.get_addr_mask(wc_msg.from_user_name)
         msg = yield self.publish_message(
             content=wc_msg.content,
             from_addr=wc_msg.from_user_name,
@@ -252,9 +258,10 @@ class WeChatTransport(Transport):
     @inlineCallbacks
     def handle_inbound_event_message(self, wc_msg):
         if wc_msg.event_key:
-            mask = yield self.cache_addr_mask(wc_msg.event_key)
+            mask = yield self.cache_addr_mask(
+                wc_msg.from_user_name, wc_msg.event_key)
         else:
-            mask = yield self.get_addr_mask()
+            mask = yield self.get_addr_mask(wc_msg.from_user_name)
 
         if wc_msg.event.lower() in ('subscribe', 'click'):
             session_event = TransportUserMessage.SESSION_NEW
@@ -321,7 +328,8 @@ class WeChatTransport(Transport):
         d = self.publish_ack(user_message_id=message['message_id'],
                              sent_message_id=message['message_id'])
         if message['session_event'] == TransportUserMessage.SESSION_CLOSE:
-            d.addCallback(lambda ack: self.clear_addr_mask())
+            d.addCallback(
+                lambda ack: self.clear_addr_mask(wc_msg.to_user_name))
         return d
 
     def push_message(self, wc_message, vumi_message):
@@ -337,7 +345,8 @@ class WeChatTransport(Transport):
                 }))
         d.addCallback(self.handle_api_response, vumi_message)
         if vumi_message['session_event'] == TransportUserMessage.SESSION_CLOSE:
-            d.addCallback(lambda ack: self.clear_addr_mask())
+            d.addCallback(
+                lambda ack: self.clear_addr_mask(wc_message.from_user_name))
         return d
 
     def handle_api_response(self, response, message):
