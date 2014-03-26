@@ -5,17 +5,8 @@ from xml.etree.ElementTree import Element, SubElement, tostring
 from vumi.transports.wechat.errors import WeChatException
 
 
-def get_children(node, name):
-    return node.getElementsByTagName(name)
-
-
-def get_child(node, name):
-    [child] = get_children(node, name)
-    return child
-
-
 def get_child_value(node, name):
-    child = get_child(node, name)
+    [child] = node.getElementsByTagName(name)
     return ''.join([grandchild.value for grandchild in child.childNodes])
 
 
