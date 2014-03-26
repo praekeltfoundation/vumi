@@ -115,6 +115,10 @@ class WeChatResource(Resource):
         request.finish()
 
     def handle_request(self, request):
+        d = request.notifyFinish()
+        d.addCallback(
+            lambda _: self.transport.handle_finished_request(request))
+
         wc_msg = WeChatXMLParser.parse(request.content.read())
         return self.transport.handle_raw_inbound_message(wc_msg)
 
@@ -289,15 +293,20 @@ class WeChatTransport(Transport):
         returnValue(msg)
 
     def force_close(self, message):
-        request = self.pop_request(message['message_id'])
+        request = self.get_request(message['message_id'])
         request.setResponseCode(http.INTERNAL_SERVER_ERROR)
         request.finish()
+
+    def handle_finished_request(self, request):
+        for message_id, request_ in self.request_dict.items():
+            if request_ == request:
+                self.request_dict.pop(message_id)
 
     def queue_request(self, message, request):
         self.request_dict[message['message_id']] = request
 
-    def pop_request(self, message_id):
-        return self.request_dict.pop(message_id, None)
+    def get_request(self, message_id):
+        return self.request_dict.get(message_id, None)
 
     def infer_message_type(self, message):
         for message_type in self.MESSAGE_TYPES:
@@ -311,7 +320,7 @@ class WeChatTransport(Transport):
         Read outbound message and do what needs to be done with them.
         """
         request_id = message['in_reply_to']
-        request = self.pop_request(request_id)
+        request = self.get_request(request_id)
 
         builder = self.infer_message_type(message)
         wc_msg = builder(message)
