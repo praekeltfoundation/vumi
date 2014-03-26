@@ -14,7 +14,7 @@ from twisted.web.server import NOT_DONE_YET
 
 from vumi import log
 from vumi.config import (
-    ConfigText, ConfigServerEndpoint, ConfigDict, ConfigBool)
+    ConfigText, ConfigServerEndpoint, ConfigDict)
 from vumi.transports import Transport
 from vumi.transports.httprpc.httprpc import HttpRpcHealthResource
 from vumi.transports.wechat.errors import WeChatException, WeChatApiException
