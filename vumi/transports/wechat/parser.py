@@ -15,12 +15,8 @@ class WeChatXMLParser(object):
     }
 
     @classmethod
-    def parse_doc(cls, string):
-        return microdom.parseXMLString(string.decode(cls.ENCODING))
-
-    @classmethod
     def parse(cls, string):
-        doc = cls.parse_doc(string)
+        doc = microdom.parseXMLString(string.decode(cls.ENCODING))
         klass = cls.get_class(doc)
         return klass.from_xml(doc)
 
