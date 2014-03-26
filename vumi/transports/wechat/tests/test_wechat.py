@@ -45,10 +45,8 @@ def request(transport, method, path='', params={}, data=None):
 
 class WeChatTestCase(VumiTestCase):
 
-    transport_class = WeChatTransport
-
     def setUp(self):
-        self.tx_helper = self.add_helper(TransportHelper(self.transport_class))
+        self.tx_helper = self.add_helper(TransportHelper(WeChatTransport))
         self.request_queue = DeferredQueue()
         self.mock_server = MockHttpServer(self.handle_api_request)
         self.add_cleanup(self.mock_server.stop)
