@@ -271,8 +271,8 @@ class TestTwitterTransport(VumiTestCase):
                 "Auto-following '@someone'" in msg
                 for msg in lc.messages()))
 
-            follow = self.twitter.get_follow(self.user.id_str, someone.id_str)
-            self.assertTrue(follow is not None)
+        follow = self.twitter.get_follow(self.user.id_str, someone.id_str)
+        self.assertTrue(follow is not None)
 
     @inlineCallbacks
     def test_auto_following_disabled(self):
@@ -287,8 +287,8 @@ class TestTwitterTransport(VumiTestCase):
                 "Received follow on user stream" in msg
                 for msg in lc.messages()))
 
-            follow = self.twitter.get_follow(self.user.id_str, someone.id_str)
-            self.assertTrue(follow is None)
+        follow = self.twitter.get_follow(self.user.id_str, someone.id_str)
+        self.assertTrue(follow is None)
 
     def test_inbound_own_follow(self):
         with LogCatcher() as lc:
