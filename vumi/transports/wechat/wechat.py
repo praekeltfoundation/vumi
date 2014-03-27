@@ -120,7 +120,7 @@ class WeChatResource(Resource):
             lambda _: self.transport.handle_finished_request(request))
 
         wc_msg = WeChatXMLParser.parse(request.content.read())
-        return self.transport.handle_raw_inbound_message(wc_msg)
+        return self.transport.handle_raw_inbound_message(request, wc_msg)
 
 
 class WeChatTransport(Transport):
@@ -235,14 +235,14 @@ class WeChatTransport(Transport):
     def clear_addr_mask(self, user):
         return self.redis.delete(self.mask_key(user))
 
-    def handle_raw_inbound_message(self, wc_msg):
+    def handle_raw_inbound_message(self, request, wc_msg):
         return {
             TextMessage: self.handle_inbound_text_message,
             EventMessage: self.handle_inbound_event_message,
-        }.get(wc_msg.__class__)(wc_msg)
+        }.get(wc_msg.__class__)(request, wc_msg)
 
     @inlineCallbacks
-    def handle_inbound_text_message(self, wc_msg):
+    def handle_inbound_text_message(self, request, wc_msg):
         mask = yield self.get_addr_mask(wc_msg.from_user_name)
         msg = yield self.publish_message(
             content=wc_msg.content,
@@ -261,7 +261,7 @@ class WeChatTransport(Transport):
         returnValue(msg)
 
     @inlineCallbacks
-    def handle_inbound_event_message(self, wc_msg):
+    def handle_inbound_event_message(self, request, wc_msg):
         if wc_msg.event_key:
             mask = yield self.cache_addr_mask(
                 wc_msg.from_user_name, wc_msg.event_key)
@@ -291,6 +291,8 @@ class WeChatTransport(Transport):
                     'EventKey': wc_msg.event_key
                 }
             })
+        # Close the request to ensure we fire a push message on reply.
+        request.finish()
         returnValue(msg)
 
     def force_close(self, message):

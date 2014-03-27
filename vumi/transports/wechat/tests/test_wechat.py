@@ -132,7 +132,7 @@ class TestWeChatInboundMessaging(WeChatTestCase):
     def test_inbound_event_subscribe_message(self):
         transport = yield self.get_transport_with_access_token('foo')
 
-        resp_d = request(
+        resp = yield request(
             transport, 'POST', data="""
                 <xml>
                     <ToUserName>
@@ -153,6 +153,8 @@ class TestWeChatInboundMessaging(WeChatTestCase):
                     </EventKey>
                 </xml>
                 """)
+        self.assertEqual(resp.code, http.OK)
+
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assertEqual(
             msg['session_event'], TransportUserMessage.SESSION_NEW)
@@ -166,21 +168,11 @@ class TestWeChatInboundMessaging(WeChatTestCase):
             }
         })
 
-        self.tx_helper.make_dispatch_reply(
-            msg, 'foo')
-
-        resp = yield resp_d
-        reply = WeChatXMLParser.parse(resp.delivered_body)
-        self.assertEqual(reply.to_user_name, 'fromUser')
-        self.assertEqual(reply.from_user_name, 'toUser')
-        self.assertTrue(int(reply.create_time) > 1348831860)
-        self.assertTrue(isinstance(reply, TextMessage))
-
     @inlineCallbacks
     def test_inbound_menu_event_click_message(self):
         transport = yield self.get_transport_with_access_token('foo')
 
-        resp_d = request(
+        resp = yield request(
             transport, 'POST', data="""
                 <xml>
                 <ToUserName><![CDATA[toUser]]></ToUserName>
@@ -191,6 +183,7 @@ class TestWeChatInboundMessaging(WeChatTestCase):
                 <EventKey><![CDATA[EVENTKEY]]></EventKey>
                 </xml>
                 """.strip())
+        self.assertEqual(resp.code, http.OK)
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
 
         self.assertEqual(
@@ -206,11 +199,6 @@ class TestWeChatInboundMessaging(WeChatTestCase):
         })
 
         self.assertEqual(msg['to_addr'], 'toUser@EVENTKEY')
-
-        self.tx_helper.make_dispatch_reply(msg, 'foo')
-
-        resp = yield resp_d
-        self.assertEqual(resp.code, 200)
 
     @inlineCallbacks
     def test_unsupported_message_type(self):
@@ -394,7 +382,7 @@ class TestWeChatAddrMasking(WeChatTestCase):
     def test_mask_switching_on_event_key(self):
         transport = yield self.get_transport_with_access_token('foo')
 
-        resp_d = request(
+        resp = yield request(
             transport, 'POST', data="""
                 <xml>
                 <ToUserName><![CDATA[toUser]]></ToUserName>
@@ -405,16 +393,15 @@ class TestWeChatAddrMasking(WeChatTestCase):
                 <EventKey><![CDATA[EVENTKEY]]></EventKey>
                 </xml>
                 """.strip())
+        self.assertEqual(resp.code, http.OK)
 
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assertEqual(
             msg['session_event'], TransportUserMessage.SESSION_NEW)
-        yield self.tx_helper.make_dispatch_reply(msg, 'foo')
 
         self.assertEqual(
             (yield transport.get_addr_mask('fromUser')), 'EVENTKEY')
         self.assertEqual(msg['to_addr'], 'toUser@EVENTKEY')
-        yield resp_d
 
     @inlineCallbacks
     def test_mask_caching_on_text_message(self):
