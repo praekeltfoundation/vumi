@@ -1,0 +1,546 @@
+import hashlib
+import json
+import yaml
+from urllib import urlencode
+
+from twisted.internet.defer import inlineCallbacks, DeferredQueue, returnValue
+from twisted.web import http
+from twisted.web.server import NOT_DONE_YET
+
+from vumi.tests.helpers import VumiTestCase
+from vumi.tests.utils import MockHttpServer
+from vumi.transports.tests.helpers import TransportHelper
+from vumi.transports.wechat import WeChatTransport
+from vumi.transports.wechat.errors import WeChatApiException
+from vumi.transports.wechat.message_types import (
+    WeChatXMLParser, TextMessage)
+from vumi.utils import http_request_full
+from vumi.message import TransportUserMessage
+
+
+def request(transport, method, path='', params={}, data=None):
+    addr = transport.server.getHost()
+    token = transport.get_static_config().auth_token
+
+    nonce = '1234'
+    timestamp = '2014-01-01T00:00:00'
+    good_signature = hashlib.sha1(
+        ''.join(sorted([timestamp, nonce, token]))).hexdigest()
+
+    default_params = {
+        'signature': good_signature,
+        'timestamp': timestamp,
+        'nonce': nonce,
+    }
+
+    default_params.update(params)
+    path += '?%s' % (urlencode(default_params),)
+    url = 'http://%s:%s%s%s' % (
+        addr.host,
+        addr.port,
+        transport.get_static_config().web_path,
+        path)
+    return http_request_full(url, method=method, data=data)
+
+
+class WeChatTestCase(VumiTestCase):
+
+    def setUp(self):
+        self.tx_helper = self.add_helper(TransportHelper(WeChatTransport))
+        self.request_queue = DeferredQueue()
+        self.mock_server = MockHttpServer(self.handle_api_request)
+        self.add_cleanup(self.mock_server.stop)
+        return self.mock_server.start()
+
+    def handle_api_request(self, request):
+        self.request_queue.put(request)
+        return NOT_DONE_YET
+
+    def get_transport(self, **config):
+        defaults = {
+            'api_url': self.mock_server.url,
+            'auth_token': 'token',
+            'twisted_endpoint': 'tcp:0',
+            'wechat_appid': 'appid',
+            'wechat_secret': 'secret',
+        }
+        defaults.update(config)
+        return self.tx_helper.get_transport(defaults)
+
+    @inlineCallbacks
+    def get_transport_with_access_token(self, access_token, **config):
+        transport = yield self.get_transport(**config)
+        yield transport.redis.set(WeChatTransport.ACCESS_TOKEN_KEY,
+                                  access_token)
+        returnValue(transport)
+
+
+class TestWeChatInboundMessaging(WeChatTestCase):
+
+    @inlineCallbacks
+    def test_auth_success(self):
+        transport = yield self.get_transport()
+        resp = yield request(
+            transport, "GET", params={
+                'echostr': 'success'
+            })
+        self.assertEqual(resp.delivered_body, 'success')
+
+    @inlineCallbacks
+    def test_auth_fail(self):
+        transport = yield self.get_transport_with_access_token('foo')
+        resp = yield request(
+            transport, "GET", params={
+                'signature': 'foo',
+                'echostr': 'success'
+            })
+        self.assertNotEqual(resp.delivered_body, 'success')
+
+    @inlineCallbacks
+    def test_inbound_text_message(self):
+        transport = yield self.get_transport_with_access_token('foo')
+
+        resp_d = request(
+            transport, 'POST', data="""
+            <xml>
+            <ToUserName><![CDATA[toUser]]></ToUserName>
+            <FromUserName><![CDATA[fromUser]]></FromUserName>
+            <CreateTime>1348831860</CreateTime>
+            <MsgType><![CDATA[text]]></MsgType>
+            <Content><![CDATA[this is a test]]></Content>
+            <MsgId>1234567890123456</MsgId>
+            </xml>
+            """.strip())
+
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        reply_msg = yield self.tx_helper.make_dispatch_reply(
+            msg, 'foo')
+
+        resp = yield resp_d
+        reply = WeChatXMLParser.parse(resp.delivered_body)
+        self.assertEqual(reply.to_user_name, 'fromUser')
+        self.assertEqual(reply.from_user_name, 'toUser')
+        self.assertTrue(int(reply.create_time) > 1348831860)
+        self.assertTrue(isinstance(reply, TextMessage))
+
+        [ack] = yield self.tx_helper.wait_for_dispatched_events(1)
+        self.assertEqual(ack['event_type'], 'ack')
+        self.assertEqual(ack['user_message_id'], reply_msg['message_id'])
+        self.assertEqual(ack['sent_message_id'], reply_msg['message_id'])
+
+    @inlineCallbacks
+    def test_inbound_event_subscribe_message(self):
+        transport = yield self.get_transport_with_access_token('foo')
+
+        resp = yield request(
+            transport, 'POST', data="""
+                <xml>
+                    <ToUserName>
+                        <![CDATA[toUser]]>
+                    </ToUserName>
+                    <FromUserName>
+                        <![CDATA[fromUser]]>
+                    </FromUserName>
+                    <CreateTime>1395130515</CreateTime>
+                    <MsgType>
+                        <![CDATA[event]]>
+                    </MsgType>
+                    <Event>
+                        <![CDATA[subscribe]]>
+                    </Event>
+                    <EventKey>
+                        <![CDATA[]]>
+                    </EventKey>
+                </xml>
+                """)
+        self.assertEqual(resp.code, http.OK)
+
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        self.assertEqual(
+            msg['session_event'], TransportUserMessage.SESSION_NEW)
+        self.assertEqual(msg['transport_metadata'], {
+            'wechat': {
+                'Event': 'subscribe',
+                'EventKey': '',
+                'FromUserName': 'fromUser',
+                'MsgType': 'event',
+                'ToUserName': 'toUser'
+            }
+        })
+
+    @inlineCallbacks
+    def test_inbound_menu_event_click_message(self):
+        transport = yield self.get_transport_with_access_token('foo')
+
+        resp = yield request(
+            transport, 'POST', data="""
+                <xml>
+                <ToUserName><![CDATA[toUser]]></ToUserName>
+                <FromUserName><![CDATA[fromUser]]></FromUserName>
+                <CreateTime>123456789</CreateTime>
+                <MsgType><![CDATA[event]]></MsgType>
+                <Event><![CDATA[CLICK]]></Event>
+                <EventKey><![CDATA[EVENTKEY]]></EventKey>
+                </xml>
+                """.strip())
+        self.assertEqual(resp.code, http.OK)
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+
+        self.assertEqual(
+            msg['session_event'], TransportUserMessage.SESSION_NEW)
+        self.assertEqual(msg['transport_metadata'], {
+            'wechat': {
+                'Event': 'CLICK',
+                'EventKey': 'EVENTKEY',
+                'FromUserName': 'fromUser',
+                'MsgType': 'event',
+                'ToUserName': 'toUser'
+            }
+        })
+
+        self.assertEqual(msg['to_addr'], 'toUser@EVENTKEY')
+
+    @inlineCallbacks
+    def test_unsupported_message_type(self):
+        transport = yield self.get_transport_with_access_token('foo')
+
+        response = yield request(
+            transport, 'POST', data="""
+            <xml>
+            <ToUserName><![CDATA[toUser]]></ToUserName>
+            <FromUserName><![CDATA[fromUser]]></FromUserName>
+            <CreateTime>1348831860</CreateTime>
+            <MsgType><![CDATA[THIS_IS_UNSUPPORTED]]></MsgType>
+            <Content><![CDATA[this is a test]]></Content>
+            <MsgId>1234567890123456</MsgId>
+            </xml>
+            """.strip())
+
+        self.assertEqual(
+            response.code, http.BAD_REQUEST)
+        self.assertEqual(
+            response.delivered_body,
+            "Unsupported MsgType: THIS_IS_UNSUPPORTED")
+        self.assertEqual(
+            [],
+            self.tx_helper.get_dispatched_inbound())
+
+
+class TestWeChatOutboundMessaging(WeChatTestCase):
+
+    def dispatch_push_message(self, content, wechat_md, **kwargs):
+        helper_metadata = kwargs.get('helper_metadata', {})
+        wechat_metadata = helper_metadata.setdefault('wechat', {})
+        wechat_metadata.update(wechat_md)
+        return self.tx_helper.make_dispatch_outbound(
+            content, helper_metadata=helper_metadata, **kwargs)
+
+    @inlineCallbacks
+    def test_ack_push_text_message(self):
+        yield self.get_transport_with_access_token('foo')
+
+        msg_d = self.dispatch_push_message('foo', {}, to_addr='toaddr')
+
+        request = yield self.request_queue.get()
+        self.assertEqual(request.path, '/message/custom/send')
+        self.assertEqual(request.args, {
+            'access_token': ['foo']
+        })
+        self.assertEqual(json.load(request.content), {
+            'touser': 'toaddr',
+            'msgtype': 'text',
+            'text': {
+                'content': 'foo'
+            }
+        })
+        request.finish()
+
+        [ack] = yield self.tx_helper.wait_for_dispatched_events(1)
+        msg = yield msg_d
+        self.assertEqual(ack['event_type'], 'ack')
+        self.assertEqual(ack['user_message_id'], msg['message_id'])
+
+    @inlineCallbacks
+    def test_nack_push_text_message(self):
+        yield self.get_transport_with_access_token('foo')
+        msg_d = self.dispatch_push_message('foo', {})
+
+        # fail the API request
+        request = yield self.request_queue.get()
+        request.setResponseCode(http.BAD_REQUEST)
+        request.finish()
+
+        msg = yield msg_d
+        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
+        self.assertEqual(
+            nack['user_message_id'], msg['message_id'])
+        self.assertEqual(nack['event_type'], 'nack')
+        self.assertEqual(nack['nack_reason'], 'Received status code: 400')
+
+    @inlineCallbacks
+    def test_ack_push_inferred_news_message(self):
+        yield self.get_transport_with_access_token('foo')
+        # news is a collection or URLs apparently
+        msg_d = self.dispatch_push_message(
+            'This is an awesome link for you! http://www.wechat.com/', {},
+            to_addr='toaddr')
+
+        request = yield self.request_queue.get()
+        self.assertEqual(request.path, '/message/custom/send')
+        self.assertEqual(request.args, {
+            'access_token': ['foo']
+        })
+        self.assertEqual(json.load(request.content), {
+            'touser': 'toaddr',
+            'msgtype': 'news',
+            'news': {
+                'articles': [
+                    {
+                        'description': 'This is an awesome link for you! ',
+                        'url': 'http://www.wechat.com/',
+                    }
+                ]
+            }
+        })
+
+        request.finish()
+
+        [ack] = yield self.tx_helper.wait_for_dispatched_events(1)
+        msg = yield msg_d
+        self.assertEqual(ack['event_type'], 'ack')
+        self.assertEqual(ack['user_message_id'], msg['message_id'])
+
+
+class TestWeChatAccessToken(WeChatTestCase):
+
+    @inlineCallbacks
+    def test_request_new_access_token(self):
+        transport = yield self.get_transport()
+        config = transport.get_static_config()
+
+        d = transport.request_new_access_token()
+
+        req = yield self.request_queue.get()
+        self.assertEqual(req.path, '/token')
+        self.assertEqual(req.args, {
+            'grant_type': ['client_credential'],
+            'appid': [config.wechat_appid],
+            'secret': [config.wechat_secret],
+        })
+        req.write(json.dumps({
+            'access_token': 'the_access_token',
+            'expires_in': 7200
+        }))
+        req.finish()
+
+        access_token = yield d
+        self.assertEqual(access_token, 'the_access_token')
+        cached_token = yield transport.redis.get(
+            WeChatTransport.ACCESS_TOKEN_KEY)
+        self.assertEqual(cached_token, 'the_access_token')
+        expiry = yield transport.redis.ttl(WeChatTransport.ACCESS_TOKEN_KEY)
+        self.assertTrue(int(7200 * 0.8) < expiry <= int(7200 * 0.9))
+
+    @inlineCallbacks
+    def test_get_cached_access_token(self):
+        transport = yield self.get_transport()
+        yield transport.redis.set(WeChatTransport.ACCESS_TOKEN_KEY, 'foo')
+        access_token = yield transport.get_access_token()
+        self.assertEqual(access_token, 'foo')
+        # Empty request queue means no WeChat API calls were made
+        self.assertEqual(self.request_queue.size, None)
+
+
+class TestWeChatAddrMasking(WeChatTestCase):
+
+    @inlineCallbacks
+    def test_default_mask(self):
+        transport = yield self.get_transport_with_access_token('foo')
+
+        resp_d = request(
+            transport, 'POST', data="""
+            <xml>
+            <ToUserName><![CDATA[toUser]]></ToUserName>
+            <FromUserName><![CDATA[fromUser]]></FromUserName>
+            <CreateTime>1348831860</CreateTime>
+            <MsgType><![CDATA[text]]></MsgType>
+            <Content><![CDATA[this is a test]]></Content>
+            <MsgId>1234567890123456</MsgId>
+            </xml>
+            """.strip())
+
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        yield self.tx_helper.make_dispatch_reply(msg, 'foo')
+
+        self.assertEqual(
+            (yield transport.get_addr_mask('fromUser')),
+            transport.DEFAULT_MASK)
+        self.assertEqual(msg['to_addr'], 'toUser@default')
+        yield resp_d
+
+    @inlineCallbacks
+    def test_mask_switching_on_event_key(self):
+        transport = yield self.get_transport_with_access_token('foo')
+
+        resp = yield request(
+            transport, 'POST', data="""
+                <xml>
+                <ToUserName><![CDATA[toUser]]></ToUserName>
+                <FromUserName><![CDATA[fromUser]]></FromUserName>
+                <CreateTime>123456789</CreateTime>
+                <MsgType><![CDATA[event]]></MsgType>
+                <Event><![CDATA[CLICK]]></Event>
+                <EventKey><![CDATA[EVENTKEY]]></EventKey>
+                </xml>
+                """.strip())
+        self.assertEqual(resp.code, http.OK)
+
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        self.assertEqual(
+            msg['session_event'], TransportUserMessage.SESSION_NEW)
+
+        self.assertEqual(
+            (yield transport.get_addr_mask('fromUser')), 'EVENTKEY')
+        self.assertEqual(msg['to_addr'], 'toUser@EVENTKEY')
+
+    @inlineCallbacks
+    def test_mask_caching_on_text_message(self):
+        transport = yield self.get_transport_with_access_token('foo')
+        yield transport.cache_addr_mask('fromUser', 'foo')
+
+        resp_d = request(
+            transport, 'POST', data="""
+            <xml>
+            <ToUserName><![CDATA[toUser]]></ToUserName>
+            <FromUserName><![CDATA[fromUser]]></FromUserName>
+            <CreateTime>1348831860</CreateTime>
+            <MsgType><![CDATA[text]]></MsgType>
+            <Content><![CDATA[this is a test]]></Content>
+            <MsgId>1234567890123456</MsgId>
+            </xml>
+            """.strip())
+
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        yield self.tx_helper.make_dispatch_reply(msg, 'foo')
+
+        self.assertEqual(msg['to_addr'], 'toUser@foo')
+        yield resp_d
+
+    @inlineCallbacks
+    def test_mask_clearing_on_session_end(self):
+        transport = yield self.get_transport_with_access_token('foo')
+        yield transport.cache_addr_mask('fromUser', 'foo')
+
+        resp_d = request(
+            transport, 'POST', data="""
+            <xml>
+            <ToUserName><![CDATA[toUser]]></ToUserName>
+            <FromUserName><![CDATA[fromUser]]></FromUserName>
+            <CreateTime>1348831860</CreateTime>
+            <MsgType><![CDATA[text]]></MsgType>
+            <Content><![CDATA[this is a test]]></Content>
+            <MsgId>1234567890123456</MsgId>
+            </xml>
+            """.strip())
+
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        yield self.tx_helper.make_dispatch_reply(
+            msg, 'foo', session_event=TransportUserMessage.SESSION_CLOSE)
+
+        self.assertEqual(msg['to_addr'], 'toUser@foo')
+        self.assertEqual(
+            (yield transport.get_addr_mask('fromUser')),
+            transport.DEFAULT_MASK)
+        yield resp_d
+
+
+class TestWeChatMenuCreation(WeChatTestCase):
+
+    MENU_TEMPLATE = """
+    button:
+      - name: Daily Song
+        type: click
+        key: V1001_TODAY_MUSIC
+
+      - name: ' Artist Profile'
+        type: click
+        key: V1001_TODAY_SINGER
+
+      - name: Menu
+        sub_button:
+          - name: Search
+            type: view
+            url: 'http://www.soso.com/'
+          - name: Video
+            type: view
+            url: 'http://v.qq.com/'
+          - name: Like us
+            type: click
+            key: V1001_GOOD
+    """
+    MENU = yaml.safe_load(MENU_TEMPLATE)
+
+    @inlineCallbacks
+    def test_create_new_menu_success(self):
+        transport = yield self.get_transport_with_access_token('foo')
+
+        d = transport.create_wechat_menu('foo', self.MENU)
+        req = yield self.request_queue.get()
+        self.assertEqual(req.path, '/menu/create')
+        self.assertEqual(req.args, {
+            'access_token': ['foo'],
+        })
+
+        self.assertEqual(json.load(req.content), self.MENU)
+        req.write(json.dumps({'errcode': 0, 'errmsg': 'ok'}))
+        req.finish()
+
+        yield d
+
+    @inlineCallbacks
+    def test_create_new_menu_failure(self):
+        transport = yield self.get_transport_with_access_token('foo')
+        d = transport.create_wechat_menu('foo', self.MENU)
+
+        req = yield self.request_queue.get()
+        req.write(json.dumps({
+            'errcode': 40018,
+            'errmsg': 'invalid button name size',
+        }))
+        req.finish()
+
+        exception = yield self.assertFailure(d, WeChatApiException)
+        self.assertEqual(
+            exception.message,
+            ('Received errcode: 40018, errmsg: invalid button name '
+             'size when creating WeChat Menu.'))
+
+
+class TestWeChatInferMessage(WeChatTestCase):
+
+    @inlineCallbacks
+    def test_infer_news_message(self):
+        transport = yield self.get_transport_with_access_token('foo')
+
+        resp_d = request(
+            transport, 'POST', data="""
+            <xml>
+            <ToUserName><![CDATA[toUser]]></ToUserName>
+            <FromUserName><![CDATA[fromUser]]></FromUserName>
+            <CreateTime>1348831860</CreateTime>
+            <MsgType><![CDATA[text]]></MsgType>
+            <Content><![CDATA[this is a test]]></Content>
+            <MsgId>10234567890123456</MsgId>
+            </xml>
+            """.strip())
+
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        yield self.tx_helper.make_dispatch_reply(
+            msg, 'This is an awesome link for you! http://www.wechat.com/')
+
+        resp = yield resp_d
+        self.assertTrue(
+            '<Url>http://www.wechat.com/</Url>' in resp.delivered_body)
+        self.assertTrue(
+            '<Description>This is an awesome link for you! </Description>'
+            in resp.delivered_body)
