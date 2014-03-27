@@ -5,7 +5,7 @@ from txtwitter.twitter import TwitterClient
 from txtwitter import messagetools
 
 from vumi.transports.base import Transport
-from vumi.config import ConfigText, ConfigList, ConfigDict
+from vumi.config import ConfigBool, ConfigText, ConfigList, ConfigDict
 
 
 class ConfigTwitterEndpoints(ConfigDict):
@@ -48,6 +48,10 @@ class TwitterTransportConfig(Transport.CONFIG_CLASS):
     terms = ConfigList(
         "A list of terms to be tracked by the transport",
         default=[], static=True)
+    autofollow = ConfigBool(
+        "Determines whether the transport will follow users that follow the "
+        "transport's user",
+        default=False, static=True)
 
 
 class TwitterTransport(Transport):
@@ -69,6 +73,8 @@ class TwitterTransport(Transport):
     def setup_transport(self):
         config = self.get_static_config()
         self.screen_name = config.screen_name
+
+        self.autofollow = config.autofollow
 
         self.client = self.get_client(
             config.access_token,
@@ -128,6 +134,10 @@ class TwitterTransport(Transport):
     def is_own_dm(self, message):
         sender = messagetools.dm_sender(message)
         return self.screen_name == messagetools.user_screen_name(sender)
+
+    def is_own_follow(self, message):
+        source_screen_name = messagetools.user_screen_name(message['source'])
+        return source_screen_name == self.screen_name
 
     @classmethod
     def tweet_to_addr(cls, tweet):
@@ -214,14 +224,27 @@ class TwitterTransport(Transport):
     def handle_user_stream(self, message):
         if messagetools.is_tweet(message):
             return self.handle_inbound_tweet(message)
-
-        dm = message.get('direct_message', {})
-        if messagetools.is_dm(dm):
+        elif messagetools.is_dm(message.get('direct_message', {})):
             return self.handle_inbound_dm(message['direct_message'])
+        elif message.get('event') == 'follow':
+            return self.handle_follow(message)
 
         log.msg(
-            "Received something from user stream that is not a DM or "
-            "tweet: %r" % message)
+            "Received a user stream message that we do not handle: %r" %
+            message)
+
+    def handle_follow(self, follow):
+        if self.is_own_follow(follow):
+            log.msg("Received own follow on user stream: %r" % (follow,))
+            return
+
+        log.msg("Received follow on user stream: %r" % (follow,))
+
+        if self.autofollow:
+            screen_name = messagetools.user_screen_name(follow['source'])
+            log.msg("Auto-following '%s'" %
+                    (self.screen_name_as_addr(screen_name,)))
+            return self.client.friendships_create(screen_name=screen_name)
 
     def handle_inbound_dm(self, dm):
         if self.is_own_dm(dm):
