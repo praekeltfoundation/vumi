@@ -113,6 +113,30 @@ class UnknownVersionedModel(Model):
     d = Integer()
 
 
+class VersionedDynamicModelMigrator(ModelMigrator):
+    def migrate_from_unversioned(self, migration_data):
+        migration_data.copy_dynamic_values('keep-')
+        migration_data.set_value('$VERSION', 1)
+        return migration_data
+
+
+class UnversionedDynamicModel(Model):
+    bucket = 'versioneddynamicmodel'
+
+    drop = Dynamic(prefix='drop-')
+    keep = Dynamic(prefix='keep-')
+
+
+class VersionedDynamicModel(Model):
+    bucket = 'versioneddynamicmodel'
+
+    VERSION = 1
+    MIGRATOR = VersionedDynamicModelMigrator
+
+    drop = Dynamic(prefix='drop-')
+    keep = Dynamic(prefix='keep-')
+
+
 class TestModelOnTxRiak(VumiTestCase):
 
     # TODO: all copies of mkmsg must be unified!
@@ -809,6 +833,21 @@ class TestModelOnTxRiak(VumiTestCase):
         except ModelMigrationError, e:
             self.assertEqual(
                 e.args[0], 'No migrators defined for VersionedModel version 3')
+
+    @Manager.calls_manager
+    def test_dynamic_field_migration(self):
+        old_model = self.manager.proxy(UnversionedDynamicModel)
+        new_model = self.manager.proxy(VersionedDynamicModel)
+        old = old_model("foo")
+        old.keep['bar'] = u"bar-val"
+        old.keep['baz'] = u"baz-val"
+        old.drop['bar'] = u"drop"
+        yield old.save()
+
+        new = yield new_model.load("foo")
+        self.assertEqual(new.keep['bar'], u"bar-val")
+        self.assertEqual(new.keep['baz'], u"baz-val")
+        self.assertFalse("bar" in new.drop)
 
 
 class TestModelOnRiak(TestModelOnTxRiak):
