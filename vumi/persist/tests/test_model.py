@@ -115,7 +115,7 @@ class UnknownVersionedModel(Model):
 
 class VersionedDynamicModelMigrator(ModelMigrator):
     def migrate_from_unversioned(self, migration_data):
-        migration_data.copy_dynamic('keep-')
+        migration_data.copy_dynamic_values('keep-')
         migration_data.set_value('$VERSION', 1)
         return migration_data
 
