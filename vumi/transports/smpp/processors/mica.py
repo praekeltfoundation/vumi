@@ -8,6 +8,10 @@ from vumi.transports.smpp.processors import default
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 
+def make_vumi_session_identifier(msisdn, mica_session_identifier):
+    return '+'.join(map(unicode, [msisdn, mica_session_identifier]))
+
+
 class DeliverShortMessageProcessorConfig(
         default.DeliverShortMessageProcessorConfig):
 
@@ -63,7 +67,9 @@ class DeliverShortMessageProcessor(default.DeliverShortMessageProcessor):
     @inlineCallbacks
     def handle_deliver_sm_ussd(self, pdu, pdu_params, pdu_opts):
         service_op = pdu_opts['ussd_service_op']
-        session_identifier = pdu_opts['user_message_reference']
+        mica_session_identifier = pdu_opts['user_message_reference']
+        vumi_session_identifier = make_vumi_session_identifier(
+            pdu_params['source_addr'], mica_session_identifier)
 
         session_event = 'close'
         if service_op == '01':
@@ -73,31 +79,31 @@ class DeliverShortMessageProcessor(default.DeliverShortMessageProcessor):
             content = None
 
             yield self.session_manager.create_session(
-                session_identifier, ussd_code=ussd_code)
+                vumi_session_identifier, ussd_code=ussd_code)
 
         elif service_op == '17':
             # PSSR response. This means session end.
             session_event = 'close'
 
             session = yield self.session_manager.load_session(
-                session_identifier)
+                vumi_session_identifier)
             ussd_code = session['ussd_code']
             content = None
 
-            yield self.session_manager.clear_session(session_identifier)
+            yield self.session_manager.clear_session(vumi_session_identifier)
 
         else:
             session_event = 'continue'
 
             session = yield self.session_manager.load_session(
-                session_identifier)
+                vumi_session_identifier)
             ussd_code = session['ussd_code']
             content = pdu_params['short_message']
 
         # This is stashed on the message and available when replying
         # with a `submit_sm`
         session_info = {
-            'session_identifier': session_identifier,
+            'session_identifier': mica_session_identifier,
         }
 
         decoded_msg = self.decode_message(content,
@@ -113,8 +119,27 @@ class DeliverShortMessageProcessor(default.DeliverShortMessageProcessor):
         returnValue(result)
 
 
+class SubmitShortMessageProcessorConfig(
+        default.SubmitShortMessageProcessorConfig):
+
+    max_session_length = ConfigInt(
+        'Maximum length a USSD sessions data is to be kept for in seconds.',
+        default=60 * 3, static=True)
+
+
 class SubmitShortMessageProcessor(default.SubmitShortMessageProcessor):
 
+    CONFIG_CLASS = SubmitShortMessageProcessorConfig
+
+    def __init__(self, transport, config):
+        super(SubmitShortMessageProcessor, self).__init__(transport, config)
+        self.transport = transport
+        self.redis = transport.redis
+        self.config = self.CONFIG_CLASS(config, static=True)
+        self.session_manager = SessionManager(
+            self.redis, max_session_length=self.config.max_session_length)
+
+    @inlineCallbacks
     def handle_outbound_message(self, message, protocol):
         to_addr = message['to_addr']
         from_addr = message['from_addr']
@@ -129,14 +154,22 @@ class SubmitShortMessageProcessor(default.SubmitShortMessageProcessor):
                 session_event != TransportUserMessage.SESSION_CLOSE)
             session_info = message['transport_metadata'].get(
                 'session_info', {})
+            mica_session_identifier = session_info.get(
+                'session_identifier', '')
+            vumi_session_identifier = make_vumi_session_identifier(
+                to_addr, mica_session_identifier)
+
             optional_parameters.update({
                 'ussd_service_op': ('02' if continue_session else '17'),
-                'user_message_reference': session_info.get(
-                    'session_identifier', '')
+                'user_message_reference': mica_session_identifier,
             })
 
+            if not continue_session:
+                yield self.session_manager.clear_session(
+                    vumi_session_identifier)
+
         if self.config.send_long_messages:
-            return protocol.submit_sm_long(
+            resp = yield protocol.submit_sm_long(
                 to_addr.encode('ascii'),
                 long_message=text.encode(self.config.submit_sm_encoding),
                 data_coding=self.config.submit_sm_data_coding,
@@ -145,7 +178,7 @@ class SubmitShortMessageProcessor(default.SubmitShortMessageProcessor):
             )
 
         elif self.config.send_multipart_sar:
-            return protocol.submit_csm_sar(
+            resp = yield protocol.submit_csm_sar(
                 to_addr.encode('ascii'),
                 short_message=text.encode(self.config.submit_sm_encoding),
                 data_coding=self.config.submit_sm_data_coding,
@@ -154,7 +187,15 @@ class SubmitShortMessageProcessor(default.SubmitShortMessageProcessor):
             )
 
         elif self.config.send_multipart_udh:
-            return protocol.submit_csm_udh(
+            resp = yield protocol.submit_csm_udh(
+                to_addr.encode('ascii'),
+                short_message=text.encode(self.config.submit_sm_encoding),
+                data_coding=self.config.submit_sm_data_coding,
+                source_addr=from_addr.encode('ascii'),
+                optional_parameters=optional_parameters,
+            )
+        else:
+            resp = yield protocol.submit_sm(
                 to_addr.encode('ascii'),
                 short_message=text.encode(self.config.submit_sm_encoding),
                 data_coding=self.config.submit_sm_data_coding,
@@ -162,10 +203,4 @@ class SubmitShortMessageProcessor(default.SubmitShortMessageProcessor):
                 optional_parameters=optional_parameters,
             )
 
-        return protocol.submit_sm(
-            to_addr.encode('ascii'),
-            short_message=text.encode(self.config.submit_sm_encoding),
-            data_coding=self.config.submit_sm_data_coding,
-            source_addr=from_addr.encode('ascii'),
-            optional_parameters=optional_parameters,
-        )
+        returnValue(resp)

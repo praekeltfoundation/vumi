@@ -1,6 +1,4 @@
 from twisted.internet.defer import inlineCallbacks
-from twisted.internet.task import Clock
-from twisted.test import proto_helpers
 
 from smpp.pdu_builder import DeliverSM
 
@@ -12,6 +10,7 @@ from vumi.transports.smpp.tests.test_smpp_transport import (
     SmppTransportTestCase)
 from vumi.transports.smpp.smpp_transport import (
     SmppTransceiverTransport)
+from vumi.transports.smpp.processors.mica import make_vumi_session_identifier
 
 
 class MicaProcessorTestCase(SmppTransportTestCase):
@@ -68,20 +67,23 @@ class MicaProcessorTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_submit_and_deliver_ussd_continue(self):
+        user_msisdn = 'msisdn'
         session_identifier = 12345
+        vumi_session_identifier = make_vumi_session_identifier(
+            user_msisdn, session_identifier)
         smpp_helper = yield self.get_smpp_helper()
 
         deliver_sm_processor = smpp_helper.transport.deliver_sm_processor
         session_manager = deliver_sm_processor.session_manager
         yield session_manager.create_session(
-            session_identifier, ussd_code='*123#')
+            vumi_session_identifier, ussd_code='*123#')
 
         yield self.tx_helper.make_dispatch_outbound(
             "hello world", transport_type="ussd", transport_metadata={
                 'session_info': {
                     'session_identifier': session_identifier
                 }
-            })
+            }, to_addr=user_msisdn)
 
         [submit_sm_pdu] = yield smpp_helper.wait_for_pdus(1)
         self.assertEqual(command_id(submit_sm_pdu), 'submit_sm')
@@ -91,7 +93,8 @@ class MicaProcessorTestCase(SmppTransportTestCase):
             session_identifier)
 
         # Server delivers a USSD message to the Client
-        pdu = DeliverSM(seq_no(submit_sm_pdu) + 1, short_message="reply!")
+        pdu = DeliverSM(seq_no(submit_sm_pdu) + 1, short_message="reply!",
+                        source_addr=user_msisdn)
         pdu.add_optional_parameter('ussd_service_op', '02')
         pdu.add_optional_parameter('user_message_reference',
                                    session_identifier)
