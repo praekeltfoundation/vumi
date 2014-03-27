@@ -272,7 +272,8 @@ class TestTwitterTransport(VumiTestCase):
                 for msg in lc.messages()))
 
         follow = self.twitter.get_follow(self.user.id_str, someone.id_str)
-        self.assertTrue(follow is not None)
+        self.assertEqual(follow.source_id, self.user.id_str)
+        self.assertEqual(follow.target_id, someone.id_str)
 
     @inlineCallbacks
     def test_auto_following_disabled(self):
