@@ -33,7 +33,7 @@ setup(
         'riakasaurus>=1.1.1',
         'riak==1.5.2',
         'txJSON-RPC==0.3.1',
-        'txTwitter>=0.1.3a',
+        'txTwitter>=0.1.4a',
     ],
     classifiers=[
         'Development Status :: 4 - Beta',
