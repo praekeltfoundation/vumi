@@ -21,38 +21,6 @@ class DeliverShortMessageProcessorConfig(
 
 
 class DeliverShortMessageProcessor(default.DeliverShortMessageProcessor):
-    """
-    Note: this is the expected PDU
-
-    {'body': {'mandatory_parameters': {'data_coding': 0,
-                                       'dest_addr_npi': 'unknown',
-                                       'dest_addr_ton': 'unknown',
-                                       'destination_addr': '',
-                                       'esm_class': 0,
-                                       'priority_flag': 0,
-                                       'protocol_id': 0,
-                                       'registered_delivery': 0,
-                                       'replace_if_present_flag': 0,
-                                       'schedule_delivery_time': '',
-                                       'service_type': 'USSD',
-                                       'short_message': '*372#',
-                                       'sm_default_msg_id': 0,
-                                       'sm_length': 5,
-                                       'source_addr': 'XXXXXXXXX',
-                                       'source_addr_npi': 'unknown',
-                                       'source_addr_ton': 'unknown',
-                                       'validity_period': ''},
-              'optional_parameters': [{'length': 2,
-                                       'tag': 'user_message_reference',
-                                       'value': 12853},
-                                      {'length': 1,
-                                       'tag': 'ussd_service_op',
-                                       'value': '01'}]},
-     'header': {'command_id': 'deliver_sm',
-                'command_length': 65,
-                'command_status': 'ESME_ROK',
-                'sequence_number': 1913}}
-    """
 
     CONFIG_CLASS = DeliverShortMessageProcessorConfig
 
@@ -75,7 +43,7 @@ class DeliverShortMessageProcessor(default.DeliverShortMessageProcessor):
         if service_op == '01':
             # PSSR request. Let's assume it means a new session.
             session_event = 'new'
-            ussd_code = pdu_params['short_message']
+            ussd_code = pdu_params['destination_addr']
             content = None
 
             yield self.session_manager.create_session(

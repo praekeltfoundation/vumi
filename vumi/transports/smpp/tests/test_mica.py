@@ -43,7 +43,7 @@ class MicaProcessorTestCase(SmppTransportTestCase):
         smpp_helper = yield self.get_smpp_helper()
 
         # Server delivers a USSD message to the Client
-        pdu = DeliverSM(1, short_message="*123#")
+        pdu = DeliverSM(1, destination_addr="*123#")
         pdu.add_optional_parameter('ussd_service_op', '01')
         pdu.add_optional_parameter('user_message_reference',
                                    session_identifier)
