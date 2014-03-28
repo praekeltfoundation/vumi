@@ -9,7 +9,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 
 
 def make_vumi_session_identifier(msisdn, mica_session_identifier):
-    return '%s+%s' % (msisdn, str(mica_session_identifier))
+    return '%s+%s' % (msisdn, mica_session_identifier)
 
 
 class DeliverShortMessageProcessorConfig(
