@@ -129,7 +129,8 @@ class SubmitShortMessageProcessor(default.SubmitShortMessageProcessor):
 
             optional_parameters.update({
                 'ussd_service_op': ('02' if continue_session else '17'),
-                'user_message_reference': mica_session_identifier,
+                'user_message_reference': (
+                    str(mica_session_identifier).zfill(2)),
             })
 
             if not continue_session:
