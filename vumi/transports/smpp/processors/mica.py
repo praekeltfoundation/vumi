@@ -43,7 +43,7 @@ class DeliverShortMessageProcessor(default.DeliverShortMessageProcessor):
         if service_op == '01':
             # PSSR request. Let's assume it means a new session.
             session_event = 'new'
-            ussd_code = pdu_params['destination_addr']
+            ussd_code = pdu_params['short_message']
             content = None
 
             yield self.session_manager.create_session(
