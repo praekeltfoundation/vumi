@@ -67,12 +67,6 @@ class TestTwitterTransport(VumiTestCase):
         self.assertEqual(transport.track_stream, None)
 
     @inlineCallbacks
-    def test_teardown_no_tracking_stream(self):
-        self.config['terms'] = []
-        transport = yield self.tx_helper.get_transport(self.config)
-        yield transport.teardown_transport()
-
-    @inlineCallbacks
     def test_tracking_tweets(self):
         someone = self.twitter.new_user('someone', 'someone')
         tweet = self.twitter.new_tweet('arnold', someone.id_str)
