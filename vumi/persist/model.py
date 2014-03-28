@@ -145,6 +145,13 @@ class MigrationData(object):
         for index in indexes:
             self.new_index[index] = self.old_index.get(index, [])[:]
 
+    def copy_dynamic_values(self, *dynamic_prefixes):
+        """Copy dynamic field values from old data to new data."""
+        for prefix in dynamic_prefixes:
+            for key in self.old_data:
+                if key.startswith(prefix):
+                    self.new_data[key] = self.old_data[key]
+
     def add_index(self, index, value):
         """Add a new index value to new data."""
         if index is None:

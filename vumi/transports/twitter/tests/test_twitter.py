@@ -255,6 +255,52 @@ class TestTwitterTransport(VumiTestCase):
                 for msg in lc.messages()))
 
     @inlineCallbacks
+    def test_auto_following(self):
+        self.config['autofollow'] = True
+        yield self.tx_helper.get_transport(self.config)
+
+        with LogCatcher() as lc:
+            someone = self.twitter.new_user('someone', 'someone')
+            self.twitter.add_follow(someone.id_str, self.user.id_str)
+
+            self.assertTrue(any(
+                "Received follow on user stream" in msg
+                for msg in lc.messages()))
+
+            self.assertTrue(any(
+                "Auto-following '@someone'" in msg
+                for msg in lc.messages()))
+
+        follow = self.twitter.get_follow(self.user.id_str, someone.id_str)
+        self.assertEqual(follow.source_id, self.user.id_str)
+        self.assertEqual(follow.target_id, someone.id_str)
+
+    @inlineCallbacks
+    def test_auto_following_disabled(self):
+        self.config['autofollow'] = False
+        yield self.tx_helper.get_transport(self.config)
+
+        with LogCatcher() as lc:
+            someone = self.twitter.new_user('someone', 'someone')
+            self.twitter.add_follow(someone.id_str, self.user.id_str)
+
+            self.assertTrue(any(
+                "Received follow on user stream" in msg
+                for msg in lc.messages()))
+
+        follow = self.twitter.get_follow(self.user.id_str, someone.id_str)
+        self.assertTrue(follow is None)
+
+    def test_inbound_own_follow(self):
+        with LogCatcher() as lc:
+            someone = self.twitter.new_user('someone', 'someone')
+            self.twitter.add_follow(self.user.id_str, someone.id_str)
+
+            self.assertTrue(any(
+                "Received own follow on user stream" in msg
+                for msg in lc.messages()))
+
+    @inlineCallbacks
     def test_tweet_sending(self):
         self.twitter.new_user('someone', 'someone')
         msg = yield self.tx_helper.make_dispatch_outbound(
@@ -345,14 +391,14 @@ class TestTwitterTransport(VumiTestCase):
                 lc.messages(),
                 ["Received non-tweet from tracking stream: {'foo': 'bar'}"])
 
-    def test_user_stream_for_non_reply_tweet(self):
+    def test_user_stream_for_unsupported_message(self):
         with LogCatcher() as lc:
             self.transport.handle_user_stream({'foo': 'bar'})
 
             self.assertEqual(
                 lc.messages(),
-                ["Received something from user stream that is not a DM or "
-                 "tweet: {'foo': 'bar'}"])
+                ["Received a user stream message that we do not handle: "
+                 "{'foo': 'bar'}"])
 
     def test_tweet_content_with_mention_at_start(self):
         self.assertEqual('hello', self.transport.tweet_content({
