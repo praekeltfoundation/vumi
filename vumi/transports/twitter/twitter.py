@@ -112,10 +112,13 @@ class TwitterTransport(Transport):
                     user_message_id=message['message_id'],
                     sent_message_id=twitter_message['id_str'])
             except Exception, e:
+                reason = '%s' % (e,)
+                log.err('Outbound twitter message failed: %s' % (reason,))
+
                 yield self.publish_nack(
                     user_message_id=message['message_id'],
                     sent_message_id=message['message_id'],
-                    reason='%s' % (e,))
+                    reason=reason)
 
         return handler
 
