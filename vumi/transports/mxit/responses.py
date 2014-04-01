@@ -3,6 +3,11 @@ import re
 from twisted.web.template import Element, renderer, XMLFile
 from twisted.python.filepath import FilePath
 
+from vumi.utils import PkgResources
+
+
+MXIT_RESOURCES = PkgResources(__name__)
+
 
 class ResponseParser(object):
 
@@ -25,8 +30,7 @@ class ResponseParser(object):
 
 
 class MxitResponse(Element):
-    loader = XMLFile(
-        FilePath('vumi/transports/mxit/templates/response.xml'))
+    loader = XMLFile(FilePath(MXIT_RESOURCES.path('templates/response.xml')))
 
     def __init__(self, message, loader=None):
         self.header, self.items = ResponseParser.parse(message['content'])
