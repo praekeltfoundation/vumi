@@ -277,7 +277,7 @@ class MessageStore(object):
 
         for batch_id in batch_ids:
             msg_record.batches.add_key(batch_id)
-            self.cache.add_inbound_message(batch_id, msg)
+            yield self.cache.add_inbound_message(batch_id, msg)
 
         yield msg_record.save()
 
