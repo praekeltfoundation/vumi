@@ -89,9 +89,12 @@ class TwitterTransport(Transport):
             handler = self.make_outbound_handler(handler)
             self.add_outbound_handler(handler, endpoint_name=endpoint)
 
-        self.track_stream = self.client.stream_filter(
-            self.handle_track_stream, track=config.terms)
-        self.track_stream.startService()
+        if config.terms:
+            self.track_stream = self.client.stream_filter(
+                self.handle_track_stream, track=config.terms)
+            self.track_stream.startService()
+        else:
+            self.track_stream = None
 
         self.user_stream = self.client.userstream_user(
             self.handle_user_stream, with_='user')
@@ -99,8 +102,10 @@ class TwitterTransport(Transport):
 
     @inlineCallbacks
     def teardown_transport(self):
+        if self.track_stream is not None:
+            yield self.track_stream.stopService()
+
         yield self.user_stream.stopService()
-        yield self.track_stream.stopService()
 
     def make_outbound_handler(self, twitter_handler):
         @inlineCallbacks
