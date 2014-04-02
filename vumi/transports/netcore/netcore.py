@@ -98,3 +98,6 @@ class NetcoreTransport(Transport):
                     'source': source,
                 }
             })
+
+    def get_health_response(self):
+        return 'OK'

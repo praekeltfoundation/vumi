@@ -11,7 +11,7 @@ from twisted.internet.protocol import Protocol, Factory
 from vumi.utils import (normalize_msisdn, vumi_resource_path, cleanup_msisdn,
                         get_operator_name, http_request, http_request_full,
                         get_first_word, redis_from_config, build_web_site,
-                        LogFilterSite)
+                        LogFilterSite, PkgResources)
 from vumi.persist.fake_redis import FakeRedis
 from vumi.tests.helpers import VumiTestCase, import_skip
 
@@ -340,3 +340,17 @@ class TestHttpUtils(VumiTestCase):
             self.assertTrue(reason.check('vumi.utils.HttpTimeoutError'))
         client_done.addBoth(check_client_response)
         yield client_done
+
+
+class TestPkgResources(VumiTestCase):
+
+    vumi_tests_path = os.path.dirname(__file__)
+
+    def test_absolute_path(self):
+        pkg = PkgResources("vumi.tests")
+        self.assertEqual('/foo/bar', pkg.path('/foo/bar'))
+
+    def test_relative_path(self):
+        pkg = PkgResources("vumi.tests")
+        self.assertEqual(os.path.join(self.vumi_tests_path, 'foo/bar'),
+                         pkg.path('foo/bar'))

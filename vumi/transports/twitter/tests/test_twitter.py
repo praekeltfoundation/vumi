@@ -348,10 +348,15 @@ class TestTwitterTransport(VumiTestCase):
 
         self.patch(self.client, 'statuses_update', fail)
 
-        msg = yield self.tx_helper.make_dispatch_outbound(
-            'hello', endpoint='tweet_endpoint')
-        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
+        with LogCatcher() as lc:
+            msg = yield self.tx_helper.make_dispatch_outbound(
+                'hello', endpoint='tweet_endpoint')
 
+            self.assertEqual(
+                [e['message'][0] for e in lc.errors],
+                ["'Outbound twitter message failed: :('"])
+
+        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(nack['user_message_id'], msg['message_id'])
         self.assertEqual(nack['sent_message_id'], msg['message_id'])
         self.assertEqual(nack['nack_reason'], ':(')
@@ -381,10 +386,15 @@ class TestTwitterTransport(VumiTestCase):
 
         self.patch(self.client, 'direct_messages_new', fail)
 
-        msg = yield self.tx_helper.make_dispatch_outbound(
-            'hello', endpoint='dm_endpoint')
-        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
+        with LogCatcher() as lc:
+            msg = yield self.tx_helper.make_dispatch_outbound(
+                'hello', endpoint='dm_endpoint')
 
+            self.assertEqual(
+                [e['message'][0] for e in lc.errors],
+                ["'Outbound twitter message failed: :('"])
+
+        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(nack['user_message_id'], msg['message_id'])
         self.assertEqual(nack['sent_message_id'], msg['message_id'])
         self.assertEqual(nack['nack_reason'], ':(')

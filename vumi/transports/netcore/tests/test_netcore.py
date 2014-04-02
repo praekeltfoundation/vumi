@@ -9,11 +9,14 @@ from vumi.transports.tests.helpers import TransportHelper
 from vumi.utils import http_request_full
 
 
-def request(transport, method, params={}):
+def request(transport, method, params={}, path=None):
+    if path is None:
+        path = transport.get_static_config().web_path
+
     addr = transport.server.getHost()
     url = 'http://%s:%s%s' % (addr.host,
                               addr.port,
-                              transport.get_static_config().web_path)
+                              path)
     return http_request_full(
         url, method=method, data=urlencode(params), headers={
             'Content-Type': ['application/x-www-form-urlencoded'],
@@ -69,3 +72,11 @@ class NetCoreTestCase(VumiTestCase):
                 'circle': 'of life',
             }
         })
+
+    @inlineCallbacks
+    def test_health_resource(self):
+        transport = yield self.get_transport()
+        health_path = transport.get_static_config().health_path
+        resp = yield request(transport, 'GET', path=health_path)
+        self.assertEqual(resp.delivered_body, 'OK')
+        self.assertEqual(resp.code, http.OK)
