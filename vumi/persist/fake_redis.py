@@ -89,7 +89,6 @@ class FakeRedis(object):
             self._delayed_calls.append(delayed)
             return d
         else:
-            # Same delay in the sync case.
             return func(self, *args, **kw)
 
     # Global operations
