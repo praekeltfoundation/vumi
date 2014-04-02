@@ -3,16 +3,22 @@ from HTMLParser import HTMLParser
 
 from twisted.web import http
 from twisted.internet.defer import inlineCallbacks
-from twisted.web.template import flattenString
 
 from vumi.transports.httprpc import HttpRpcTransport
 from vumi.transports.mxit.responses import MxitResponse
+from vumi.utils import http_request_full
 
 
 class MxitTransport(HttpRpcTransport):
     """
     HTTP Transport for MXit, implemented using the MXit Mobi Portal
-    API Specification, see: http://dev.mxit.com/docs/mobi-portal-api.
+    (for inbound messages and replies) and the Messaging API (for sends
+    that aren't replies).
+
+    * Mobi Portal API specification:
+      http://dev.mxit.com/docs/mobi-portal-api
+    * Message API specification:
+      https://dev.mxit.com/docs/restapi/messaging/post-message-send
     """
 
     content_type = 'text/html; charset=utf-8'
@@ -97,11 +103,17 @@ class MxitTransport(HttpRpcTransport):
                 'mxit_info': data,
             })
 
-    @inlineCallbacks
     def handle_outbound_message(self, message):
         self.emit("MxitTransport consuming %s" % (message))
+        if message["in_reply_to"] is None:
+            return self.handle_outbound_send(message)
+        else:
+            return self.handle_outbound_reply(message)
+
+    @inlineCallbacks
+    def handle_outbound_reply(self, message):
         missing_fields = self.ensure_message_values(
-            message, ['in_reply_to', 'content'])
+            message, ['in_reply_to'])
         if missing_fields:
             yield self.reject_message(message, missing_fields)
         else:
@@ -111,10 +123,29 @@ class MxitTransport(HttpRpcTransport):
                 sent_message_id=message['message_id'])
 
     @inlineCallbacks
+    def handle_outbound_send(self, message):
+        # TODO: XXX
+        body = yield MxitResponse(message).flatten()
+        url = "http://api.mxit.com/message/send/"
+        headers = {}
+        data = {
+            "Body": body,
+            "ContainsMarkup": "true",
+            "From": message["from_addr"],
+            "To": message["to_addr"],
+            "Spool": "true",
+        }
+        context_factory = None
+        yield http_request_full(
+            url, data=data, headers=headers,
+            method="POST", timeout=self.timeout,
+            context_factory=context_factory)
+
+    @inlineCallbacks
     def render_response(self, message):
         msg_id = message['in_reply_to']
         request = self.get_request(msg_id)
         if request:
-            data = yield flattenString(None, MxitResponse(message))
+            data = yield MxitResponse(message).flatten()
             super(MxitTransport, self).finish_request(
                 msg_id, data, code=http.OK)

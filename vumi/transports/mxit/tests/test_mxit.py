@@ -174,3 +174,8 @@ class TestMxitTransport(VumiTestCase):
             'Hell\xc3\xb8' in resp.delivered_body)
         self.assertTrue(
             '\xc3\xb8pti\xc3\xb8n 1' in resp.delivered_body)
+
+    @inlineCallbacks
+    def test_outbound_that_is_not_a_reply(self):
+        self.tx_helper.make_dispatch_outbound(
+            content="Send!", to_addr="mxit-1", from_addr="mxit-2")
