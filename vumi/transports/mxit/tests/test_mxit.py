@@ -116,12 +116,19 @@ class TestMxitTransport(VumiTestCase):
             'X-Mxit-User-Input': u'<&>',
         })
 
-    def test_get_request_content(self):
+    def test_get_request_content_from_header(self):
         req = Request(None, True)
         req.requestHeaders.addRawHeader('X-Mxit-User-Input', 'foo')
         self.assertEqual(self.transport.get_request_content(req), 'foo')
+
+    def test_get_request_content_from_args(self):
+        req = Request(None, True)
         req.args = {'input': ['bar']}
         self.assertEqual(self.transport.get_request_content(req), 'bar')
+
+    def test_get_request_content_when_missing(self):
+        req = Request(None, True)
+        self.assertEqual(self.transport.get_request_content(req), None)
 
     @inlineCallbacks
     def test_invalid_request(self):
