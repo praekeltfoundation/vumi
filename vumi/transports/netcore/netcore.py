@@ -59,6 +59,11 @@ class NetcoreResource(Resource):
         circle = request.args['circle'][0]
         source = request.args['source'][0]
 
+        # NOTE: If we have a leading 0 then the normalization middleware
+        #       will deal with it.
+        if not from_addr.startswith('0'):
+            from_addr = '0%s' % (from_addr,)
+
         d = self.transport.handle_raw_inbound_message(
             to_addr, from_addr, content, circle, source)
         d.addCallback(lambda msg: request.write(msg['message_id']))
