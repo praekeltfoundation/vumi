@@ -56,7 +56,7 @@ class NetCoreTestCase(VumiTestCase):
         transport = yield self.get_transport()
         resp = yield request(transport, 'POST', {
             'to_addr': '10010',
-            'from_addr': '27123456789',
+            'from_addr': '8800000000',
             'content': 'foo',
             'source': 'sms',
             'circle': 'of life',
@@ -64,7 +64,7 @@ class NetCoreTestCase(VumiTestCase):
         self.assertEqual(resp.code, http.OK)
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assertEqual(msg['to_addr'], '10010')
-        self.assertEqual(msg['from_addr'], '27123456789')
+        self.assertEqual(msg['from_addr'], '08800000000')
         self.assertEqual(msg['content'], 'foo')
         self.assertEqual(msg['transport_metadata'], {
             'netcore': {
