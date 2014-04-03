@@ -32,8 +32,7 @@ class NetCoreTestCase(VumiTestCase):
 
     def get_transport(self, **config):
         defaults = {
-            'twisted_endpoint': 'tcp:0',
-            'country_prefix': '91',
+            'twisted_endpoint': 'tcp:0'
         }
         defaults.update(config)
         return self.tx_helper.get_transport(defaults)
