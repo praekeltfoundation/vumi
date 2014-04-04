@@ -15,7 +15,7 @@ from vumi.utils import http_request_full
 
 
 class MxitTransportException(Exception):
-    pass
+    """Raised when the Mxit API returns an error"""
 
 
 class MxitTransportConfig(HttpRpcTransport.CONFIG_CLASS):
