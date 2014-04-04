@@ -1,6 +1,6 @@
 import re
 
-from twisted.web.template import Element, renderer, XMLFile
+from twisted.web.template import Element, renderer, XMLFile, flattenString
 from twisted.python.filepath import FilePath
 
 from vumi.utils import PkgResources
@@ -33,7 +33,8 @@ class MxitResponse(Element):
     loader = XMLFile(FilePath(MXIT_RESOURCES.path('templates/response.xml')))
 
     def __init__(self, message, loader=None):
-        self.header, self.items = ResponseParser.parse(message['content'])
+        self.header, self.items = ResponseParser.parse(
+            message['content'] or u'')
         super(MxitResponse, self).__init__(loader or self.loader)
 
     @renderer
@@ -50,3 +51,6 @@ class MxitResponse(Element):
     def render_item(self, request, tag):
         for index, text in self.items:
             yield tag.clone().fillSlots(index=str(index), text=text)
+
+    def flatten(self):
+        return flattenString(None, self)
