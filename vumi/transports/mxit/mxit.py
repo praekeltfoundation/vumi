@@ -5,7 +5,7 @@ from urllib import urlencode
 from HTMLParser import HTMLParser
 
 from twisted.web import http
-from twisted.internet.defer import inlineCallbacks, succeed, returnValue
+from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.config import ConfigText, ConfigInt, ConfigDict, ConfigList
 from vumi.persist.txredis_manager import TxRedisManager
@@ -30,7 +30,7 @@ class MxitTransportConfig(HttpRpcTransport.CONFIG_CLASS):
         'Timeout for outbound Mxit HTTP API calls.', required=False,
         default=30, static=True)
     redis_manager = ConfigDict(
-        'How to connect to Redis', required=False, static=True)
+        'How to connect to Redis', required=True, static=True)
     api_send_url = ConfigText(
         'The URL for the Mxit message sending API.',
         required=False, default="https://api.mxit.com",

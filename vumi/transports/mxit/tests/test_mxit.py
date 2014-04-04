@@ -217,10 +217,11 @@ class TestMxitTransport(VumiTestCase):
 
     @inlineCallbacks
     def test_getting_access_token(self):
-        # clear primed value
         transport = self.transport
         redis = transport.redis
+        # clear primed value
         yield redis.delete(transport.access_token_key)
+
         d = transport.get_access_token()
 
         req = yield self.mock_request_queue.get()
