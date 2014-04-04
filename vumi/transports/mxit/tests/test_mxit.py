@@ -1,4 +1,5 @@
 import json
+import base64
 
 from twisted.internet.defer import inlineCallbacks, DeferredQueue
 from twisted.web.http import Request, BAD_REQUEST
@@ -26,7 +27,8 @@ class TestMxitTransport(VumiTestCase):
             'web_path': '/api/v1/mxit/mobiportal/',
             'client_id': 'client_id',
             'client_secret': 'client_secret',
-            'api_send_url': self.mock_http.url
+            'api_send_url': self.mock_http.url,
+            'api_auth_url': self.mock_http.url,
         }
         self.sample_loc_str = 'cc,cn,sc,sn,cc,c,noi,cfb,ci'
         self.sample_profile_str = 'lc,cc,dob,gender,tariff'
@@ -212,3 +214,28 @@ class TestMxitTransport(VumiTestCase):
         req.finish()
 
         yield d
+
+    @inlineCallbacks
+    def test_getting_access_token(self):
+        # clear primed value
+        transport = self.transport
+        redis = transport.redis
+        yield redis.delete(transport.access_token_key)
+        d = transport.get_access_token()
+
+        req = yield self.mock_request_queue.get()
+        [auth] = req.requestHeaders.getRawHeaders('Authorization')
+        self.assertEqual(
+            auth, 'Basic %s' % (
+                base64.b64encode('client_id:client_secret')))
+        req.write(json.dumps({
+            'access_token': 'access_token',
+            'expires_in': '10'
+        }))
+        req.finish()
+
+        access_token = yield d
+        self.assertEqual(access_token, 'access_token')
+        ttl = yield redis.ttl(transport.access_token_key)
+        self.assertTrue(
+            0 < ttl <= (transport.access_token_auto_decay * 10))

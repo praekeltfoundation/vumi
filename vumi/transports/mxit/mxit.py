@@ -60,6 +60,7 @@ class MxitTransport(HttpRpcTransport):
     content_type = 'text/html; charset=utf-8'
     transport_type = 'mxit'
     access_token_key = 'access_token'
+    access_token_auto_decay = 0.95
 
     @inlineCallbacks
     def setup_transport(self):
@@ -171,9 +172,9 @@ class MxitTransport(HttpRpcTransport):
         if access_token is None:
             access_token, expiry = yield self.request_new_access_token()
             # always make sure we expire before the token actually does
-            safe_expiry = expiry * 0.95
+            safe_expiry = expiry * self.access_token_auto_decay
             yield self.redis.setex(
-                self.access_token_key, safe_expiry, access_token)
+                self.access_token_key, int(safe_expiry), access_token)
         returnValue(access_token)
 
     @inlineCallbacks
