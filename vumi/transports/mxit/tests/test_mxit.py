@@ -1,10 +1,14 @@
-from twisted.internet.defer import inlineCallbacks
+import json
+
+from twisted.internet.defer import inlineCallbacks, DeferredQueue
 from twisted.web.http import Request, BAD_REQUEST
+from twisted.web.server import NOT_DONE_YET
 
 from vumi.transports.mxit import MxitTransport
 from vumi.transports.mxit.responses import ResponseParser
 from vumi.utils import http_request_full
 from vumi.tests.helpers import VumiTestCase
+from vumi.tests.utils import MockHttpServer
 from vumi.transports.tests.helpers import TransportHelper
 
 
@@ -12,9 +16,17 @@ class TestMxitTransport(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
+        self.mock_http = MockHttpServer(self.handle_request)
+        self.mock_request_queue = DeferredQueue()
+        yield self.mock_http.start()
+        self.addCleanup(self.mock_http.stop)
+
         config = {
             'web_port': 0,
             'web_path': '/api/v1/mxit/mobiportal/',
+            'client_id': 'client_id',
+            'client_secret': 'client_secret',
+            'api_send_url': self.mock_http.url
         }
         self.sample_loc_str = 'cc,cn,sc,sn,cc,c,noi,cfb,ci'
         self.sample_profile_str = 'lc,cc,dob,gender,tariff'
@@ -42,7 +54,13 @@ class TestMxitTransport(VumiTestCase):
 
         self.tx_helper = self.add_helper(TransportHelper(MxitTransport))
         self.transport = yield self.tx_helper.get_transport(config)
+        # NOTE: priming redis with an access token
+        self.transport.redis.set(self.transport.access_token_key, 'foo')
         self.url = self.transport.get_transport_url(config['web_path'])
+
+    def handle_request(self, request):
+        self.mock_request_queue.put(request)
+        return NOT_DONE_YET
 
     def test_is_mxit_request(self):
         req = Request(None, True)
@@ -177,5 +195,20 @@ class TestMxitTransport(VumiTestCase):
 
     @inlineCallbacks
     def test_outbound_that_is_not_a_reply(self):
-        self.tx_helper.make_dispatch_outbound(
+        d = self.tx_helper.make_dispatch_outbound(
             content="Send!", to_addr="mxit-1", from_addr="mxit-2")
+        req = yield self.mock_request_queue.get()
+        body = json.load(req.content)
+        self.assertEqual(body, {
+            'Body': 'Send!',
+            'To': 'mxit-1',
+            'From': 'mxit-2',
+            'ContainsMarkup': 'true',
+            'Spool': 'true',
+        })
+        [auth] = req.requestHeaders.getRawHeaders('Authorization')
+        # primed access token
+        self.assertEqual(auth, 'Bearer foo')
+        req.finish()
+
+        yield d

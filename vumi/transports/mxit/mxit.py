@@ -1,12 +1,47 @@
 # -*- test-case-name: vumi.transports.mxit.tests.test_mxit -*-
+import json
+import base64
+from urllib import urlencode
 from HTMLParser import HTMLParser
 
 from twisted.web import http
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, succeed, returnValue
 
+from vumi.config import ConfigText, ConfigInt, ConfigDict, ConfigList
+from vumi.persist.txredis_manager import TxRedisManager
 from vumi.transports.httprpc import HttpRpcTransport
 from vumi.transports.mxit.responses import MxitResponse
 from vumi.utils import http_request_full
+
+
+class MxitTransportException(Exception):
+    pass
+
+
+class MxitTransportConfig(HttpRpcTransport.CONFIG_CLASS):
+
+    client_id = ConfigText(
+        'The OAuth2 ClientID assigned to this transport.', required=True,
+        static=True)
+    client_secret = ConfigText(
+        'The OAuth2 ClientSecret assigned to this transport.', required=True,
+        static=True)
+    timeout = ConfigInt(
+        'Timeout for outbound Mxit HTTP API calls.', required=False,
+        default=30, static=True)
+    redis_manager = ConfigDict(
+        'How to connect to Redis', required=False, static=True)
+    api_send_url = ConfigText(
+        'The URL for the Mxit message sending API.',
+        required=False, default="https://api.mxit.com",
+        static=True)
+    api_auth_url = ConfigText(
+        'The URL for the Mxit authentication API.',
+        required=False, default='https://auth.mxit.com',
+        static=True)
+    api_auth_scopes = ConfigList(
+        'The list of scopes to request access to.',
+        required=False, static=True, default=[])
 
 
 class MxitTransport(HttpRpcTransport):
@@ -21,8 +56,16 @@ class MxitTransport(HttpRpcTransport):
       https://dev.mxit.com/docs/restapi/messaging/post-message-send
     """
 
+    CONFIG_CLASS = MxitTransportConfig
     content_type = 'text/html; charset=utf-8'
     transport_type = 'mxit'
+    access_token_key = 'access_token'
+
+    @inlineCallbacks
+    def setup_transport(self):
+        yield super(MxitTransport, self).setup_transport()
+        config = self.get_static_config()
+        self.redis = yield TxRedisManager.from_config(config.redis_manager)
 
     def is_mxit_request(self, request):
         return request.requestHeaders.hasHeader('X-Mxit-Contact')
@@ -123,11 +166,47 @@ class MxitTransport(HttpRpcTransport):
                 sent_message_id=message['message_id'])
 
     @inlineCallbacks
+    def get_access_token(self):
+        access_token = yield self.redis.get(self.access_token_key)
+        if access_token is None:
+            access_token, expiry = yield self.request_new_access_token()
+            # always make sure we expire before the token actually does
+            safe_expiry = expiry * 0.95
+            yield self.redis.setex(
+                self.access_token_key, safe_expiry, access_token)
+        returnValue(access_token)
+
+    @inlineCallbacks
+    def request_new_access_token(self):
+        config = self.get_static_config()
+        url = '%s/token' % (config.api_auth_url)
+        auth = base64.b64encode(
+            '%s:%s' % (config.client_id, config.client_secret))
+        headers = {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Authorization': 'Basic %s' % (auth,)
+        }
+        data = urlencode({
+            'grant_type': 'client_credentials',
+            'scope': ' '.join(config.api_auth_scopes)
+        })
+        response = yield http_request_full(url=url, method='POST',
+                                           headers=headers, data=data)
+        data = json.loads(response.delivered_body)
+        if 'error' in data:
+            raise MxitTransportException(
+                '%(error)s: %(error_description)s.' % data)
+        returnValue((data['access_token'], int(data['expires_in'])))
+
+    @inlineCallbacks
     def handle_outbound_send(self, message):
-        # TODO: XXX
-        body = yield MxitResponse(message).flatten()
-        url = "http://api.mxit.com/message/send/"
-        headers = {}
+        config = self.get_static_config()
+        body = message['content']
+        access_token = yield self.get_access_token()
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer %s" % (access_token,)
+        }
         data = {
             "Body": body,
             "ContainsMarkup": "true",
@@ -136,9 +215,9 @@ class MxitTransport(HttpRpcTransport):
             "Spool": "true",
         }
         context_factory = None
-        yield http_request_full(
-            url, data=data, headers=headers,
-            method="POST", timeout=self.timeout,
+        resp = yield http_request_full(
+            config.api_send_url, data=json.dumps(data), headers=headers,
+            method="POST", timeout=config.timeout,
             context_factory=context_factory)
 
     @inlineCallbacks
