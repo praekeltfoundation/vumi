@@ -41,7 +41,7 @@ class MxitTransportConfig(HttpRpcTransport.CONFIG_CLASS):
         static=True)
     api_auth_scopes = ConfigList(
         'The list of scopes to request access to.',
-        required=False, static=True, default=[])
+        required=False, static=True, default=['message/user'])
 
 
 class MxitTransport(HttpRpcTransport):

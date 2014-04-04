@@ -1,5 +1,6 @@
 import json
 import base64
+import urllib
 
 from twisted.internet.defer import inlineCallbacks, DeferredQueue
 from twisted.web.http import Request, BAD_REQUEST
@@ -229,6 +230,9 @@ class TestMxitTransport(VumiTestCase):
         self.assertEqual(
             auth, 'Basic %s' % (
                 base64.b64encode('client_id:client_secret')))
+        self.assertEqual(
+            'scope=message%2Fuser&grant_type=client_credentials',
+            req.content.read())
         req.write(json.dumps({
             'access_token': 'access_token',
             'expires_in': '10'
