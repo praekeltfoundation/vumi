@@ -15,6 +15,18 @@ from vumi.service import Publisher, Consumer
 from vumi.blinkenlights.message20110818 import MetricMessage
 
 
+class MetricPublisher(Publisher):
+    """
+    Publisher for metrics messages.
+    """
+    exchange_name = "vumi.metrics"
+    exchange_type = "direct"
+    routing_key = "vumi.metrics"
+    durable = True
+    auto_delete = False
+    delivery_mode = 2
+
+
 class MetricManager(Publisher):
     """Utility for creating and monitoring a set of metrics.
 

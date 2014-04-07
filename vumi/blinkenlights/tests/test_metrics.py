@@ -10,6 +10,56 @@ from vumi.service import Worker
 from vumi.tests.helpers import VumiTestCase, WorkerHelper
 
 
+class TestMetricPublisher(VumiTestCase):
+
+    def setUp(self):
+        self.worker_helper = self.add_helper(WorkerHelper())
+
+    @inlineCallbacks
+    def start_publisher(self, publisher):
+        channel = yield get_stubbed_channel(self.worker_helper.broker)
+        publisher.start(channel)
+
+    def _sleep(self, delay):
+        d = Deferred()
+        reactor.callLater(delay, lambda: d.callback(None))
+        return d
+
+    def _check_msg(self, prefix, metric, values):
+        msgs = self.worker_helper.broker.get_dispatched(
+            "vumi.metrics", "vumi.metrics")
+        if values is None:
+            self.assertEqual(msgs, [])
+            return
+        content = msgs[-1]
+        self.assertEqual(content.properties, {"delivery mode": 2})
+        msg = Message.from_json(content.body)
+        [datapoint] = msg.payload["datapoints"]
+        self.assertEqual(datapoint[0], prefix + metric.name)
+        self.assertEqual(datapoint[1], list(metric.aggs))
+        # check datapoints within 2s of now -- the truncating of
+        # time.time() to an int for timestamps can cause a 1s
+        # difference by itself
+        now = time.time()
+        self.assertTrue(all(abs(p[0] - now) < 2.0
+                            for p in datapoint[2]),
+                        "Not all datapoints near now (%f): %r"
+                        % (now, datapoint))
+        self.assertEqual([dp[1] for dp in datapoint[2]], values)
+
+    @inlineCallbacks
+    def test_publish_single_metric(self):
+        publisher = metrics.MetricPublisher()
+        yield self.start_publisher(publisher)
+
+        msg = metrics.MetricMessage()
+        cnt = metrics.Count("my.count")
+        msg.append(
+            ("vumi.test.%s" % (cnt.name,), cnt.aggs, [(time.time(), 1)]))
+        publisher.publish_message(msg)
+        self._check_msg("vumi.test.", cnt, [1])
+
+
 class TestMetricManager(VumiTestCase):
 
     def setUp(self):
