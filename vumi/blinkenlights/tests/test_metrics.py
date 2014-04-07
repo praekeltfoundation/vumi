@@ -107,6 +107,42 @@ class TestMetricManager(VumiTestCase):
                         % (now, datapoint))
         self.assertEqual([dp[1] for dp in datapoint[2]], values)
 
+    @inlineCallbacks
+    def test_start_manager_no_publisher(self):
+        mm = metrics.MetricManager("vumi.test.")
+        self.assertEqual(mm._publisher, None)
+        self.assertEqual(mm._task, None)
+        channel = yield get_stubbed_channel(self.worker_helper.broker)
+        mm.start(channel)
+        self.add_cleanup(mm.stop)
+        self.assertIsInstance(mm._publisher, metrics.MetricPublisher)
+        self.assertNotEqual(mm._task, None)
+
+    def test_start_manager_no_publisher_no_channel(self):
+        mm = metrics.MetricManager("vumi.test.")
+        self.assertEqual(mm._publisher, None)
+        self.assertEqual(mm._task, None)
+        self.assertRaises(Exception, mm.start)
+
+    @inlineCallbacks
+    def test_start_manager_publisher_and_channel(self):
+        publisher = metrics.MetricPublisher()
+        mm = metrics.MetricManager("vumi.test.", publisher=publisher)
+        self.assertEqual(mm._publisher, publisher)
+        self.assertEqual(mm._task, None)
+        channel = yield get_stubbed_channel(self.worker_helper.broker)
+        self.assertRaises(Exception, mm.start, channel)
+
+    def test_start_manager_publisher_no_channel(self):
+        publisher = metrics.MetricPublisher()
+        mm = metrics.MetricManager("vumi.test.", publisher=publisher)
+        self.assertEqual(mm._publisher, publisher)
+        self.assertEqual(mm._task, None)
+        mm.start()
+        self.add_cleanup(mm.stop)
+        self.assertEqual(mm._publisher, publisher)
+        self.assertNotEqual(mm._task, None)
+
     def test_oneshot(self):
         self.patch(time, "time", lambda: 12345)
         mm = metrics.MetricManager("vumi.test.")
