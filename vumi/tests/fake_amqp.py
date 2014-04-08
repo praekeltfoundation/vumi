@@ -249,6 +249,8 @@ class FakeAMQPBroker(object):
         return done
 
     def clear_messages(self, exchange, rkey=None):
+        if exchange not in self.dispatched:
+            return
         if rkey:
             del self.dispatched[exchange][rkey][:]
         else:

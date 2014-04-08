@@ -821,6 +821,17 @@ class TestWorkerHelper(VumiTestCase):
         self.assertEqual(broker.dispatched['vumi'], {})
         self.assertEqual(broker.dispatched['vumi.metrics'], {})
 
+    def test_clear_all_dispatched_no_messages(self):
+        """
+        WorkerHelper.clear_all_dispatched() should succeed even if no messages
+        have ever been dispatched.
+        """
+        worker_helper = WorkerHelper()
+        broker = worker_helper.broker
+        self.assertEqual(broker.dispatched, {})
+        worker_helper.clear_all_dispatched()
+        self.assertEqual(broker.dispatched, {})
+
     def test_get_dispatched_events(self):
         """
         WorkerHelper.get_dispatched_events() should get events dispatched by
