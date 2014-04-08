@@ -282,8 +282,8 @@ class TestWeChatOutboundMessaging(WeChatTestCase):
         yield self.get_transport_with_access_token('foo')
         # news is a collection or URLs apparently
         msg_d = self.dispatch_push_message(
-            'This is an awesome link for you! http://www.wechat.com/', {},
-            to_addr='toaddr')
+            ('This is an awesome link for you! http://www.wechat.com/ '
+             'Go visit it.'), {}, to_addr='toaddr')
 
         request = yield self.request_queue.get()
         self.assertEqual(request.path, '/message/custom/send')
@@ -296,8 +296,9 @@ class TestWeChatOutboundMessaging(WeChatTestCase):
             'news': {
                 'articles': [
                     {
-                        'description': 'This is an awesome link for you! ',
+                        'title': 'This is an awesome link for you! ',
                         'url': 'http://www.wechat.com/',
+                        'description': ' Go visit it.'
                     }
                 ]
             }
@@ -536,11 +537,15 @@ class TestWeChatInferMessage(WeChatTestCase):
 
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         yield self.tx_helper.make_dispatch_reply(
-            msg, 'This is an awesome link for you! http://www.wechat.com/')
+            msg, ('This is an awesome link for you! http://www.wechat.com/ '
+                  'Go visit it.'))
 
         resp = yield resp_d
         self.assertTrue(
             '<Url>http://www.wechat.com/</Url>' in resp.delivered_body)
         self.assertTrue(
-            '<Description>This is an awesome link for you! </Description>'
+            '<Title>This is an awesome link for you! </Title>'
+            in resp.delivered_body)
+        self.assertTrue(
+            '<Description> Go visit it.</Description>'
             in resp.delivered_body)

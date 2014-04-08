@@ -115,10 +115,9 @@ class NewsMessage(WeChatMessage):
             from_addr,
             vumi_message['timestamp'].strftime('%s'),
             [{
-                'title': 'Title!',
-                'picurl': 'https://raw.githubusercontent.com/praekelt/vumi-go/develop/go/base/static/img/logo-lrg.png',
+                'title': '%(before)s' % url_data,
                 'url': '%(schema)s://%(domain)s' % url_data,
-                'description': '%(before)s%(after)s' % url_data,
+                'description': '%(after)s' % url_data,
             }])
 
     def to_xml(self):
