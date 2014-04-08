@@ -90,9 +90,15 @@ class MetricManager(object):
         for metric in self._metrics:
             msg.append(
                 (self.prefix + metric.name, metric.aggs, metric.poll()))
-        self._publisher.publish_message(msg)
+        self.publish_message(msg)
         if self._on_publish is not None:
             self._on_publish(self)
+
+    def publish_message(self, msg):
+        """
+        Compat wrapper for tests that assume this is a publisher.
+        """
+        return self._publisher.publish_message(msg)
 
     def oneshot(self, metric, value):
         """Publish a single value for the given metric.
