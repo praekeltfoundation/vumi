@@ -1,6 +1,6 @@
 # -*- test-case-name: vumi.transports.netcore.tests.test_netcore -*-
 
-from vumi.config import ConfigServerEndpoint, ConfigText
+from vumi.config import ConfigServerEndpoint, ConfigText, ConfigBool
 from vumi.transports import Transport
 from vumi.transports.httprpc.httprpc import HttpRpcHealthResource
 from vumi.utils import build_web_site
@@ -22,6 +22,9 @@ class NetcoreTransportConfig(Transport.CONFIG_CLASS):
     health_path = ConfigText(
         "The path to serve the health resource on.",
         default='/health/', static=True)
+    reject_none = ConfigBool(
+        "Reject messages where the content parameter equals 'None'",
+        required=False, default=True, static=True)
 
 
 class NetcoreResource(Resource):
@@ -31,6 +34,7 @@ class NetcoreResource(Resource):
     def __init__(self, transport):
         Resource.__init__(self)
         self.transport = transport
+        self.config = transport.get_static_config()
 
     def render_POST(self, request):
         expected_keys = [
@@ -53,6 +57,11 @@ class NetcoreResource(Resource):
             request.setResponseCode(http.BAD_REQUEST)
             return ('Not all parameters have values. '
                     'Received: %r' % (param_values,))
+
+        content = request.args['content'][0]
+        if self.config.reject_none and content == "None":
+            request.setResponseCode(http.BAD_REQUEST)
+            return ('"None" string literal not allowed for content parameter.')
 
         self.handle_request(request)
         return NOT_DONE_YET

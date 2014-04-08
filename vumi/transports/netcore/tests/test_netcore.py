@@ -69,6 +69,22 @@ class NetCoreTestCase(VumiTestCase):
             [], self.tx_helper.get_dispatched_inbound())
 
     @inlineCallbacks
+    def test_inbound_content_none_string_literal(self):
+        transport = yield self.get_transport()
+        resp = yield request(transport, 'POST', {
+            'to_addr': '10010',
+            'from_addr': '8800000000',
+            'content': 'None',  # Python str(None) on netcore's side
+            'source': 'sms',
+            'circle': 'of life',
+        })
+        self.assertEqual(resp.code, http.BAD_REQUEST)
+        self.assertEqual(resp.delivered_body, (
+            '"None" string literal not allowed for content parameter.'))
+        self.assertEqual(
+            [], self.tx_helper.get_dispatched_inbound())
+
+    @inlineCallbacks
     def test_inbound_sms_success(self):
         transport = yield self.get_transport()
         resp = yield request(transport, 'POST', {
