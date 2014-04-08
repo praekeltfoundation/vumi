@@ -81,18 +81,20 @@ class MetricManager(object):
 
     def _publish_metrics(self):
         msg = MetricMessage()
-        # oneshot metrics
-        oneshots, self._oneshot_msgs = self._oneshot_msgs, []
-        for metric, values in oneshots:
-            msg.append(
-                (self.prefix + metric.name, metric.aggs, values))
-        # polled metrics
-        for metric in self._metrics:
-            msg.append(
-                (self.prefix + metric.name, metric.aggs, metric.poll()))
+        self._collect_oneshot_metrics(msg)
+        self._collect_polled_metrics(msg)
         self.publish_message(msg)
         if self._on_publish is not None:
             self._on_publish(self)
+
+    def _collect_oneshot_metrics(self, msg):
+        oneshots, self._oneshot_msgs = self._oneshot_msgs, []
+        for metric, values in oneshots:
+            msg.append((self.prefix + metric.name, metric.aggs, values))
+
+    def _collect_polled_metrics(self, msg):
+        for metric in self._metrics:
+            msg.append((self.prefix + metric.name, metric.aggs, metric.poll()))
 
     def publish_message(self, msg):
         """
@@ -113,6 +115,19 @@ class MetricManager(object):
         """
         self._oneshot_msgs.append(
             (metric, [(int(time.time()), value)]))
+
+    def publish_oneshot_metrics(self, publisher=None):
+        """
+        Publish all waiting oneshot metrics.
+
+        If a publisher is provided, it will be used instead of the manager's
+        publisher.
+        """
+        msg = MetricMessage()
+        self._collect_oneshot_metrics(msg)
+        if publisher is None:
+            publisher = self._publisher
+        publisher.publish_message(msg)
 
     def register(self, metric):
         """Register a new metric object to be managed by this metric set.
