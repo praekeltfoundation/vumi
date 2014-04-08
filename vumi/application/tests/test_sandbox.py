@@ -1156,6 +1156,7 @@ class TestHttpClientResource(ResourceTestCaseBase):
                 self.resource.DEFAULT_DATA_LIMIT + 1,
                 self.resource.DEFAULT_DATA_LIMIT,))
 
+    @inlineCallbacks
     def test_https_request_method_default(self):
         self.http_request_succeed("foo")
         reply = yield self.dispatch_command(
