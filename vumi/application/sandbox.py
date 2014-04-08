@@ -744,10 +744,10 @@ class HttpClientResource(SandboxResource):
         - ``headers``: A dictionary of keys for the header name and a list
             of values to provide as header values.
         - ``data``: The payload to submit as part of the request.
-        - ``files``: A dictionary, submited as multipart/form-data
+        - ``files``: A dictionary, submitted as multipart/form-data
             in the request:
-                {
-                    field name": {
+                [{
+                    "field name": {
                         "file_name": "the file name",
                         "content_type": "content-type",
                         "data": "data to submit, encoded as base64",
