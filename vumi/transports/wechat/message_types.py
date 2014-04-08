@@ -107,12 +107,16 @@ class NewsMessage(WeChatMessage):
 
     @classmethod
     def from_vumi_message(cls, match, vumi_message):
+        md = vumi_message['transport_metadata'].get('wechat', {})
+        from_addr = md.get('ToUserName', vumi_message['from_addr'])
         url_data = match.groupdict()
         return cls(
             vumi_message['to_addr'],
-            vumi_message['from_addr'],
+            from_addr,
             vumi_message['timestamp'].strftime('%s'),
             [{
+                'title': 'Title!',
+                'picurl': 'https://raw.githubusercontent.com/praekelt/vumi-go/develop/go/base/static/img/logo-lrg.png',
                 'url': '%(schema)s://%(domain)s' % url_data,
                 'description': '%(before)s%(after)s' % url_data,
             }])
