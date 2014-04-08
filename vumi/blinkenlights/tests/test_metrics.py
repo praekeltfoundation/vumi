@@ -171,7 +171,7 @@ class TestMetricManager(VumiTestCase):
         yield self.start_manager(mm)
 
         cnt.inc()
-        mm._publish_metrics()
+        mm.publish_metrics()
         self._check_msg(mm, cnt, [1])
 
     @inlineCallbacks
@@ -181,7 +181,7 @@ class TestMetricManager(VumiTestCase):
         yield self.start_manager(mm)
 
         mm.oneshot(cnt, 1)
-        mm._publish_metrics()
+        mm.publish_metrics()
         self._check_msg(mm, cnt, [1])
 
     @inlineCallbacks
@@ -203,25 +203,25 @@ class TestMetricManager(VumiTestCase):
         self._check_msg(mm, cnt, [1, 1])
 
     @inlineCallbacks
-    def test_publish_oneshot_metrics(self):
+    def test_publish_metrics(self):
         mm = metrics.MetricManager("vumi.test.", 0.1, self.on_publish)
         cnt = metrics.Count("my.count")
         yield self.start_manager(mm)
 
         mm.oneshot(cnt, 1)
         self.assertEqual(len(mm._oneshot_msgs), 1)
-        mm.publish_oneshot_metrics()
+        mm.publish_metrics()
         self.assertEqual(mm._oneshot_msgs, [])
         self._check_msg(mm, cnt, [1])
 
-    def test_publish_oneshot_metrics_not_started_no_publisher(self):
+    def test_publish_metrics_not_started_no_publisher(self):
         mm = metrics.MetricManager("vumi.test.")
         self.assertEqual(mm._publisher, None)
         mm.oneshot(metrics.Count("my.count"), 1)
-        self.assertRaises(Exception, mm.publish_oneshot_metrics)
+        self.assertRaises(Exception, mm.publish_metrics)
 
     @inlineCallbacks
-    def test_publish_oneshot_metrics_not_started_with_publisher(self):
+    def test_publish_metrics_not_started_with_publisher(self):
         mm = metrics.MetricManager("vumi.test.", 0.1, self.on_publish)
         publisher = metrics.MetricPublisher()
         channel = yield get_stubbed_channel(self.worker_helper.broker)
@@ -231,7 +231,7 @@ class TestMetricManager(VumiTestCase):
         self.assertEqual(mm._publisher, None)
         mm.oneshot(cnt, 1)
         self.assertEqual(len(mm._oneshot_msgs), 1)
-        mm.publish_oneshot_metrics(publisher)
+        mm.publish_metrics(publisher)
         self.assertEqual(mm._oneshot_msgs, [])
         self._check_msg(mm, cnt, [1])
 

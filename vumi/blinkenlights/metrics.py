@@ -68,7 +68,7 @@ class MetricManager(object):
         elif channel is not None:
             raise RuntimeError(
                 "channel must not be provided if publisher is present.")
-        self._task = LoopingCall(self._publish_metrics)
+        self._task = LoopingCall(self.publish_metrics)
         done = self._task.start(self._publish_interval, now=False)
         done.addErrback(lambda failure: log.err(failure,
                         "MetricManager publishing task died"))
@@ -79,13 +79,23 @@ class MetricManager(object):
             self._task.stop()
             self._task = None
 
-    def _publish_metrics(self):
+    def publish_metrics(self, publisher=None):
+        """
+        Publish all waiting metrics.
+
+        If a publisher is provided, it will be used instead of the manager's
+        publisher.
+        """
         msg = MetricMessage()
         self._collect_oneshot_metrics(msg)
         self._collect_polled_metrics(msg)
-        self.publish_message(msg)
+        if publisher is None:
+            publisher = self._publisher
+        publisher.publish_message(msg)
         if self._on_publish is not None:
             self._on_publish(self)
+
+    _publish_metrics = publish_metrics  # For old tests that poke this.
 
     def _collect_oneshot_metrics(self, msg):
         oneshots, self._oneshot_msgs = self._oneshot_msgs, []
@@ -95,12 +105,6 @@ class MetricManager(object):
     def _collect_polled_metrics(self, msg):
         for metric in self._metrics:
             msg.append((self.prefix + metric.name, metric.aggs, metric.poll()))
-
-    def publish_message(self, msg):
-        """
-        Compat wrapper for tests that assume this is a publisher.
-        """
-        return self._publisher.publish_message(msg)
 
     def oneshot(self, metric, value):
         """Publish a single value for the given metric.
@@ -115,19 +119,6 @@ class MetricManager(object):
         """
         self._oneshot_msgs.append(
             (metric, [(int(time.time()), value)]))
-
-    def publish_oneshot_metrics(self, publisher=None):
-        """
-        Publish all waiting oneshot metrics.
-
-        If a publisher is provided, it will be used instead of the manager's
-        publisher.
-        """
-        msg = MetricMessage()
-        self._collect_oneshot_metrics(msg)
-        if publisher is None:
-            publisher = self._publisher
-        publisher.publish_message(msg)
 
     def register(self, metric):
         """Register a new metric object to be managed by this metric set.
