@@ -63,6 +63,7 @@ class WeChatTestCase(VumiTestCase):
             'twisted_endpoint': 'tcp:0',
             'wechat_appid': 'appid',
             'wechat_secret': 'secret',
+            'embed_user_profile': False,
         }
         defaults.update(config)
         return self.tx_helper.get_transport(defaults)

@@ -78,7 +78,7 @@ class WeChatConfig(Transport.CONFIG_CLASS):
         '(default 1 hour)', default=60 * 60 * 1, static=True)
     embed_user_profile = ConfigBool(
         'Whether or not to embed the WeChat User Profile info in '
-        'messages received.', required=False, default=False, static=True)
+        'messages received.', required=True, default=False, static=True)
     embed_user_profile_lang = ConfigText(
         'What language to request User Profile as.', required=False,
         default='en', static=True)
