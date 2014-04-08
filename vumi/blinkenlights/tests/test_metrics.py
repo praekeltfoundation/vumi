@@ -26,15 +26,11 @@ class TestMetricPublisher(VumiTestCase):
         return d
 
     def _check_msg(self, prefix, metric, values):
-        msgs = self.worker_helper.broker.get_dispatched(
-            "vumi.metrics", "vumi.metrics")
+        msgs = self.worker_helper.get_dispatched_metrics()
         if values is None:
             self.assertEqual(msgs, [])
             return
-        content = msgs[-1]
-        self.assertEqual(content.properties, {"delivery mode": 2})
-        msg = Message.from_json(content.body)
-        [datapoint] = msg.payload["datapoints"]
+        [datapoint] = msgs[-1]
         self.assertEqual(datapoint[0], prefix + metric.name)
         self.assertEqual(datapoint[1], list(metric.aggs))
         # check datapoints within 2s of now -- the truncating of
@@ -86,15 +82,11 @@ class TestMetricManager(VumiTestCase):
         return d
 
     def _check_msg(self, manager, metric, values):
-        msgs = self.worker_helper.broker.get_dispatched(
-            "vumi.metrics", "vumi.metrics")
+        msgs = self.worker_helper.get_dispatched_metrics()
         if values is None:
             self.assertEqual(msgs, [])
             return
-        content = msgs[-1]
-        self.assertEqual(content.properties, {"delivery mode": 2})
-        msg = Message.from_json(content.body)
-        [datapoint] = msg.payload["datapoints"]
+        [datapoint] = msgs[-1]
         self.assertEqual(datapoint[0], manager.prefix + metric.name)
         self.assertEqual(datapoint[1], list(metric.aggs))
         # check datapoints within 2s of now -- the truncating of
