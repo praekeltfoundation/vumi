@@ -48,6 +48,11 @@ class NetcoreResource(Resource):
             return ('Not all expected parameters received. '
                     'Only allowing: %r, received: %r' % (
                         expected_keys, request.args.keys()))
+        param_values = [param[0] for param in request.args.values()]
+        if not all(param_values):
+            request.setResponseCode(http.BAD_REQUEST)
+            return ('Not all parameters have values. '
+                    'Received: %r' % (param_values,))
 
         self.handle_request(request)
         return NOT_DONE_YET
