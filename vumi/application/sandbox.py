@@ -24,7 +24,8 @@ from twisted.python.failure import Failure
 from twisted.web.client import WebClientContextFactory, Agent
 
 from OpenSSL.SSL import (
-    VERIFY_PEER, VERIFY_FAIL_IF_NO_PEER_CERT, VERIFY_CLIENT_ONCE, VERIFY_NONE)
+    VERIFY_PEER, VERIFY_FAIL_IF_NO_PEER_CERT, VERIFY_CLIENT_ONCE, VERIFY_NONE,
+    SSLv3_METHOD, SSLv23_METHOD, TLSv1_METHOD)
 
 from vumi.config import ConfigText, ConfigInt, ConfigList, ConfigDict
 from vumi.application.base import ApplicationWorker
@@ -713,8 +714,10 @@ class LoggingResource(SandboxResource):
 
 class HttpClientContextFactory(WebClientContextFactory):
 
-    def __init__(self, verify_options=None):
+    def __init__(self, verify_options=None, method=None):
         self.verify_options = verify_options
+        if method is not None:
+            self.method = method
 
     def verify_callback(self, conn, cert, errno, errdepth, ok):
         return ok
@@ -799,7 +802,12 @@ class HttpClientResource(SandboxResource):
             'VERIFY_NONE': VERIFY_NONE,
             'VERIFY_PEER': VERIFY_PEER,
             'VERIFY_CLIENT_ONCE': VERIFY_CLIENT_ONCE,
-            'VERIFY_FAIL_IF_NO_PEER_CERT': VERIFY_FAIL_IF_NO_PEER_CERT
+            'VERIFY_FAIL_IF_NO_PEER_CERT': VERIFY_FAIL_IF_NO_PEER_CERT,
+        }
+        method_map = {
+            'SSLv3': SSLv3_METHOD,
+            'SSLv23': SSLv23_METHOD,
+            'TLSv1': TLSv1_METHOD,
         }
 
         if 'verify_options' in command:
@@ -808,9 +816,14 @@ class HttpClientResource(SandboxResource):
             verify_options = reduce(operator.or_, verify_options)
         else:
             verify_options = None
+        if 'ssl_method' in command:
+            # TODO: Fail better with unknown method.
+            ssl_method = method_map[command['ssl_method']]
+        else:
+            ssl_method = None
 
         context_factory = HttpClientContextFactory(
-            verify_options=verify_options)
+            verify_options=verify_options, method=ssl_method)
 
         headers = command.get('headers', None)
         data = command.get('data', None)

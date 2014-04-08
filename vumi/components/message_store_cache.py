@@ -166,7 +166,7 @@ class MessageStoreCache(object):
 
     @Manager.calls_manager
     def init_status(self, batch_id):
-        """"
+        """
         Setup the hash for event tracking on this batch, it primes the
         hash to have the bare minimum of expected keys and their values
         all set to 0. If there's already an existing value then it is

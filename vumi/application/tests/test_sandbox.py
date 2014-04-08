@@ -10,7 +10,8 @@ import logging
 from collections import defaultdict
 
 from OpenSSL.SSL import (
-    VERIFY_PEER, VERIFY_FAIL_IF_NO_PEER_CERT, VERIFY_NONE)
+    VERIFY_PEER, VERIFY_FAIL_IF_NO_PEER_CERT, VERIFY_NONE,
+    SSLv3_METHOD, SSLv23_METHOD, TLSv1_METHOD)
 
 from twisted.internet.defer import (
     inlineCallbacks, fail, succeed, DeferredQueue)
@@ -895,6 +896,7 @@ class TestLoggingResource(ResourceTestCaseBase):
     def test_handle_log_defaults_to_info(self):
         return self.check_logs('log', 'foo', logging.INFO)
 
+    @inlineCallbacks
     def test_with_unicode(self):
         with LogCatcher() as lc:
             reply = yield self.dispatch_command('log', msg=u'Zo\u00eb')
@@ -1153,3 +1155,50 @@ class TestHttpClientResource(ResourceTestCaseBase):
             'Received %d bytes, maximum of %s bytes allowed.' % (
                 self.resource.DEFAULT_DATA_LIMIT + 1,
                 self.resource.DEFAULT_DATA_LIMIT,))
+
+    def test_https_request_method_default(self):
+        self.http_request_succeed("foo")
+        reply = yield self.dispatch_command(
+            'get', url='https://www.example.com')
+        self.assertTrue(reply['success'])
+        self.assertEqual(reply['body'], "foo")
+        self.assert_http_request('https://www.example.com', method='GET')
+
+        ctxt = self.get_context_factory()
+        self.assertEqual(ctxt.method, SSLv23_METHOD)
+
+    @inlineCallbacks
+    def test_https_request_method_SSLv3(self):
+        self.http_request_succeed("foo")
+        reply = yield self.dispatch_command(
+            'get', url='https://www.example.com', ssl_method='SSLv3')
+        self.assertTrue(reply['success'])
+        self.assertEqual(reply['body'], "foo")
+        self.assert_http_request('https://www.example.com', method='GET')
+
+        ctxt = self.get_context_factory()
+        self.assertEqual(ctxt.method, SSLv3_METHOD)
+
+    @inlineCallbacks
+    def test_https_request_method_SSLv23(self):
+        self.http_request_succeed("foo")
+        reply = yield self.dispatch_command(
+            'get', url='https://www.example.com', ssl_method='SSLv23')
+        self.assertTrue(reply['success'])
+        self.assertEqual(reply['body'], "foo")
+        self.assert_http_request('https://www.example.com', method='GET')
+
+        ctxt = self.get_context_factory()
+        self.assertEqual(ctxt.method, SSLv23_METHOD)
+
+    @inlineCallbacks
+    def test_https_request_method_TLSv1(self):
+        self.http_request_succeed("foo")
+        reply = yield self.dispatch_command(
+            'get', url='https://www.example.com', ssl_method='TLSv1')
+        self.assertTrue(reply['success'])
+        self.assertEqual(reply['body'], "foo")
+        self.assert_http_request('https://www.example.com', method='GET')
+
+        ctxt = self.get_context_factory()
+        self.assertEqual(ctxt.method, TLSv1_METHOD)

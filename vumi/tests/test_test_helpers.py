@@ -1,3 +1,4 @@
+from copy import deepcopy
 from datetime import datetime
 
 from twisted.internet.defer import Deferred, succeed, inlineCallbacks
@@ -8,7 +9,7 @@ from vumi.tests.fake_amqp import FakeAMQPBroker, FakeAMQClient
 from vumi.tests.helpers import (
     VumiTestCase, proxyable, generate_proxies, IHelper, import_skip,
     MessageHelper, WorkerHelper, MessageDispatchHelper, PersistenceHelper,
-    success_result_of)
+    success_result_of, RiakDisabledForTest)
 from vumi.worker import BaseWorker
 
 
@@ -1695,6 +1696,13 @@ class TestPersistenceHelper(VumiTestCase):
         self.assertEqual(
             ['redis_manager', 'riak_manager'], sorted(new_config.keys()))
         self.assertEqual(config, {})
+
+    def test_deepcopy_RiakDisabledForTest(self):
+        """
+        RiakDisabledForTest should be deepcopy()able.
+        """
+        rdft = RiakDisabledForTest()
+        self.assertEqual(rdft, deepcopy(rdft))
 
     def test__get_riak_managers_for_cleanup(self):
         """
