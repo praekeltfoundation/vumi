@@ -121,10 +121,13 @@ class MessageStoreCache(object):
     @Manager.calls_manager
     def truncate_inbound_message_keys(self, batch_id, truncate_at=None):
         # indexes are zero based
-        truncate_at = (truncate_at or self.TRUNCATE_MESSAGE_KEY_COUNT_AT)
-        if (yield self.inbound_message_keys_size(batch_id)) > truncate_at:
+        truncate_at = (truncate_at or self.TRUNCATE_MESSAGE_KEY_COUNT_AT) + 1
+        current_size = yield self.inbound_message_keys_size(batch_id)
+        # NOTE: doing this because ZCARD is O(1) where ZREMRANGEBYRANK is
+        #       O(log(N)+M)
+        if current_size > truncate_at:
             keys_removed = yield self.redis.zremrangebyrank(
-                self.inbound_key(batch_id), truncate_at, -1)
+                self.inbound_key(batch_id), 0, truncate_at * -1)
             returnValue(keys_removed)
 
         returnValue(0)
@@ -132,11 +135,13 @@ class MessageStoreCache(object):
     @Manager.calls_manager
     def truncate_outbound_message_keys(self, batch_id, truncate_at=None):
         # indexes are zero based
-        truncate_at = (truncate_at or self.TRUNCATE_MESSAGE_KEY_COUNT_AT)
-
-        if (yield self.outbound_message_keys_size(batch_id)) > truncate_at:
+        truncate_at = (truncate_at or self.TRUNCATE_MESSAGE_KEY_COUNT_AT) + 1
+        current_size = yield self.outbound_message_keys_size(batch_id)
+        # NOTE: doing this because ZCARD is O(1) where ZREMRANGEBYRANK is
+        #       O(log(N)+M)
+        if current_size > truncate_at:
             keys_removed = yield self.redis.zremrangebyrank(
-                self.outbound_key(batch_id), truncate_at, -1)
+                self.outbound_key(batch_id), 0, truncate_at * -1)
             returnValue(keys_removed)
 
         returnValue(0)
