@@ -10,12 +10,33 @@ import warnings
 
 from twisted.internet.task import LoopingCall
 from twisted.python import log
+from zope.interface import Interface, implementer
 
 from vumi.service import Publisher, Consumer
 from vumi.blinkenlights.message20110818 import MetricMessage
 
 
-class MetricManager(Publisher):
+class IMetricPublisher(Interface):
+    def publish_message(msg):
+        """
+        Publish a :class:`MetricMessage`.
+        """
+
+
+@implementer(IMetricPublisher)
+class MetricPublisher(Publisher):
+    """
+    Publisher for metrics messages.
+    """
+    exchange_name = "vumi.metrics"
+    exchange_type = "direct"
+    routing_key = "vumi.metrics"
+    durable = True
+    auto_delete = False
+    delivery_mode = 2
+
+
+class MetricManager(object):
     """Utility for creating and monitoring a set of metrics.
 
     :type prefix: str
@@ -28,14 +49,9 @@ class MetricManager(Publisher):
     :param on_publish:
         Function to call immediately after metrics after published.
     """
-    exchange_name = "vumi.metrics"
-    exchange_type = "direct"
-    routing_key = "vumi.metrics"
-    durable = True
-    auto_delete = False
-    delivery_mode = 2
 
-    def __init__(self, prefix, publish_interval=5, on_publish=None):
+    def __init__(self, prefix, publish_interval=5, on_publish=None,
+                 publisher=None):
         self.prefix = prefix
         self._metrics = []  # list of metrics to poll
         self._oneshot_msgs = []  # list of oneshot messages since last publish
@@ -43,35 +59,49 @@ class MetricManager(Publisher):
         self._publish_interval = publish_interval
         self._task = None  # created in .start()
         self._on_publish = on_publish
+        self._publisher = publisher
 
-    def start(self, channel):
-        """Start publishing metrics in a loop."""
-        super(MetricManager, self).start(channel)
-        self._task = LoopingCall(self._publish_metrics)
+    def start_polling(self):
+        """
+        Start the metric polling and publishing task.
+        """
+        self._task = LoopingCall(self.publish_metrics)
         done = self._task.start(self._publish_interval, now=False)
         done.addErrback(lambda failure: log.err(failure,
-                        "MetricManager publishing task died"))
+                        "MetricManager polling task died"))
 
-    def stop(self):
-        """Stop publishing metrics."""
+    def stop_polling(self):
+        """
+        Stop the metric polling and publishing task.
+        """
         if self._task:
             self._task.stop()
             self._task = None
 
-    def _publish_metrics(self):
+    def publish_metrics(self):
+        """
+        Publish all waiting metrics.
+        """
         msg = MetricMessage()
-        # oneshot metrics
-        oneshots, self._oneshot_msgs = self._oneshot_msgs, []
-        for metric, values in oneshots:
-            msg.append(
-                (self.prefix + metric.name, metric.aggs, values))
-        # polled metrics
-        for metric in self._metrics:
-            msg.append(
-                (self.prefix + metric.name, metric.aggs, metric.poll()))
+        self._collect_oneshot_metrics(msg)
+        self._collect_polled_metrics(msg)
         self.publish_message(msg)
         if self._on_publish is not None:
             self._on_publish(self)
+
+    def publish_message(self, msg):
+        if self._publisher is None:
+            raise ValueError("No publisher available.")
+        IMetricPublisher(self._publisher).publish_message(msg)
+
+    def _collect_oneshot_metrics(self, msg):
+        oneshots, self._oneshot_msgs = self._oneshot_msgs, []
+        for metric, values in oneshots:
+            msg.append((self.prefix + metric.name, metric.aggs, values))
+
+    def _collect_polled_metrics(self, msg):
+        for metric in self._metrics:
+            msg.append((self.prefix + metric.name, metric.aggs, metric.poll()))
 
     def oneshot(self, metric, value):
         """Publish a single value for the given metric.
@@ -112,6 +142,27 @@ class MetricManager(Publisher):
 
     def __contains__(self, suffix):
         return suffix in self._metrics_lookup
+
+    # Everything from this point onward is to allow MetricManager to pretend to
+    # be a publisher and avoid breaking existing code that treats it as one.
+
+    exchange_name = MetricPublisher.exchange_name
+    exchange_type = MetricPublisher.exchange_type
+    durable = MetricPublisher.durable
+
+    _publish_metrics = publish_metrics  # For old tests that poke this.
+
+    def start(self, channel):
+        """Start publishing metrics in a loop."""
+        if self._publisher is not None:
+            raise RuntimeError("Publisher already present.")
+        self._publisher = MetricPublisher()
+        self._publisher.start(channel)
+        self.start_polling()
+
+    def stop(self):
+        """Stop publishing metrics."""
+        self.stop_polling()
 
 
 class AggregatorAlreadyDefinedError(Exception):
