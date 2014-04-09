@@ -14,7 +14,7 @@ from twisted.web.server import NOT_DONE_YET
 
 from vumi import log
 from vumi.config import (
-    ConfigText, ConfigServerEndpoint, ConfigDict, ConfigInt)
+    ConfigText, ConfigServerEndpoint, ConfigDict, ConfigInt, ConfigBool)
 from vumi.transports import Transport
 from vumi.transports.httprpc.httprpc import HttpRpcHealthResource
 from vumi.transports.wechat.errors import WeChatException, WeChatApiException
@@ -76,6 +76,15 @@ class WeChatConfig(Transport.CONFIG_CLASS):
     wechat_mask_lifetime = ConfigInt(
         'How long, in seconds, to maintain an address mask for. '
         '(default 1 hour)', default=60 * 60 * 1, static=True)
+    embed_user_profile = ConfigBool(
+        'Whether or not to embed the WeChat User Profile info in '
+        'messages received.', required=True, default=False, static=True)
+    embed_user_profile_lang = ConfigText(
+        'What language to request User Profile as.', required=False,
+        default='en', static=True)
+    embed_user_profile_lifetime = ConfigInt(
+        'How long to cache User Profiles for.', default=60*60, required=False,
+        static=True)
 
 
 class WeChatResource(Resource):
@@ -173,6 +182,9 @@ class WeChatTransport(Transport):
     ACCESS_TOKEN_KEY = 'access_token'
     # What key to store the `addr_mask` under in Redis
     ADDR_MASK_KEY = 'addr_mask'
+    # What key to use when constructing the User Profile key
+    USER_PROFILE_KEY = 'user_profile'
+
     transport_type = 'wechat'
 
     @inlineCallbacks
@@ -211,6 +223,12 @@ class WeChatTransport(Transport):
                 'when creating WeChat Menu.' % data)
         log.info('WeChat Menu created succesfully.')
 
+    def user_profile_key(self, open_id):
+        return '@'.join([
+            self.USER_PROFILE_KEY,
+            open_id,
+        ])
+
     def mask_key(self, user):
         return '@'.join([
             self.ADDR_MASK_KEY,
@@ -243,6 +261,12 @@ class WeChatTransport(Transport):
 
     @inlineCallbacks
     def handle_inbound_text_message(self, request, wc_msg):
+        config = self.get_static_config()
+        if config.embed_user_profile:
+            user_profile = yield self.get_user_profile(wc_msg.from_user_name)
+        else:
+            user_profile = {}
+
         mask = yield self.get_addr_mask(wc_msg.from_user_name)
         msg = yield self.publish_message(
             content=wc_msg.content,
@@ -256,6 +280,7 @@ class WeChatTransport(Transport):
                     'ToUserName': wc_msg.to_user_name,
                     'MsgType': 'text',
                     'MsgId': wc_msg.msg_id,
+                    'UserProfile': user_profile,
                 }
             })
         returnValue(msg)
@@ -376,6 +401,25 @@ class WeChatTransport(Transport):
         if access_token is None:
             access_token = yield self.request_new_access_token()
         returnValue(access_token)
+
+    @inlineCallbacks
+    def get_user_profile(self, open_id):
+        config = self.get_static_config()
+        up_key = self.user_profile_key(open_id)
+        cached_up = yield self.redis.get(open_id)
+        if cached_up:
+            returnValue(json.loads(cached_up))
+
+        access_token = yield self.get_access_token()
+        response = yield http_request_full(self.make_url('user/info', {
+            'access_token': access_token,
+            'openid': open_id,
+            'lang': config.embed_user_profile_lang,
+        }), method='GET')
+        user_profile = response.delivered_body
+        yield self.redis.setex(up_key, config.embed_user_profile_lifetime,
+                               user_profile)
+        returnValue(json.loads(user_profile))
 
     @inlineCallbacks
     def request_new_access_token(self):
