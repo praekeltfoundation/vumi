@@ -63,6 +63,7 @@ class WeChatTestCase(VumiTestCase):
             'twisted_endpoint': 'tcp:0',
             'wechat_appid': 'appid',
             'wechat_secret': 'secret',
+            'embed_user_profile': False,
         }
         defaults.update(config)
         return self.tx_helper.get_transport(defaults)
@@ -282,8 +283,8 @@ class TestWeChatOutboundMessaging(WeChatTestCase):
         yield self.get_transport_with_access_token('foo')
         # news is a collection or URLs apparently
         msg_d = self.dispatch_push_message(
-            'This is an awesome link for you! http://www.wechat.com/', {},
-            to_addr='toaddr')
+            ('This is an awesome link for you! http://www.wechat.com/ '
+             'Go visit it.'), {}, to_addr='toaddr')
 
         request = yield self.request_queue.get()
         self.assertEqual(request.path, '/message/custom/send')
@@ -296,8 +297,9 @@ class TestWeChatOutboundMessaging(WeChatTestCase):
             'news': {
                 'articles': [
                     {
-                        'description': 'This is an awesome link for you! ',
+                        'title': 'This is an awesome link for you! ',
                         'url': 'http://www.wechat.com/',
+                        'description': ' Go visit it.'
                     }
                 ]
             }
@@ -536,11 +538,77 @@ class TestWeChatInferMessage(WeChatTestCase):
 
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         yield self.tx_helper.make_dispatch_reply(
-            msg, 'This is an awesome link for you! http://www.wechat.com/')
+            msg, ('This is an awesome link for you! http://www.wechat.com/ '
+                  'Go visit it.'))
 
         resp = yield resp_d
         self.assertTrue(
             '<Url>http://www.wechat.com/</Url>' in resp.delivered_body)
         self.assertTrue(
-            '<Description>This is an awesome link for you! </Description>'
+            '<Title>This is an awesome link for you! </Title>'
             in resp.delivered_body)
+        self.assertTrue(
+            '<Description> Go visit it.</Description>'
+            in resp.delivered_body)
+
+
+class TestWeChatEmbedUserProfile(WeChatTestCase):
+
+    @inlineCallbacks
+    def test_embed_user_profile(self):
+        # NOTE: From http://admin.wechat.com/wiki/index.php?title=User_Profile
+        user_profile = {
+            "subscribe": 1,
+            "openid": "fromUser",
+            "nickname": "Band",
+            "sex": 1,
+            "language": "zh_CN",
+            "city": "Guangzhou",
+            "province": "Guangdong",
+            "country": "China",
+            "headimgurl": (
+                "http://wx.qlogo.cn/mmopen/g3MonUZtNHkdmzicIlibx6iaFqAc56v"
+                "xLSUfpb6n5WKSYVY0ChQKkiaJSgQ1dZuTOgvLLrhJbERQQ4eMsv84eavH"
+                "iaiceqxibJxCfHe/0"),
+            "subscribe_time": 1382694957
+        }
+
+        transport = yield self.get_transport_with_access_token(
+            'foo', embed_user_profile=True)
+        resp_d = request(
+            transport, 'POST', data="""
+            <xml>
+            <ToUserName><![CDATA[toUser]]></ToUserName>
+            <FromUserName><![CDATA[fromUser]]></FromUserName>
+            <CreateTime>1348831860</CreateTime>
+            <MsgType><![CDATA[text]]></MsgType>
+            <Content><![CDATA[this is a test]]></Content>
+            <MsgId>10234567890123456</MsgId>
+            </xml>
+            """.strip())
+
+        req = yield self.request_queue.get()
+        self.assertEqual(req.args, {
+            'access_token': ['foo'],
+            'lang': ['en'],
+            'openid': ['fromUser'],
+        })
+
+        req.write(json.dumps(user_profile))
+        req.finish()
+
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        yield self.tx_helper.make_dispatch_reply(msg, 'Bye!')
+
+        self.assertEqual(
+            msg['transport_metadata']['wechat']['UserProfile'],
+            user_profile)
+
+        up_key = transport.user_profile_key('fromUser')
+        cached_up = yield transport.redis.get(up_key)
+        config = transport.get_static_config()
+        self.assertEqual(json.loads(cached_up), user_profile)
+        self.assertTrue(0
+                        < (yield transport.redis.ttl(up_key))
+                        <= config.embed_user_profile_lifetime)
+        yield resp_d
