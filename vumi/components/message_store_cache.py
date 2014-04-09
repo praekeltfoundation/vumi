@@ -122,7 +122,7 @@ class MessageStoreCache(object):
     def truncate_inbound_message_keys(self, batch_id, truncate_at=None):
         truncate_at = (truncate_at or self.TRUNCATE_MESSAGE_KEY_COUNT_AT)
         current_size = yield self.inbound_message_keys_size(batch_id)
-        # NOTE: doing this because ZARD is O(1) where ZREMRANGEBYRANK is
+        # NOTE: doing this because ZCARD is O(1) where ZREMRANGEBYRANK is
         #       O(log(N)+M)
         if current_size > truncate_at:
             # indexes are zero based
@@ -136,7 +136,7 @@ class MessageStoreCache(object):
     def truncate_outbound_message_keys(self, batch_id, truncate_at=None):
         truncate_at = (truncate_at or self.TRUNCATE_MESSAGE_KEY_COUNT_AT)
         current_size = yield self.outbound_message_keys_size(batch_id)
-        # NOTE: doing this because ZARD is O(1) where ZREMRANGEBYRANK is
+        # NOTE: doing this because ZCARD is O(1) where ZREMRANGEBYRANK is
         #       O(log(N)+M)
         if current_size > truncate_at:
             # indexes are zero based
