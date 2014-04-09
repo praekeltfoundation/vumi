@@ -10,11 +10,20 @@ import warnings
 
 from twisted.internet.task import LoopingCall
 from twisted.python import log
+from zope.interface import Interface, implementer
 
 from vumi.service import Publisher, Consumer
 from vumi.blinkenlights.message20110818 import MetricMessage
 
 
+class IMetricPublisher(Interface):
+    def publish_message(msg):
+        """
+        Publish a :class:`MetricMessage`.
+        """
+
+
+@implementer(IMetricPublisher)
 class MetricPublisher(Publisher):
     """
     Publisher for metrics messages.
@@ -95,7 +104,7 @@ class MetricManager(object):
     def publish_message(self, msg):
         if self._publisher is None:
             raise ValueError("No publisher available.")
-        self._publisher.publish_message(msg)
+        IMetricPublisher(self._publisher).publish_message(msg)
 
     def _collect_oneshot_metrics(self, msg):
         oneshots, self._oneshot_msgs = self._oneshot_msgs, []

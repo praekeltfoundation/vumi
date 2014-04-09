@@ -55,6 +55,10 @@ class TestMetricPublisher(VumiTestCase):
         publisher.publish_message(msg)
         self._check_msg("vumi.test.", cnt, [1])
 
+    def test_publisher_provides_interface(self):
+        publisher = metrics.MetricPublisher()
+        self.assertTrue(metrics.IMetricPublisher.providedBy(publisher))
+
 
 class TestMetricManager(VumiTestCase):
 
