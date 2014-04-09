@@ -50,11 +50,6 @@ class MetricManager(object):
         Function to call immediately after metrics after published.
     """
 
-    # These are required to pretend to be a publisher.
-    exchange_name = MetricPublisher.exchange_name
-    exchange_type = MetricPublisher.exchange_type
-    durable = MetricPublisher.durable
-
     def __init__(self, prefix, publish_interval=5, on_publish=None,
                  publisher=None):
         self.prefix = prefix
@@ -66,24 +61,19 @@ class MetricManager(object):
         self._on_publish = on_publish
         self._publisher = publisher
 
-    def start(self, channel=None):
-        """Start publishing metrics in a loop."""
-        if self._publisher is None:
-            if channel is None:
-                raise RuntimeError(
-                    "channel must be provided if no publisher is present.")
-            self._publisher = MetricPublisher()
-            self._publisher.start(channel)
-        elif channel is not None:
-            raise RuntimeError(
-                "channel must not be provided if publisher is present.")
+    def start_polling(self):
+        """
+        Start the metric polling and publishing task.
+        """
         self._task = LoopingCall(self.publish_metrics)
         done = self._task.start(self._publish_interval, now=False)
         done.addErrback(lambda failure: log.err(failure,
-                        "MetricManager publishing task died"))
+                        "MetricManager polling task died"))
 
-    def stop(self):
-        """Stop publishing metrics."""
+    def stop_polling(self):
+        """
+        Stop the metric polling and publishing task.
+        """
         if self._task:
             self._task.stop()
             self._task = None
@@ -98,8 +88,6 @@ class MetricManager(object):
         self.publish_message(msg)
         if self._on_publish is not None:
             self._on_publish(self)
-
-    _publish_metrics = publish_metrics  # For old tests that poke this.
 
     def publish_message(self, msg):
         if self._publisher is None:
@@ -154,6 +142,27 @@ class MetricManager(object):
 
     def __contains__(self, suffix):
         return suffix in self._metrics_lookup
+
+    # Everything from this point onward is to allow MetricManager to pretend to
+    # be a publisher and avoid breaking existing code that treats it as one.
+
+    exchange_name = MetricPublisher.exchange_name
+    exchange_type = MetricPublisher.exchange_type
+    durable = MetricPublisher.durable
+
+    _publish_metrics = publish_metrics  # For old tests that poke this.
+
+    def start(self, channel):
+        """Start publishing metrics in a loop."""
+        if self._publisher is not None:
+            raise RuntimeError("Publisher already present.")
+        self._publisher = MetricPublisher()
+        self._publisher.start(channel)
+        self.start_polling()
+
+    def stop(self):
+        """Stop publishing metrics."""
+        self.stop_polling()
 
 
 class AggregatorAlreadyDefinedError(Exception):

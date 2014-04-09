@@ -75,7 +75,7 @@ class TestMetricManager(VumiTestCase):
         return self._next_publish
 
     @inlineCallbacks
-    def start_manager(self, manager):
+    def start_manager_as_publisher(self, manager):
         channel = yield get_stubbed_channel(self.worker_helper.broker)
         manager.start(channel)
         self.add_cleanup(manager.stop)
@@ -114,12 +114,6 @@ class TestMetricManager(VumiTestCase):
         self.assertIsInstance(mm._publisher, metrics.MetricPublisher)
         self.assertNotEqual(mm._task, None)
 
-    def test_start_manager_no_publisher_no_channel(self):
-        mm = metrics.MetricManager("vumi.test.")
-        self.assertEqual(mm._publisher, None)
-        self.assertEqual(mm._task, None)
-        self.assertRaises(RuntimeError, mm.start)
-
     @inlineCallbacks
     def test_start_manager_publisher_and_channel(self):
         publisher = metrics.MetricPublisher()
@@ -129,13 +123,22 @@ class TestMetricManager(VumiTestCase):
         channel = yield get_stubbed_channel(self.worker_helper.broker)
         self.assertRaises(RuntimeError, mm.start, channel)
 
-    def test_start_manager_publisher_no_channel(self):
+    def test_start_polling_no_publisher(self):
+        mm = metrics.MetricManager("vumi.test.")
+        self.assertEqual(mm._publisher, None)
+        self.assertEqual(mm._task, None)
+        mm.start_polling()
+        self.add_cleanup(mm.stop_polling)
+        self.assertEqual(mm._publisher, None)
+        self.assertNotEqual(mm._task, None)
+
+    def test_start_polling_with_publisher(self):
         publisher = metrics.MetricPublisher()
         mm = metrics.MetricManager("vumi.test.", publisher=publisher)
         self.assertEqual(mm._publisher, publisher)
         self.assertEqual(mm._task, None)
-        mm.start()
-        self.add_cleanup(mm.stop)
+        mm.start_polling()
+        self.add_cleanup(mm.stop_polling)
         self.assertEqual(mm._publisher, publisher)
         self.assertNotEqual(mm._task, None)
 
@@ -172,7 +175,7 @@ class TestMetricManager(VumiTestCase):
     def test_publish_metrics_poll(self):
         mm = metrics.MetricManager("vumi.test.", 0.1, self.on_publish)
         cnt = mm.register(metrics.Count("my.count"))
-        yield self.start_manager(mm)
+        yield self.start_manager_as_publisher(mm)
 
         cnt.inc()
         mm.publish_metrics()
@@ -182,7 +185,7 @@ class TestMetricManager(VumiTestCase):
     def test_publish_metrics_oneshot(self):
         mm = metrics.MetricManager("vumi.test.", 0.1, self.on_publish)
         cnt = metrics.Count("my.count")
-        yield self.start_manager(mm)
+        yield self.start_manager_as_publisher(mm)
 
         mm.oneshot(cnt, 1)
         mm.publish_metrics()
@@ -192,7 +195,7 @@ class TestMetricManager(VumiTestCase):
     def test_start(self):
         mm = metrics.MetricManager("vumi.test.", 0.1, self.on_publish)
         cnt = mm.register(metrics.Count("my.count"))
-        yield self.start_manager(mm)
+        yield self.start_manager_as_publisher(mm)
 
         self.assertTrue(mm._task is not None)
         self._check_msg(mm, cnt, None)
@@ -210,7 +213,7 @@ class TestMetricManager(VumiTestCase):
     def test_publish_metrics(self):
         mm = metrics.MetricManager("vumi.test.", 0.1, self.on_publish)
         cnt = metrics.Count("my.count")
-        yield self.start_manager(mm)
+        yield self.start_manager_as_publisher(mm)
 
         mm.oneshot(cnt, 1)
         self.assertEqual(len(mm._oneshot_msgs), 1)
