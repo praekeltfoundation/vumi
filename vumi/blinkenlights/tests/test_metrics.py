@@ -114,7 +114,7 @@ class TestMetricManager(VumiTestCase):
         mm = metrics.MetricManager("vumi.test.")
         self.assertEqual(mm._publisher, None)
         self.assertEqual(mm._task, None)
-        self.assertRaises(Exception, mm.start)
+        self.assertRaises(RuntimeError, mm.start)
 
     @inlineCallbacks
     def test_start_manager_publisher_and_channel(self):
@@ -123,7 +123,7 @@ class TestMetricManager(VumiTestCase):
         self.assertEqual(mm._publisher, publisher)
         self.assertEqual(mm._task, None)
         channel = yield get_stubbed_channel(self.worker_helper.broker)
-        self.assertRaises(Exception, mm.start, channel)
+        self.assertRaises(RuntimeError, mm.start, channel)
 
     def test_start_manager_publisher_no_channel(self):
         publisher = metrics.MetricPublisher()
@@ -218,22 +218,7 @@ class TestMetricManager(VumiTestCase):
         mm = metrics.MetricManager("vumi.test.")
         self.assertEqual(mm._publisher, None)
         mm.oneshot(metrics.Count("my.count"), 1)
-        self.assertRaises(Exception, mm.publish_metrics)
-
-    @inlineCallbacks
-    def test_publish_metrics_not_started_with_publisher(self):
-        mm = metrics.MetricManager("vumi.test.", 0.1, self.on_publish)
-        publisher = metrics.MetricPublisher()
-        channel = yield get_stubbed_channel(self.worker_helper.broker)
-        publisher.start(channel)
-        cnt = metrics.Count("my.count")
-
-        self.assertEqual(mm._publisher, None)
-        mm.oneshot(cnt, 1)
-        self.assertEqual(len(mm._oneshot_msgs), 1)
-        mm.publish_metrics(publisher)
-        self.assertEqual(mm._oneshot_msgs, [])
-        self._check_msg(mm, cnt, [1])
+        self.assertRaises(ValueError, mm.publish_metrics)
 
     def test_stop_unstarted(self):
         mm = metrics.MetricManager("vumi.test.", 0.1, self.on_publish)

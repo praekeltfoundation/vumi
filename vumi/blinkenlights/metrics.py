@@ -79,23 +79,23 @@ class MetricManager(object):
             self._task.stop()
             self._task = None
 
-    def publish_metrics(self, publisher=None):
+    def publish_metrics(self):
         """
         Publish all waiting metrics.
-
-        If a publisher is provided, it will be used instead of the manager's
-        publisher.
         """
         msg = MetricMessage()
         self._collect_oneshot_metrics(msg)
         self._collect_polled_metrics(msg)
-        if publisher is None:
-            publisher = self._publisher
-        publisher.publish_message(msg)
+        self.publish_message(msg)
         if self._on_publish is not None:
             self._on_publish(self)
 
     _publish_metrics = publish_metrics  # For old tests that poke this.
+
+    def publish_message(self, msg):
+        if self._publisher is None:
+            raise ValueError("No publisher available.")
+        self._publisher.publish_message(msg)
 
     def _collect_oneshot_metrics(self, msg):
         oneshots, self._oneshot_msgs = self._oneshot_msgs, []
