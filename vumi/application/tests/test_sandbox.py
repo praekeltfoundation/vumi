@@ -639,12 +639,18 @@ class TestRedisResource(ResourceTestCaseBase):
         yield self.r_server.set(count_key, total_count)
 
     @inlineCallbacks
-    def check_metric(self, metric, value, total_count):
+    def check_metric(self, metric, value, total_count, seconds=None):
         metric_key = 'sandboxes#test_id#' + metric
         count_key = 'count#test_id'
         self.assertEqual((yield self.r_server.get(metric_key)), value)
         self.assertEqual((yield self.r_server.get(count_key)),
-                         str(total_count))
+                         str(total_count) if total_count is not None else None)
+        ttl = yield self.r_server.ttl(metric_key)
+        if seconds is None:
+            self.assertEqual(ttl, None)
+        else:
+            self.assertNotEqual(ttl, None)
+            self.assertTrue(0 < ttl <= seconds)
 
     def assert_api_log(self, expected_level, expected_message):
         [log_entry] = self.api.logs
@@ -657,6 +663,22 @@ class TestRedisResource(ResourceTestCaseBase):
         reply = yield self.dispatch_command('set', key='foo', value='bar')
         self.check_reply(reply, success=True)
         yield self.check_metric('foo', json.dumps('bar'), 1)
+
+    @inlineCallbacks
+    def test_handle_set_with_expiry(self):
+        reply = yield self.dispatch_command(
+            'set', key='foo', value='bar', seconds=5)
+        self.check_reply(reply, success=True)
+        yield self.check_metric('foo', json.dumps('bar'), 1, seconds=5)
+
+    @inlineCallbacks
+    def test_handle_set_with_bad_seconds(self):
+        reply = yield self.dispatch_command(
+            'set', key='foo', value='bar', seconds='foo')
+        self.check_reply(
+            reply, success=False,
+            reason="seconds must be a number or null")
+        yield self.check_metric('foo', None, None)
 
     @inlineCallbacks
     def test_handle_set_soft_limit_reached(self):
