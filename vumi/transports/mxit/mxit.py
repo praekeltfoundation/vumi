@@ -1,7 +1,7 @@
 # -*- test-case-name: vumi.transports.mxit.tests.test_mxit -*-
 import json
 import base64
-from urllib import urlencode
+from urllib import urlencode, unquote_plus
 from HTMLParser import HTMLParser
 
 from twisted.web import http
@@ -122,11 +122,11 @@ class MxitTransport(HttpRpcTransport):
 
     def get_request_content(self, request):
         if request.args and 'input' in request.args:
-            content = request.args['input']
+            [content] = request.args['input']
         else:
             headers = request.requestHeaders
-            content = headers.getRawHeaders('X-Mxit-User-Input', [None])
-        return content[0]
+            [content] = headers.getRawHeaders('X-Mxit-User-Input', [None])
+        return (None if content is None else unquote_plus(content))
 
     def handle_raw_inbound_message(self, msg_id, request):
         if not self.is_mxit_request(request):

@@ -1,6 +1,5 @@
 import json
 import base64
-import urllib
 
 from twisted.internet.defer import inlineCallbacks, DeferredQueue
 from twisted.web.http import Request, BAD_REQUEST
@@ -141,6 +140,18 @@ class TestMxitTransport(VumiTestCase):
         req = Request(None, True)
         req.requestHeaders.addRawHeader('X-Mxit-User-Input', 'foo')
         self.assertEqual(self.transport.get_request_content(req), 'foo')
+
+    def test_get_quote_plus_request_content_from_header(self):
+        req = Request(None, True)
+        req.requestHeaders.addRawHeader('X-Mxit-User-Input', 'foo+bar')
+        self.assertEqual(
+            self.transport.get_request_content(req), 'foo bar')
+
+    def test_get_quoted_request_content_from_header(self):
+        req = Request(None, True)
+        req.requestHeaders.addRawHeader('X-Mxit-User-Input', 'foo%20bar')
+        self.assertEqual(
+            self.transport.get_request_content(req), 'foo bar')
 
     def test_get_request_content_from_args(self):
         req = Request(None, True)
