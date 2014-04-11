@@ -121,12 +121,16 @@ class MxitTransport(HttpRpcTransport):
         return data
 
     def get_request_content(self, request):
+        headers = request.requestHeaders
+        [content] = headers.getRawHeaders('X-Mxit-User-Input', [None])
+        if content:
+            return unquote_plus(content)
+
         if request.args and 'input' in request.args:
             [content] = request.args['input']
-        else:
-            headers = request.requestHeaders
-            [content] = headers.getRawHeaders('X-Mxit-User-Input', [None])
-        return (None if content is None else unquote_plus(content))
+            return content
+
+        return None
 
     def handle_raw_inbound_message(self, msg_id, request):
         if not self.is_mxit_request(request):
