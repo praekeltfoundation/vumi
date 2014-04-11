@@ -1,3 +1,4 @@
+import json
 import os
 from functools import wraps
 from inspect import CO_GENERATOR
@@ -735,6 +736,7 @@ class WorkerHelper(object):
         Clear all dispatched messages from the broker.
         """
         self.broker.clear_messages('vumi')
+        self.broker.clear_messages('vumi.metrics')
 
     def _clear_dispatched(self, connector_name, name):
         rkey = self._rkey(connector_name, name)
@@ -976,6 +978,24 @@ class WorkerHelper(object):
             delivered.
         """
         return self.broker.kick_delivery()
+
+    @proxyable
+    def get_dispatched_metrics(self):
+        """
+        Get dispatched metrics.
+
+        The list of datapoints from each dispatched metrics message is
+        returned.
+        """
+        msgs = self.broker.get_dispatched('vumi.metrics', 'vumi.metrics')
+        return [json.loads(msg.body)['datapoints'] for msg in msgs]
+
+    @proxyable
+    def clear_dispatched_metrics(self):
+        """
+        Clear dispatched metrics messages from the broker.
+        """
+        self.broker.clear_messages('vumi.metrics')
 
 
 class MessageDispatchHelper(object):
