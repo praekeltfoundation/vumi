@@ -18,6 +18,7 @@ from vumi.transports.smpp.deprecated.transport import (
     SmppTransportConfig as OldSmppTransportConfig)
 from vumi.transports.smpp.deprecated.utils import convert_to_new_config
 from vumi.transports.smpp.protocol import EsmeTransceiverFactory
+from vumi.transports.smpp.isequence import ISequence
 from vumi.transports.smpp.sequence import RedisSequence
 from vumi.transports.failures import FailureMessage
 
@@ -117,12 +118,17 @@ class SmppService(ReconnectingClientService):
         return ReconnectingClientService.stopService(self)
 
 
+class SmppTransportException(Exception):
+    pass
+
+
 class SmppTransceiverTransport(Transport):
 
     CONFIG_CLASS = SmppTransportConfig
 
     factory_class = SmppTransceiverClientFactory
     service_class = SmppService
+    sequence_class = RedisSequence
     clock = reactor
     start_message_consumer = False
 
@@ -143,7 +149,12 @@ class SmppTransceiverTransport(Transport):
             self, config.deliver_short_message_processor_config)
         self.submit_sm_processor = config.submit_short_message_processor(
             self, config.submit_short_message_processor_config)
-        self.sequence_generator = RedisSequence(self.redis)
+
+        if not ISequence.implementedBy(self.sequence_class):
+            raise SmppTransportException(
+                '%s does not implement %s' % (self.sequence_class, ISequence))
+
+        self.sequence_generator = self.sequence_class(self)
         self.throttled = None
         self.factory = self.factory_class(self)
 

@@ -134,7 +134,7 @@ class EsmeTestCase(VumiTestCase):
             dr_processor = cfg.delivery_report_processor(
                 dummy_smpp_transport, cfg.delivery_report_processor_config)
 
-        sequence_generator = ForwardableRedisSequence(self.redis)
+        sequence_generator = ForwardableRedisSequence(dummy_smpp_transport)
 
         dummy_smpp_transport.dr_processor = dr_processor
         dummy_smpp_transport.deliver_sm_processor = deliver_sm_processor
