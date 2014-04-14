@@ -477,6 +477,26 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.assertEqual(event['user_message_id'], msg['message_id'])
 
     @inlineCallbacks
+    def test_mt_sms_tps_limits(self):
+        smpp_helper = yield self.get_smpp_helper(config={
+            'mt_tps': 1,
+        })
+        transport = smpp_helper.transport
+
+        msg1 = yield self.tx_helper.make_dispatch_outbound('hello world 1')
+        msg2 = yield self.tx_helper.make_dispatch_outbound('hello world 2')
+
+        self.assertTrue(transport.throttled)
+        [submit_sm_pdu1] = yield smpp_helper.wait_for_pdus(1)
+        self.assertEqual(short_message(submit_sm_pdu1), 'hello world 1')
+
+        self.clock.advance(1)
+
+        self.assertFalse(transport.throttled)
+        [submit_sm_pdu2] = yield smpp_helper.wait_for_pdus(1)
+        self.assertEqual(short_message(submit_sm_pdu2), 'hello world 2')
+
+    @inlineCallbacks
     def test_mt_sms_queue_full(self):
         smpp_helper = yield self.get_smpp_helper()
         transport_config = smpp_helper.transport.get_static_config()

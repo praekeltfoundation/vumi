@@ -96,3 +96,8 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
         "delay before reconnecting. In these cases a 45s "
         "`initial_reconnect_delay` is recommended. Default 55.",
         default=55, static=True)
+    mt_tps = ConfigInt(
+        'Maximum Vumi messages per second to attempt to put on the wire. '
+        'Defaults to 0 which means no throttling is applied. '
+        '(NOTE: 1 Vumi message may result in multiple PDUs)',
+        default=0, static=True, required=False)
