@@ -1,13 +1,8 @@
 # -*- test-case-name: vumi.transports.smpp.tests.test_sequence -*-
 from twisted.internet.defer import inlineCallbacks, returnValue
 
-from zope.interface import implements
-
-from vumi.transports.smpp.isequence import ISequence
-
 
 class RedisSequence(object):
-    implements(ISequence)
 
     """
     Generate a sequence of incrementing numbers that rollover
@@ -17,8 +12,8 @@ class RedisSequence(object):
     distributed system.
     """
 
-    def __init__(self, transport, rollover_at=0xFFFF0000):
-        self.redis = transport.redis
+    def __init__(self, redis, rollover_at=0xFFFF0000):
+        self.redis = redis
         self.rollover_at = rollover_at
 
     def __iter__(self):
