@@ -7,6 +7,7 @@ from twisted.internet import reactor
 from twisted.internet.defer import (
     inlineCallbacks, DeferredQueue, maybeDeferred, returnValue, Deferred,
     succeed)
+from twisted.internet.task import LoopingCall
 
 from vumi.reconnecting_client import ReconnectingClientService
 from vumi.transports.base import Transport
@@ -143,11 +144,21 @@ class SmppTransceiverTransport(Transport):
             self, config.deliver_short_message_processor_config)
         self.submit_sm_processor = config.submit_short_message_processor(
             self, config.submit_short_message_processor_config)
+
         self.sequence_generator = RedisSequence(self.redis)
         self.throttled = None
         self.factory = self.factory_class(self)
 
         self.service = self.start_service(self.factory)
+
+        self.tps_counter = 0
+        self.tps_limit = config.mt_tps
+        if config.mt_tps > 0:
+            self.mt_tps_lc = LoopingCall(self.reset_mt_tps)
+            self.mt_tps_lc.clock = self.clock
+            self.mt_tps_lc.start(1, now=True)
+        else:
+            self.mt_tps_lc = None
 
     def start_service(self, factory):
         config = self.get_static_config()
@@ -159,10 +170,37 @@ class SmppTransceiverTransport(Transport):
     def teardown_transport(self):
         if self.service:
             yield self.service.stopService()
+        if self.mt_tps_lc and self.mt_tps_lc.running:
+            self.mt_tps_lc.stop()
         yield self.redis._close()
+
+    def reset_mt_tps(self):
+        if self.throttled and self.need_mt_throttling():
+            self.reset_mt_throttle_counter()
+            self.stop_throttling()
+
+    def reset_mt_throttle_counter(self):
+        self.tps_counter = 0
+
+    def incr_mt_throttle_counter(self):
+        self.tps_counter += 1
+
+    def need_mt_throttling(self):
+        return self.tps_counter > self.tps_limit
+
+    def bind_requires_throttling(self):
+        config = self.get_static_config()
+        return config.mt_tps > 0
+
+    def check_mt_throttling(self):
+        self.incr_mt_throttle_counter()
+        if self.need_mt_throttling():
+            self.start_throttling()
 
     @inlineCallbacks
     def handle_outbound_message(self, message):
+        if self.bind_requires_throttling():
+            self.check_mt_throttling()
         protocol = yield self.service.get_protocol()
         seq_nrs = yield self.submit_sm_processor.handle_outbound_message(
             message, protocol)
