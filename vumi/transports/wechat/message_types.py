@@ -90,9 +90,8 @@ class NewsMessage(WeChatMessage):
     # Has something URL-ish in it
     URLISH = re.compile(
         r'(?P<before>.*)'
-        r'(?P<schema>[a-zA-Z]{4,5})\://'
-        r'(?P<domain>[^\s]+)'
-        r'(?P<after>.*)')
+        r'(?P<url>http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+)'
+        r'(?P<after>.*?)')
 
     def __init__(self, to_user_name, from_user_name, create_time,
                  items=None):
@@ -116,8 +115,8 @@ class NewsMessage(WeChatMessage):
             vumi_message['timestamp'].strftime('%s'),
             [{
                 'title': '%(before)s' % url_data,
-                'url': '%(schema)s://%(domain)s' % url_data,
-                'description': '%(after)s' % url_data,
+                'url': '%(url)s' % url_data,
+                'description': vumi_message['content']
             }])
 
     def to_xml(self):

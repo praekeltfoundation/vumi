@@ -303,9 +303,10 @@ class TestWeChatOutboundMessaging(WeChatTestCase):
     def test_ack_push_inferred_news_message(self):
         yield self.get_transport_with_access_token('foo')
         # news is a collection or URLs apparently
+        content = ('This is an awesome link for you! http://www.wechat.com/ '
+                   'Go visit it.')
         msg_d = self.dispatch_push_message(
-            ('This is an awesome link for you! http://www.wechat.com/ '
-             'Go visit it.'), {}, to_addr='toaddr')
+            content, {}, to_addr='toaddr')
 
         request = yield self.request_queue.get()
         self.assertEqual(request.path, '/message/custom/send')
@@ -320,7 +321,7 @@ class TestWeChatOutboundMessaging(WeChatTestCase):
                     {
                         'title': 'This is an awesome link for you! ',
                         'url': 'http://www.wechat.com/',
-                        'description': ' Go visit it.'
+                        'description': content,
                     }
                 ]
             }
@@ -589,17 +590,22 @@ class TestWeChatInferMessage(WeChatTestCase):
 
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         yield self.tx_helper.make_dispatch_reply(
-            msg, ('This is an awesome link for you! http://www.wechat.com/ '
-                  'Go visit it.'))
+            msg, ('To continue you need to accept the T&Cs available at '
+                  'http://tandcurl.com/ . Have you read and do you accept '
+                  'the terms and conditions?\n1. Yes\n2. No'))
 
         resp = yield resp_d
         self.assertTrue(
-            '<Url>http://www.wechat.com/</Url>' in resp.delivered_body)
+            '<Url>http://tandcurl.com/</Url>' in resp.delivered_body)
         self.assertTrue(
-            '<Title>This is an awesome link for you! </Title>'
+            '<Title>To continue you need to accept the T&amp;Cs available '
+            'at </Title>'
             in resp.delivered_body)
         self.assertTrue(
-            '<Description> Go visit it.</Description>'
+            '<Description>To continue you need to accept the T&amp;Cs '
+            'available at http://tandcurl.com/ . Have you read and do '
+            'you accept the terms and conditions?\n1. Yes\n2. No'
+            '</Description>'
             in resp.delivered_body)
 
 
