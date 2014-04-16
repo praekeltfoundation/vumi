@@ -149,9 +149,7 @@ class TestWeChatInboundMessaging(WeChatTestCase):
                     <Event>
                         <![CDATA[subscribe]]>
                     </Event>
-                    <EventKey>
-                        <![CDATA[]]>
-                    </EventKey>
+                    <EventKey><![CDATA[]]></EventKey>
                 </xml>
                 """)
         self.assertEqual(resp.code, http.OK)

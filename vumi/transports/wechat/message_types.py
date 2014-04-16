@@ -10,7 +10,7 @@ from vumi.transports.wechat.errors import (
 
 def get_child_value(node, name):
     [child] = node.findall(name)
-    return child.text.strip()
+    return (child.text.strip() if child.text is not None else '')
 
 
 def append(node, tag, value):
