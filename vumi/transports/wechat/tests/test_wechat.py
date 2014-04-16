@@ -8,7 +8,7 @@ from twisted.web import http
 from twisted.web.server import NOT_DONE_YET
 
 from vumi.tests.helpers import VumiTestCase
-from vumi.tests.utils import MockHttpServer
+from vumi.tests.utils import MockHttpServer, LogCatcher
 from vumi.transports.tests.helpers import TransportHelper
 from vumi.transports.wechat import WeChatTransport
 from vumi.transports.wechat.errors import WeChatApiException
@@ -198,6 +198,29 @@ class TestWeChatInboundMessaging(WeChatTestCase):
         })
 
         self.assertEqual(msg['to_addr'], 'toUser@EVENTKEY')
+
+    @inlineCallbacks
+    def test_inbound_menu_event_view_message(self):
+        transport = yield self.get_transport_with_access_token('foo')
+
+        with LogCatcher() as lc:
+            resp = yield request(
+                transport, 'POST', data="""
+                    <xml>
+                    <ToUserName><![CDATA[toUser]]></ToUserName>
+                    <FromUserName><![CDATA[fromUser]]></FromUserName>
+                    <CreateTime>123456789</CreateTime>
+                    <MsgType><![CDATA[event]]></MsgType>
+                    <Event><![CDATA[VIEW]]></Event>
+                    <EventKey><![CDATA[http://www.gotvafrica.com/mobi/home.aspx]]></EventKey>
+                    </xml>
+                    """.strip())
+            self.assertEqual(resp.code, http.OK)
+            [] = self.tx_helper.get_dispatched_inbound()
+            msg = lc.messages()[0]
+            self.assertEqual(
+                msg,
+                'fromUser clicked on http://www.gotvafrica.com/mobi/home.aspx')
 
     @inlineCallbacks
     def test_unsupported_message_type(self):

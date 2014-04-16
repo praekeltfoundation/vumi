@@ -287,6 +287,12 @@ class WeChatTransport(Transport):
 
     @inlineCallbacks
     def handle_inbound_event_message(self, request, wc_msg):
+        if wc_msg.event.lower() in ('view'):
+            log.msg("%s clicked on %s" % (
+                wc_msg.from_user_name, wc_msg.event_key))
+            request.finish()
+            return
+
         if wc_msg.event_key:
             mask = yield self.cache_addr_mask(
                 wc_msg.from_user_name, wc_msg.event_key)
@@ -331,7 +337,8 @@ class WeChatTransport(Transport):
                 self.request_dict.pop(message_id)
 
     def queue_request(self, message, request):
-        self.request_dict[message['message_id']] = request
+        if message is not None:
+            self.request_dict[message['message_id']] = request
 
     def get_request(self, message_id):
         return self.request_dict.get(message_id, None)
