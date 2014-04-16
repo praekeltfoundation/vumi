@@ -287,10 +287,11 @@ class WeChatTransport(Transport):
 
     @inlineCallbacks
     def handle_inbound_event_message(self, request, wc_msg):
-        if wc_msg.event.lower() in ('view'):
+        if wc_msg.event.lower() in ('view', 'unsubscribe'):
             log.msg("%s clicked on %s" % (
                 wc_msg.from_user_name, wc_msg.event_key))
             request.finish()
+            yield self.clear_addr_mask(wc_msg.from_user_name)
             return
 
         if wc_msg.event_key:
@@ -301,8 +302,6 @@ class WeChatTransport(Transport):
 
         if wc_msg.event.lower() in ('subscribe', 'click'):
             session_event = TransportUserMessage.SESSION_NEW
-        elif wc_msg.event.lower() == 'unsubscribe':
-            session_event = TransportUserMessage.SESSION_CLOSE
         else:
             session_event = TransportUserMessage.SESSION_NONE
 

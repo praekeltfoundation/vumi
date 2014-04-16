@@ -476,6 +476,36 @@ class TestWeChatAddrMasking(WeChatTestCase):
             transport.DEFAULT_MASK)
         yield resp_d
 
+    @inlineCallbacks
+    def test_inbound_event_unsubscribe_message(self):
+        transport = yield self.get_transport_with_access_token('foo')
+        yield transport.cache_addr_mask('fromUser', 'foo')
+
+        resp = yield request(
+            transport, 'POST', data="""
+                <xml>
+                    <ToUserName>
+                        <![CDATA[toUser]]>
+                    </ToUserName>
+                    <FromUserName>
+                        <![CDATA[fromUser]]>
+                    </FromUserName>
+                    <CreateTime>1395130515</CreateTime>
+                    <MsgType>
+                        <![CDATA[event]]>
+                    </MsgType>
+                    <Event>
+                        <![CDATA[unsubscribe]]>
+                    </Event>
+                    <EventKey><![CDATA[]]></EventKey>
+                </xml>
+                """)
+        self.assertEqual(resp.code, http.OK)
+        self.assertEqual([], self.tx_helper.get_dispatched_inbound())
+        self.assertEqual(
+            (yield transport.get_addr_mask('fromUser')),
+            transport.DEFAULT_MASK)
+
 
 class TestWeChatMenuCreation(WeChatTestCase):
 
