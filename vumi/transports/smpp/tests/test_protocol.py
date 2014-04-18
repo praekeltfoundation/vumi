@@ -507,3 +507,12 @@ class EsmeTestCase(VumiTestCase):
         transport, protocol = yield self.setup_bind()
         protocol.on_pdu(invalid_pdu)
         self.assertEqual(calls, [invalid_pdu])
+
+    def test_csm_split_message(self):
+        protocol = self.get_protocol()
+        self.assertEqual(
+            1, len(protocol.csm_split_message('1' * 140)))
+        self.assertEqual(
+            2, len(protocol.csm_split_message('1' * 160)))
+        self.assertEqual(
+            1, len(protocol.csm_split_message('1' * 140)))

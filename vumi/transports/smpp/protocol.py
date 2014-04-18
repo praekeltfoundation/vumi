@@ -521,6 +521,9 @@ class EsmeTransceiver(Protocol):
         :rtype: list
 
         """
+        if len(message) <= GSM_MAX_SMS_BYTES:
+            return [message]
+
         payload_length = GSM_MAX_SMS_BYTES - 10
         split_msg = []
         while message:
