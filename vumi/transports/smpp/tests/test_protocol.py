@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from twisted.test import proto_helpers
 from twisted.internet import reactor
 from twisted.internet.defer import (
@@ -510,9 +511,13 @@ class EsmeTestCase(VumiTestCase):
 
     def test_csm_split_message(self):
         protocol = self.get_protocol()
-        self.assertEqual(
-            1, len(protocol.csm_split_message('1' * 140)))
-        self.assertEqual(
-            2, len(protocol.csm_split_message('1' * 160)))
-        self.assertEqual(
-            1, len(protocol.csm_split_message('1' * 140)))
+
+        def split(msg):
+            return protocol.csm_split_message(msg.encode('utf-8'))
+
+        # these are fine because they're in the 7-bit character set
+        self.assertEqual(1, len(split(u'&' * 140)))
+        self.assertEqual(1, len(split(u'&' * 160)))
+        # ± is not in the 7-bit character set so it should utf-8 encode it
+        # which bumps it over the 140 bytes
+        self.assertEqual(2, len(split(u'±' + u'1' * 139)))

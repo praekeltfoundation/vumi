@@ -1,13 +1,13 @@
 # -*- test-case-name: vumi.transports.smpp.tests.test_protocol -*-
 
 from functools import wraps
+from curses import ascii
 
 from twisted.internet import reactor
 from twisted.internet.protocol import Protocol, ClientFactory
 from twisted.internet.task import LoopingCall
 from twisted.internet.defer import (
-    inlineCallbacks, returnValue, maybeDeferred, DeferredQueue, succeed,
-    TimeoutError)
+    inlineCallbacks, returnValue, maybeDeferred, DeferredQueue, succeed)
 
 from smpp.pdu import unpack_pdu
 from smpp.pdu_builder import (
@@ -22,6 +22,7 @@ from vumi.transports.smpp.pdu_utils import (
     pdu_ok, seq_no, command_status, command_id, message_id, chop_pdu_stream)
 
 GSM_MAX_SMS_BYTES = 140
+GSM_MAX_SMS_7BIT_CHARS = 160
 
 
 def require_bind(func):
@@ -522,6 +523,11 @@ class EsmeTransceiver(Protocol):
 
         """
         if len(message) <= GSM_MAX_SMS_BYTES:
+            return [message]
+
+        # NOTE: We already have byte strings here
+        if (all([ascii.isascii(c) for c in message])
+                and len(message) <= GSM_MAX_SMS_7BIT_CHARS):
             return [message]
 
         payload_length = GSM_MAX_SMS_BYTES - 10
