@@ -282,12 +282,13 @@ class FakeAMQPBroker(object):
 
 
 class FakeAMQPChannel(object):
-    def __init__(self, channel_id, broker, delegate):
+    def __init__(self, channel_id, client):
         self.channel_id = channel_id
-        self.broker = broker
+        self.client = client
+        self.broker = client.broker
         self.qos_prefetch_count = 0
         self.consumers = {}
-        self.delegate = delegate
+        self.delegate = client.delegate
         self.unacked = []
 
     def __repr__(self):
@@ -474,7 +475,7 @@ class FakeAMQClient(WorkerAMQClient):
             try:
                 ch = self.channels[id]
             except KeyError:
-                ch = FakeAMQPChannel(id, self.broker, self.delegate)
+                ch = FakeAMQPChannel(id, self)
                 self.channels[id] = ch
         finally:
             self.channelLock.release()

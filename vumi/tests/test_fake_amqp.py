@@ -10,7 +10,7 @@ def mkmsg(body):
     return fake_amqp.Thing("Message", body=body)
 
 
-class TestWorker(Worker):
+class ToyWorker(Worker):
     @inlineCallbacks
     def startWorker(self):
         paused = self.config.get('paused', False)
@@ -22,6 +22,15 @@ class TestWorker(Worker):
 
     def consume_msg(self, msg):
         self.msgs.append(msg)
+
+
+class ToyAMQClient(object):
+    """
+    A fake fake client object for building fake channel objects.
+    """
+    def __init__(self, broker, delegate):
+        self.broker = broker
+        self.delegate = delegate
 
 
 class TestFakeAMQP(VumiTestCase):
@@ -38,7 +47,8 @@ class TestFakeAMQP(VumiTestCase):
         return self.broker.queues[queue]
 
     def make_channel(self, channel_id, delegate=None):
-        channel = fake_amqp.FakeAMQPChannel(channel_id, self.broker, delegate)
+        channel = fake_amqp.FakeAMQPChannel(
+            channel_id, ToyAMQClient(self.broker, delegate))
         channel.channel_open()
         return channel
 
@@ -56,7 +66,7 @@ class TestFakeAMQP(VumiTestCase):
         spec = get_spec(vumi_resource_path("amqp-spec-0-8.xml"))
         amq_client = fake_amqp.FakeAMQClient(spec, {}, self.broker)
 
-        worker = TestWorker({}, config)
+        worker = ToyWorker({}, config)
         worker._amqp_client = amq_client
         yield worker.startWorker()
         returnValue(worker)
@@ -68,7 +78,7 @@ class TestFakeAMQP(VumiTestCase):
         self.assertRaises(AttributeError, lambda: msg.bar)
 
     def test_channel_open(self):
-        channel = fake_amqp.FakeAMQPChannel(0, self.broker, None)
+        channel = fake_amqp.FakeAMQPChannel(0, ToyAMQClient(self.broker, None))
         self.assertEqual([], self.broker.channels)
         channel.channel_open()
         self.assertEqual([channel], self.broker.channels)
@@ -265,7 +275,7 @@ class TestFakeAMQP(VumiTestCase):
     #     wc = WorkerCreator(options)
     #     d = Deferred()
 
-    #     class TestWorker(Worker):
+    #     class ToyWorker(Worker):
     #         @inlineCallbacks
     #         def startWorker(self):
     #             self.pub = yield self.publish_to('test.pub')
@@ -279,7 +289,7 @@ class TestFakeAMQP(VumiTestCase):
     #             print "CONSUMED!", msg
     #             return True
 
-    #     worker = wc.create_worker_by_class(TestWorker, {})
+    #     worker = wc.create_worker_by_class(ToyWorker, {})
     #     worker.startService()
     #     yield d
     #     print "foo"

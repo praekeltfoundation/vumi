@@ -32,9 +32,9 @@ class AggregatedMetricConsumer(Consumer):
     durable = True
     routing_key = "vumi.metrics.aggregates"
 
-    def __init__(self, channel, client, callback):
+    def __init__(self, channel, callback):
         self.queue_name = self.routing_key
-        super(AggregatedMetricConsumer, self).__init__(channel, client)
+        super(AggregatedMetricConsumer, self).__init__(channel)
         self.callback = callback
 
     def consume_message(self, vumi_message):
@@ -76,10 +76,10 @@ class TimeBucketConsumer(Consumer):
     durable = True
     ROUTING_KEY_TEMPLATE = "bucket.%d"
 
-    def __init__(self, channel, client, bucket, callback):
+    def __init__(self, channel, bucket, callback):
         self.queue_name = self.ROUTING_KEY_TEMPLATE % bucket
         self.routing_key = self.queue_name
-        super(TimeBucketConsumer, self).__init__(channel, client)
+        super(TimeBucketConsumer, self).__init__(channel)
         self.callback = callback
 
     def consume_message(self, vumi_message):

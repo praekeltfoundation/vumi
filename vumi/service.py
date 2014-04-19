@@ -114,7 +114,7 @@ class WorkerAMQClient(AMQClient):
     def start_consumer(self, consumer_class, *args, **kwargs):
         channel = yield self.get_channel()
 
-        consumer = consumer_class(channel, self, *args, **kwargs)
+        consumer = consumer_class(channel, *args, **kwargs)
         consumer.vumi_options = self.vumi_options
 
         # get the details for AMQP
@@ -257,9 +257,8 @@ class Consumer(object):
     message_class = Message
     start_paused = False
 
-    def __init__(self, channel, client):
+    def __init__(self, channel):
         self.channel = channel
-        self._client = client
         self._notify_paused_and_quiet = []
         self.keep_consuming = False
         self._testing = hasattr(self.channel, 'message_processed')
@@ -293,7 +292,7 @@ class Consumer(object):
             raise RuntimeError("Consumer already registered.")
         reply = yield self.channel.basic_consume(queue=self.queue_name)
         self._consumer_tag = reply.consumer_tag
-        self.queue = yield self._client.queue(self._consumer_tag)
+        self.queue = yield self.channel.client.queue(self._consumer_tag)
         self.keep_consuming = True
         self._read_messages()
 
@@ -364,8 +363,8 @@ class Consumer(object):
 
 
 class DynamicConsumer(Consumer):
-    def __init__(self, channel, client, callback):
-        super(DynamicConsumer, self).__init__(channel, client)
+    def __init__(self, channel, callback):
+        super(DynamicConsumer, self).__init__(channel)
         self.callback = callback
 
     def consume_message(self, message):
