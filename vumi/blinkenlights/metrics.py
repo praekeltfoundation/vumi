@@ -441,9 +441,10 @@ class MetricsConsumer(Consumer):
     routing_key = "vumi.metrics"
     durable = True
 
-    def __init__(self, callback):
-        self.callback = callback
+    def __init__(self, channel, client, callback):
         self.queue_name = self.routing_key
+        super(MetricsConsumer, self).__init__(channel, client)
+        self.callback = callback
 
     def consume_message(self, vumi_message):
         msg = MetricMessage.from_dict(vumi_message.payload)
