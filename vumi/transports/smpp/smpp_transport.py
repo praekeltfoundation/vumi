@@ -250,7 +250,9 @@ class SmppTransceiverTransport(Transport):
 
     def set_remote_message_id(self, message_id, smpp_message_id):
         if message_id is None:
-            # Don't store None, because that breaks stuff later.
+            # If we store None, we end up with the string "None" in Redis. This
+            # confuses later lookups (which treat any non-None value as a valid
+            # identifier) and results in broken delivery reports.
             return succeed(None)
         key = remote_message_key(smpp_message_id)
         config = self.get_static_config()
