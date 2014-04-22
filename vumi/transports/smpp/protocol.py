@@ -1,7 +1,6 @@
 # -*- test-case-name: vumi.transports.smpp.tests.test_protocol -*-
 
 from functools import wraps
-from curses import ascii
 
 from twisted.internet import reactor
 from twisted.internet.protocol import Protocol, ClientFactory
@@ -504,6 +503,19 @@ class EsmeTransceiver(Protocol):
             destination_addr, short_message='', sm_length=0,
             optional_parameters=optional_parameters, **pdu_params)
 
+    def _fits_in_one_message(self, message):
+        if len(message) <= GSM_MAX_SMS_BYTES:
+            return True
+
+        # NOTE: We already have byte strings here, so we assume that printable
+        #       ASCII characters are all the same as single-width GSM 03.38
+        #       characters.
+        if len(message) <= GSM_MAX_SMS_7BIT_CHARS:
+            # TODO: We need better character handling and counting stuff.
+            return all(0x20 <= ord(ch) <= 0x7f for ch in message)
+
+        return False
+
     def csm_split_message(self, message):
         """
         Chop the message into 130 byte chunks to leave 10 bytes for the
@@ -522,12 +534,7 @@ class EsmeTransceiver(Protocol):
         :rtype: list
 
         """
-        if len(message) <= GSM_MAX_SMS_BYTES:
-            return [message]
-
-        # NOTE: We already have byte strings here
-        if (all([ascii.isascii(c) for c in message])
-                and len(message) <= GSM_MAX_SMS_7BIT_CHARS):
+        if self._fits_in_one_message(message):
             return [message]
 
         payload_length = GSM_MAX_SMS_BYTES - 10
