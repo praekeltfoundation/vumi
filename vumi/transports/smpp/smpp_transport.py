@@ -73,8 +73,20 @@ class SmppTransceiverProtocol(EsmeTransceiverFactory.protocol):
         d.addCallback(
             self.vumi_transport.set_remote_message_id, smpp_message_id)
         d.addCallback(
-            lambda message_id: cb(message_id, smpp_message_id, command_status))
+            self._handle_submit_sm_resp_callback, smpp_message_id,
+            command_status, cb)
         return d
+
+    def _handle_submit_sm_resp_callback(self, message_id, smpp_message_id,
+                                        command_status, cb):
+        if message_id is None:
+            # We have no message_id, so log a warning instead of calling the
+            # callback.
+            log.warning("Failed to retrieve message id for deliver_sm_resp."
+                        " ack/nack from %s discarded."
+                        % self.vumi_transport.transport_name)
+        else:
+            return cb(message_id, smpp_message_id, command_status)
 
 
 class SmppReceiverProtocol(SmppTransceiverProtocol):
@@ -237,6 +249,9 @@ class SmppTransceiverTransport(Transport):
         return self.redis.delete(message_key(message_id))
 
     def set_remote_message_id(self, message_id, smpp_message_id):
+        if message_id is None:
+            # Don't store None, because that breaks stuff later.
+            return succeed(None)
         key = remote_message_key(smpp_message_id)
         config = self.get_static_config()
         d = self.redis.set(key, message_id)
