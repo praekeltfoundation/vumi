@@ -214,11 +214,8 @@ class SmppTransceiverTransport(Transport):
         if self.bind_requires_throttling():
             self.check_mt_throttling()
         protocol = yield self.service.get_protocol()
-        seq_nrs = yield self.submit_sm_processor.handle_outbound_message(
+        yield self.submit_sm_processor.handle_outbound_message(
             message, protocol)
-        yield gatherResults([
-            self.set_sequence_number_message_id(sqn, message['message_id'])
-            for sqn in seq_nrs])
         yield self.cache_message(message)
 
     def set_sequence_number_message_id(self, sequence_number, message_id):

@@ -321,6 +321,7 @@ class SubmitShortMessageProcessor(object):
         to_addr = message['to_addr']
         from_addr = message['from_addr']
         text = message['content']
+        vumi_message_id = message['message_id']
 
         # TODO: this should probably be handled by a processor as these
         #       USSD fields & params are TATA (India) specific
@@ -341,6 +342,7 @@ class SubmitShortMessageProcessor(object):
 
         if self.config.send_long_messages:
             return protocol.submit_sm_long(
+                vumi_message_id,
                 to_addr.encode('ascii'),
                 long_message=text.encode(self.config.submit_sm_encoding),
                 data_coding=self.config.submit_sm_data_coding,
@@ -350,6 +352,7 @@ class SubmitShortMessageProcessor(object):
 
         elif self.config.send_multipart_sar:
             return protocol.submit_csm_sar(
+                vumi_message_id,
                 to_addr.encode('ascii'),
                 short_message=text.encode(self.config.submit_sm_encoding),
                 data_coding=self.config.submit_sm_data_coding,
@@ -359,6 +362,7 @@ class SubmitShortMessageProcessor(object):
 
         elif self.config.send_multipart_udh:
             return protocol.submit_csm_udh(
+                vumi_message_id,
                 to_addr.encode('ascii'),
                 short_message=text.encode(self.config.submit_sm_encoding),
                 data_coding=self.config.submit_sm_data_coding,
@@ -367,6 +371,7 @@ class SubmitShortMessageProcessor(object):
             )
 
         return protocol.submit_sm(
+            vumi_message_id,
             to_addr.encode('ascii'),
             short_message=text.encode(self.config.submit_sm_encoding),
             data_coding=self.config.submit_sm_data_coding,

@@ -1,7 +1,7 @@
 from twisted.test import proto_helpers
 from twisted.internet import reactor
 from twisted.internet.defer import (
-    inlineCallbacks, Deferred, returnValue, succeed)
+    inlineCallbacks, gatherResults, Deferred, returnValue, succeed)
 from twisted.internet.error import ConnectionDone
 from twisted.internet.task import Clock
 
@@ -79,7 +79,15 @@ def wait_for_pdus(transport, count):
 
 
 class DummySmppTransport(object):
-    pass
+    # We don't subclass SmppTransceiverTransport here, so we can't use its
+    # methods. Instead, we steal the underlying functions and turn them into
+    # our own methods.
+
+    set_sequence_number_message_id = (
+        SmppTransceiverTransport.set_sequence_number_message_id.im_func)
+
+    get_sequence_number_message_id = (
+        SmppTransceiverTransport.get_sequence_number_message_id.im_func)
 
 
 class ForwardableRedisSequence(RedisSequence):
@@ -167,6 +175,10 @@ class EsmeTestCase(VumiTestCase):
         transport = yield connect_transport(protocol)
         yield bind_protocol(transport, protocol, clear=clear)
         returnValue((transport, protocol))
+
+    def lookup_message_ids(self, protocol, seq_nums):
+        lookup_func = protocol.vumi_transport.get_sequence_number_message_id
+        return gatherResults([lookup_func(seq_num) for seq_num in seq_nums])
 
     @inlineCallbacks
     def test_on_connection_made(self):
@@ -304,17 +316,21 @@ class EsmeTestCase(VumiTestCase):
     @inlineCallbacks
     def test_submit_sm(self):
         transport, protocol = yield self.setup_bind()
-        yield protocol.submit_sm('dest_addr', short_message='foo')
+        seq_nums = yield protocol.submit_sm(
+            'abc123', 'dest_addr', short_message='foo')
         [submit_sm] = yield wait_for_pdus(transport, 1)
         self.assertCommand(submit_sm, 'submit_sm', params={
             'short_message': 'foo',
         })
+        stored_ids = yield self.lookup_message_ids(protocol, seq_nums)
+        self.assertEqual(['abc123'], stored_ids)
 
     @inlineCallbacks
     def test_submit_sm_long(self):
         transport, protocol = yield self.setup_bind()
         long_message = 'This is a long message.' * 20
-        yield protocol.submit_sm_long('dest_addr', long_message)
+        seq_nums = yield protocol.submit_sm_long(
+            'abc123', 'dest_addr', long_message)
         [submit_sm] = yield wait_for_pdus(transport, 1)
         pdu_opts = unpacked_pdu_opts(submit_sm)
 
@@ -323,6 +339,8 @@ class EsmeTestCase(VumiTestCase):
             None, submit_sm['body']['mandatory_parameters']['short_message'])
         self.assertEqual(''.join('%02x' % ord(c) for c in long_message),
                          pdu_opts['message_payload'])
+        stored_ids = yield self.lookup_message_ids(protocol, seq_nums)
+        self.assertEqual(['abc123'], stored_ids)
 
     @inlineCallbacks
     def test_submit_sm_multipart_udh(self):
@@ -331,7 +349,7 @@ class EsmeTestCase(VumiTestCase):
         })
         long_message = 'This is a long message.' * 20
         seq_numbers = yield protocol.submit_csm_udh(
-            'dest_addr', short_message=long_message)
+            'abc123', 'dest_addr', short_message=long_message)
         pdus = yield wait_for_pdus(transport, 4)
         self.assertEqual(len(seq_numbers), 4)
 
@@ -358,6 +376,9 @@ class EsmeTestCase(VumiTestCase):
         self.assertEqual(long_message, ''.join(msg_parts))
         self.assertEqual(1, len(set(msg_refs)))
 
+        stored_ids = yield self.lookup_message_ids(protocol, seq_numbers)
+        self.assertEqual(['abc123'] * len(seq_numbers), stored_ids)
+
     @inlineCallbacks
     def test_udh_ref_num_limit(self):
         transport, protocol = yield self.setup_bind(config={
@@ -369,7 +390,7 @@ class EsmeTestCase(VumiTestCase):
 
         long_message = 'This is a long message.' * 20
         seq_numbers = yield protocol.submit_csm_udh(
-            'dest_addr', short_message=long_message)
+            'abc123', 'dest_addr', short_message=long_message)
         pdus = yield wait_for_pdus(transport, 4)
 
         self.assertEqual(len(seq_numbers), 4)
@@ -392,7 +413,7 @@ class EsmeTestCase(VumiTestCase):
         })
         long_message = 'This is a long message.' * 20
         seq_nums = yield protocol.submit_csm_sar(
-            'dest_addr', short_message=long_message)
+            'abc123', 'dest_addr', short_message=long_message)
         pdus = yield wait_for_pdus(transport, 4)
         # seq no 1 == bind_transceiver, 2 == enquire_link, 3 == sar_msg_ref_num
         self.assertEqual([4, 5, 6, 7], seq_nums)
@@ -413,6 +434,9 @@ class EsmeTestCase(VumiTestCase):
         self.assertEqual(long_message, ''.join(msg_parts))
         self.assertEqual([3, 3, 3, 3], msg_refs)
 
+        stored_ids = yield self.lookup_message_ids(protocol, seq_nums)
+        self.assertEqual(['abc123'] * len(seq_nums), stored_ids)
+
     @inlineCallbacks
     def test_sar_ref_num_limit(self):
         transport, protocol = yield self.setup_bind(config={
@@ -424,7 +448,7 @@ class EsmeTestCase(VumiTestCase):
 
         long_message = 'This is a long message.' * 20
         seq_numbers = yield protocol.submit_csm_udh(
-            'dest_addr', short_message=long_message)
+            'abc123', 'dest_addr', short_message=long_message)
         pdus = yield wait_for_pdus(transport, 4)
 
         self.assertEqual(len(seq_numbers), 4)

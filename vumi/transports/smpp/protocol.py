@@ -361,6 +361,7 @@ class EsmeTransceiver(Protocol):
     @require_bind
     @inlineCallbacks
     def submit_sm(self,
+                  vumi_message_id,
                   destination_addr,
                   source_addr='',
                   service_type='',
@@ -473,10 +474,13 @@ class EsmeTransceiver(Protocol):
             for key, value in optional_parameters.items():
                 pdu.add_optional_parameter(key, value)
 
+        yield self.vumi_transport.set_sequence_number_message_id(
+            sequence_number, vumi_message_id)
         self.send_pdu(pdu)
         returnValue([sequence_number])
 
-    def submit_sm_long(self, destination_addr, long_message, **pdu_params):
+    def submit_sm_long(self, vumi_message_id, destination_addr, long_message,
+                       **pdu_params):
         """
         Send a `submit_sm` command with the message encoded in the
         ``message_payload`` optional parameter.
@@ -500,7 +504,7 @@ class EsmeTransceiver(Protocol):
                 ''.join('%02x' % ord(c) for c in long_message))
         })
         return self.submit_sm(
-            destination_addr, short_message='', sm_length=0,
+            vumi_message_id, destination_addr, short_message='', sm_length=0,
             optional_parameters=optional_parameters, **pdu_params)
 
     def csm_split_message(self, message):
@@ -529,7 +533,7 @@ class EsmeTransceiver(Protocol):
         return split_msg
 
     @inlineCallbacks
-    def submit_csm_sar(self, destination_addr, **pdu_params):
+    def submit_csm_sar(self, vumi_message_id, destination_addr, **pdu_params):
         """
         Submit a concatenated SMS to the SMSC using the optional
         SAR parameter names in the various PDUS.
@@ -551,13 +555,13 @@ class EsmeTransceiver(Protocol):
                 'sar_segment_seqnum': i + 1,
             })
             sequence_number = yield self.submit_sm(
-                destination_addr, short_message=msg,
+                vumi_message_id, destination_addr, short_message=msg,
                 optional_parameters=optional_parameters, **pdu_params)
             sequence_numbers.extend(sequence_number)
         returnValue(sequence_numbers)
 
     @inlineCallbacks
-    def submit_csm_udh(self, destination_addr, **pdu_params):
+    def submit_csm_udh(self, vumi_message_id, destination_addr, **pdu_params):
         """
         Submit a concatenated SMS to the SMSC using UDH headers
         in the message content.
@@ -603,7 +607,8 @@ class EsmeTransceiver(Protocol):
             ])
             short_message = udh + msg
             sequence_number = yield self.submit_sm(
-                destination_addr, short_message=short_message, **pdu_params)
+                vumi_message_id, destination_addr, short_message=short_message,
+                **pdu_params)
             sequence_numbers.extend(sequence_number)
         returnValue(sequence_numbers)
 
