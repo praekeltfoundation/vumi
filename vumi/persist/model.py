@@ -606,7 +606,13 @@ class Manager(object):
         mr = self.mr_from_keys(model, keys)
         mr._riak_mapreduce_obj.map(function="""
                 function (v) {
-                    return [[v.key, v.values[0]]]
+                    values = v.values.filter(function(val) {
+                        return !val.metadata['X-Riak-Deleted'];
+                    })
+                    if (!values.length) {
+                        return [];
+                    }
+                    return [[v.key, values[0]]]
                 }
                 """).filter_not_found()
         return self.run_map_reduce(

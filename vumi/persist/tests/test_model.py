@@ -316,6 +316,20 @@ class TestModelOnTxRiak(VumiTestCase):
         self.assertEqual(["one", "two"], sorted(obj.key for obj in objs))
 
     @Manager.calls_manager
+    def test_load_all_bunches_skips_tombstones(self):
+        simple_model = self.manager.proxy(SimpleModel)
+        yield simple_model("one", a=1, b=u'abc').save()
+        yield simple_model("two", a=2, b=u'def').save()
+        tombstone = yield simple_model("tombstone", a=2, b=u'ghi').save()
+        yield tombstone.delete()
+
+        objs_iter = simple_model.load_all_bunches(['one', 'two', 'tombstone'])
+        objs = []
+        for obj_bunch in objs_iter:
+            objs.extend((yield obj_bunch))
+        self.assertEqual(["one", "two"], sorted(obj.key for obj in objs))
+
+    @Manager.calls_manager
     def test_simple_instance(self):
         simple_model = self.manager.proxy(SimpleModel)
         s1 = simple_model("foo", a=5, b=u'3')
