@@ -14,6 +14,6 @@ install:
   - "pip install coveralls --use-wheel"
   - "python setup.py install"
 script:
-  - VUMITEST_REDIS_DB=1 coverage run --source=vumi `which trial` vumi
+  - VUMITEST_REDIS_DB=1 VUMI_TEST_NODE_PATH="$(which node)" coverage run --source=vumi `which trial` vumi
 after_success:
   - coveralls
