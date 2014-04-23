@@ -17,6 +17,7 @@ from vumi.transports.smpp.pdu_utils import (
     seq_no, command_status, command_id, chop_pdu_stream, short_message)
 from vumi.transports.smpp.smpp_utils import unpacked_pdu_opts
 from vumi.transports.smpp.sequence import RedisSequence
+from vumi.transports.tests.helpers import TransportHelper
 
 from smpp.pdu import unpack_pdu
 from smpp.pdu_builder import (
@@ -79,18 +80,6 @@ def wait_for_pdus(transport, count):
     return d
 
 
-class DummySmppTransport(object):
-    # We don't subclass SmppTransceiverTransport here, so we can't use its
-    # methods. Instead, we steal the underlying functions and turn them into
-    # our own methods.
-
-    set_sequence_number_message_id = (
-        SmppTransceiverTransport.set_sequence_number_message_id.im_func)
-
-    get_sequence_number_message_id = (
-        SmppTransceiverTransport.get_sequence_number_message_id.im_func)
-
-
 class ForwardableRedisSequence(RedisSequence):
 
     def advance(self, seq_nr):
@@ -99,15 +88,22 @@ class ForwardableRedisSequence(RedisSequence):
         return d
 
 
+class DummySmppTransport(SmppTransceiverTransport):
+
+    sequence_class = ForwardableRedisSequence
+
+
 class EsmeTestCase(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
+        self.tx_helper = self.add_helper(TransportHelper(DummySmppTransport))
         self.persistence_helper = self.add_helper(PersistenceHelper())
         self.redis = yield self.persistence_helper.get_redis_manager()
         self.clock = Clock()
         self.patch(EsmeTransceiver, 'clock', self.clock)
 
+    @inlineCallbacks
     def get_protocol(self, config={},
                      deliver_sm_processor=None, dr_processor=None,
                      factory_class=None):
@@ -117,42 +113,27 @@ class EsmeTestCase(VumiTestCase):
         default_config = {
             'transport_name': 'sphex_transport',
             'twisted_endpoint': 'tcp:host=127.0.0.1:port=0',
-            'deliver_short_message_processor': (
-                'vumi.transports.smpp.processors.'
-                'DeliverShortMessageProcessor'),
-            'delivery_report_processor': ('vumi.transports.smpp.processors.'
-                                          'DeliveryReportProcessor'),
             'system_id': 'system_id',
             'password': 'password',
             'smpp_bind_timeout': 30,
         }
+
+        if deliver_sm_processor:
+            default_config['deliver_short_message_processor'] = (
+                deliver_sm_processor)
+
+        if dr_processor:
+            default_config['delivery_report_processor'] = (
+                dr_processor)
+
         default_config.update(config)
 
-        cfg = SmppTransceiverTransport.CONFIG_CLASS(
-            default_config, static=True)
+        smpp_transport = yield self.tx_helper.get_transport(default_config)
 
-        dummy_smpp_transport = DummySmppTransport()
-        dummy_smpp_transport.get_static_config = lambda: cfg
-        dummy_smpp_transport.redis = self.redis
-
-        if deliver_sm_processor is None:
-            deliver_sm_processor = cfg.deliver_short_message_processor(
-                dummy_smpp_transport,
-                cfg.deliver_short_message_processor_config)
-        if dr_processor is None:
-            dr_processor = cfg.delivery_report_processor(
-                dummy_smpp_transport, cfg.delivery_report_processor_config)
-
-        sequence_generator = ForwardableRedisSequence(self.redis)
-
-        dummy_smpp_transport.dr_processor = dr_processor
-        dummy_smpp_transport.deliver_sm_processor = deliver_sm_processor
-        dummy_smpp_transport.sequence_generator = sequence_generator
-
-        factory = factory_class(dummy_smpp_transport)
+        factory = factory_class(smpp_transport)
         proto = factory.buildProtocol(('127.0.0.1', 0))
         self.add_cleanup(proto.connectionLost, reason=ConnectionDone)
-        return proto
+        returnValue(proto)
 
     def assertCommand(self, pdu, cmd_id, sequence_number=None,
                       status=None, params={}):
@@ -172,7 +153,7 @@ class EsmeTestCase(VumiTestCase):
 
     @inlineCallbacks
     def setup_bind(self, config={}, clear=True, factory_class=None):
-        protocol = self.get_protocol(config, factory_class=factory_class)
+        protocol = yield self.get_protocol(config, factory_class=factory_class)
         transport = yield connect_transport(protocol)
         yield bind_protocol(transport, protocol, clear=clear)
         returnValue((transport, protocol))
@@ -183,7 +164,7 @@ class EsmeTestCase(VumiTestCase):
 
     @inlineCallbacks
     def test_on_connection_made(self):
-        protocol = self.get_protocol()
+        protocol = yield self.get_protocol()
         self.assertEqual(protocol.state, EsmeTransceiver.CLOSED_STATE)
         transport = yield connect_transport(
             protocol, system_id='system_id', password='password')
@@ -200,7 +181,7 @@ class EsmeTestCase(VumiTestCase):
 
     @inlineCallbacks
     def test_drop_link(self):
-        protocol = self.get_protocol()
+        protocol = yield self.get_protocol()
         transport = yield connect_transport(protocol)
         [bind_pdu] = yield wait_for_pdus(transport, 1)
         self.assertCommand(bind_pdu, 'bind_transceiver')
@@ -216,7 +197,7 @@ class EsmeTestCase(VumiTestCase):
 
     @inlineCallbacks
     def test_on_smpp_bind(self):
-        protocol = self.get_protocol()
+        protocol = yield self.get_protocol()
         transport = yield connect_transport(protocol)
         yield bind_protocol(transport, protocol)
         self.assertEqual(protocol.state, EsmeTransceiver.BOUND_STATE_TRX)
@@ -533,8 +514,9 @@ class EsmeTestCase(VumiTestCase):
         protocol.on_pdu(invalid_pdu)
         self.assertEqual(calls, [invalid_pdu])
 
+    @inlineCallbacks
     def test_csm_split_message(self):
-        protocol = self.get_protocol()
+        protocol = yield self.get_protocol()
 
         def split(msg):
             return protocol.csm_split_message(msg.encode('utf-8'))

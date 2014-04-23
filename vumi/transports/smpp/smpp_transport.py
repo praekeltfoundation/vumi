@@ -121,9 +121,8 @@ class SmppService(ReconnectingClientService):
             return d
 
     def stopService(self):
-        protocol = self.get_protocol()
-        if protocol is not None:
-            d = protocol.disconnect()
+        if self._protocol is not None:
+            d = self._protocol.disconnect()
             d.addCallback(
                 lambda _: ReconnectingClientService.stopService(self))
             return d
@@ -136,6 +135,7 @@ class SmppTransceiverTransport(Transport):
 
     factory_class = SmppTransceiverClientFactory
     service_class = SmppService
+    sequence_class = RedisSequence
     clock = reactor
     start_message_consumer = False
 
@@ -157,7 +157,7 @@ class SmppTransceiverTransport(Transport):
         self.submit_sm_processor = config.submit_short_message_processor(
             self, config.submit_short_message_processor_config)
 
-        self.sequence_generator = RedisSequence(self.redis)
+        self.sequence_generator = self.sequence_class(self.redis)
         self.throttled = None
         self.factory = self.factory_class(self)
 
