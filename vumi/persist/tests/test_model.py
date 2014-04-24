@@ -304,6 +304,7 @@ class TestModelOnTxRiak(VumiTestCase):
 
     @Manager.calls_manager
     def test_load_all_bunches(self):
+        self.assertFalse(self.manager.USE_MAPREDUCE_BUNCH_LOADING)
         simple_model = self.manager.proxy(SimpleModel)
         yield simple_model("one", a=1, b=u'abc').save()
         yield simple_model("two", a=2, b=u'def').save()
@@ -317,6 +318,7 @@ class TestModelOnTxRiak(VumiTestCase):
 
     @Manager.calls_manager
     def test_load_all_bunches_skips_tombstones(self):
+        self.assertFalse(self.manager.USE_MAPREDUCE_BUNCH_LOADING)
         simple_model = self.manager.proxy(SimpleModel)
         yield simple_model("one", a=1, b=u'abc').save()
         yield simple_model("two", a=2, b=u'def').save()
@@ -328,6 +330,77 @@ class TestModelOnTxRiak(VumiTestCase):
         for obj_bunch in objs_iter:
             objs.extend((yield obj_bunch))
         self.assertEqual(["one", "two"], sorted(obj.key for obj in objs))
+
+    @Manager.calls_manager
+    def test_load_all_bunches_mapreduce(self):
+        self.manager.USE_MAPREDUCE_BUNCH_LOADING = True
+        simple_model = self.manager.proxy(SimpleModel)
+        yield simple_model("one", a=1, b=u'abc').save()
+        yield simple_model("two", a=2, b=u'def').save()
+        yield simple_model("three", a=2, b=u'ghi').save()
+
+        objs_iter = simple_model.load_all_bunches(['one', 'two', 'bad'])
+        objs = []
+        for obj_bunch in objs_iter:
+            objs.extend((yield obj_bunch))
+        self.assertEqual(["one", "two"], sorted(obj.key for obj in objs))
+
+    @Manager.calls_manager
+    def test_load_all_bunches_mapreduce_skips_tombstones(self):
+        self.manager.USE_MAPREDUCE_BUNCH_LOADING = True
+        simple_model = self.manager.proxy(SimpleModel)
+        yield simple_model("one", a=1, b=u'abc').save()
+        yield simple_model("two", a=2, b=u'def').save()
+        tombstone = yield simple_model("tombstone", a=2, b=u'ghi').save()
+        yield tombstone.delete()
+
+        objs_iter = simple_model.load_all_bunches(['one', 'two', 'tombstone'])
+        objs = []
+        for obj_bunch in objs_iter:
+            objs.extend((yield obj_bunch))
+        self.assertEqual(["one", "two"], sorted(obj.key for obj in objs))
+
+    @Manager.calls_manager
+    def test_load_all_bunches_performance(self):
+        """
+        A performance test that is handy to occasionally but shouldn't happen
+        on every test run.
+
+        This should go away once we're happy with the non-mapreduce bunch
+        loading.
+        """
+        import time
+        start_setup = time.time()
+        simple_model = self.manager.proxy(SimpleModel)
+        keys = []
+        for i in xrange(2000):
+            obj = yield simple_model("item%s" % i, a=i, b=u'abc').save()
+            keys.append(obj.key)
+
+        end_setup = time.time()
+        print "\n\nSetup time: %s" % (end_setup - start_setup,)
+
+        start_mr = time.time()
+        self.manager.USE_MAPREDUCE_BUNCH_LOADING = True
+        objs_iter = simple_model.load_all_bunches(keys)
+        objs = []
+        for obj_bunch in objs_iter:
+            objs.extend((yield obj_bunch))
+        end_mr = time.time()
+        print "Mapreduce time: %s" % (end_mr - start_mr,)
+
+        start_mult = time.time()
+        self.manager.USE_MAPREDUCE_BUNCH_LOADING = False
+        objs_iter = simple_model.load_all_bunches(keys)
+        objs = []
+        for obj_bunch in objs_iter:
+            objs.extend((yield obj_bunch))
+        end_mult = time.time()
+        print "Multiple time: %s\n" % (end_mult - start_mult,)
+
+        self.assertEqual(sorted(keys), sorted(obj.key for obj in objs))
+    test_load_all_bunches_performance.skip = (
+        "This takes a long time to run. Enable it if you need it.")
 
     @Manager.calls_manager
     def test_simple_instance(self):
