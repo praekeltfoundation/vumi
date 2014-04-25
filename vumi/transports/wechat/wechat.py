@@ -3,7 +3,6 @@
 import hashlib
 import urllib
 import json
-import time
 from datetime import datetime
 from functools import partial
 
@@ -295,7 +294,7 @@ class WeChatTransport(Transport):
             returnValue(False)
 
         cached_reply = yield self.get_cached_reply(wc_msg_id)
-        if seen_recently and cached_reply:
+        if cached_reply:
             # we've got a reply still lying around, just parrot that instead.
             request.write(cached_reply)
 
