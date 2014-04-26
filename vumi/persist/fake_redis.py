@@ -3,26 +3,26 @@
 import fnmatch
 from functools import wraps
 from itertools import takewhile, dropwhile
+import os
 
-from twisted.internet.defer import Deferred
+from twisted.internet import reactor
+from twisted.internet.defer import Deferred, execute
 from twisted.internet.task import Clock
+
+
+FAKE_REDIS_WAIT = float(os.environ.get('VUMI_FAKE_REDIS_WAIT', '0.005'))
 
 
 def maybe_async(func):
     @wraps(func)
     def wrapper(self, *args, **kw):
-        result = func(self, *args, **kw)
-        if self._is_async:
-            d = Deferred()
-            # We fake a bit of a delay here.
-            self.clock.callLater(0.05, d.callback, result)
-            self.clock.advance(0.1)
-            return d
-        # Same delay in the sync case.
-        self.clock.advance(0.1)
-        return result
+        return self._delay_operation(func, args, kw)
     wrapper.sync = func
     return wrapper
+
+
+def call_to_deferred(deferred, func, *args, **kw):
+    execute(func, *args, **kw).chainDeferred(deferred)
 
 
 class FakeRedis(object):
@@ -44,9 +44,11 @@ class FakeRedis(object):
         self.clock = Clock()
         self._charset = charset
         self._charset_errors = errors
+        self._delayed_calls = []
 
     def teardown(self):
         self._clean_up_expires()
+        self._clean_up_delayed_calls()
 
     def _encode(self, value):
         # Replicated from
@@ -64,6 +66,30 @@ class FakeRedis(object):
             delayed = self._expiries.pop(key)
             if not (delayed.cancelled or delayed.called):
                 delayed.cancel()
+
+    def _clean_up_delayed_calls(self):
+        for delayed in self._delayed_calls:
+            if not (delayed.cancelled or delayed.called):
+                delayed.cancel()
+
+    def _delay_operation(self, func, args, kw):
+        """
+        Return the result with some fake delay. If we're in async mode, add
+        some real delay to catch code that doesn't properly wait for the
+        deferred to fire.
+        """
+        self.clock.advance(0.1)
+        if self._is_async:
+            # Add some latency to catch things that don't wait on deferreds. We
+            # can't use deferLater() here because we want to keep track of the
+            # delayed call object.
+            d = Deferred()
+            delayed = reactor.callLater(
+                FAKE_REDIS_WAIT, call_to_deferred, d, func, self, *args, **kw)
+            self._delayed_calls.append(delayed)
+            return d
+        else:
+            return func(self, *args, **kw)
 
     # Global operations
 

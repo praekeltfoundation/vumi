@@ -316,7 +316,7 @@ class TestUDPMetricsCollector(VumiTestCase):
         self.add_cleanup(self.udp_server.stopListening)
         self.worker = yield self.worker_helper.get_worker(
             metrics_workers.UDPMetricsCollector, {
-                'metrics_host': 'localhost',
+                'metrics_host': '127.0.0.1',
                 'metrics_port': self.udp_server.getHost().port,
             })
 

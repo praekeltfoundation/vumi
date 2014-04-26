@@ -33,9 +33,9 @@ class MessageStoreCacheTestCase(VumiTestCase):
         self.msg_helper = self.add_helper(MessageHelper())
 
     @inlineCallbacks
-    def add_messages(self, batch_id, callback, count=10):
+    def add_messages(self, batch_id, callback, now=None, count=10):
         messages = []
-        now = datetime.now()
+        now = (datetime.now() if now is None else now)
         for i in range(count):
             msg = self.msg_helper.make_inbound(
                 "inbound",
@@ -346,7 +346,9 @@ class TestMessageStoreCacheWithCounters(MessageStoreCacheTestCase):
     start_batch = False
 
     @inlineCallbacks
-    def test_switching_to_counters(self):
+    def test_switching_to_counters_outbound(self):
+        self.cache.TRUNCATE_MESSAGE_KEY_COUNT_AT = 7
+
         for i in range(10):
             msg = self.msg_helper.make_outbound("outbound")
             yield self.cache.add_outbound_message(self.batch_id, msg)
@@ -360,6 +362,30 @@ class TestMessageStoreCacheWithCounters(MessageStoreCacheTestCase):
         self.assertEqual(
             (yield self.cache.count_outbound_message_keys(self.batch_id)),
             10)
+
+        outbound = yield self.cache.get_outbound_message_keys(self.batch_id)
+        self.assertEqual(len(outbound), 7)
+
+    @inlineCallbacks
+    def test_switching_to_counters_inbound(self):
+        self.cache.TRUNCATE_MESSAGE_KEY_COUNT_AT = 7
+
+        for i in range(10):
+            msg = self.msg_helper.make_inbound("inbound")
+            yield self.cache.add_inbound_message(self.batch_id, msg)
+
+        self.assertFalse((yield self.cache.uses_counters(self.batch_id)))
+        self.assertEqual(
+            (yield self.cache.count_inbound_message_keys(self.batch_id)),
+            10)
+        yield self.cache.switch_to_counters(self.batch_id)
+        self.assertTrue((yield self.cache.uses_counters(self.batch_id)))
+        self.assertEqual(
+            (yield self.cache.count_inbound_message_keys(self.batch_id)),
+            10)
+
+        inbound = yield self.cache.get_inbound_message_keys(self.batch_id)
+        self.assertEqual(len(inbound), 7)
 
     @inlineCallbacks
     def test_inbound_truncate_at_within_limits(self):
@@ -396,3 +422,32 @@ class TestMessageStoreCacheWithCounters(MessageStoreCacheTestCase):
         self.assertEqual(count, 3)
         self.assertEqual((yield self.cache.count_outbound_message_keys(
             self.batch_id)), 7)
+
+    @inlineCallbacks
+    def test_truncation_after_hitting_limit(self):
+        truncate_at = 10
+        # Check we're actually truncating in the messages
+        self.assertTrue(self.cache.uses_counters(self.batch_id))
+
+        start = datetime.now()
+        received_messages = []
+        for i in range(20):
+            now = start + timedelta(seconds=i)
+            # populate in ascending timestamp
+            [msg] = yield self.add_messages(
+                self.batch_id, self.cache.add_inbound_message,
+                now=now, count=1)
+            received_messages.append(msg)
+            # Manually truncate
+            yield self.cache.truncate_inbound_message_keys(
+                self.batch_id, truncate_at=truncate_at)
+
+        # Get latest 20 messages from cache (there should be 10)
+        cached_message_keys = yield self.cache.get_inbound_message_keys(
+            self.batch_id, 0, 19)
+        # Make sure we're not storing more than we expect to be
+        self.assertEqual(len(cached_message_keys), truncate_at)
+        # Make sure we're storing the most recent ones
+        self.assertEqual(
+            set(cached_message_keys),
+            set([m['message_id'] for m in received_messages[truncate_at:]]))

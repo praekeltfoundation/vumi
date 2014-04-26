@@ -172,7 +172,7 @@ from twisted.words.protocols.irc import IRC
 
 
 class StubbyIrcServerProtocol(IRC):
-    hostname = 'localhost'
+    hostname = '127.0.0.1'
 
     def irc_unknown(self, prefix, command, params):
         self.factory.events.put((prefix, command, params))
@@ -212,7 +212,8 @@ class TestIrcTransport(VumiTestCase):
         self.irc_server = StubbyIrcServer()
         self.add_cleanup(lambda: self.irc_server.finished_d)
         self.tx_helper = self.add_helper(TransportHelper(IrcTransport))
-        self.irc_connector = yield reactor.listenTCP(0, self.irc_server)
+        self.irc_connector = yield reactor.listenTCP(
+            0, self.irc_server, interface='127.0.0.1')
         self.add_cleanup(self.irc_connector.stopListening)
         addr = self.irc_connector.getHost()
         self.server_addr = "%s:%s" % (addr.host, addr.port)

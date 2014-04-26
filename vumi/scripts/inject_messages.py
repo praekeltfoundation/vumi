@@ -37,7 +37,6 @@ class MessageInjector(Worker):
         self.direction = self.config['direction']
         self.publisher = yield self.publish_to(
             '%s.%s' % (self.transport_name, self.direction))
-        self.publisher.require_bind = False
         self.WORKER_QUEUE.put(self)
 
     def process_file(self, in_file, out_file=None):

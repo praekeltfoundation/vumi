@@ -49,7 +49,8 @@ class TestIntegratHttpResource(VumiTestCase):
         self.msgs = []
         site_factory = Site(IntegratHttpResource("testgrat", "ussd",
             self._publish))
-        self.server = yield reactor.listenTCP(0, site_factory)
+        self.server = yield reactor.listenTCP(
+            0, site_factory, interface='127.0.0.1')
         self.add_cleanup(self.server.loseConnection)
         addr = self.server.getHost()
         self._server_url = "http://%s:%s/" % (addr.host, addr.port)

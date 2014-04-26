@@ -162,6 +162,10 @@ class RiakManager(Manager):
             riak_object = migrator(riak_object).get_riak_object()
         return None
 
+    def _load_multiple(self, modelcls, keys):
+        objs = (self.load(modelcls, key) for key in keys)
+        return [obj for obj in objs if obj is not None]
+
     def riak_map_reduce(self):
         return RiakMapReduce(self.client)
 

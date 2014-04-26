@@ -11,7 +11,7 @@ from twisted.internet.protocol import Protocol, Factory
 from vumi.utils import (normalize_msisdn, vumi_resource_path, cleanup_msisdn,
                         get_operator_name, http_request, http_request_full,
                         get_first_word, redis_from_config, build_web_site,
-                        LogFilterSite)
+                        LogFilterSite, PkgResources)
 from vumi.persist.fake_redis import FakeRedis
 from vumi.tests.helpers import VumiTestCase, import_skip
 
@@ -123,7 +123,8 @@ class TestHttpUtils(VumiTestCase):
         self.root = Resource()
         self.root.isLeaf = True
         site_factory = Site(self.root)
-        self.webserver = yield reactor.listenTCP(0, site_factory)
+        self.webserver = yield reactor.listenTCP(
+            0, site_factory, interface='127.0.0.1')
         # This is a lambda because we replace self.webserver in a test.
         self.add_cleanup(lambda: self.webserver.loseConnection())
         addr = self.webserver.getHost()
@@ -244,7 +245,8 @@ class TestHttpUtils(VumiTestCase):
             "Content-Type: text/html; charset=utf-8\r\n"
             "\r\n"
             "Yay")
-        self.webserver = yield reactor.listenTCP(0, factory)
+        self.webserver = yield reactor.listenTCP(
+            0, factory, interface='127.0.0.1')
         addr = self.webserver.getHost()
         self.url = "http://%s:%s/" % (addr.host, addr.port)
 
@@ -338,3 +340,17 @@ class TestHttpUtils(VumiTestCase):
             self.assertTrue(reason.check('vumi.utils.HttpTimeoutError'))
         client_done.addBoth(check_client_response)
         yield client_done
+
+
+class TestPkgResources(VumiTestCase):
+
+    vumi_tests_path = os.path.dirname(__file__)
+
+    def test_absolute_path(self):
+        pkg = PkgResources("vumi.tests")
+        self.assertEqual('/foo/bar', pkg.path('/foo/bar'))
+
+    def test_relative_path(self):
+        pkg = PkgResources("vumi.tests")
+        self.assertEqual(os.path.join(self.vumi_tests_path, 'foo/bar'),
+                         pkg.path('foo/bar'))

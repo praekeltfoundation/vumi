@@ -119,6 +119,11 @@ class TxRiakManager(Manager):
 
         return d.addCallback(build_model_object)
 
+    def _load_multiple(self, modelcls, keys):
+        d = gatherResults([self.load(modelcls, key) for key in keys])
+        d.addCallback(lambda objs: [obj for obj in objs if obj is not None])
+        return d
+
     def riak_map_reduce(self):
         return RiakMapReduce(self.client)
 

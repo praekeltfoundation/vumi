@@ -143,6 +143,13 @@ class MigrationData(object):
         for index in indexes:
             self.new_index[index] = self.old_index.get(index, [])[:]
 
+    def copy_dynamic_values(self, *dynamic_prefixes):
+        """Copy dynamic field values from old data to new data."""
+        for prefix in dynamic_prefixes:
+            for key in self.old_data:
+                if key.startswith(prefix):
+                    self.new_data[key] = self.old_data[key]
+
     def add_index(self, index, value):
         """Add a new index value to new data."""
         if index is None:
@@ -506,6 +513,9 @@ class Manager(object):
 
     DEFAULT_LOAD_BUNCH_SIZE = 100
     DEFAULT_MAPREDUCE_TIMEOUT = 4 * 60 * 1000  # in milliseconds
+    # This is a temporary measure to give us an easy way to switch back to the
+    # old mechanism if the new one causes problems.
+    USE_MAPREDUCE_BUNCH_LOADING = False
 
     def __init__(self, client, bucket_prefix, load_bunch_size=None,
                  mapreduce_timeout=None):
@@ -589,6 +599,34 @@ class Manager(object):
         raise NotImplementedError("Sub-classes of Manager should implement"
                                   " .load(...)")
 
+    def _load_multiple(self, cls, keys):
+        """Load the model instances for a batch of keys from Riak.
+
+        If a key doesn't exist, no object will be returned for it.
+        """
+        raise NotImplementedError("Sub-classes of Manager should implement"
+                                  " ._load_multiple(...)")
+
+    def _load_bunch_mapreduce(self, model, keys):
+        """Load the model instances for a batch of keys from Riak.
+
+        If a key doesn't exist, no object will be returned for it.
+        """
+        mr = self.mr_from_keys(model, keys)
+        mr._riak_mapreduce_obj.map(function="""
+                function (v) {
+                    values = v.values.filter(function(val) {
+                        return !val.metadata['X-Riak-Deleted'];
+                    })
+                    if (!values.length) {
+                        return [];
+                    }
+                    return [[v.key, values[0]]]
+                }
+                """).filter_not_found()
+        return self.run_map_reduce(
+            mr._riak_mapreduce_obj, lambda mgr, obj: model.load(mgr, *obj))
+
     def _load_bunch(self, model, keys):
         """Load the model instances for a batch of keys from Riak.
 
@@ -597,14 +635,10 @@ class Manager(object):
         assert len(keys) <= self.load_bunch_size
         if not keys:
             return []
-        mr = self.mr_from_keys(model, keys)
-        mr._riak_mapreduce_obj.map(function="""
-                function (v) {
-                    return [[v.key, v.values[0]]]
-                }
-                """).filter_not_found()
-        return self.run_map_reduce(
-            mr._riak_mapreduce_obj, lambda mgr, obj: model.load(mgr, *obj))
+        if self.USE_MAPREDUCE_BUNCH_LOADING:
+            return self._load_bunch_mapreduce(model, keys)
+        else:
+            return self._load_multiple(model, keys)
 
     def load_all_bunches(self, model, keys):
         """Load batches of model instances for a list of keys from Riak.

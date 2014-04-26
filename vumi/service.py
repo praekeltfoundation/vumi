@@ -15,8 +15,7 @@ from txamqp.protocol import AMQClient
 
 from vumi.errors import VumiError
 from vumi.message import Message
-from vumi.utils import (load_class_by_string, vumi_resource_path, http_request,
-                        basic_auth_string, build_web_site)
+from vumi.utils import load_class_by_string, vumi_resource_path, build_web_site
 
 
 SPECS = {}
@@ -364,7 +363,6 @@ class Publisher(object):
     exchange_name = "vumi"
     exchange_type = "direct"
     routing_key = "routing_key"
-    require_bind = True
     durable = False
     auto_delete = False
     delivery_mode = 2  # save to disk
@@ -378,76 +376,16 @@ class Publisher(object):
         if not hasattr(self, 'vumi_options'):
             self.vumi_options = {}
 
-    @inlineCallbacks
-    def list_bindings(self):
-        try:
-            # Note utils.callback() does a POST not a GET
-            # which may lead to errors if the RabbitMQ Management REST api
-            # changes
-            resp = yield http_request(
-                "http://localhost:55672/api/bindings", headers={
-                    'Authorization': basic_auth_string(
-                        self.vumi_options['username'],
-                        self.vumi_options['password']),
-                    })
-            bindings = json.loads(resp)
-            bound_routing_keys = {}
-            for b in bindings:
-                if (b['vhost'] == self.vumi_options['vhost'] and
-                        b['source'] == self.exchange_name):
-                    bound_routing_keys[b['routing_key']] = \
-                            bound_routing_keys.get(b['routing_key'], []) + \
-                            [b['destination']]
-        except:
-            bound_routing_keys = {"bindings": "undetected"}
-        returnValue(bound_routing_keys)
-
-    @inlineCallbacks
-    def routing_key_is_bound(self, key):
-        # Don't check for bound routing keys on RPC reply exchanges
-        # The one-use queues are changing too frequently to cache efficiently,
-        # too many http calls to RabbitMQ Management will be required,
-        # and the auto-generated queues & routing_keys are unlikley to
-        # result in errors where routing keys are unbound
-        if self.exchange_name[-4:].lower() == '_rpc':
-            returnValue(True)
-        if (len(self.bound_routing_keys) == 1 and
-                self.bound_routing_keys.get("bindings") == "undetected"):
-            # The following is very noisy in the logs:
-            # log.msg("No bindings detected, is the RabbitMQ Management plugin"
-            #         " installed?")
-            returnValue(True)
-        if key in self.bound_routing_keys.keys():
-            returnValue(True)
-        self.bound_routing_keys = yield self.list_bindings()
-        if (len(self.bound_routing_keys) == 1 and
-                self.bound_routing_keys.get("bindings") == "undetected"):
-            # The following is very noisy in the logs:
-            # log.msg("No bindings detected, is the RabbitMQ Management plugin"
-            #         " installed?")
-            returnValue(True)
-        returnValue(key in self.bound_routing_keys.keys())
-
-    @inlineCallbacks
-    def check_routing_key(self, routing_key, require_bind):
+    def check_routing_key(self, routing_key):
         if(routing_key != routing_key.lower()):
             raise RoutingKeyError("The routing_key: %s is not all lower case!"
                                   % (routing_key))
-        if not require_bind:
-            return
-        is_bound = yield self.routing_key_is_bound(routing_key)
-        if not is_bound:
-            raise RoutingKeyError("The routing_key: %s is not bound to any"
-                                  " queues in vhost: %s  exchange: %s" % (
-                                  routing_key, self.vumi_options['vhost'],
-                                  self.exchange_name))
 
     @inlineCallbacks
     def publish(self, message, **kwargs):
         exchange_name = kwargs.get('exchange_name') or self.exchange_name
         routing_key = kwargs.get('routing_key') or self.routing_key
-        require_bind = kwargs.get('require_bind', self.require_bind)
-        yield self.check_routing_key(routing_key, require_bind)
+        self.check_routing_key(routing_key)
         yield self.channel.basic_publish(exchange=exchange_name,
                                          content=message,
                                          routing_key=routing_key)

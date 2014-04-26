@@ -14,6 +14,9 @@ class TestFakeRedis(VumiTestCase):
     def assert_redis_op(self, expected, op, *args, **kw):
         self.assertEqual(expected, getattr(self.redis, op)(*args, **kw))
 
+    def assert_error(self, func, *args, **kw):
+        self.assertRaises(Exception, func, *args, **kw)
+
     @inlineCallbacks
     def test_delete(self):
         yield self.redis.set("delete_me", 1)
@@ -82,10 +85,8 @@ class TestFakeRedis(VumiTestCase):
         yield self.assert_redis_op(0, 'zadd', 'set', one=2.0)
         yield self.assert_redis_op([('one', 2.0)], 'zrange', 'set', 0, -1,
                                    withscores=True)
-        self.assertRaises(
-            Exception, self.redis.zadd, "set", one='foo')
-        self.assertRaises(
-            Exception, self.redis.zadd, "set", one=None)
+        yield self.assert_error(self.redis.zadd, "set", one='foo')
+        yield self.assert_error(self.redis.zadd, "set", one=None)
 
     @inlineCallbacks
     def test_zrange(self):
@@ -195,12 +196,11 @@ class TestFakeRedis(VumiTestCase):
         yield self.assert_redis_op(2, 'hincrby', "inc", "field1")
         yield self.assert_redis_op(5, 'hincrby', "inc", "field1", 3)
         yield self.assert_redis_op(7, 'hincrby', "inc", "field1", "2")
-        self.assertRaises(
-            Exception, self.redis.hincrby, "inc", "field1", "1.5")
+        yield self.assert_error(self.redis.hincrby, "inc", "field1", "1.5")
         yield self.redis.hset("inc", "field2", "a")
-        yield self.assertRaises(Exception, self.redis.hincrby, "inc", "field2")
+        yield self.assert_error(self.redis.hincrby, "inc", "field2")
         yield self.redis.set("key", "string")
-        yield self.assertRaises(Exception, self.redis.hincrby, "key", "field1")
+        yield self.assert_error(self.redis.hincrby, "key", "field1")
 
     @inlineCallbacks
     def test_hexists(self):
@@ -399,3 +399,6 @@ class TestFakeRedisAsync(TestFakeRedis):
     def assert_redis_op(self, expected, op, *args, **kw):
         d = getattr(self.redis, op)(*args, **kw)
         return d.addCallback(lambda r: self.assertEqual(expected, r))
+
+    def assert_error(self, func, *args, **kw):
+        return self.assertFailure(func(*args, **kw), Exception)

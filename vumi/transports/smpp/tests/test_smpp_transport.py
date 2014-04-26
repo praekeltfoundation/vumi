@@ -449,6 +449,26 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.assertEqual(failure['reason'], 'Unspecified')
 
     @inlineCallbacks
+    def test_mt_sms_seq_num_lookup_failure(self):
+        smpp_helper = yield self.get_smpp_helper()
+
+        lc = LogCatcher(message="Failed to retrieve message id")
+        with lc:
+            yield smpp_helper.handle_pdu(
+                SubmitSMResp(sequence_number=0xbad, message_id='bad'))
+
+        # Make sure we didn't store 'None' in redis.
+        message_id = yield smpp_helper.transport.get_internal_message_id('bad')
+        self.assertEqual(message_id, None)
+
+        # check that failure to send ack/nack was logged
+        [warning] = lc.logs
+        expected_msg = (
+            "Failed to retrieve message id for deliver_sm_resp. ack/nack"
+            " from %s discarded.") % (self.tx_helper.transport_name,)
+        self.assertEqual(warning['message'], (expected_msg,))
+
+    @inlineCallbacks
     def test_mt_sms_throttled(self):
         smpp_helper = yield self.get_smpp_helper()
         transport_config = smpp_helper.transport.get_static_config()
@@ -475,6 +495,26 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         [event] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(event['event_type'], 'ack')
         self.assertEqual(event['user_message_id'], msg['message_id'])
+
+    @inlineCallbacks
+    def test_mt_sms_tps_limits(self):
+        smpp_helper = yield self.get_smpp_helper(config={
+            'mt_tps': 1,
+        })
+        transport = smpp_helper.transport
+
+        msg1 = yield self.tx_helper.make_dispatch_outbound('hello world 1')
+        msg2 = yield self.tx_helper.make_dispatch_outbound('hello world 2')
+
+        self.assertTrue(transport.throttled)
+        [submit_sm_pdu1] = yield smpp_helper.wait_for_pdus(1)
+        self.assertEqual(short_message(submit_sm_pdu1), 'hello world 1')
+
+        self.clock.advance(1)
+
+        self.assertFalse(transport.throttled)
+        [submit_sm_pdu2] = yield smpp_helper.wait_for_pdus(1)
+        self.assertEqual(short_message(submit_sm_pdu2), 'hello world 2')
 
     @inlineCallbacks
     def test_mt_sms_queue_full(self):

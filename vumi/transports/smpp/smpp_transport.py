@@ -5,8 +5,8 @@ from uuid import uuid4
 
 from twisted.internet import reactor
 from twisted.internet.defer import (
-    inlineCallbacks, DeferredQueue, maybeDeferred, returnValue, Deferred,
-    succeed)
+    inlineCallbacks, maybeDeferred, returnValue, Deferred, succeed)
+from twisted.internet.task import LoopingCall
 
 from vumi.reconnecting_client import ReconnectingClientService
 from vumi.transports.base import Transport
@@ -72,8 +72,20 @@ class SmppTransceiverProtocol(EsmeTransceiverFactory.protocol):
         d.addCallback(
             self.vumi_transport.set_remote_message_id, smpp_message_id)
         d.addCallback(
-            lambda message_id: cb(message_id, smpp_message_id, command_status))
+            self._handle_submit_sm_resp_callback, smpp_message_id,
+            command_status, cb)
         return d
+
+    def _handle_submit_sm_resp_callback(self, message_id, smpp_message_id,
+                                        command_status, cb):
+        if message_id is None:
+            # We have no message_id, so log a warning instead of calling the
+            # callback.
+            log.warning("Failed to retrieve message id for deliver_sm_resp."
+                        " ack/nack from %s discarded."
+                        % self.vumi_transport.transport_name)
+        else:
+            return cb(message_id, smpp_message_id, command_status)
 
 
 class SmppReceiverProtocol(SmppTransceiverProtocol):
@@ -108,9 +120,8 @@ class SmppService(ReconnectingClientService):
             return d
 
     def stopService(self):
-        protocol = self.get_protocol()
-        if protocol is not None:
-            d = protocol.disconnect()
+        if self._protocol is not None:
+            d = self._protocol.disconnect()
             d.addCallback(
                 lambda _: ReconnectingClientService.stopService(self))
             return d
@@ -123,6 +134,7 @@ class SmppTransceiverTransport(Transport):
 
     factory_class = SmppTransceiverClientFactory
     service_class = SmppService
+    sequence_class = RedisSequence
     clock = reactor
     start_message_consumer = False
 
@@ -143,11 +155,21 @@ class SmppTransceiverTransport(Transport):
             self, config.deliver_short_message_processor_config)
         self.submit_sm_processor = config.submit_short_message_processor(
             self, config.submit_short_message_processor_config)
-        self.sequence_generator = RedisSequence(self.redis)
+
+        self.sequence_generator = self.sequence_class(self.redis)
         self.throttled = None
         self.factory = self.factory_class(self)
 
         self.service = self.start_service(self.factory)
+
+        self.tps_counter = 0
+        self.tps_limit = config.mt_tps
+        if config.mt_tps > 0:
+            self.mt_tps_lc = LoopingCall(self.reset_mt_tps)
+            self.mt_tps_lc.clock = self.clock
+            self.mt_tps_lc.start(1, now=True)
+        else:
+            self.mt_tps_lc = None
 
     def start_service(self, factory):
         config = self.get_static_config()
@@ -159,16 +181,40 @@ class SmppTransceiverTransport(Transport):
     def teardown_transport(self):
         if self.service:
             yield self.service.stopService()
+        if self.mt_tps_lc and self.mt_tps_lc.running:
+            self.mt_tps_lc.stop()
         yield self.redis._close()
+
+    def reset_mt_tps(self):
+        if self.throttled and self.need_mt_throttling():
+            self.reset_mt_throttle_counter()
+            self.stop_throttling()
+
+    def reset_mt_throttle_counter(self):
+        self.tps_counter = 0
+
+    def incr_mt_throttle_counter(self):
+        self.tps_counter += 1
+
+    def need_mt_throttling(self):
+        return self.tps_counter > self.tps_limit
+
+    def bind_requires_throttling(self):
+        config = self.get_static_config()
+        return config.mt_tps > 0
+
+    def check_mt_throttling(self):
+        self.incr_mt_throttle_counter()
+        if self.need_mt_throttling():
+            self.start_throttling()
 
     @inlineCallbacks
     def handle_outbound_message(self, message):
+        if self.bind_requires_throttling():
+            self.check_mt_throttling()
         protocol = yield self.service.get_protocol()
-        seq_nrs = yield self.submit_sm_processor.handle_outbound_message(
+        yield self.submit_sm_processor.handle_outbound_message(
             message, protocol)
-        yield DeferredQueue([
-            self.set_sequence_number_message_id(sqn, message['message_id'])
-            for sqn in seq_nrs])
         yield self.cache_message(message)
 
     def set_sequence_number_message_id(self, sequence_number, message_id):
@@ -199,6 +245,11 @@ class SmppTransceiverTransport(Transport):
         return self.redis.delete(message_key(message_id))
 
     def set_remote_message_id(self, message_id, smpp_message_id):
+        if message_id is None:
+            # If we store None, we end up with the string "None" in Redis. This
+            # confuses later lookups (which treat any non-None value as a valid
+            # identifier) and results in broken delivery reports.
+            return succeed(None)
         key = remote_message_key(smpp_message_id)
         config = self.get_static_config()
         d = self.redis.set(key, message_id)

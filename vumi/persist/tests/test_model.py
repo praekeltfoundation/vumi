@@ -113,6 +113,30 @@ class UnknownVersionedModel(Model):
     d = Integer()
 
 
+class VersionedDynamicModelMigrator(ModelMigrator):
+    def migrate_from_unversioned(self, migration_data):
+        migration_data.copy_dynamic_values('keep-')
+        migration_data.set_value('$VERSION', 1)
+        return migration_data
+
+
+class UnversionedDynamicModel(Model):
+    bucket = 'versioneddynamicmodel'
+
+    drop = Dynamic(prefix='drop-')
+    keep = Dynamic(prefix='keep-')
+
+
+class VersionedDynamicModel(Model):
+    bucket = 'versioneddynamicmodel'
+
+    VERSION = 1
+    MIGRATOR = VersionedDynamicModelMigrator
+
+    drop = Dynamic(prefix='drop-')
+    keep = Dynamic(prefix='keep-')
+
+
 class TestModelOnTxRiak(VumiTestCase):
 
     # TODO: all copies of mkmsg must be unified!
@@ -280,6 +304,7 @@ class TestModelOnTxRiak(VumiTestCase):
 
     @Manager.calls_manager
     def test_load_all_bunches(self):
+        self.assertFalse(self.manager.USE_MAPREDUCE_BUNCH_LOADING)
         simple_model = self.manager.proxy(SimpleModel)
         yield simple_model("one", a=1, b=u'abc').save()
         yield simple_model("two", a=2, b=u'def').save()
@@ -290,6 +315,92 @@ class TestModelOnTxRiak(VumiTestCase):
         for obj_bunch in objs_iter:
             objs.extend((yield obj_bunch))
         self.assertEqual(["one", "two"], sorted(obj.key for obj in objs))
+
+    @Manager.calls_manager
+    def test_load_all_bunches_skips_tombstones(self):
+        self.assertFalse(self.manager.USE_MAPREDUCE_BUNCH_LOADING)
+        simple_model = self.manager.proxy(SimpleModel)
+        yield simple_model("one", a=1, b=u'abc').save()
+        yield simple_model("two", a=2, b=u'def').save()
+        tombstone = yield simple_model("tombstone", a=2, b=u'ghi').save()
+        yield tombstone.delete()
+
+        objs_iter = simple_model.load_all_bunches(['one', 'two', 'tombstone'])
+        objs = []
+        for obj_bunch in objs_iter:
+            objs.extend((yield obj_bunch))
+        self.assertEqual(["one", "two"], sorted(obj.key for obj in objs))
+
+    @Manager.calls_manager
+    def test_load_all_bunches_mapreduce(self):
+        self.manager.USE_MAPREDUCE_BUNCH_LOADING = True
+        simple_model = self.manager.proxy(SimpleModel)
+        yield simple_model("one", a=1, b=u'abc').save()
+        yield simple_model("two", a=2, b=u'def').save()
+        yield simple_model("three", a=2, b=u'ghi').save()
+
+        objs_iter = simple_model.load_all_bunches(['one', 'two', 'bad'])
+        objs = []
+        for obj_bunch in objs_iter:
+            objs.extend((yield obj_bunch))
+        self.assertEqual(["one", "two"], sorted(obj.key for obj in objs))
+
+    @Manager.calls_manager
+    def test_load_all_bunches_mapreduce_skips_tombstones(self):
+        self.manager.USE_MAPREDUCE_BUNCH_LOADING = True
+        simple_model = self.manager.proxy(SimpleModel)
+        yield simple_model("one", a=1, b=u'abc').save()
+        yield simple_model("two", a=2, b=u'def').save()
+        tombstone = yield simple_model("tombstone", a=2, b=u'ghi').save()
+        yield tombstone.delete()
+
+        objs_iter = simple_model.load_all_bunches(['one', 'two', 'tombstone'])
+        objs = []
+        for obj_bunch in objs_iter:
+            objs.extend((yield obj_bunch))
+        self.assertEqual(["one", "two"], sorted(obj.key for obj in objs))
+
+    @Manager.calls_manager
+    def test_load_all_bunches_performance(self):
+        """
+        A performance test that is handy to occasionally but shouldn't happen
+        on every test run.
+
+        This should go away once we're happy with the non-mapreduce bunch
+        loading.
+        """
+        import time
+        start_setup = time.time()
+        simple_model = self.manager.proxy(SimpleModel)
+        keys = []
+        for i in xrange(2000):
+            obj = yield simple_model("item%s" % i, a=i, b=u'abc').save()
+            keys.append(obj.key)
+
+        end_setup = time.time()
+        print "\n\nSetup time: %s" % (end_setup - start_setup,)
+
+        start_mr = time.time()
+        self.manager.USE_MAPREDUCE_BUNCH_LOADING = True
+        objs_iter = simple_model.load_all_bunches(keys)
+        objs = []
+        for obj_bunch in objs_iter:
+            objs.extend((yield obj_bunch))
+        end_mr = time.time()
+        print "Mapreduce time: %s" % (end_mr - start_mr,)
+
+        start_mult = time.time()
+        self.manager.USE_MAPREDUCE_BUNCH_LOADING = False
+        objs_iter = simple_model.load_all_bunches(keys)
+        objs = []
+        for obj_bunch in objs_iter:
+            objs.extend((yield obj_bunch))
+        end_mult = time.time()
+        print "Multiple time: %s\n" % (end_mult - start_mult,)
+
+        self.assertEqual(sorted(keys), sorted(obj.key for obj in objs))
+    test_load_all_bunches_performance.skip = (
+        "This takes a long time to run. Enable it if you need it.")
 
     @Manager.calls_manager
     def test_simple_instance(self):
@@ -809,6 +920,21 @@ class TestModelOnTxRiak(VumiTestCase):
         except ModelMigrationError, e:
             self.assertEqual(
                 e.args[0], 'No migrators defined for VersionedModel version 3')
+
+    @Manager.calls_manager
+    def test_dynamic_field_migration(self):
+        old_model = self.manager.proxy(UnversionedDynamicModel)
+        new_model = self.manager.proxy(VersionedDynamicModel)
+        old = old_model("foo")
+        old.keep['bar'] = u"bar-val"
+        old.keep['baz'] = u"baz-val"
+        old.drop['bar'] = u"drop"
+        yield old.save()
+
+        new = yield new_model.load("foo")
+        self.assertEqual(new.keep['bar'], u"bar-val")
+        self.assertEqual(new.keep['baz'], u"baz-val")
+        self.assertFalse("bar" in new.drop)
 
 
 class TestModelOnRiak(TestModelOnTxRiak):

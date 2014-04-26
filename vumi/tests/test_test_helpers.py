@@ -1,14 +1,16 @@
+from copy import deepcopy
 from datetime import datetime
 
 from twisted.internet.defer import Deferred, succeed, inlineCallbacks
 from twisted.trial.unittest import SkipTest, TestCase, FailTest
 
+from vumi.blinkenlights.metrics import MetricMessage
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.tests.fake_amqp import FakeAMQPBroker, FakeAMQClient
 from vumi.tests.helpers import (
     VumiTestCase, proxyable, generate_proxies, IHelper, import_skip,
     MessageHelper, WorkerHelper, MessageDispatchHelper, PersistenceHelper,
-    success_result_of)
+    success_result_of, RiakDisabledForTest)
 from vumi.worker import BaseWorker
 
 
@@ -764,6 +766,10 @@ class TestWorkerHelper(VumiTestCase):
         if kick:
             return broker.kick_delivery()
 
+    def _add_to_dispatched_metrics(self, broker, msg):
+        broker.exchange_declare('vumi.metrics', 'direct')
+        broker.publish_message('vumi.metrics', 'vumi.metrics', msg)
+
     def test_get_dispatched(self):
         """
         WorkerHelper.get_dispatched() should get messages dispatched by the
@@ -805,12 +811,26 @@ class TestWorkerHelper(VumiTestCase):
         """
         msg_helper = MessageHelper()
         worker_helper = WorkerHelper()
+        broker = worker_helper.broker
         msg = msg_helper.make_inbound('message')
-        self._add_to_dispatched(
-            worker_helper.broker, 'fooconn.inbound', msg)
-        self.assertNotEqual(worker_helper.broker.dispatched['vumi'], {})
+        self._add_to_dispatched(broker, 'fooconn.inbound', msg)
+        self._add_to_dispatched_metrics(broker, MetricMessage())
+        self.assertNotEqual(broker.dispatched['vumi'], {})
+        self.assertNotEqual(broker.dispatched['vumi.metrics'], {})
         worker_helper.clear_all_dispatched()
-        self.assertEqual(worker_helper.broker.dispatched['vumi'], {})
+        self.assertEqual(broker.dispatched['vumi'], {})
+        self.assertEqual(broker.dispatched['vumi.metrics'], {})
+
+    def test_clear_all_dispatched_no_messages(self):
+        """
+        WorkerHelper.clear_all_dispatched() should succeed even if no messages
+        have ever been dispatched.
+        """
+        worker_helper = WorkerHelper()
+        broker = worker_helper.broker
+        self.assertEqual(broker.dispatched, {})
+        worker_helper.clear_all_dispatched()
+        self.assertEqual(broker.dispatched, {})
 
     def test_get_dispatched_events(self):
         """
@@ -1207,6 +1227,40 @@ class TestWorkerHelper(VumiTestCase):
         yield worker_helper.dispatch_outbound(msg)
         self.assertEqual(
             broker.get_messages('vumi', 'fooconn.outbound'), [msg])
+
+    def test_get_dispatched_metrics(self):
+        """
+        WorkerHelper.get_dispatched_metrics() should get metrics dispatched by
+        the broker.
+        """
+        worker_helper = WorkerHelper()
+        dispatched = worker_helper.get_dispatched_metrics()
+        self.assertEqual(dispatched, [])
+
+        msg = MetricMessage()
+        self._add_to_dispatched_metrics(worker_helper.broker, msg)
+        dispatched = worker_helper.get_dispatched_metrics()
+        self.assertEqual(dispatched, [[]])
+
+        msg = MetricMessage()
+        msg.append('fake metric 1')
+        msg.append('fake metric 2')
+        self._add_to_dispatched_metrics(worker_helper.broker, msg)
+        dispatched = worker_helper.get_dispatched_metrics()
+        self.assertEqual(dispatched, [[], ['fake metric 1', 'fake metric 2']])
+
+    def test_clear_dispatched_metrics(self):
+        """
+        WorkerHelper.clear_dispatched_metrics() should clear metrics messages
+        dispatched from the broker.
+        """
+        worker_helper = WorkerHelper()
+        self._add_to_dispatched_metrics(worker_helper.broker, MetricMessage())
+        self.assertNotEqual(
+            worker_helper.broker.dispatched['vumi.metrics'], {})
+        worker_helper.clear_dispatched_metrics()
+        self.assertEqual(
+            worker_helper.broker.dispatched['vumi.metrics'], {})
 
 
 class TestMessageDispatchHelper(VumiTestCase):
@@ -1695,6 +1749,13 @@ class TestPersistenceHelper(VumiTestCase):
         self.assertEqual(
             ['redis_manager', 'riak_manager'], sorted(new_config.keys()))
         self.assertEqual(config, {})
+
+    def test_deepcopy_RiakDisabledForTest(self):
+        """
+        RiakDisabledForTest should be deepcopy()able.
+        """
+        rdft = RiakDisabledForTest()
+        self.assertEqual(rdft, deepcopy(rdft))
 
     def test__get_riak_managers_for_cleanup(self):
         """

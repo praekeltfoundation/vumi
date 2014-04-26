@@ -562,7 +562,7 @@ class TestESME(VumiTestCase):
     def setUp(self):
         config = SmppTransportConfig({
             "transport_name": "transport_name",
-            "host": 'localhost',
+            "host": '127.0.0.1',
             "port": 2775,
             "system_id": 'test_system',
             "password": 'password',

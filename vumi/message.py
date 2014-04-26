@@ -206,8 +206,9 @@ class TransportUserMessage(TransportMessage):
     TT_USSD = 'ussd'
     TT_XMPP = 'xmpp'
     TT_MXIT = 'mxit'
+    TT_WECHAT = 'wechat'
     TRANSPORT_TYPES = set([TT_HTTP_API, TT_IRC, TT_TELNET, TT_TWITTER, TT_SMS,
-                           TT_USSD, TT_XMPP, TT_MXIT])
+                           TT_USSD, TT_XMPP, TT_MXIT, TT_WECHAT])
 
     def process_fields(self, fields):
         fields = super(TransportUserMessage, self).process_fields(fields)
