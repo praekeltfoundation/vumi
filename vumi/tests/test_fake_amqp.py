@@ -200,6 +200,30 @@ class TestFakeAMQP(VumiTestCase):
         self.chan1.basic_cancel('tag2')
         self.assertEqual(set(['tag1']), self.q1.consumers)
 
+    def test_basic_qos_global_unsupported(self):
+        """
+        basic_qos() is unsupported with global=True.
+        """
+        channel = self.make_channel(0)
+        self.assertRaises(NotImplementedError, channel.basic_qos, 0, 1, True)
+
+    def test_basic_qos_per_consumer(self):
+        """
+        basic_qos() only applies to consumers started after the call.
+        """
+        channel = self.make_channel(0)
+        channel.queue_declare('q1')
+        channel.queue_declare('q2')
+        self.assertEqual(channel.qos_prefetch_count, 0)
+
+        channel.basic_consume('q1', 'tag1')
+        self.assertEqual(channel._get_consumer_prefetch('tag1'), 0)
+
+        channel.basic_qos(0, 1, False)
+        channel.basic_consume('q2', 'tag2')
+        self.assertEqual(channel._get_consumer_prefetch('tag1'), 0)
+        self.assertEqual(channel._get_consumer_prefetch('tag2'), 1)
+
     @inlineCallbacks
     def test_fake_amqclient(self):
         worker = yield self.get_worker()

@@ -178,18 +178,17 @@ class FakeAMQPBroker(object):
         self.message_processed()
 
     def try_deliver_to_channel(self, channel):
-        if not channel.deliverable():
-            return False
         delivered = False
         for ctag, queue in channel.consumers.items():
-            dtag, msg = self._get_queue(queue).get_message()
-            while dtag is not None:
+            while channel.deliverable(ctag):
+                dtag, msg = self._get_queue(queue).get_message()
+                if dtag is None:
+                    break
                 dmsg = mk_deliver(msg['content'], msg['exchange'],
                                   msg['routing_key'], ctag, dtag)
                 self._delivering['count'] += 1
                 channel.deliver_message(dmsg, queue)
                 delivered = True
-                dtag, msg = self._get_queue(queue).get_message()
         return delivered
 
     def kick_delivery(self):
@@ -290,6 +289,7 @@ class FakeAMQPChannel(object):
         self.consumers = {}
         self.delegate = client.delegate
         self.unacked = []
+        self._consumer_prefetch = {}
 
     def __repr__(self):
         return '<FakeAMQPChannel: id=%s>' % (self.channel_id,)
@@ -307,7 +307,9 @@ class FakeAMQPChannel(object):
     def close(self, _reason):
         pass
 
-    def basic_qos(self, _prefetch_size, prefetch_count, _global):
+    def basic_qos(self, _prefetch_size, prefetch_count, is_global):
+        if is_global:
+            raise NotImplementedError("global prefetch limits not supported.")
         self.qos_prefetch_count = prefetch_count
 
     def exchange_declare(self, exchange, type, durable=None):
@@ -323,6 +325,7 @@ class FakeAMQPChannel(object):
         if not tag:
             tag = gen_id('consumer.')
         assert tag not in self.consumers
+        self._consumer_prefetch[tag] = self.qos_prefetch_count
         self.consumers[tag] = queue
         return self.broker.basic_consume(queue, tag)
 
@@ -330,6 +333,7 @@ class FakeAMQPChannel(object):
         queue = self.consumers.pop(tag, None)
         if queue:
             self.broker.basic_cancel(tag, queue)
+        self._consumer_prefetch.pop(tag, None)
         return Message(mkMethod("cancel-ok", 31))
 
     def basic_publish(self, exchange, routing_key, content):
@@ -344,10 +348,16 @@ class FakeAMQPChannel(object):
                 if (dtag == delivery_tag):
                     return resp
 
-    def deliverable(self):
-        if self.qos_prefetch_count < 1:
+    def _get_consumer_prefetch(self, consumer_tag):
+        return self._consumer_prefetch[consumer_tag]
+
+    def deliverable(self, consumer_tag):
+        if consumer_tag not in self.consumers:
+            return False
+        prefetch = self._get_consumer_prefetch(consumer_tag)
+        if prefetch < 1:
             return True
-        return len(self.unacked) < self.qos_prefetch_count
+        return len(self.unacked) < prefetch
 
     def deliver_message(self, msg, queue):
         self.unacked.append((msg.delivery_tag, queue))
