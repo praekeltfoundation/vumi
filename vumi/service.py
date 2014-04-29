@@ -195,7 +195,7 @@ class Worker(MultiService, object):
 
     def consume(self, routing_key, callback, queue_name=None,
                 exchange_name='vumi', exchange_type='direct', durable=True,
-                message_class=None, paused=False):
+                message_class=None, paused=False, prefetch_count=None):
 
         # use the routing key to generate the name for the class
         # amq.routing.key -> AmqRoutingKey
@@ -208,6 +208,7 @@ class Worker(MultiService, object):
             'exchange_type': exchange_type,
             'durable': durable,
             'start_paused': paused,
+            'prefetch_count': prefetch_count,
         }
         log.msg('Starting %s with %s' % (class_name, kwargs))
         klass = type(class_name, (DynamicConsumer,), kwargs)
@@ -256,6 +257,7 @@ class Consumer(object):
 
     message_class = Message
     start_paused = False
+    prefetch_count = None
 
     def __init__(self, channel):
         self.channel = channel
@@ -270,6 +272,8 @@ class Consumer(object):
         self._in_progress = 0
         self.keep_consuming = True
         self.paused = self.start_paused
+        if self.prefetch_count is not None:
+            yield self.channel.basic_qos(0, self.prefetch_count, False)
         if not self.paused:
             yield self._channel_consume()
         returnValue(self)

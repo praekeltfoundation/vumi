@@ -27,6 +27,7 @@ class BaseDispatchWorker(Worker):
         log.msg('Starting a %s dispatcher with config: %s'
                 % (self.__class__.__name__, self.config))
 
+        self.amqp_prefetch_count = self.config.get('amqp_prefetch_count', 20)
         yield self.setup_endpoints()
         yield self.setup_middleware()
         yield self.setup_router()
@@ -34,9 +35,6 @@ class BaseDispatchWorker(Worker):
         yield self.setup_exposed_publishers()
         yield self.setup_transport_consumers()
         yield self.setup_exposed_consumers()
-        self.amqp_prefetch_count = self.config.get('amqp_prefetch_count', 20)
-        if self.amqp_prefetch_count is not None:
-            yield self.setup_amqp_qos()
 
         consumers = (self.exposed_consumer.values() +
                         self.transport_consumer.values() +
@@ -85,12 +83,14 @@ class BaseDispatchWorker(Worker):
                 '%s.inbound' % (transport_name,),
                 functools.partial(self.dispatch_inbound_message,
                                   transport_name),
-                message_class=TransportUserMessage, paused=True)
+                message_class=TransportUserMessage, paused=True,
+                prefetch_count=self.amqp_prefetch_count)
         for transport_name in self.transport_names:
             self.transport_event_consumer[transport_name] = yield self.consume(
                 '%s.event' % (transport_name,),
                 functools.partial(self.dispatch_inbound_event, transport_name),
-                message_class=TransportEvent, paused=True)
+                message_class=TransportEvent, paused=True,
+                prefetch_count=self.amqp_prefetch_count)
 
     @inlineCallbacks
     def setup_exposed_publishers(self):
@@ -111,16 +111,8 @@ class BaseDispatchWorker(Worker):
                 '%s.outbound' % (exposed_name,),
                 functools.partial(self.dispatch_outbound_message,
                                   exposed_name),
-                message_class=TransportUserMessage, paused=True)
-
-    @inlineCallbacks
-    def setup_amqp_qos(self):
-        consumers = (self.transport_consumer.values() +
-                        self.transport_event_consumer.values() +
-                        self.exposed_consumer.values())
-        for consumer in consumers:
-            yield consumer.channel.basic_qos(
-                0, int(self.amqp_prefetch_count), False)
+                message_class=TransportUserMessage, paused=True,
+                prefetch_count=self.amqp_prefetch_count)
 
     def dispatch_inbound_message(self, endpoint, msg):
         d = self._middlewares.apply_consume("inbound", msg, endpoint)
