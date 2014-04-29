@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from twisted.test import proto_helpers
+from twisted.internet import reactor
 from twisted.internet.defer import (
     inlineCallbacks, returnValue, Deferred, succeed)
 from twisted.internet.error import ConnectionDone
@@ -557,8 +558,8 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         })
         transport = smpp_helper.transport
 
-        msg1 = yield self.tx_helper.make_dispatch_outbound('hello world 1')
-        msg2 = yield self.tx_helper.make_dispatch_outbound('hello world 2')
+        yield self.tx_helper.make_dispatch_outbound('hello world 1')
+        yield self.tx_helper.make_dispatch_outbound('hello world 2')
 
         self.assertTrue(transport.throttled)
         [submit_sm_pdu1] = yield smpp_helper.wait_for_pdus(1)

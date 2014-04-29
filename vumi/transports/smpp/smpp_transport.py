@@ -208,7 +208,9 @@ class SmppTransceiverTransport(Transport):
     def check_mt_throttling(self):
         self.incr_mt_throttle_counter()
         if self.need_mt_throttling():
-            return self.start_throttling()
+            # We can't yield here, because we need this message to finish
+            # processing before it will return.
+            self.start_throttling()
 
     @inlineCallbacks
     def handle_outbound_message(self, message):
