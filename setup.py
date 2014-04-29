@@ -20,7 +20,7 @@ setup(
     install_requires=[
         'zope.interface',
         'Twisted>=12.1.0',
-        'txAMQP>=0.5',
+        'txAMQP>=0.6.2',
         'PyYAML',
         'iso8601',
         'pyOpenSSL',

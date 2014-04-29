@@ -16,7 +16,6 @@ from OpenSSL.SSL import (
 from twisted.internet.defer import (
     inlineCallbacks, fail, succeed, DeferredQueue)
 from twisted.internet.error import ProcessTerminated
-from twisted.trial.unittest import SkipTest
 from twisted.web.http_headers import Headers
 
 from vumi.application.sandbox import (
@@ -24,7 +23,8 @@ from vumi.application.sandbox import (
     SandboxResource, RedisResource, OutboundResource, JsSandboxResource,
     LoggingResource, HttpClientResource, JsSandbox, JsFileSandbox,
     HttpClientContextFactory)
-from vumi.application.tests.helpers import ApplicationHelper
+from vumi.application.tests.helpers import (
+    ApplicationHelper, find_nodejs_or_skip_test)
 from vumi.tests.utils import LogCatcher
 from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 
@@ -461,14 +461,14 @@ class TestJsSandbox(SandboxTestCaseBase, JsSandboxTestMixin):
     application_class = JsSandbox
 
     def setUp(self):
-        if JsSandbox.find_nodejs() is None:
-            raise SkipTest("No node.js executable found.")
+        self._node_path = find_nodejs_or_skip_test(self.application_class)
         super(TestJsSandbox, self).setUp()
 
     def setup_app(self, javascript_code, extra_config=None):
         extra_config = extra_config or {}
         extra_config.update({
             'javascript': javascript_code,
+            'executable': self._node_path,
         })
         return super(TestJsSandbox, self).setup_app(
             extra_config=extra_config)
@@ -479,8 +479,7 @@ class TestJsFileSandbox(SandboxTestCaseBase, JsSandboxTestMixin):
     application_class = JsFileSandbox
 
     def setUp(self):
-        if JsSandbox.find_nodejs() is None:
-            raise SkipTest("No node.js executable found.")
+        self._node_path = find_nodejs_or_skip_test(self.application_class)
         super(TestJsFileSandbox, self).setUp()
 
     def setup_app(self, javascript, extra_config=None):
@@ -492,6 +491,7 @@ class TestJsFileSandbox(SandboxTestCaseBase, JsSandboxTestMixin):
         extra_config = extra_config or {}
         extra_config.update({
             'javascript_file': tmp_file_name,
+            'executable': self._node_path,
         })
 
         return super(TestJsFileSandbox, self).setup_app(

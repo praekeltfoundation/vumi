@@ -491,7 +491,8 @@ class TestMetricsConsumer(VumiTestCase):
             ("vumi.test.v2", 3456, 2.0),
             ]
         datapoints = []
-        consumer = metrics.MetricsConsumer(lambda *v: datapoints.append(v))
+        callback = lambda *v: datapoints.append(v)
+        consumer = metrics.MetricsConsumer(None, callback)
         msg = metrics.MetricMessage()
         msg.extend(expected_datapoints)
         vumi_msg = Message.from_json(msg.to_json())

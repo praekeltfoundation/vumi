@@ -512,6 +512,9 @@ class Manager(object):
 
     DEFAULT_LOAD_BUNCH_SIZE = 100
     DEFAULT_MAPREDUCE_TIMEOUT = 4 * 60 * 1000  # in milliseconds
+    # This is a temporary measure to give us an easy way to switch back to the
+    # old mechanism if the new one causes problems.
+    USE_MAPREDUCE_BUNCH_LOADING = False
 
     def __init__(self, client, bucket_prefix, load_bunch_size=None,
                  mapreduce_timeout=None):
@@ -595,14 +598,19 @@ class Manager(object):
         raise NotImplementedError("Sub-classes of Manager should implement"
                                   " .load(...)")
 
-    def _load_bunch(self, model, keys):
+    def _load_multiple(self, cls, keys):
         """Load the model instances for a batch of keys from Riak.
 
         If a key doesn't exist, no object will be returned for it.
         """
-        assert len(keys) <= self.load_bunch_size
-        if not keys:
-            return []
+        raise NotImplementedError("Sub-classes of Manager should implement"
+                                  " ._load_multiple(...)")
+
+    def _load_bunch_mapreduce(self, model, keys):
+        """Load the model instances for a batch of keys from Riak.
+
+        If a key doesn't exist, no object will be returned for it.
+        """
         mr = self.mr_from_keys(model, keys)
         mr._riak_mapreduce_obj.map(function="""
                 function (v) {
@@ -617,6 +625,19 @@ class Manager(object):
                 """).filter_not_found()
         return self.run_map_reduce(
             mr._riak_mapreduce_obj, lambda mgr, obj: model.load(mgr, *obj))
+
+    def _load_bunch(self, model, keys):
+        """Load the model instances for a batch of keys from Riak.
+
+        If a key doesn't exist, no object will be returned for it.
+        """
+        assert len(keys) <= self.load_bunch_size
+        if not keys:
+            return []
+        if self.USE_MAPREDUCE_BUNCH_LOADING:
+            return self._load_bunch_mapreduce(model, keys)
+        else:
+            return self._load_multiple(model, keys)
 
     def load_all_bunches(self, model, keys):
         """Load batches of model instances for a list of keys from Riak.

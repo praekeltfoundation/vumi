@@ -1,7 +1,9 @@
 # -*- test-case-name: vumi.application.tests.test_test_helpers -*-
 
-from twisted.internet.defer import inlineCallbacks
+import os
 
+from twisted.internet.defer import inlineCallbacks
+from twisted.trial.unittest import SkipTest
 from zope.interface import implements
 
 from vumi.tests.helpers import (
@@ -75,3 +77,22 @@ class ApplicationHelper(object):
         config = self.mk_config(config)
         config.setdefault('transport_name', self.msg_helper.transport_name)
         return self.get_worker(cls, config, start)
+
+
+def find_nodejs_or_skip_test(worker_class):
+    """
+    Find the node.js executable by checking the ``VUMI_TEST_NODE_PATH`` envvar
+    and falling back to the provided worker's own detection method. If no
+    executable is found, :class:`SkipTest` is raised.
+    """
+    path = os.environ.get('VUMI_TEST_NODE_PATH')
+    if path is not None:
+        if os.path.isfile(path):
+            return path
+        raise RuntimeError(
+            "VUMI_TEST_NODE_PATH specified, but does not exist: %s" % (path,))
+
+    path = worker_class.find_nodejs()
+    if path is None:
+        raise SkipTest("No node.js executable found.")
+    return path
