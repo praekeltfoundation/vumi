@@ -271,9 +271,13 @@ class WeChatTransport(Transport):
 
     def mark_as_seen_recently(self, wc_msg_id):
         config = self.get_static_config()
-        return self.redis.setex(
-            self.cached_reply_key(wc_msg_id),
-            config.double_delivery_lifetime, 1)
+        key = self.cached_reply_key(wc_msg_id)
+        d = self.redis.setnx(key, 1)
+        d.addCallback(
+            lambda result: (
+                self.redis.expire(key, config.double_delivery_lifetime)
+                if result else False))
+        return d
 
     def was_seen_recently(self, wc_msg_id):
         return self.redis.exists(self.cached_reply_key(wc_msg_id))
@@ -308,7 +312,11 @@ class WeChatTransport(Transport):
         if double_delivery:
             log.msg('WeChat double delivery of message: %s' % (wc_msg.msg_id,))
             return
-        yield self.mark_as_seen_recently(wc_msg.msg_id)
+
+        lock = yield self.mark_as_seen_recently(wc_msg.msg_id)
+        if not lock:
+            log.msg('Unable to get lock for message id: %s' % (wc_msg.msg_id,))
+            return
 
         config = self.get_static_config()
         if config.embed_user_profile:
