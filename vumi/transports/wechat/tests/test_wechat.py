@@ -760,4 +760,4 @@ class TestWeChatInsanity(WeChatTestCase):
             transport2.mark_as_seen_recently('msg-id'),
             transport3.mark_as_seen_recently('msg-id'),
         ])
-        self.assertEqual(set(locks), set([1, 0]))
+        self.assertEqual(sorted(locks), [0, 0, 1])
