@@ -531,6 +531,8 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
                          message_id='bar2',
                          command_status='ESME_ROK'))
 
+        # Prod clock, message no longer throttled.
+        self.clock.advance(0)
         [ssm_pdu1_retry2] = yield smpp_helper.wait_for_pdus(1)
         yield smpp_helper.handle_pdu(
             SubmitSMResp(sequence_number=seq_no(ssm_pdu1_retry2),

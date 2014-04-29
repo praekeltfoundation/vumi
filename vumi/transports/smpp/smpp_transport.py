@@ -268,7 +268,7 @@ class SmppTransceiverTransport(Transport):
         d = self.publish_ack(message_id, smpp_message_id)
         d.addCallback(lambda _: self.delete_cached_message(message_id))
         if self.throttled:
-            d.addCallback(lambda _: self._check_stop_throttling())
+            d.addBoth(lambda _: self.check_stop_throttling(0))
         return d
 
     @inlineCallbacks
@@ -286,6 +286,8 @@ class SmppTransceiverTransport(Transport):
                 FailureMessage(message=error_message.payload,
                                failure_code=None,
                                reason=command_status))
+        if self.throttled:
+            self.check_stop_throttling(0)
 
     def handle_submit_sm_throttled(self, message_id, smpp_message_id,
                                    command_status):
@@ -293,12 +295,18 @@ class SmppTransceiverTransport(Transport):
         config = self.get_static_config()
         self._append_throttle_retry(message_id)
         if self._unthrottle_delayedCall is None:
-            self._unthrottle_delayedCall = self.clock.callLater(
-                config.throttle_delay, self._check_stop_throttling)
+            self.check_stop_throttling(config.throttle_delay)
 
     def _append_throttle_retry(self, message_id):
         if message_id not in self._throttled_message_ids:
             self._throttled_message_ids.append(message_id)
+
+    def check_stop_throttling(self, delay):
+        if self._unthrottle_delayedCall is not None:
+            # We already have one of these scheduled.
+            return
+        self._unthrottle_delayedCall = self.clock.callLater(
+            delay, self._check_stop_throttling)
 
     @inlineCallbacks
     def _check_stop_throttling(self):
@@ -336,7 +344,7 @@ class SmppTransceiverTransport(Transport):
         if message is None:
             # We can't find this message, so log it and start again.
             log.err("Could not retrieve throttled message: %s" % (message_id,))
-            yield self._check_stop_throttling()
+            self.check_stop_throttling(0)
         else:
             # Try handle this message again and leave the rest to our
             # submit_sm_resp handlers.
