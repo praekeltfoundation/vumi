@@ -497,6 +497,58 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.assertEqual(event['user_message_id'], msg['message_id'])
 
     @inlineCallbacks
+    def test_mt_sms_throttle_while_throttled(self):
+        smpp_helper = yield self.get_smpp_helper()
+        transport_config = smpp_helper.transport.get_static_config()
+        msg1 = self.tx_helper.make_outbound('hello world 1')
+        msg2 = self.tx_helper.make_outbound('hello world 2')
+
+        yield self.tx_helper.dispatch_outbound(msg1)
+        yield self.tx_helper.dispatch_outbound(msg2)
+        [ssm_pdu1, ssm_pdu2] = yield smpp_helper.wait_for_pdus(2)
+        yield smpp_helper.handle_pdu(
+            SubmitSMResp(sequence_number=seq_no(ssm_pdu1),
+                         message_id='foo1',
+                         command_status='ESME_RTHROTTLED'))
+        yield smpp_helper.handle_pdu(
+            SubmitSMResp(sequence_number=seq_no(ssm_pdu2),
+                         message_id='foo2',
+                         command_status='ESME_RTHROTTLED'))
+
+        # Advance clock, still throttled.
+        self.clock.advance(transport_config.throttle_delay)
+        [ssm_pdu1_retry1] = yield smpp_helper.wait_for_pdus(1)
+        yield smpp_helper.handle_pdu(
+            SubmitSMResp(sequence_number=seq_no(ssm_pdu1_retry1),
+                         message_id='bar1',
+                         command_status='ESME_RTHROTTLED'))
+
+        # Advance clock, message no longer throttled.
+        self.clock.advance(transport_config.throttle_delay)
+        [ssm_pdu2_retry1] = yield smpp_helper.wait_for_pdus(1)
+        yield smpp_helper.handle_pdu(
+            SubmitSMResp(sequence_number=seq_no(ssm_pdu2_retry1),
+                         message_id='bar2',
+                         command_status='ESME_ROK'))
+
+        [ssm_pdu1_retry2] = yield smpp_helper.wait_for_pdus(1)
+        yield smpp_helper.handle_pdu(
+            SubmitSMResp(sequence_number=seq_no(ssm_pdu1_retry2),
+                         message_id='baz1',
+                         command_status='ESME_ROK'))
+
+        self.assertEqual(short_message(ssm_pdu1), 'hello world 1')
+        self.assertEqual(short_message(ssm_pdu2), 'hello world 2')
+        self.assertEqual(short_message(ssm_pdu1_retry1), 'hello world 1')
+        self.assertEqual(short_message(ssm_pdu2_retry1), 'hello world 2')
+        self.assertEqual(short_message(ssm_pdu1_retry2), 'hello world 1')
+        [event2, event1] = yield self.tx_helper.wait_for_dispatched_events(2)
+        self.assertEqual(event1['event_type'], 'ack')
+        self.assertEqual(event1['user_message_id'], msg1['message_id'])
+        self.assertEqual(event2['event_type'], 'ack')
+        self.assertEqual(event2['user_message_id'], msg2['message_id'])
+
+    @inlineCallbacks
     def test_mt_sms_tps_limits(self):
         smpp_helper = yield self.get_smpp_helper(config={
             'mt_tps': 1,

@@ -158,6 +158,8 @@ class SmppTransceiverTransport(Transport):
 
         self.sequence_generator = self.sequence_class(self.redis)
         self.throttled = None
+        self._throttled_message_ids = []
+        self._unthrottle_delayedCall = None
         self.factory = self.factory_class(self)
 
         self.service = self.start_service(self.factory)
@@ -263,10 +265,10 @@ class SmppTransceiverTransport(Transport):
 
     def handle_submit_sm_success(self, message_id, smpp_message_id,
                                  command_status):
-        if self.throttled:
-            self.stop_throttling()
         d = self.publish_ack(message_id, smpp_message_id)
         d.addCallback(lambda _: self.delete_cached_message(message_id))
+        if self.throttled:
+            d.addCallback(lambda _: self._check_stop_throttling())
         return d
 
     @inlineCallbacks
@@ -285,19 +287,59 @@ class SmppTransceiverTransport(Transport):
                                failure_code=None,
                                reason=command_status))
 
-    @inlineCallbacks
     def handle_submit_sm_throttled(self, message_id, smpp_message_id,
                                    command_status):
-        config = self.get_static_config()
-        message = yield self.get_cached_message(message_id)
         self.start_throttling()
+        config = self.get_static_config()
+        self._append_throttle_retry(message_id)
+        if self._unthrottle_delayedCall is None:
+            self._unthrottle_delayedCall = self.clock.callLater(
+                config.throttle_delay, self._check_stop_throttling)
+
+    def _append_throttle_retry(self, message_id):
+        if message_id not in self._throttled_message_ids:
+            self._throttled_message_ids.append(message_id)
+
+    @inlineCallbacks
+    def _check_stop_throttling(self):
+        """
+        Check if we should stop throttling, and stop throttling if we should.
+
+        At a high level, we try each throttled message in our list until all of
+        them have been accepted by the SMSC, at which point we stop throttling.
+
+        In more detail:
+
+        We recursively process our list of throttled message_ids until either
+        we have none left (at which point we stop throttling) or we find one we
+        can successfully look up in our cache.
+
+        When we find a message we can retry, we retry it and return. We remain
+        throttled until the SMSC responds. If we're still throttled, the
+        message_id gets appended to our list and another check is scheduled for
+        later. If we're no longer throttled, this method gets called again
+        immediately.
+
+        When there are no more throttled message_ids in our list, we stop
+        throttling.
+        """
+        self._unthrottle_delayedCall = None
+
+        if not self._throttled_message_ids:
+            # We have no throttled messages waiting, so stop throttling.
+            self.stop_throttling()
+            return
+
+        message_id = self._throttled_message_ids.pop(0)
+        message = yield self.get_cached_message(message_id)
         if message is None:
-            log.err("Could not retrieve throttled message:%s" % (
-                message_id))
-            self.clock.callLater(config.throttle_delay, self.stop_throttling)
+            # We can't find this message, so log it and start again.
+            log.err("Could not retrieve throttled message:%s" % (message_id,))
+            yield self._check_stop_throttling()
         else:
-            self.clock.callLater(config.throttle_delay,
-                                 self.handle_outbound_message, message)
+            # Try handle this message again.
+            # If we get a happy response (ESME_ROK) we'll immedia
+            yield self.handle_outbound_message(message)
 
     def start_throttling(self):
         if self.throttled:
