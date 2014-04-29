@@ -337,8 +337,8 @@ class SmppTransceiverTransport(Transport):
             log.err("Could not retrieve throttled message:%s" % (message_id,))
             yield self._check_stop_throttling()
         else:
-            # Try handle this message again.
-            # If we get a happy response (ESME_ROK) we'll immedia
+            # Try handle this message again and leave the rest to our
+            # submit_sm_resp handlers.
             yield self.handle_outbound_message(message)
 
     def start_throttling(self):
