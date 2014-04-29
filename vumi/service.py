@@ -283,9 +283,6 @@ class Consumer(object):
         try:
             while self.keep_consuming:
                 message = yield self.queue.get()
-                if isinstance(message, QueueCloseMarker):
-                    self.queue = None
-                    return
                 yield self.consume(message)
         except txamqp.queue.Closed as e:
             log.err("Queue has closed", e)
@@ -300,20 +297,16 @@ class Consumer(object):
         self.keep_consuming = True
         self._read_messages()
 
-    @inlineCallbacks
     def _channel_cancel(self):
         if self._consumer_tag is None:
             raise RuntimeError("Consumer not registered.")
-        yield self.channel.basic_cancel(self._consumer_tag)
         self.queue.put(QueueCloseMarker())
-        self._consumer_tag = None
 
-    @inlineCallbacks
     def pause(self):
         self.paused = True
         if self._consumer_tag is not None:
-            yield self._channel_cancel()
-        yield self.notify_paused_and_quiet()
+            self._channel_cancel()
+        return self.notify_paused_and_quiet()
 
     def unpause(self):
         self.paused = False
@@ -333,11 +326,22 @@ class Consumer(object):
 
     @inlineCallbacks
     def consume(self, message):
+        self._check_notify()
+
+        # NOTE: This assumes we're only processing one message at a time.
+        #       That's fine, since most of this class will have to be rewritten
+        #       to change that.
+        if isinstance(message, QueueCloseMarker):
+            self.keep_consuming = False
+            yield self.channel.basic_cancel(self._consumer_tag)
+            self._consumer_tag = None
+            self.queue = None
+            return
+
         self._in_progress += 1
         result = yield self.consume_message(self.message_class.from_json(
                                             message.content.body))
         self._in_progress -= 1
-        self._check_notify()
         if self._testing:
             self.channel.message_processed()
         if result is not False:
@@ -358,7 +362,7 @@ class Consumer(object):
         log.msg("Consumer stopping...")
         self.keep_consuming = False
         if self._consumer_tag is not None:
-            yield self._channel_cancel()
+            yield self.pause()
         # This actually closes the channel on the server
         yield self.channel.channel_close()
         # This just marks the channel as closed on the client

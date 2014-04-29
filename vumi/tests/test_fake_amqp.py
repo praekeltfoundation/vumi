@@ -1,4 +1,4 @@
-from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.defer import inlineCallbacks, returnValue, DeferredQueue
 
 from vumi.service import get_spec, Worker
 from vumi.utils import vumi_resource_path
@@ -223,6 +223,70 @@ class TestFakeAMQP(VumiTestCase):
         channel.basic_consume('q2', 'tag2')
         self.assertEqual(channel._get_consumer_prefetch('tag1'), 0)
         self.assertEqual(channel._get_consumer_prefetch('tag2'), 1)
+
+    @inlineCallbacks
+    def test_basic_ack(self):
+        """
+        basic_ack() should acknowledge a message.
+        """
+        class ToyDelegate(object):
+            def __init__(self):
+                self.queue = DeferredQueue()
+
+            def basic_deliver(self, channel, msg):
+                self.queue.put(msg)
+
+        delegate = ToyDelegate()
+        channel = self.make_channel(0, delegate)
+        channel.exchange_declare('e1', 'direct')
+        channel.queue_declare('q1')
+        channel.queue_bind('q1', 'e1', 'rkey')
+        channel.basic_consume('q1', 'tag1')
+
+        self.assertEqual(len(channel.unacked), 0)
+        channel.basic_publish('e1', 'rkey', fake_amqp.mkContent('foo'))
+        msg = yield delegate.queue.get()
+        dtag = msg.delivery_tag
+        self.assertEqual(len(channel.unacked), 1)
+        channel.basic_ack(dtag, False)
+        self.assertEqual(len(channel.unacked), 0)
+
+        # Clean up.
+        channel.message_processed()
+        yield channel.broker.wait_delivery()
+
+    @inlineCallbacks
+    def test_basic_ack_consumer_canceled(self):
+        """
+        basic_ack() should fail if the consumer has been canceled.
+        """
+        class ToyDelegate(object):
+            def __init__(self):
+                self.queue = DeferredQueue()
+
+            def basic_deliver(self, channel, msg):
+                self.queue.put(msg)
+
+        delegate = ToyDelegate()
+        channel = self.make_channel(0, delegate)
+        channel.exchange_declare('e1', 'direct')
+        channel.queue_declare('q1')
+        channel.queue_bind('q1', 'e1', 'rkey')
+        channel.basic_consume('q1', 'tag1')
+
+        self.assertEqual(len(channel.unacked), 0)
+        channel.basic_publish('e1', 'rkey', fake_amqp.mkContent('foo'))
+        msg = yield delegate.queue.get()
+        dtag = msg.delivery_tag
+        self.assertEqual(len(channel.unacked), 1)
+
+        channel.basic_cancel('tag1')
+        self.assertRaises(Exception, channel.basic_ack, dtag, False)
+        self.assertEqual(len(channel.unacked), 0)
+
+        # Clean up.
+        channel.message_processed()
+        yield channel.broker.wait_delivery()
 
     @inlineCallbacks
     def test_fake_amqclient(self):

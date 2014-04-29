@@ -187,7 +187,7 @@ class FakeAMQPBroker(object):
                 dmsg = mk_deliver(msg['content'], msg['exchange'],
                                   msg['routing_key'], ctag, dtag)
                 self._delivering['count'] += 1
-                channel.deliver_message(dmsg, queue)
+                channel.deliver_message(dmsg, ctag)
                 delivered = True
         return delivered
 
@@ -340,10 +340,12 @@ class FakeAMQPChannel(object):
         return self.broker.basic_publish(exchange, routing_key, content)
 
     def basic_ack(self, delivery_tag, multiple):
-        assert delivery_tag in [d for d, _q in self.unacked]
-        for dtag, queue in self.unacked[:]:
+        assert delivery_tag in [dtag for dtag, _ctag, _queue in self.unacked]
+        for dtag, ctag, queue in self.unacked[:]:
             if multiple or (dtag == delivery_tag):
-                self.unacked.remove((dtag, queue))
+                self.unacked.remove((dtag, ctag, queue))
+                if ctag is not None and ctag not in self.consumers:
+                    raise Exception("Invalid consumer tag: %s" % (ctag,))
                 resp = self.broker.basic_ack(queue, dtag)
                 if (dtag == delivery_tag):
                     return resp
@@ -359,14 +361,15 @@ class FakeAMQPChannel(object):
             return True
         return len(self.unacked) < prefetch
 
-    def deliver_message(self, msg, queue):
-        self.unacked.append((msg.delivery_tag, queue))
+    def deliver_message(self, msg, consumer_tag):
+        self.unacked.append(
+            (msg.delivery_tag, consumer_tag, self.consumers[consumer_tag]))
         self.delegate.basic_deliver(self, msg)
 
     def basic_get(self, queue):
         dtag, msg = self.broker.basic_get(queue)
         if msg:
-            self.unacked.append((dtag, queue))
+            self.unacked.append((dtag, None, queue))
             return mk_get_ok(msg['content'], msg['exchange'],
                              msg['routing_key'], dtag)
         return Message(mkMethod("get-empty", 72))
