@@ -327,6 +327,7 @@ class SmppTransceiverTransport(Transport):
 
         if not self._throttled_message_ids:
             # We have no throttled messages waiting, so stop throttling.
+            log.msg("No more throttled messages to retry.")
             self.stop_throttling()
             return
 
@@ -334,11 +335,12 @@ class SmppTransceiverTransport(Transport):
         message = yield self.get_cached_message(message_id)
         if message is None:
             # We can't find this message, so log it and start again.
-            log.err("Could not retrieve throttled message:%s" % (message_id,))
+            log.err("Could not retrieve throttled message: %s" % (message_id,))
             yield self._check_stop_throttling()
         else:
             # Try handle this message again and leave the rest to our
             # submit_sm_resp handlers.
+            log.msg("Retrying throttled message: %s" % (message_id,))
             yield self.handle_outbound_message(message)
 
     def start_throttling(self):
