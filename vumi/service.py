@@ -320,7 +320,11 @@ class Consumer(object):
             self._channel_cancel()
         return self.notify_paused_and_quiet()
 
+    @inlineCallbacks
     def unpause(self):
+        if not self.paused:
+            return
+        yield self.notify_paused_and_quiet()
         self.paused = False
         if self._consumer_tag is None:
             self._channel_consume()
