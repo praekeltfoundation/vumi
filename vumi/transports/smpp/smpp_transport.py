@@ -294,8 +294,7 @@ class SmppTransceiverTransport(Transport):
         self.start_throttling()
         config = self.get_static_config()
         self._append_throttle_retry(message_id)
-        if self._unthrottle_delayedCall is None:
-            self.check_stop_throttling(config.throttle_delay)
+        self.check_stop_throttling(config.throttle_delay)
 
     def _append_throttle_retry(self, message_id):
         if message_id not in self._throttled_message_ids:
