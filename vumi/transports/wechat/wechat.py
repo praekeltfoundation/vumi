@@ -85,6 +85,9 @@ class WeChatConfig(Transport.CONFIG_CLASS):
     embed_user_profile_lifetime = ConfigInt(
         'How long to cache User Profiles for.', default=60*60, required=False,
         static=True)
+    double_delivery_lifetime = ConfigInt(
+        'How long to keep track of Message IDs and responses for double '
+        'delivery tracking.', default=60*60, required=False, static=True)
 
 
 class WeChatResource(Resource):
@@ -184,6 +187,8 @@ class WeChatTransport(Transport):
     ADDR_MASK_KEY = 'addr_mask'
     # What key to use when constructing the User Profile key
     USER_PROFILE_KEY = 'user_profile'
+    # What key to use when constructing the cached reply key
+    CACHED_REPLY_KEY = 'cached_reply'
 
     transport_type = 'wechat'
 
@@ -235,6 +240,11 @@ class WeChatTransport(Transport):
             user,
         ])
 
+    def cached_reply_key(self, *parts):
+        key_parts = [self.CACHED_REPLY_KEY]
+        key_parts.extend(parts)
+        return '@'.join(key_parts)
+
     def mask_addr(self, to_addr, mask):
         return '@'.join([to_addr, mask])
 
@@ -259,8 +269,60 @@ class WeChatTransport(Transport):
             EventMessage: self.handle_inbound_event_message,
         }.get(wc_msg.__class__)(request, wc_msg)
 
+    def wrap_expire(self, result, key, ttl):
+        d = self.redis.expire(key, ttl)
+        d.addCallback(lambda _: result)
+        return d
+
+    def mark_as_seen_recently(self, wc_msg_id):
+        config = self.get_static_config()
+        key = self.cached_reply_key(wc_msg_id)
+        d = self.redis.setnx(key, 1)
+        d.addCallback(
+            lambda result: (
+                self.wrap_expire(result, key, config.double_delivery_lifetime)
+                if result else False))
+        return d
+
+    def was_seen_recently(self, wc_msg_id):
+        return self.redis.exists(self.cached_reply_key(wc_msg_id))
+
+    def get_cached_reply(self, wc_msg_id):
+        return self.redis.get(self.cached_reply_key(wc_msg_id, 'reply'))
+
+    def set_cached_reply(self, wc_msg_id, reply):
+        config = self.get_static_config()
+        return self.redis.setex(
+            self.cached_reply_key(wc_msg_id, 'reply'),
+            config.double_delivery_lifetime, reply)
+
+    @inlineCallbacks
+    def check_for_double_delivery(self, request, wc_msg_id):
+        seen_recently = yield self.was_seen_recently(wc_msg_id)
+        if not seen_recently:
+            returnValue(False)
+
+        cached_reply = yield self.get_cached_reply(wc_msg_id)
+        if cached_reply:
+            # we've got a reply still lying around, just parrot that instead.
+            request.write(cached_reply)
+
+        request.finish()
+        returnValue(True)
+
     @inlineCallbacks
     def handle_inbound_text_message(self, request, wc_msg):
+        double_delivery = yield self.check_for_double_delivery(
+            request, wc_msg.msg_id)
+        if double_delivery:
+            log.msg('WeChat double delivery of message: %s' % (wc_msg.msg_id,))
+            return
+
+        lock = yield self.mark_as_seen_recently(wc_msg.msg_id)
+        if not lock:
+            log.msg('Unable to get lock for message id: %s' % (wc_msg.msg_id,))
+            return
+
         config = self.get_static_config()
         if config.embed_user_profile:
             user_profile = yield self.get_user_profile(wc_msg.from_user_name)
@@ -370,10 +432,14 @@ class WeChatTransport(Transport):
 
         d = self.publish_ack(user_message_id=message['message_id'],
                              sent_message_id=message['message_id'])
+        wc_metadata = message["transport_metadata"].get('wechat', {})
+        if wc_metadata:
+            d.addCallback(lambda _: self.set_cached_reply(
+                wc_metadata['MsgId'], wc_msg.to_xml()))
 
         if message['session_event'] == TransportUserMessage.SESSION_CLOSE:
             d.addCallback(
-                lambda ack: self.clear_addr_mask(wc_msg.to_user_name))
+                lambda _: self.clear_addr_mask(wc_msg.to_user_name))
         return d
 
     def push_message(self, wc_message, vumi_message):

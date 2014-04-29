@@ -3,9 +3,12 @@ import json
 import yaml
 from urllib import urlencode
 
-from twisted.internet.defer import inlineCallbacks, DeferredQueue, returnValue
+from twisted.internet.defer import (
+    inlineCallbacks, DeferredQueue, returnValue, gatherResults)
+from twisted.internet import task, reactor
 from twisted.web import http
 from twisted.web.server import NOT_DONE_YET
+from twisted.trial.unittest import SkipTest
 
 from vumi.tests.helpers import VumiTestCase
 from vumi.tests.utils import MockHttpServer, LogCatcher
@@ -16,6 +19,7 @@ from vumi.transports.wechat.message_types import (
     WeChatXMLParser, TextMessage)
 from vumi.utils import http_request_full
 from vumi.message import TransportUserMessage
+from vumi.persist.fake_redis import FakeRedis
 
 
 def request(transport, method, path='', params={}, data=None):
@@ -669,3 +673,91 @@ class TestWeChatEmbedUserProfile(WeChatTestCase):
                         < (yield transport.redis.ttl(up_key))
                         <= config.embed_user_profile_lifetime)
         yield resp_d
+
+
+class TestWeChatInsanity(WeChatTestCase):
+
+    @inlineCallbacks
+    def test_double_delivery_handling(self):
+        transport = yield self.get_transport_with_access_token('foo')
+
+        xml = """
+        <xml>
+        <ToUserName><![CDATA[toUser]]></ToUserName>
+        <FromUserName><![CDATA[fromUser]]></FromUserName>
+        <CreateTime>1348831860</CreateTime>
+        <MsgType><![CDATA[text]]></MsgType>
+        <Content><![CDATA[this is a test]]></Content>
+        <MsgId>1234567890123456</MsgId>
+        </xml>
+        """.strip()
+
+        resp1_d = request(transport, 'POST', data=xml)
+
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        reply_msg = yield self.tx_helper.make_dispatch_reply(
+            msg, 'foo')
+
+        resp1 = yield resp1_d
+        reply1 = WeChatXMLParser.parse(resp1.delivered_body)
+        self.assertTrue(isinstance(reply1, TextMessage))
+
+        # this one should bounce straight away
+        resp2 = yield request(transport, 'POST', data=xml)
+        self.assertEqual(resp2.code, http.OK)
+        reply2 = WeChatXMLParser.parse(resp2.delivered_body)
+        self.assertEqual(reply1.to_xml(), reply2.to_xml())
+        # Nothing new was added
+        self.assertEqual(1, len(self.tx_helper.get_dispatched_inbound()))
+
+    @inlineCallbacks
+    def test_close_double_delivery_handling(self):
+        transport = yield self.get_transport_with_access_token('foo')
+
+        xml = """
+        <xml>
+        <ToUserName><![CDATA[toUser]]></ToUserName>
+        <FromUserName><![CDATA[fromUser]]></FromUserName>
+        <CreateTime>1348831860</CreateTime>
+        <MsgType><![CDATA[text]]></MsgType>
+        <Content><![CDATA[%s]]></Content>
+        <MsgId>1234567890123456</MsgId>
+        </xml>
+        """.strip()
+
+        resp1_d = request(transport, 'POST', data=xml % ('first',))
+        resp2_d = task.deferLater(reactor, 0.1, request, transport, 'POST',
+                                  data=xml % ('second',))
+
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+
+        # the second request should return first
+        resp2 = yield resp2_d
+        self.assertEqual(resp2.code, http.OK)
+        self.assertEqual(resp2.delivered_body, '')
+
+        reply_msg = yield self.tx_helper.make_dispatch_reply(
+            msg, 'foo')
+
+        resp1 = yield resp1_d
+        reply1 = WeChatXMLParser.parse(resp1.delivered_body)
+        self.assertTrue(isinstance(reply1, TextMessage))
+
+    @inlineCallbacks
+    def test_locking(self):
+        transport1 = yield self.get_transport_with_access_token('foo')
+        transport2 = yield self.get_transport_with_access_token('foo')
+        transport3 = yield self.get_transport_with_access_token('foo')
+
+        if any([isinstance(tx.redis._client, FakeRedis)
+                for tx in [transport1, transport2, transport3]]):
+            raise SkipTest(
+                'FakeRedis setnx is not atomic. '
+                'See https://github.com/praekelt/vumi/issues/789')
+
+        locks = yield gatherResults([
+            transport1.mark_as_seen_recently('msg-id'),
+            transport2.mark_as_seen_recently('msg-id'),
+            transport3.mark_as_seen_recently('msg-id'),
+        ])
+        self.assertEqual(sorted(locks), [0, 0, 1])
