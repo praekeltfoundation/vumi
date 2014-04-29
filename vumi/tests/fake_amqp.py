@@ -141,9 +141,8 @@ class FakeAMQPBroker(object):
 
     def basic_consume(self, queue, tag):
         self._get_queue(queue).add_consumer(tag)
-        d = self.kick_delivery()
-        return d.addCallback(lambda _: Message(
-            mkMethod("consume-ok", 21), [("consumer_tag", tag)]))
+        self.kick_delivery()
+        return Message(mkMethod("consume-ok", 21), [("consumer_tag", tag)])
 
     def basic_cancel(self, tag, queue):
         if queue in self.queues:
@@ -283,18 +282,17 @@ class FakeAMQPBroker(object):
 
 
 class FakeAMQPChannel(object):
-    def __init__(self, channel_id, broker, delegate):
+    def __init__(self, channel_id, client):
         self.channel_id = channel_id
-        self.broker = broker
+        self.client = client
+        self.broker = client.broker
         self.qos_prefetch_count = 0
         self.consumers = {}
-        self.delegate = delegate
+        self.delegate = client.delegate
         self.unacked = []
-        self.flow_active = True
 
     def __repr__(self):
-        return '<FakeAMQPChannel: id=%s flow=%s>' % (
-            self.channel_id, self.flow_active)
+        return '<FakeAMQPChannel: id=%s>' % (self.channel_id,)
 
     def channel_open(self):
         return self.broker.channel_open(self)
@@ -303,11 +301,8 @@ class FakeAMQPChannel(object):
         return self.broker.channel_close(self)
 
     def channel_flow(self, active):
-        self.flow_active = active
-        if active:
-            # We've re-enabled flow, so deliver queued messages.
-            self.broker.kick_delivery()
-        return Message(mkMethod("flow-ok", 21), [('active', active)])
+        raise NotImplementedError(
+            "channel.flow() is no longer supported in RabbitMQ 3.3.0.")
 
     def close(self, _reason):
         pass
@@ -350,8 +345,6 @@ class FakeAMQPChannel(object):
                     return resp
 
     def deliverable(self):
-        if not self.flow_active:
-            return False
         if self.qos_prefetch_count < 1:
             return True
         return len(self.unacked) < self.qos_prefetch_count
@@ -482,7 +475,7 @@ class FakeAMQClient(WorkerAMQClient):
             try:
                 ch = self.channels[id]
             except KeyError:
-                ch = FakeAMQPChannel(id, self.broker, self.delegate)
+                ch = FakeAMQPChannel(id, self)
                 self.channels[id] = ch
         finally:
             self.channelLock.release()

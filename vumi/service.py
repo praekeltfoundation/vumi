@@ -113,9 +113,8 @@ class WorkerAMQClient(AMQClient):
     @inlineCallbacks
     def start_consumer(self, consumer_class, *args, **kwargs):
         channel = yield self.get_channel()
-        consumer = consumer_class(*args, **kwargs)
-        if consumer.start_paused:
-            channel.channel_flow(active=False)
+
+        consumer = consumer_class(channel, *args, **kwargs)
         consumer.vumi_options = self.vumi_options
 
         # get the details for AMQP
@@ -132,11 +131,7 @@ class WorkerAMQClient(AMQClient):
         # bind it to the exchange with the routing key
         yield channel.queue_bind(queue=queue_name, exchange=exchange_name,
                                  routing_key=routing_key)
-        # register the consumer
-        reply = yield channel.basic_consume(queue=queue_name)
-        queue = yield self.queue(reply.consumer_tag)
-        # start consuming! nom nom nom
-        consumer.start(channel, queue)
+        yield consumer.start()
         # return the newly created & consuming consumer
         returnValue(consumer)
 
@@ -262,41 +257,64 @@ class Consumer(object):
     message_class = Message
     start_paused = False
 
-    @inlineCallbacks
-    def start(self, channel, queue):
-        self._notify_paused_and_quiet = []
-        self._in_progress = 0
+    def __init__(self, channel):
         self.channel = channel
-        self.queue = queue
+        self._notify_paused_and_quiet = []
+        self.keep_consuming = False
+        self._testing = hasattr(self.channel, 'message_processed')
+        self.queue = None
+        self._consumer_tag = None
+
+    @inlineCallbacks
+    def start(self):
+        self._in_progress = 0
         self.keep_consuming = True
-        self._testing = hasattr(channel, 'message_processed')
         self.paused = self.start_paused
-
-        @inlineCallbacks
-        def read_messages():
-            log.msg("Consumer starting...")
-            try:
-                while self.keep_consuming:
-                    message = yield self.queue.get()
-                    if isinstance(message, QueueCloseMarker):
-                        log.msg("Queue closed.")
-                        return
-                    yield self.consume(message)
-            except txamqp.queue.Closed, e:
-                log.err("Queue has closed", e)
-
-        read_messages()
-        yield None
+        if not self.paused:
+            yield self._channel_consume()
         returnValue(self)
 
+    @inlineCallbacks
+    def _read_messages(self):
+        try:
+            while self.keep_consuming:
+                message = yield self.queue.get()
+                if isinstance(message, QueueCloseMarker):
+                    self.queue = None
+                    return
+                yield self.consume(message)
+        except txamqp.queue.Closed as e:
+            log.err("Queue has closed", e)
+
+    @inlineCallbacks
+    def _channel_consume(self):
+        if self._consumer_tag is not None:
+            raise RuntimeError("Consumer already registered.")
+        reply = yield self.channel.basic_consume(queue=self.queue_name)
+        self._consumer_tag = reply.consumer_tag
+        self.queue = yield self.channel.client.queue(self._consumer_tag)
+        self.keep_consuming = True
+        self._read_messages()
+
+    @inlineCallbacks
+    def _channel_cancel(self):
+        if self._consumer_tag is None:
+            raise RuntimeError("Consumer not registered.")
+        yield self.channel.basic_cancel(self._consumer_tag)
+        self.queue.put(QueueCloseMarker())
+        self._consumer_tag = None
+
+    @inlineCallbacks
     def pause(self):
         self.paused = True
-        self.channel.channel_flow(active=False)
-        return self.notify_paused_and_quiet()
+        if self._consumer_tag is not None:
+            yield self._channel_cancel()
+        yield self.notify_paused_and_quiet()
 
     def unpause(self):
         self.paused = False
-        self.channel.channel_flow(active=True)
+        if self._consumer_tag is None:
+            self._channel_consume()
 
     def notify_paused_and_quiet(self):
         d = Deferred()
@@ -335,16 +353,18 @@ class Consumer(object):
     def stop(self):
         log.msg("Consumer stopping...")
         self.keep_consuming = False
+        if self._consumer_tag is not None:
+            yield self._channel_cancel()
         # This actually closes the channel on the server
         yield self.channel.channel_close()
         # This just marks the channel as closed on the client
         self.channel.close(None)
-        self.queue.put(QueueCloseMarker())
         returnValue(self.keep_consuming)
 
 
 class DynamicConsumer(Consumer):
-    def __init__(self, callback):
+    def __init__(self, channel, callback):
+        super(DynamicConsumer, self).__init__(channel)
         self.callback = callback
 
     def consume_message(self, message):
