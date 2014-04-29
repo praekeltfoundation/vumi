@@ -208,12 +208,12 @@ class SmppTransceiverTransport(Transport):
     def check_mt_throttling(self):
         self.incr_mt_throttle_counter()
         if self.need_mt_throttling():
-            self.start_throttling()
+            return self.start_throttling()
 
     @inlineCallbacks
     def handle_outbound_message(self, message):
         if self.bind_requires_throttling():
-            self.check_mt_throttling()
+            yield self.check_mt_throttling()
         protocol = yield self.service.get_protocol()
         yield self.submit_sm_processor.handle_outbound_message(
             message, protocol)
@@ -289,9 +289,10 @@ class SmppTransceiverTransport(Transport):
         if self.throttled:
             self.check_stop_throttling(0)
 
+    @inlineCallbacks
     def handle_submit_sm_throttled(self, message_id, smpp_message_id,
                                    command_status):
-        self.start_throttling()
+        yield self.start_throttling()
         config = self.get_static_config()
         self._append_throttle_retry(message_id)
         self.check_stop_throttling(config.throttle_delay)
@@ -355,7 +356,7 @@ class SmppTransceiverTransport(Transport):
             return
         log.warning("Throttling outbound messages.")
         self.throttled = True
-        self.pause_connectors()
+        return self.pause_connectors()
 
     def stop_throttling(self):
         if not self.throttled:
