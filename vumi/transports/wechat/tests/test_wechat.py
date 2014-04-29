@@ -3,10 +3,12 @@ import json
 import yaml
 from urllib import urlencode
 
-from twisted.internet.defer import inlineCallbacks, DeferredQueue, returnValue
+from twisted.internet.defer import (
+    inlineCallbacks, DeferredQueue, returnValue, gatherResults)
 from twisted.internet import task, reactor
 from twisted.web import http
 from twisted.web.server import NOT_DONE_YET
+from twisted.trial.unittest import SkipTest
 
 from vumi.tests.helpers import VumiTestCase
 from vumi.tests.utils import MockHttpServer, LogCatcher
@@ -17,6 +19,7 @@ from vumi.transports.wechat.message_types import (
     WeChatXMLParser, TextMessage)
 from vumi.utils import http_request_full
 from vumi.message import TransportUserMessage
+from vumi.persist.fake_redis import FakeRedis
 
 
 def request(transport, method, path='', params={}, data=None):
@@ -739,3 +742,22 @@ class TestWeChatInsanity(WeChatTestCase):
         resp1 = yield resp1_d
         reply1 = WeChatXMLParser.parse(resp1.delivered_body)
         self.assertTrue(isinstance(reply1, TextMessage))
+
+    @inlineCallbacks
+    def test_locking(self):
+        transport1 = yield self.get_transport_with_access_token('foo')
+        transport2 = yield self.get_transport_with_access_token('foo')
+        transport3 = yield self.get_transport_with_access_token('foo')
+
+        if any([isinstance(tx.redis._client, FakeRedis)
+                for tx in [transport1, transport2, transport3]]):
+            raise SkipTest(
+                'FakeRedis setnx is not atomic. '
+                'See https://github.com/praekelt/vumi/issues/789')
+
+        locks = yield gatherResults([
+            transport1.mark_as_seen_recently('msg-id'),
+            transport2.mark_as_seen_recently('msg-id'),
+            transport3.mark_as_seen_recently('msg-id'),
+        ])
+        self.assertEqual(set(locks), set([1, 0]))

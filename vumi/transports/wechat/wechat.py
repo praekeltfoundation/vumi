@@ -269,13 +269,18 @@ class WeChatTransport(Transport):
             EventMessage: self.handle_inbound_event_message,
         }.get(wc_msg.__class__)(request, wc_msg)
 
+    def wrap_expire(self, result, key, ttl):
+        d = self.redis.expire(key, ttl)
+        d.addCallback(lambda _: result)
+        return d
+
     def mark_as_seen_recently(self, wc_msg_id):
         config = self.get_static_config()
         key = self.cached_reply_key(wc_msg_id)
         d = self.redis.setnx(key, 1)
         d.addCallback(
             lambda result: (
-                self.redis.expire(key, config.double_delivery_lifetime)
+                self.wrap_expire(result, key, config.double_delivery_lifetime)
                 if result else False))
         return d
 
