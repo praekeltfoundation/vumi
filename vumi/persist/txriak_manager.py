@@ -5,7 +5,7 @@
 from riakasaurus.riak import RiakClient, RiakObject, RiakMapReduce
 from riakasaurus import transport
 from twisted.internet.defer import (
-    inlineCallbacks, gatherResults, maybeDeferred, succeed)
+    inlineCallbacks, gatherResults, maybeDeferred, succeed, returnValue)
 
 from vumi.persist.model import Manager
 
@@ -25,9 +25,9 @@ class TxRiakManager(Manager):
                                        cls.DEFAULT_MAPREDUCE_TIMEOUT)
         transport_type = config.pop('transport_type', 'http')
         transport_class = {
-            'http': transport.HTTPTransport,
+            'http': StreamingMapReduceHttpTransport,
             'protocol_buffer': transport.PBCTransport,
-        }.get(transport_type, transport.HTTPTransport)
+        }.get(transport_type, StreamingMapReduceHttpTransport)
 
         host = config.get('host', '127.0.0.1')
         port = config.get('port', 8098)
@@ -132,6 +132,12 @@ class TxRiakManager(Manager):
         bucket = self.client.bucket(bucket_name)
         return bucket.enable_search()
 
+    def _run_mapreduce_nostream(self, mapreduce):
+        return mapreduce.run(timeout=self.mapreduce_timeout)
+
+    def _run_mapreduce_stream(self, mapreduce):
+        return mapreduce.run(timeout=self.mapreduce_timeout)
+
     def run_map_reduce(self, mapreduce, mapper_func=None, reducer_func=None):
         def map_results(raw_results):
             deferreds = []
@@ -139,7 +145,7 @@ class TxRiakManager(Manager):
                 deferreds.append(maybeDeferred(mapper_func, self, row))
             return gatherResults(deferreds)
 
-        mapreduce_done = mapreduce.run(timeout=self.mapreduce_timeout)
+        mapreduce_done = self._run_mapreduce_stream(mapreduce)
         if mapper_func is not None:
             mapreduce_done.addCallback(map_results)
         if reducer_func is not None:
@@ -155,3 +161,66 @@ class TxRiakManager(Manager):
                 bucket = self.client.bucket(bucket_name)
                 deferreds.append(bucket.purge_keys())
         yield gatherResults(deferreds)
+
+
+class StreamingMapReduceHttpTransport(transport.HTTPTransport):
+
+    @inlineCallbacks
+    def mapred(self, inputs, query, timeout=None):
+        """
+        Run a MapReduce query.
+
+        Pilfered from riakasaurus and modified to handle multipart data.
+        """
+        plm = yield self.phaseless_mapred()
+        if not plm and (query is None or len(query) is 0):
+            raise Exception('Phase-less MapReduce is not supported '
+                            'by this Riak node')
+
+        # Construct the job, optionally set the timeout...
+        job = {'inputs': inputs, 'query': query}
+        if timeout is not None:
+            job['timeout'] = timeout
+
+        content = self.encodeJson(job)
+
+        # Do the request...
+        url = "/%s?chunked=true" % (self.client._mapred_prefix,)
+        headers = {'Content-Type': 'application/json'}
+        response = yield self.http_request('POST', url, headers, content)
+
+        # Make sure the expected status code came back...
+        status = response[0]['http_code']
+        if status != 200:
+            self.raise_mapred_error(response[0], response[1])
+        returnValue(self.decode_chunked_response(response[0], response[1]))
+
+    def raise_mapred_error(self, headers, body):
+        raise Exception(
+            'Error running MapReduce operation. Headers: %s Body: %s' % (
+                repr(headers), repr(body)))
+
+    def decode_chunked_response(self, headers, body):
+        fake_email = "Content-Type: %s\n\n%s" % (headers['content-type'], body)
+        from email import message_from_string
+        msg = message_from_string(fake_email)
+        if msg.is_multipart():
+            return self.decode_chunks(msg.get_payload())
+
+        payload = msg.get_payload()
+        if not payload.strip():
+            # No content means no results.
+            payload = "[]"
+        result = self.decodeJson(payload)
+        if isinstance(result, dict) and 'error' in result:
+            self.raise_mapred_error(headers, body)
+
+        return result
+
+    def decode_chunks(self, chunks):
+        phase_results = {}
+        for chunk in chunks:
+            part = self.decodeJson(chunk.get_payload())
+            phase_results.setdefault(part['phase'], []).extend(part['data'])
+        # NOTE: We discard all but the last phase received.
+        return phase_results[max(phase_results.keys())]
