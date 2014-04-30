@@ -283,20 +283,9 @@ class Consumer(object):
         try:
             while self.keep_consuming:
                 message = yield self.queue.get()
-                if isinstance(message, QueueCloseMarker):
-                    break
                 yield self.consume(message)
         except txamqp.queue.Closed as e:
             log.err("Queue has closed", e)
-
-        # NOTE: This assumes we're only processing one message at a time.
-        #       That's fine, since most of this class will have to be rewritten
-        #       to change that.
-        if not self.keep_consuming:
-            yield self.channel.basic_cancel(self._consumer_tag)
-            self._consumer_tag = None
-            self.queue = None
-            self._check_notify()
 
     @inlineCallbacks
     def _channel_consume(self):
@@ -311,7 +300,6 @@ class Consumer(object):
     def _channel_cancel(self):
         if self._consumer_tag is None:
             raise RuntimeError("Consumer not registered.")
-        self.keep_consuming = False
         self.queue.put(QueueCloseMarker())
 
     def pause(self):
@@ -320,11 +308,7 @@ class Consumer(object):
             self._channel_cancel()
         return self.notify_paused_and_quiet()
 
-    @inlineCallbacks
     def unpause(self):
-        if not self.paused:
-            return
-        yield self.notify_paused_and_quiet()
         self.paused = False
         if self._consumer_tag is None:
             self._channel_consume()
@@ -336,12 +320,24 @@ class Consumer(object):
         return d
 
     def _check_notify(self):
-        if self._consumer_tag is None:
+        if self.paused and not self._in_progress:
             while self._notify_paused_and_quiet:
                 self._notify_paused_and_quiet.pop(0).callback(None)
 
     @inlineCallbacks
     def consume(self, message):
+        self._check_notify()
+
+        # NOTE: This assumes we're only processing one message at a time.
+        #       That's fine, since most of this class will have to be rewritten
+        #       to change that.
+        if isinstance(message, QueueCloseMarker):
+            self.keep_consuming = False
+            yield self.channel.basic_cancel(self._consumer_tag)
+            self._consumer_tag = None
+            self.queue = None
+            return
+
         self._in_progress += 1
         result = yield self.consume_message(self.message_class.from_json(
                                             message.content.body))
