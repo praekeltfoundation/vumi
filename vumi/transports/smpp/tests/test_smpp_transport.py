@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
 from twisted.test import proto_helpers
-from twisted.internet import reactor
 from twisted.internet.defer import (
     inlineCallbacks, returnValue, Deferred, succeed)
 from twisted.internet.error import ConnectionDone
@@ -554,7 +553,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
     @inlineCallbacks
     def test_mt_sms_tps_limits(self):
         smpp_helper = yield self.get_smpp_helper(config={
-            'mt_tps': 1,
+            'mt_tps': 2,
         })
         transport = smpp_helper.transport
 
