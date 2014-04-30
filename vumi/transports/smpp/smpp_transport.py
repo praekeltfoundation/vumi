@@ -199,7 +199,7 @@ class SmppTransceiverTransport(Transport):
         self.tps_counter += 1
 
     def need_mt_throttling(self):
-        return self.tps_counter > self.tps_limit
+        return self.tps_counter >= self.tps_limit
 
     def bind_requires_throttling(self):
         config = self.get_static_config()
