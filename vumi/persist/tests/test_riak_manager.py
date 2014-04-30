@@ -95,6 +95,17 @@ class TestRiakManager(CommonRiakManagerTests, VumiTestCase):
             'transport_type': 'http',
             'bucket_prefix': 'test.',
             })
+        from vumi.persist.riak_manager import StreamingMapReduceHttpTransport
+        self.assertEqual(type(manager.client._transport),
+                         StreamingMapReduceHttpTransport)
+
+    def test_transport_class_http_non_streaming_mapreduce(self):
+        manager_class = type(self.manager)
+        self.patch(manager_class, 'USE_STREAMING_MAPREDUCE', False)
+        manager = manager_class.from_config({
+            'transport_type': 'http',
+            'bucket_prefix': 'test.',
+            })
         from riak import RiakHttpTransport
         self.assertEqual(type(manager.client._transport), RiakHttpTransport)
 
@@ -103,8 +114,9 @@ class TestRiakManager(CommonRiakManagerTests, VumiTestCase):
         manager = manager_class.from_config({
             'bucket_prefix': 'test.',
             })
-        from riak import RiakHttpTransport
-        self.assertEqual(type(manager.client._transport), RiakHttpTransport)
+        from vumi.persist.riak_manager import StreamingMapReduceHttpTransport
+        self.assertEqual(type(manager.client._transport),
+                         StreamingMapReduceHttpTransport)
 
     @Manager.calls_manager
     def test_json_decoding(self):

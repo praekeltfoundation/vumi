@@ -6,7 +6,6 @@ import json
 
 from riak import (
     RiakClient, RiakObject, RiakMapReduce, RiakHttpTransport, RiakPbcTransport)
-from twisted.internet.defer import gatherResults
 
 from vumi.persist.model import Manager
 from vumi.utils import flatten_generator
@@ -26,10 +25,13 @@ class RiakManager(Manager):
         mapreduce_timeout = config.pop('mapreduce_timeout',
                                        cls.DEFAULT_MAPREDUCE_TIMEOUT)
         transport_type = config.pop('transport_type', 'http')
+        http_transport_class = RiakHttpTransport
+        if cls.USE_STREAMING_MAPREDUCE:
+            http_transport_class = StreamingMapReduceHttpTransport
         transport_class = {
-            'http': RiakHttpTransport,
+            'http': http_transport_class,
             'protocol_buffer': RiakPbcTransport,
-        }.get(transport_type, RiakHttpTransport)
+        }.get(transport_type, http_transport_class)
 
         host = config.get('host', '127.0.0.1')
         port = config.get('port', 8098)
@@ -126,3 +128,63 @@ class RiakManager(Manager):
                 for key in bucket.get_keys():
                     obj = bucket.get(key)
                     obj.delete()
+
+
+class StreamingMapReduceHttpTransport(RiakHttpTransport):
+    def mapred(self, inputs, query, timeout=None):
+        """
+        Run a MapReduce query.
+
+        Pilfered from riak-python 1.5.2 and modified to handle multipart data.
+        """
+        if not self.phaseless_mapred() and (query is None or len(query) is 0):
+            raise Exception(
+                'Phase-less MapReduce is not supported by Riak node')
+
+        # Construct the job, optionally set the timeout...
+        job = {'inputs': inputs, 'query': query}
+        if timeout is not None:
+            job['timeout'] = timeout
+
+        content = json.dumps(job)
+
+        # Do the request...
+        url = "/%s?chunked=true" % (self._mapred_prefix,)
+        headers = {'Content-Type': 'application/json'}
+        response = self.http_request('POST', url, headers, content)
+
+        # Make sure the expected status code came back...
+        status = response[0]['http_code']
+        if status != 200:
+            self.raise_mapred_error(response[0], response[1])
+        return self.decode_chunked_response(response[0], response[1])
+
+    def raise_mapred_error(self, headers, body):
+        raise Exception(
+            'Error running MapReduce operation. Headers: %s Body: %s' % (
+                repr(headers), repr(body)))
+
+    def decode_chunked_response(self, headers, body):
+        fake_email = "Content-Type: %s\n\n%s" % (headers['content-type'], body)
+        from email import message_from_string
+        msg = message_from_string(fake_email)
+        if msg.is_multipart():
+            return self.decode_chunks(msg.get_payload())
+
+        payload = msg.get_payload()
+        if not payload.strip():
+            # No content means no results.
+            payload = "[]"
+        result = json.loads(payload)
+        if isinstance(result, dict) and 'error' in result:
+            self.raise_mapred_error(headers, body)
+
+        return result
+
+    def decode_chunks(self, chunks):
+        phase_results = {}
+        for chunk in chunks:
+            part = json.loads(chunk.get_payload())
+            phase_results.setdefault(part['phase'], []).extend(part['data'])
+        # NOTE: We discard all but the last phase received.
+        return phase_results[max(phase_results.keys())]
