@@ -251,7 +251,8 @@ class TestSmppTransport(VumiTestCase):
         clock.advance(0.05)
         yield self.transport.redis.exists('wait for redis')
         assert_throttled_status(True, ["Heimlich"], [])
-        yield self.tx_helper.make_dispatch_outbound("Other", message_id="448")
+        # Don't wait for this, because it won't be processed until later.
+        self.tx_helper.make_dispatch_outbound("Other", message_id="448")
         assert_throttled_status(True, ["Heimlich"], [])
         # Resent
         clock.advance(0.05)
@@ -291,7 +292,8 @@ class TestSmppTransport(VumiTestCase):
         clock.advance(0.05)
         yield self.transport.redis.exists('wait for redis')
         assert_throttled_status(True, ["Heimlich"], [])
-        yield self.tx_helper.make_dispatch_outbound("Other", message_id="448")
+        # Don't wait for this, because it won't be processed until later.
+        self.tx_helper.make_dispatch_outbound("Other", message_id="448")
         assert_throttled_status(True, ["Heimlich"], [])
         # Resent
         clock.advance(0.05)

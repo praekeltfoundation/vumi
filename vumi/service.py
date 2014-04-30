@@ -272,10 +272,11 @@ class Consumer(object):
         self._in_progress = 0
         self.keep_consuming = True
         self.paused = self.start_paused
+        self._unpause_d = None
         if self.prefetch_count is not None:
             yield self.channel.basic_qos(0, self.prefetch_count, False)
         if not self.paused:
-            yield self._channel_consume()
+            yield self.unpause()
         returnValue(self)
 
     @inlineCallbacks
@@ -283,6 +284,10 @@ class Consumer(object):
         try:
             while self.keep_consuming:
                 message = yield self.queue.get()
+                if isinstance(message, QueueCloseMarker):
+                    break
+                if self.paused:
+                    yield self._unpause_d
                 yield self.consume(message)
         except txamqp.queue.Closed as e:
             log.err("Queue has closed", e)
@@ -297,21 +302,20 @@ class Consumer(object):
         self.keep_consuming = True
         self._read_messages()
 
-    def _channel_cancel(self):
-        if self._consumer_tag is None:
-            raise RuntimeError("Consumer not registered.")
-        self.queue.put(QueueCloseMarker())
-
+    @inlineCallbacks
     def pause(self):
         self.paused = True
-        if self._consumer_tag is not None:
-            self._channel_cancel()
-        return self.notify_paused_and_quiet()
+        if self._unpause_d is None:
+            self._unpause_d = Deferred()
+        yield self.notify_paused_and_quiet()
 
     def unpause(self):
         self.paused = False
+        d, self._unpause_d = self._unpause_d, None
+        if d is not None:
+            d.callback(None)
         if self._consumer_tag is None:
-            self._channel_consume()
+            return self._channel_consume()
 
     def notify_paused_and_quiet(self):
         d = Deferred()
@@ -326,18 +330,6 @@ class Consumer(object):
 
     @inlineCallbacks
     def consume(self, message):
-        self._check_notify()
-
-        # NOTE: This assumes we're only processing one message at a time.
-        #       That's fine, since most of this class will have to be rewritten
-        #       to change that.
-        if isinstance(message, QueueCloseMarker):
-            self.keep_consuming = False
-            yield self.channel.basic_cancel(self._consumer_tag)
-            self._consumer_tag = None
-            self.queue = None
-            return
-
         self._in_progress += 1
         result = yield self.consume_message(self.message_class.from_json(
                                             message.content.body))
@@ -345,24 +337,21 @@ class Consumer(object):
         if self._testing:
             self.channel.message_processed()
         if result is not False:
-            returnValue(self.ack(message))
+            yield self.channel.basic_ack(message.delivery_tag, False)
         else:
             log.msg('Received %s as a return value consume_message. '
                     'Not acknowledging AMQ message' % result)
+        self._check_notify()
 
     def consume_message(self, message):
         """helper method, override in implementation"""
         log.msg("Received message: %s" % message)
 
-    def ack(self, message):
-        self.channel.basic_ack(message.delivery_tag, True)
-
     @inlineCallbacks
     def stop(self):
         log.msg("Consumer stopping...")
         self.keep_consuming = False
-        if self._consumer_tag is not None:
-            yield self.pause()
+        yield self.pause()
         # This actually closes the channel on the server
         yield self.channel.channel_close()
         # This just marks the channel as closed on the client

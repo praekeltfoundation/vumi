@@ -331,7 +331,6 @@ class TestFakeAMQP(VumiTestCase):
         yield worker.con.pause()
         yield self.broker.wait_delivery()
         yield worker.conpub.publish_json({'message': 'bar'})
-        yield self.broker.wait_delivery()
         self.assertEqual([], worker.msgs)
 
         yield worker.con.unpause()
