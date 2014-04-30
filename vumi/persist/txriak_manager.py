@@ -24,10 +24,13 @@ class TxRiakManager(Manager):
         mapreduce_timeout = config.pop('mapreduce_timeout',
                                        cls.DEFAULT_MAPREDUCE_TIMEOUT)
         transport_type = config.pop('transport_type', 'http')
+        http_transport_class = transport.HTTPTransport
+        if cls.USE_STREAMING_MAPREDUCE:
+            http_transport_class = StreamingMapReduceHttpTransport
         transport_class = {
-            'http': StreamingMapReduceHttpTransport,
+            'http': http_transport_class,
             'protocol_buffer': transport.PBCTransport,
-        }.get(transport_type, StreamingMapReduceHttpTransport)
+        }.get(transport_type, http_transport_class)
 
         host = config.get('host', '127.0.0.1')
         port = config.get('port', 8098)
@@ -132,12 +135,6 @@ class TxRiakManager(Manager):
         bucket = self.client.bucket(bucket_name)
         return bucket.enable_search()
 
-    def _run_mapreduce_nostream(self, mapreduce):
-        return mapreduce.run(timeout=self.mapreduce_timeout)
-
-    def _run_mapreduce_stream(self, mapreduce):
-        return mapreduce.run(timeout=self.mapreduce_timeout)
-
     def run_map_reduce(self, mapreduce, mapper_func=None, reducer_func=None):
         def map_results(raw_results):
             deferreds = []
@@ -145,7 +142,7 @@ class TxRiakManager(Manager):
                 deferreds.append(maybeDeferred(mapper_func, self, row))
             return gatherResults(deferreds)
 
-        mapreduce_done = self._run_mapreduce_stream(mapreduce)
+        mapreduce_done = mapreduce.run(timeout=self.mapreduce_timeout)
         if mapper_func is not None:
             mapreduce_done.addCallback(map_results)
         if reducer_func is not None:

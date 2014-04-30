@@ -515,6 +515,9 @@ class Manager(object):
     # This is a temporary measure to give us an easy way to switch back to the
     # old mechanism if the new one causes problems.
     USE_MAPREDUCE_BUNCH_LOADING = False
+    # This is a temporary measure to give us an easy way to switch back to the
+    # old mechanism if the new one causes problems.
+    USE_STREAMING_MAPREDUCE = True
 
     def __init__(self, client, bucket_prefix, load_bunch_size=None,
                  mapreduce_timeout=None):

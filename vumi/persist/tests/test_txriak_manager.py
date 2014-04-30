@@ -215,6 +215,7 @@ class TestTxRiakManager(CommonRiakManagerTests, VumiTestCase):
             import_skip(e, 'riakasaurus', 'riakasaurus.riak')
         self.pbc_transport = transport.PBCTransport
         self.http_transport = StreamingMapReduceHttpTransport
+        self.http_transport_nostream = transport.HTTPTransport
         self.manager = TxRiakManager.from_config({'bucket_prefix': 'test.'})
         self.add_cleanup(self.manager.purge_all)
         yield self.manager.purge_all()
@@ -240,6 +241,16 @@ class TestTxRiakManager(CommonRiakManagerTests, VumiTestCase):
             })
         self.assertEqual(type(manager.client.transport),
                          self.http_transport)
+
+    def test_transport_class_http_non_streaming_mapreduce(self):
+        manager_class = type(self.manager)
+        self.patch(manager_class, 'USE_STREAMING_MAPREDUCE', False)
+        manager = manager_class.from_config({
+            'transport_type': 'http',
+            'bucket_prefix': 'test.',
+            })
+        self.assertEqual(type(manager.client.transport),
+                         self.http_transport_nostream)
 
     def test_transport_class_default(self):
         manager_class = type(self.manager)
