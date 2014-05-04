@@ -190,7 +190,7 @@ class SmppTransceiverTransport(Transport):
     def reset_mt_tps(self):
         if self.throttled and self.need_mt_throttling():
             self.reset_mt_throttle_counter()
-            self.stop_throttling()
+            self.stop_throttling(quiet=True)
 
     def reset_mt_throttle_counter(self):
         self.tps_counter = 0
@@ -210,7 +210,7 @@ class SmppTransceiverTransport(Transport):
         if self.need_mt_throttling():
             # We can't yield here, because we need this message to finish
             # processing before it will return.
-            self.start_throttling()
+            self.start_throttling(quiet=True)
 
     @inlineCallbacks
     def handle_outbound_message(self, message):
@@ -354,17 +354,23 @@ class SmppTransceiverTransport(Transport):
             log.msg("Retrying throttled message: %s" % (message_id,))
             yield self.handle_outbound_message(message)
 
-    def start_throttling(self):
+    def start_throttling(self, quiet=False):
         if self.throttled:
             return
-        log.warning("Throttling outbound messages.")
+        # We always want to log throttling messages, but we don't always want
+        # them to be warnings.
+        logger = log.msg if quiet else log.warning
+        logger("Throttling outbound messages.")
         self.throttled = True
         return self.pause_connectors()
 
-    def stop_throttling(self):
+    def stop_throttling(self, quiet=False):
         if not self.throttled:
             return
-        log.warning("No longer throttling outbound messages.")
+        # We always want to log throttling messages, but we don't always want
+        # them to be warnings.
+        logger = log.msg if quiet else log.warning
+        logger("No longer throttling outbound messages.")
         self.throttled = False
         self.unpause_connectors()
 
