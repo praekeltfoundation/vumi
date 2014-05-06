@@ -213,10 +213,25 @@ class SmppTransceiverTransport(Transport):
             self.start_throttling(quiet=True)
 
     @inlineCallbacks
+    def _check_address_valid(self, message, field):
+        addr = message[field]
+        try:
+            addr.encode('ascii')
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            yield self.publish_nack(
+                message['message_id'], u'Invalid %s: %s' % (field, addr))
+            returnValue(False)
+        returnValue(True)
+
+    @inlineCallbacks
     def handle_outbound_message(self, message):
         if self.bind_requires_throttling():
             yield self.check_mt_throttling()
         protocol = yield self.service.get_protocol()
+        if not (yield self._check_address_valid(message, 'to_addr')):
+            return
+        if not (yield self._check_address_valid(message, 'from_addr')):
+            return
         yield self.submit_sm_processor.handle_outbound_message(
             message, protocol)
         yield self.cache_message(message)
