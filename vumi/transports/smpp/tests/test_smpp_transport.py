@@ -360,6 +360,26 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.assertEqual(short_message(pdu), 'hello world')
 
     @inlineCallbacks
+    def test_mt_sms_bad_to_addr(self):
+        yield self.get_transport()
+        msg = yield self.tx_helper.make_dispatch_outbound(
+            'hello world', to_addr=u'+\u2000')
+        [event] = self.tx_helper.get_dispatched_events()
+        self.assertEqual(event['event_type'], 'nack')
+        self.assertEqual(event['user_message_id'], msg['message_id'])
+        self.assertEqual(event['nack_reason'], u'Invalid to_addr: +\u2000')
+
+    @inlineCallbacks
+    def test_mt_sms_bad_from_addr(self):
+        yield self.get_transport()
+        msg = yield self.tx_helper.make_dispatch_outbound(
+            'hello world', from_addr=u'+\u2000')
+        [event] = self.tx_helper.get_dispatched_events()
+        self.assertEqual(event['event_type'], 'nack')
+        self.assertEqual(event['user_message_id'], msg['message_id'])
+        self.assertEqual(event['nack_reason'], u'Invalid from_addr: +\u2000')
+
+    @inlineCallbacks
     def test_mt_sms_submit_sm_encoding(self):
         smpp_helper = yield self.get_smpp_helper(config={
             'submit_short_message_processor_config': {
