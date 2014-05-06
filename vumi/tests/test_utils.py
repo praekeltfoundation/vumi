@@ -46,6 +46,16 @@ class TestNormalizeMsisdn(VumiTestCase):
     def test_short_address_with_leading_plus(self):
         self.assertEqual(normalize_msisdn('+12345'), '+12345')
 
+    def test_unicode_addr_remains_unicode(self):
+        addr = normalize_msisdn(u'0761234567', '27')
+        self.assertEqual(addr, u'+27761234567')
+        self.assertTrue(isinstance(addr, unicode))
+
+    def test_str_addr_remains_str(self):
+        addr = normalize_msisdn('0761234567', '27')
+        self.assertEqual(addr, '+27761234567')
+        self.assertTrue(isinstance(addr, str))
+
 
 class TestUtils(VumiTestCase):
     def test_make_campaign_path_abs(self):
