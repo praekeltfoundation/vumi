@@ -118,6 +118,9 @@ class RiakManager(Manager):
         bucket = self.client.bucket(bucket_name)
         return bucket.enable_search()
 
+    def should_quote_index_values(self):
+        return not isinstance(self.client, RiakPbcTransport)
+
     def purge_all(self):
         buckets = self.client.get_buckets()
         for bucket_name in buckets:

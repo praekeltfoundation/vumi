@@ -146,6 +146,9 @@ class TxRiakManager(Manager):
             mapreduce_done.addCallback(lambda r: reducer_func(self, r))
         return mapreduce_done
 
+    def should_quote_index_values(self):
+        return not isinstance(self.client, transport.PBCTransport)
+
     @inlineCallbacks
     def purge_all(self):
         buckets = yield self.client.list_buckets()
