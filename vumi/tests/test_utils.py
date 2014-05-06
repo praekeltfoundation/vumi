@@ -22,20 +22,32 @@ class DummyRequest(object):
         self.prepath = prepath
 
 
-class TestUtils(VumiTestCase):
-    def test_normalize_msisdn(self):
+class TestNormalizeMsisdn(VumiTestCase):
+    def test_leading_zero(self):
         self.assertEqual(normalize_msisdn('0761234567', '27'),
                          '+27761234567')
-        self.assertEqual(normalize_msisdn('27761234567', '27'),
-                         '+27761234567')
-        self.assertEqual(normalize_msisdn('+27761234567', '27'),
-                         '+27761234567')
+
+    def test_double_leading_zero(self):
         self.assertEqual(normalize_msisdn('0027761234567', '27'),
                          '+27761234567')
+
+    def test_leading_plus(self):
+        self.assertEqual(normalize_msisdn('+27761234567', '27'),
+                         '+27761234567')
+
+    def test_no_leading_plus_or_zero(self):
+        self.assertEqual(normalize_msisdn('27761234567', '27'),
+                         '+27761234567')
+
+    def test_short_address(self):
         self.assertEqual(normalize_msisdn('1234'), '1234')
         self.assertEqual(normalize_msisdn('12345'), '12345')
+
+    def test_short_address_with_leading_plus(self):
         self.assertEqual(normalize_msisdn('+12345'), '+12345')
 
+
+class TestUtils(VumiTestCase):
     def test_make_campaign_path_abs(self):
         vumi_tests_path = os.path.dirname(__file__)
         vumi_path = os.path.dirname(os.path.dirname(vumi_tests_path))
