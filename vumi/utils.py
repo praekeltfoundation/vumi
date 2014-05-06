@@ -192,7 +192,7 @@ def normalize_msisdn(raw, country_code=''):
     if len(raw) <= 5:
         return raw
 
-    raw = ''.join([c for c in str(raw) if c.isdigit() or c == '+'])
+    raw = ''.join([c for c in raw if c.isdigit() or c == '+'])
     if raw.startswith('00'):
         return '+' + raw[2:]
     if raw.startswith('0'):
