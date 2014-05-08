@@ -176,7 +176,8 @@ class MigrationData(object):
         if index is not None:
             if index_value is None:
                 index_value = value
-            self.add_index(index, index_value)
+            if index_value is not None:
+                self.add_index(index, index_value)
 
 
 class Model(object):
