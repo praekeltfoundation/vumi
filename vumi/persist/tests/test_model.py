@@ -87,6 +87,26 @@ class VersionedModelMigrator(ModelMigrator):
         # Actual migration
         migration_data.set_value('$VERSION', 2)
         migration_data.set_value('c', migration_data.old_data['b'])
+        migration_data.set_value('text', 'hello')
+        return migration_data
+
+    def migrate_from_2(self, migration_data):
+        # Migrator assertions
+        assert self.data_version == 2
+        assert self.model_class is IndexedVersionedModel
+        assert isinstance(self.manager, Manager)
+
+        # Data assertions
+        assert set(migration_data.old_data.keys()) == set(
+            ['$VERSION', 'c', 'text'])
+        assert migration_data.old_data['$VERSION'] == 2
+        assert migration_data.old_index == {}
+
+        # Actual migration
+        migration_data.set_value('$VERSION', 3)
+        migration_data.copy_values('c')
+        migration_data.set_value(
+            'text', migration_data.old_data['text'], index='text_bin')
         return migration_data
 
 
@@ -105,10 +125,19 @@ class VersionedModel(Model):
     VERSION = 2
     MIGRATOR = VersionedModelMigrator
     c = Integer()
+    text = Unicode(null=True)
+
+
+class IndexedVersionedModel(Model):
+    VERSION = 3
+    MIGRATOR = VersionedModelMigrator
+    bucket = 'versionedmodel'
+    c = Integer()
+    text = Unicode(null=True, index=True)
 
 
 class UnknownVersionedModel(Model):
-    VERSION = 3
+    VERSION = 4
     bucket = 'versionedmodel'
     d = Integer()
 
@@ -165,6 +194,12 @@ class TestModelOnTxRiak(VumiTestCase):
             if model is not None:
                 live_keys.append(key)
         returnValue(live_keys)
+
+    def get_model_indexes(self, model):
+        indexes = {}
+        for index in model._riak_object.get_indexes():
+            indexes.setdefault(index.get_field(), []).append(index.get_value())
+        return indexes
 
     def test_simple_class(self):
         field_names = SimpleModel.field_descriptors.keys()
@@ -457,6 +492,22 @@ class TestModelOnTxRiak(VumiTestCase):
 
         keys = yield indexed_model.index_keys('b', u"one")
         self.assertEqual(sorted(keys), ["foo1", "foo2"])
+
+        keys = yield indexed_model.index_keys('b', None)
+        self.assertEqual(keys, ["foo3"])
+
+    @Manager.calls_manager
+    def test_index_keys_quoting(self):
+        indexed_model = self.manager.proxy(IndexedModel)
+        yield indexed_model("foo1", a=1, b=u"+one").save()
+        yield indexed_model("foo2", a=2, b=u"one").save()
+        yield indexed_model("foo3", a=2, b=None).save()
+
+        keys = yield indexed_model.index_keys('b', u"+one")
+        self.assertEqual(sorted(keys), ["foo1"])
+
+        keys = yield indexed_model.index_keys('b', u"one")
+        self.assertEqual(sorted(keys), ["foo2"])
 
         keys = yield indexed_model.index_keys('b', None)
         self.assertEqual(keys, ["foo3"])
@@ -906,6 +957,31 @@ class TestModelOnTxRiak(VumiTestCase):
 
         foo_new = yield new_model.load("foo")
         self.assertEqual(foo_new.c, 1)
+        self.assertEqual(foo_new.text, "hello")
+
+    @Manager.calls_manager
+    def test_version_migration_new_index(self):
+        old_model = self.manager.proxy(VersionedModel)
+        new_model = self.manager.proxy(IndexedVersionedModel)
+        foo_old = old_model("foo", c=1, text=u"hi")
+        yield foo_old.save()
+
+        foo_new = yield new_model.load("foo")
+        self.assertEqual(foo_new.c, 1)
+        self.assertEqual(foo_new.text, "hi")
+        self.assertEqual(self.get_model_indexes(foo_new), {"text_bin": ["hi"]})
+
+    @Manager.calls_manager
+    def test_version_migration_new_index_None(self):
+        old_model = self.manager.proxy(VersionedModel)
+        new_model = self.manager.proxy(IndexedVersionedModel)
+        foo_old = old_model("foo", c=1, text=None)
+        yield foo_old.save()
+
+        foo_new = yield new_model.load("foo")
+        self.assertEqual(foo_new.c, 1)
+        self.assertEqual(foo_new.text, None)
+        self.assertEqual(self.get_model_indexes(foo_new), {})
 
     @Manager.calls_manager
     def test_version_migration_failure(self):
@@ -919,7 +995,7 @@ class TestModelOnTxRiak(VumiTestCase):
             self.fail('Expected ModelMigrationError.')
         except ModelMigrationError, e:
             self.assertEqual(
-                e.args[0], 'No migrators defined for VersionedModel version 3')
+                e.args[0], 'No migrators defined for VersionedModel version 4')
 
     @Manager.calls_manager
     def test_dynamic_field_migration(self):

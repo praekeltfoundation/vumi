@@ -3,6 +3,7 @@
 """Base classes for Vumi persistence models."""
 
 from functools import wraps
+import urllib
 
 from vumi.errors import VumiError
 from vumi.persist.fields import Field, FieldDescriptor, ValidationError
@@ -175,7 +176,8 @@ class MigrationData(object):
         if index is not None:
             if index_value is None:
                 index_value = value
-            self.add_index(index, index_value)
+            if index_value is not None:
+                self.add_index(index, index_value)
 
 
 class Model(object):
@@ -664,8 +666,17 @@ class Manager(object):
         raise NotImplementedError("Sub-classes of Manager should implement"
                                   " .run_map_reduce(...)")
 
+    def should_quote_index_values(self):
+        raise NotImplementedError("Sub-classes of Manager should implement"
+                                  " .should_quote_index_values()")
+
     def index_keys(self, model, index_name, start_value, end_value=None):
         bucket = self.bucket_for_modelcls(model)
+        if self.should_quote_index_values():
+            if start_value is not None:
+                start_value = urllib.quote(start_value)
+            if end_value is not None:
+                end_value = urllib.quote(end_value)
         return bucket.get_index(index_name, start_value, end_value)
 
     def mr_from_field(self, model, field_name, start_value, end_value=None):

@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+import logging
+
 from twisted.test import proto_helpers
 from twisted.internet.defer import (
     inlineCallbacks, returnValue, Deferred, succeed)
@@ -358,6 +360,26 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.assertEqual(short_message(pdu), 'hello world')
 
     @inlineCallbacks
+    def test_mt_sms_bad_to_addr(self):
+        yield self.get_transport()
+        msg = yield self.tx_helper.make_dispatch_outbound(
+            'hello world', to_addr=u'+\u2000')
+        [event] = self.tx_helper.get_dispatched_events()
+        self.assertEqual(event['event_type'], 'nack')
+        self.assertEqual(event['user_message_id'], msg['message_id'])
+        self.assertEqual(event['nack_reason'], u'Invalid to_addr: +\u2000')
+
+    @inlineCallbacks
+    def test_mt_sms_bad_from_addr(self):
+        yield self.get_transport()
+        msg = yield self.tx_helper.make_dispatch_outbound(
+            'hello world', from_addr=u'+\u2000')
+        [event] = self.tx_helper.get_dispatched_events()
+        self.assertEqual(event['event_type'], 'nack')
+        self.assertEqual(event['user_message_id'], msg['message_id'])
+        self.assertEqual(event['nack_reason'], u'Invalid from_addr: +\u2000')
+
+    @inlineCallbacks
     def test_mt_sms_submit_sm_encoding(self):
         smpp_helper = yield self.get_smpp_helper(config={
             'submit_short_message_processor_config': {
@@ -476,10 +498,13 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
         yield self.tx_helper.dispatch_outbound(msg)
         [submit_sm_pdu] = yield smpp_helper.wait_for_pdus(1)
-        yield smpp_helper.handle_pdu(
-            SubmitSMResp(sequence_number=seq_no(submit_sm_pdu),
-                         message_id='foo',
-                         command_status='ESME_RTHROTTLED'))
+        with LogCatcher(message="Throttling outbound messages.") as lc:
+            yield smpp_helper.handle_pdu(
+                SubmitSMResp(sequence_number=seq_no(submit_sm_pdu),
+                             message_id='foo',
+                             command_status='ESME_RTHROTTLED'))
+        [logmsg] = lc.logs
+        self.assertEqual(logmsg['logLevel'], logging.WARNING)
 
         self.clock.advance(transport_config.throttle_delay)
 
@@ -496,21 +521,88 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.assertEqual(event['event_type'], 'ack')
         self.assertEqual(event['user_message_id'], msg['message_id'])
 
+        # We're still throttled until our next attempt to unthrottle finds no
+        # messages to retry.
+        with LogCatcher(message="No longer throttling outbound") as lc:
+            self.clock.advance(transport_config.throttle_delay)
+        [logmsg] = lc.logs
+        self.assertEqual(logmsg['logLevel'], logging.WARNING)
+
+    @inlineCallbacks
+    def test_mt_sms_throttle_while_throttled(self):
+        smpp_helper = yield self.get_smpp_helper()
+        transport_config = smpp_helper.transport.get_static_config()
+        msg1 = self.tx_helper.make_outbound('hello world 1')
+        msg2 = self.tx_helper.make_outbound('hello world 2')
+
+        yield self.tx_helper.dispatch_outbound(msg1)
+        yield self.tx_helper.dispatch_outbound(msg2)
+        [ssm_pdu1, ssm_pdu2] = yield smpp_helper.wait_for_pdus(2)
+        yield smpp_helper.handle_pdu(
+            SubmitSMResp(sequence_number=seq_no(ssm_pdu1),
+                         message_id='foo1',
+                         command_status='ESME_RTHROTTLED'))
+        yield smpp_helper.handle_pdu(
+            SubmitSMResp(sequence_number=seq_no(ssm_pdu2),
+                         message_id='foo2',
+                         command_status='ESME_RTHROTTLED'))
+
+        # Advance clock, still throttled.
+        self.clock.advance(transport_config.throttle_delay)
+        [ssm_pdu1_retry1] = yield smpp_helper.wait_for_pdus(1)
+        yield smpp_helper.handle_pdu(
+            SubmitSMResp(sequence_number=seq_no(ssm_pdu1_retry1),
+                         message_id='bar1',
+                         command_status='ESME_RTHROTTLED'))
+
+        # Advance clock, message no longer throttled.
+        self.clock.advance(transport_config.throttle_delay)
+        [ssm_pdu2_retry1] = yield smpp_helper.wait_for_pdus(1)
+        yield smpp_helper.handle_pdu(
+            SubmitSMResp(sequence_number=seq_no(ssm_pdu2_retry1),
+                         message_id='bar2',
+                         command_status='ESME_ROK'))
+
+        # Prod clock, message no longer throttled.
+        self.clock.advance(0)
+        [ssm_pdu1_retry2] = yield smpp_helper.wait_for_pdus(1)
+        yield smpp_helper.handle_pdu(
+            SubmitSMResp(sequence_number=seq_no(ssm_pdu1_retry2),
+                         message_id='baz1',
+                         command_status='ESME_ROK'))
+
+        self.assertEqual(short_message(ssm_pdu1), 'hello world 1')
+        self.assertEqual(short_message(ssm_pdu2), 'hello world 2')
+        self.assertEqual(short_message(ssm_pdu1_retry1), 'hello world 1')
+        self.assertEqual(short_message(ssm_pdu2_retry1), 'hello world 2')
+        self.assertEqual(short_message(ssm_pdu1_retry2), 'hello world 1')
+        [event2, event1] = yield self.tx_helper.wait_for_dispatched_events(2)
+        self.assertEqual(event1['event_type'], 'ack')
+        self.assertEqual(event1['user_message_id'], msg1['message_id'])
+        self.assertEqual(event2['event_type'], 'ack')
+        self.assertEqual(event2['user_message_id'], msg2['message_id'])
+
     @inlineCallbacks
     def test_mt_sms_tps_limits(self):
         smpp_helper = yield self.get_smpp_helper(config={
-            'mt_tps': 1,
+            'mt_tps': 2,
         })
         transport = smpp_helper.transport
 
-        msg1 = yield self.tx_helper.make_dispatch_outbound('hello world 1')
-        msg2 = yield self.tx_helper.make_dispatch_outbound('hello world 2')
+        with LogCatcher(message="Throttling outbound messages.") as lc:
+            yield self.tx_helper.make_dispatch_outbound('hello world 1')
+            yield self.tx_helper.make_dispatch_outbound('hello world 2')
+        [logmsg] = lc.logs
+        self.assertEqual(logmsg['logLevel'], logging.INFO)
 
         self.assertTrue(transport.throttled)
         [submit_sm_pdu1] = yield smpp_helper.wait_for_pdus(1)
         self.assertEqual(short_message(submit_sm_pdu1), 'hello world 1')
 
-        self.clock.advance(1)
+        with LogCatcher(message="No longer throttling outbound") as lc:
+            self.clock.advance(1)
+        [logmsg] = lc.logs
+        self.assertEqual(logmsg['logLevel'], logging.INFO)
 
         self.assertFalse(transport.throttled)
         [submit_sm_pdu2] = yield smpp_helper.wait_for_pdus(1)
