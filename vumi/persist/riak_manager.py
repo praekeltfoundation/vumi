@@ -173,7 +173,7 @@ class StreamingMapReduceHttpTransport(RiakHttpTransport):
         from email import message_from_string
         msg = message_from_string(fake_email)
         if msg.is_multipart():
-            return self.decode_chunks(msg.get_payload())
+            return self.decode_chunks(msg.get_payload(), headers, body)
 
         payload = msg.get_payload()
         if not payload.strip():
@@ -185,10 +185,12 @@ class StreamingMapReduceHttpTransport(RiakHttpTransport):
 
         return result
 
-    def decode_chunks(self, chunks):
+    def decode_chunks(self, chunks, headers, body):
         phase_results = {}
         for chunk in chunks:
             part = json.loads(chunk.get_payload())
+            if 'error' in part:
+                self.raise_mapred_error(headers, body)
             phase_results.setdefault(part['phase'], []).extend(part['data'])
         # NOTE: We discard all but the last phase received.
         return phase_results[max(phase_results.keys())]
