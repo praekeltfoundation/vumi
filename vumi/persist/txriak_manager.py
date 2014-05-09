@@ -196,6 +196,7 @@ class StreamingMapReduceHttpTransport(transport.HTTPTransport):
         returnValue(self.decode_chunked_response(response[0], response[1]))
 
     def raise_mapred_error(self, headers, body):
+        # This is the same exception raised by transport.HTTPTransport.
         raise Exception(
             'Error running MapReduce operation. Headers: %s Body: %s' % (
                 repr(headers), repr(body)))
