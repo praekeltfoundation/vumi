@@ -749,6 +749,9 @@ class HttpClientResource(SandboxResource):
         - ``data``: The payload to submit as part of the request.
         - ``files``: A dictionary, submitted as multipart/form-data
             in the request:
+
+            .. code-block:: javascript
+
                 [{
                     "field name": {
                         "file_name": "the file name",
@@ -759,7 +762,6 @@ class HttpClientResource(SandboxResource):
 
             The ``data`` field in the dictionary will be base64 decoded
             before the HTTP request is made.
-
 
     Success reply fields:
         - ``success``: Set to ``true``
