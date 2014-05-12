@@ -921,7 +921,12 @@ class DummyHTTPClient(object):
         self.agent = agent
 
     def get_context_factory(self):
-        return self.agent._contextFactory
+        try:
+            return self.agent._contextFactory
+        except AttributeError:
+            # This changed in Twisted 14.0
+            print dir(self.agent._policyForHTTPS)
+            return self.agent._policyForHTTPS._webContextFactory
 
     def fail_next(self, error):
         self._next_http_request_result = fail(error)
@@ -1166,7 +1171,9 @@ class TestHttpClientResource(ResourceTestCaseBase):
         self.assert_http_request('https://www.example.com', method='GET')
 
         ctxt = self.get_context_factory()
-        self.assertEqual(ctxt.method, SSLv23_METHOD)
+        if hasattr(ctxt, 'method'):
+            # This changed in Twisted 14.0
+            self.assertEqual(ctxt.method, SSLv23_METHOD)
 
     @inlineCallbacks
     def test_https_request_method_SSLv3(self):
