@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 """Tests for vumi.persist.model."""
 
 from datetime import datetime
@@ -973,6 +975,20 @@ class TestModelOnTxRiak(VumiTestCase):
         self.assertEqual(foo_new.c, 1)
         self.assertEqual(foo_new.text, "hi")
         self.assertEqual(self.get_model_indexes(foo_new), {"text_bin": ["hi"]})
+        self.assertEqual(foo_new.was_migrated, True)
+
+    @Manager.calls_manager
+    def test_version_migration_new_index_with_unicode(self):
+        old_model = self.manager.proxy(VersionedModel)
+        new_model = self.manager.proxy(IndexedVersionedModel)
+        foo_old = old_model("foo", c=1, text=u"hi Zoë")
+        yield foo_old.save()
+
+        foo_new = yield new_model.load("foo")
+        self.assertEqual(foo_new.c, 1)
+        self.assertEqual(foo_new.text, u"hi Zoë")
+        self.assertEqual(
+            self.get_model_indexes(foo_new), {"text_bin": ["hi Zo\xc3\xab"]})
         self.assertEqual(foo_new.was_migrated, True)
 
     @Manager.calls_manager
