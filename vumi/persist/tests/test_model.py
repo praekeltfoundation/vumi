@@ -446,6 +446,7 @@ class TestModelOnTxRiak(VumiTestCase):
         s2 = yield simple_model.load("foo")
         self.assertEqual(s2.a, 5)
         self.assertEqual(s2.b, u'3')
+        self.assertEqual(s2.was_migrated, False)
 
     @Manager.calls_manager
     def test_simple_instance_delete(self):
@@ -947,6 +948,7 @@ class TestModelOnTxRiak(VumiTestCase):
 
         foo_new = yield new_model.load("foo")
         self.assertEqual(foo_new.c, 1)
+        self.assertEqual(foo_new.was_migrated, True)
 
     @Manager.calls_manager
     def test_version_migration(self):
@@ -958,6 +960,7 @@ class TestModelOnTxRiak(VumiTestCase):
         foo_new = yield new_model.load("foo")
         self.assertEqual(foo_new.c, 1)
         self.assertEqual(foo_new.text, "hello")
+        self.assertEqual(foo_new.was_migrated, True)
 
     @Manager.calls_manager
     def test_version_migration_new_index(self):
@@ -970,6 +973,7 @@ class TestModelOnTxRiak(VumiTestCase):
         self.assertEqual(foo_new.c, 1)
         self.assertEqual(foo_new.text, "hi")
         self.assertEqual(self.get_model_indexes(foo_new), {"text_bin": ["hi"]})
+        self.assertEqual(foo_new.was_migrated, True)
 
     @Manager.calls_manager
     def test_version_migration_new_index_None(self):

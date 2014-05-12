@@ -104,20 +104,22 @@ class TxRiakManager(Manager):
         riak_object = self.riak_object(modelcls, key, result)
         d = succeed(riak_object) if result else riak_object.reload()
 
-        def build_model_object(riak_object):
+        def build_model_object(riak_object, was_migrated):
             if riak_object.get_data() is None:
                 return None
 
             data_version = riak_object.get_data().get('$VERSION', None)
             if data_version == modelcls.VERSION:
-                return modelcls(self, key, _riak_object=riak_object)
+                obj = modelcls(self, key, _riak_object=riak_object)
+                obj.was_migrated = was_migrated
+                return obj
 
             migrator = modelcls.MIGRATOR(modelcls, self, data_version)
             md = maybeDeferred(migrator, riak_object)
             md.addCallback(lambda mdata: mdata.get_riak_object())
-            return md.addCallback(build_model_object)
+            return md.addCallback(build_model_object, was_migrated=True)
 
-        return d.addCallback(build_model_object)
+        return d.addCallback(build_model_object, was_migrated=False)
 
     def _load_multiple(self, modelcls, keys):
         d = gatherResults([self.load(modelcls, key) for key in keys])

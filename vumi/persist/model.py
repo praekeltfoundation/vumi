@@ -213,6 +213,7 @@ class Model(object):
                                   " to model %s" % (field_values.keys(),
                                                     self.__class__))
         self.clean()
+        self.was_migrated = False
 
     def __repr__(self):
         str_items = ["%s=%r" % item for item
