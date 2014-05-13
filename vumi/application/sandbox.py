@@ -712,21 +712,71 @@ class LoggingResource(SandboxResource):
         return self.handle_log(api, command, level=logging.CRITICAL)
 
 
-class HttpClientContextFactory(WebClientContextFactory):
+try:
+    from twisted.web.client import BrowserLikePolicyForHTTPS
+    from twisted.internet.ssl import optionsForClientTLS
 
-    def __init__(self, verify_options=None, method=None):
+    class HttpClientPolicyForHTTPS(BrowserLikePolicyForHTTPS):
+        """
+        This client policy is used if we have Twisted 14.0.0 or newer and are
+        not explicitly disabling host verification.
+        """
+        def __init__(self, ssl_method=None):
+            super(HttpClientPolicyForHTTPS, self).__init__()
+            self.ssl_method = ssl_method
+
+        def creatorForNetloc(self, hostname, port):
+            options = {}
+            if self.ssl_method is not None:
+                options['method'] = self.ssl_method
+            return optionsForClientTLS(
+                hostname.decode("ascii"), extraCertificateOptions=options)
+
+except ImportError:
+    HttpClientPolicyForHTTPS = None
+
+
+class HttpClientContextFactory(object):
+    """
+    This context factory is used if we have a Twisted version older than 14.0.0
+    or if we are explicitly disabling host verification.
+    """
+    def __init__(self, verify_options=None, ssl_method=None):
         self.verify_options = verify_options
-        if method is not None:
-            self.method = method
-
-    def verify_callback(self, conn, cert, errno, errdepth, ok):
-        return ok
+        self.ssl_method = ssl_method
 
     def getContext(self, hostname, port):
-        context = WebClientContextFactory.getContext(self, hostname, port)
+        context = self._get_noverify_context()
+
+        if self.verify_options in (None, VERIFY_NONE):
+            # We don't want to do anything with verification here.
+            return context
+
         if self.verify_options is not None:
-            context.set_verify(self.verify_options, self.verify_callback)
+            def verify_callback(conn, cert, errno, errdepth, ok):
+                return ok
+            context.set_verify(self.verify_options, verify_callback)
         return context
+
+    def _get_noverify_context(self):
+        """
+        Use ClientContextFactory directly and set the method if necessary.
+
+        This will perform no host verification at all.
+        """
+        from twisted.internet.ssl import ClientContextFactory
+        context_factory = ClientContextFactory()
+        if self.ssl_method is not None:
+            context_factory.method = self.ssl_method
+        return context_factory.getContext()
+
+
+def make_context_factory(ssl_method=None, verify_options=None):
+    if HttpClientPolicyForHTTPS is None or verify_options == VERIFY_NONE:
+        return HttpClientContextFactory(
+            verify_options=verify_options, ssl_method=ssl_method)
+    else:
+        return HttpClientPolicyForHTTPS(ssl_method=ssl_method)
 
 
 class HttpClientResource(SandboxResource):
@@ -824,8 +874,8 @@ class HttpClientResource(SandboxResource):
         else:
             ssl_method = None
 
-        context_factory = HttpClientContextFactory(
-            verify_options=verify_options, method=ssl_method)
+        context_factory = make_context_factory(
+            verify_options=verify_options, ssl_method=ssl_method)
 
         headers = command.get('headers', None)
         data = command.get('data', None)

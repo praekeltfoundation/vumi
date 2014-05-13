@@ -22,7 +22,7 @@ from vumi.application.sandbox import (
     Sandbox, SandboxApi, SandboxCommand, SandboxResources,
     SandboxResource, RedisResource, OutboundResource, JsSandboxResource,
     LoggingResource, HttpClientResource, JsSandbox, JsFileSandbox,
-    HttpClientContextFactory)
+    HttpClientContextFactory, HttpClientPolicyForHTTPS, make_context_factory)
 from vumi.application.tests.helpers import (
     ApplicationHelper, find_nodejs_or_skip_test)
 from vumi.tests.utils import LogCatcher
@@ -921,7 +921,11 @@ class DummyHTTPClient(object):
         self.agent = agent
 
     def get_context_factory(self):
-        return self.agent._contextFactory
+        # This test's behaviour depends on the version of Twisted being used.
+        if HttpClientPolicyForHTTPS is None:
+            return self.agent._contextFactory
+        else:
+            return self.agent._policyForHTTPS
 
     def fail_next(self, error):
         self._next_http_request_result = fail(error)
@@ -975,6 +979,26 @@ class TestHttpClientResource(ResourceTestCaseBase):
     def get_context_factory(self):
         return self.dummy_client.get_context_factory()
 
+    def get_context(self, context_factory=None):
+        if context_factory is None:
+            context_factory = self.get_context_factory()
+        if hasattr(context_factory, 'creatorForNetloc'):
+            # This context_factory is a new-style IPolicyForHTTPS
+            # implementation, so we need to get a context from through its
+            # client connection creator. The creator could either be a wrapper
+            # around a ClientContextFactory (in which case we treat it like
+            # one) or a ClientTLSOptions object (which means we have to grab
+            # the context from a private attribute).
+            creator = context_factory.creatorForNetloc('example.com', 80)
+            if hasattr(creator, 'getContext'):
+                return creator.getContext()
+            else:
+                return creator._ctx
+        else:
+            # This context_factory is an old-style WebClientContextFactory and
+            # will build us a context object if we ask nicely.
+            return context_factory.getContext('example.com', 80)
+
     def assert_http_request(self, url, method='GET', headers=None, data=None,
                             timeout=None, files=None):
         timeout = (timeout if timeout is not None
@@ -983,9 +1007,6 @@ class TestHttpClientResource(ResourceTestCaseBase):
         kw = dict(headers=headers, data=data,
                   timeout=timeout, files=files)
         [(actual_args, actual_kw)] = self.dummy_client.http_requests
-        context_factory = self.dummy_client.get_context_factory()
-        self.assertTrue(isinstance(context_factory,
-                                   HttpClientContextFactory))
 
         # NOTE: Files are handed over to treq as file pointer-ish things
         #       which in our case are `StringIO` instances.
@@ -1010,6 +1031,78 @@ class TestHttpClientResource(ResourceTestCaseBase):
                 self.assert_not_unicode(key)
                 for value in values:
                     self.assert_not_unicode(value)
+
+    def test_make_context_factory_no_method_verify_none(self):
+        context_factory = make_context_factory(verify_options=VERIFY_NONE)
+        self.assertIsInstance(context_factory, HttpClientContextFactory)
+        self.assertEqual(context_factory.verify_options, VERIFY_NONE)
+        self.assertEqual(context_factory.ssl_method, None)
+        self.assertEqual(
+            self.get_context(context_factory).get_verify_mode(), VERIFY_NONE)
+
+    def test_make_context_factory_sslv3_verify_none(self):
+        context_factory = make_context_factory(
+            verify_options=VERIFY_NONE, ssl_method=SSLv3_METHOD)
+        self.assertIsInstance(context_factory, HttpClientContextFactory)
+        self.assertEqual(context_factory.verify_options, VERIFY_NONE)
+        self.assertEqual(context_factory.ssl_method, SSLv3_METHOD)
+        self.assertEqual(
+            self.get_context(context_factory).get_verify_mode(), VERIFY_NONE)
+
+    def test_make_context_factory_no_method_verify_peer(self):
+        # This test's behaviour depends on the version of Twisted being used.
+        context_factory = make_context_factory(verify_options=VERIFY_PEER)
+        context = self.get_context(context_factory)
+        self.assertEqual(context_factory.ssl_method, None)
+        self.assertNotEqual(context.get_verify_mode(), VERIFY_NONE)
+        if HttpClientPolicyForHTTPS is None:
+            # We have Twisted<14.0.0
+            self.assertIsInstance(context_factory, HttpClientContextFactory)
+            self.assertEqual(context_factory.verify_options, VERIFY_PEER)
+            self.assertEqual(context.get_verify_mode(), VERIFY_PEER)
+        else:
+            self.assertIsInstance(context_factory, HttpClientPolicyForHTTPS)
+
+    def test_make_context_factory_no_method_verify_peer_or_fail(self):
+        # This test's behaviour depends on the version of Twisted being used.
+        context_factory = make_context_factory(
+            verify_options=(VERIFY_PEER | VERIFY_FAIL_IF_NO_PEER_CERT))
+        context = self.get_context(context_factory)
+        self.assertEqual(context_factory.ssl_method, None)
+        self.assertNotEqual(context.get_verify_mode(), VERIFY_NONE)
+        if HttpClientPolicyForHTTPS is None:
+            # We have Twisted<14.0.0
+            self.assertIsInstance(context_factory, HttpClientContextFactory)
+            self.assertEqual(
+                context_factory.verify_options,
+                VERIFY_PEER | VERIFY_FAIL_IF_NO_PEER_CERT)
+            self.assertEqual(
+                context.get_verify_mode(),
+                VERIFY_PEER | VERIFY_FAIL_IF_NO_PEER_CERT)
+        else:
+            self.assertIsInstance(context_factory, HttpClientPolicyForHTTPS)
+
+    def test_make_context_factory_no_method_no_verify(self):
+        # This test's behaviour depends on the version of Twisted being used.
+        context_factory = make_context_factory()
+        self.assertEqual(context_factory.ssl_method, None)
+        if HttpClientPolicyForHTTPS is None:
+            # We have Twisted<14.0.0
+            self.assertIsInstance(context_factory, HttpClientContextFactory)
+            self.assertEqual(context_factory.verify_options, None)
+        else:
+            self.assertIsInstance(context_factory, HttpClientPolicyForHTTPS)
+
+    def test_make_context_factory_sslv3_no_verify(self):
+        # This test's behaviour depends on the version of Twisted being used.
+        context_factory = make_context_factory(ssl_method=SSLv3_METHOD)
+        self.assertEqual(context_factory.ssl_method, SSLv3_METHOD)
+        if HttpClientPolicyForHTTPS is None:
+            # We have Twisted<14.0.0
+            self.assertIsInstance(context_factory, HttpClientContextFactory)
+            self.assertEqual(context_factory.verify_options, None)
+        else:
+            self.assertIsInstance(context_factory, HttpClientPolicyForHTTPS)
 
     @inlineCallbacks
     def test_handle_get(self):
@@ -1073,6 +1166,7 @@ class TestHttpClientResource(ResourceTestCaseBase):
 
     @inlineCallbacks
     def test_https_request(self):
+        # This test's behaviour depends on the version of Twisted being used.
         self.http_request_succeed("foo")
         reply = yield self.dispatch_command('get',
                                             url='https://www.example.com')
@@ -1080,8 +1174,13 @@ class TestHttpClientResource(ResourceTestCaseBase):
         self.assertEqual(reply['body'], "foo")
         self.assert_http_request('https://www.example.com', method='GET')
 
-        ctxt = self.get_context_factory()
-        self.assertEqual(ctxt.verify_options, None)
+        context_factory = self.get_context_factory()
+        self.assertEqual(context_factory.ssl_method, None)
+        if HttpClientPolicyForHTTPS is None:
+            self.assertIsInstance(context_factory, HttpClientContextFactory)
+            self.assertEqual(context_factory.verify_options, None)
+        else:
+            self.assertIsInstance(context_factory, HttpClientPolicyForHTTPS)
 
     @inlineCallbacks
     def test_https_request_verify_none(self):
@@ -1093,11 +1192,12 @@ class TestHttpClientResource(ResourceTestCaseBase):
         self.assertEqual(reply['body'], "foo")
         self.assert_http_request('https://www.example.com', method='GET')
 
-        ctxt = self.get_context_factory()
-        self.assertEqual(ctxt.verify_options, VERIFY_NONE)
+        context = self.get_context()
+        self.assertEqual(context.get_verify_mode(), VERIFY_NONE)
 
     @inlineCallbacks
     def test_https_request_verify_peer_or_fail(self):
+        # This test's behaviour depends on the version of Twisted being used.
         self.http_request_succeed("foo")
         reply = yield self.dispatch_command(
             'get', url='https://www.example.com',
@@ -1106,10 +1206,13 @@ class TestHttpClientResource(ResourceTestCaseBase):
         self.assertEqual(reply['body'], "foo")
         self.assert_http_request('https://www.example.com', method='GET')
 
-        ctxt = self.get_context_factory()
-        self.assertEqual(
-            ctxt.verify_options,
-            VERIFY_PEER | VERIFY_FAIL_IF_NO_PEER_CERT)
+        context = self.get_context()
+        # We don't control verify mode in newer Twisted.
+        self.assertNotEqual(context.get_verify_mode(), VERIFY_NONE)
+        if HttpClientPolicyForHTTPS is None:
+            self.assertEqual(
+                context.get_verify_mode(),
+                VERIFY_PEER | VERIFY_FAIL_IF_NO_PEER_CERT)
 
     @inlineCallbacks
     def test_handle_post_files(self):
@@ -1165,8 +1268,8 @@ class TestHttpClientResource(ResourceTestCaseBase):
         self.assertEqual(reply['body'], "foo")
         self.assert_http_request('https://www.example.com', method='GET')
 
-        ctxt = self.get_context_factory()
-        self.assertEqual(ctxt.method, SSLv23_METHOD)
+        context_factory = self.get_context_factory()
+        self.assertEqual(context_factory.ssl_method, None)
 
     @inlineCallbacks
     def test_https_request_method_SSLv3(self):
@@ -1177,8 +1280,8 @@ class TestHttpClientResource(ResourceTestCaseBase):
         self.assertEqual(reply['body'], "foo")
         self.assert_http_request('https://www.example.com', method='GET')
 
-        ctxt = self.get_context_factory()
-        self.assertEqual(ctxt.method, SSLv3_METHOD)
+        context_factory = self.get_context_factory()
+        self.assertEqual(context_factory.ssl_method, SSLv3_METHOD)
 
     @inlineCallbacks
     def test_https_request_method_SSLv23(self):
@@ -1189,8 +1292,8 @@ class TestHttpClientResource(ResourceTestCaseBase):
         self.assertEqual(reply['body'], "foo")
         self.assert_http_request('https://www.example.com', method='GET')
 
-        ctxt = self.get_context_factory()
-        self.assertEqual(ctxt.method, SSLv23_METHOD)
+        context_factory = self.get_context_factory()
+        self.assertEqual(context_factory.ssl_method, SSLv23_METHOD)
 
     @inlineCallbacks
     def test_https_request_method_TLSv1(self):
@@ -1201,5 +1304,5 @@ class TestHttpClientResource(ResourceTestCaseBase):
         self.assertEqual(reply['body'], "foo")
         self.assert_http_request('https://www.example.com', method='GET')
 
-        ctxt = self.get_context_factory()
-        self.assertEqual(ctxt.method, TLSv1_METHOD)
+        context_factory = self.get_context_factory()
+        self.assertEqual(context_factory.ssl_method, TLSv1_METHOD)
