@@ -5,10 +5,14 @@ python:
 node_js:
   - "0.10"
 env:
-  # Test against the earliest Twisted version we support and the most recent
-  # version.
-  - TWISTED_VERSION="Twisted==13.1.0"
+  # Test against the latest version of Twisted.
   - TWISTED_VERSION="Twisted"
+matrix:
+  include:
+    # Test against the oldest version of Twisted that we claim to support
+    # This is a separate matrix inclusion to avoid spawning unnecessary builds.
+    - python: "2.7"
+      env: TWISTED_VERSION="Twisted==13.1.0"
 services:
   - riak
   - redis-server
