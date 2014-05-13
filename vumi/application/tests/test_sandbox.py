@@ -983,12 +983,20 @@ class TestHttpClientResource(ResourceTestCaseBase):
         if context_factory is None:
             context_factory = self.get_context_factory()
         if hasattr(context_factory, 'creatorForNetloc'):
+            # This context_factory is a new-style IPolicyForHTTPS
+            # implementation, so we need to get a context from through its
+            # client connection creator. The creator could either be a wrapper
+            # around a ClientContextFactory (in which case we treat it like
+            # one) or a ClientTLSOptions object (which means we have to grab
+            # the context from a private attribute).
             creator = context_factory.creatorForNetloc('example.com', 80)
             if hasattr(creator, 'getContext'):
                 return creator.getContext()
             else:
                 return creator._ctx
         else:
+            # This context_factory is an old-style WebClientContextFactory and
+            # will build us a context object if we ask nicely.
             return context_factory.getContext('example.com', 80)
 
     def assert_http_request(self, url, method='GET', headers=None, data=None,
