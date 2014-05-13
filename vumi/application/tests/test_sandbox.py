@@ -925,6 +925,7 @@ class DummyHTTPClient(object):
             return self.agent._contextFactory
         except AttributeError:
             # This changed in Twisted 14.0
+            print dir(self.agent._policyForHTTPS)
             return self.agent._policyForHTTPS._webContextFactory
 
     def fail_next(self, error):
