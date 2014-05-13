@@ -19,7 +19,7 @@ setup(
     include_package_data=True,
     install_requires=[
         'zope.interface',
-        'Twisted>=12.1.0,<14.0',  # Can't use 14.0 until we sort out SSL stuff.
+        'Twisted>=13.1.0',
         'txAMQP>=0.6.2',
         'PyYAML',
         'iso8601',

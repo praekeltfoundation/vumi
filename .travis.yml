@@ -4,11 +4,17 @@ python:
   - "2.7"
 node_js:
   - "0.10"
+env:
+  # Test against the earliest Twisted version we support and the most recent
+  # version.
+  - TWISTED_VERSION="Twisted==13.1.0"
+  - TWISTED_VERSION="Twisted"
 services:
   - riak
   - redis-server
 install:
   # We easy_install a binary riak_pb package because pip install needs `protoc'.
+  - "pip install ${TWISTED_VERSION}"
   - "easy_install 'riak_pb<1.3.0'"
   - "pip install -r requirements.pip --use-wheel"
   - "pip install coveralls --use-wheel"
