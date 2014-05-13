@@ -159,6 +159,8 @@ class MigrationData(object):
             index = ''
         else:
             index = str(index)
+        if isinstance(value, unicode):
+            value = value.encode('utf-8')
         self.new_index.setdefault(index, []).append(value)
 
     def clear_index(self, index):
