@@ -440,6 +440,8 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         [submit_sm] = yield smpp_helper.wait_for_pdus(1)
         response = SubmitSMResp(seq_no(submit_sm), "3rd_party_id_3",
                                 command_status="ESME_RSUBMITFAIL")
+        # A failure PDU might not have a body.
+        response.obj.pop('body')
         smpp_helper.send_pdu(response)
 
         # There should be a nack
