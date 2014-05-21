@@ -200,7 +200,7 @@ class EsmeTransceiver(Protocol):
         :param smpp.pdu_builder.PDU pdu:
             The PDU object to send.
         """
-        self.emit('<< %r' % (pdu.get_obj(),))
+        self.emit('OUTGOING >> %r' % (pdu.get_obj(),))
         return self.transport.write(pdu.get_bin())
 
     def dataReceived(self, data):
@@ -226,7 +226,7 @@ class EsmeTransceiver(Protocol):
             The dict result one gets when calling ``smpp.pdu.unpack_pdu()``
             on the received PDU
         """
-        self.emit('>> %r' % (pdu,))
+        self.emit('INCOMING << %r' % (pdu,))
         handler = getattr(self, 'handle_%s' % (command_id(pdu),),
                           self.on_unsupported_command_id)
         return maybeDeferred(handler, pdu)
@@ -364,23 +364,18 @@ class EsmeTransceiver(Protocol):
                   vumi_message_id,
                   destination_addr,
                   source_addr='',
-                  service_type='',
-                  source_addr_ton=0,
-                  source_addr_npi=0,
-                  dest_addr_ton=0,
-                  dest_addr_npi=1,
                   esm_class=0,
                   protocol_id=0,
                   priority_flag=0,
                   schedule_delivery_time='',
                   validity_period='',
-                  registered_delivery=1,
                   replace_if_present=0,
                   data_coding=0,
                   sm_default_msg_id=0,
                   sm_length=0,
                   short_message='',
-                  optional_parameters=None
+                  optional_parameters=None,
+                  **configured_parameters
                   ):
         """
         Put a `submit_sm` command on the wire.
@@ -448,27 +443,31 @@ class EsmeTransceiver(Protocol):
         :rtype: list
 
         """
+        configured_param_values = {
+            'service_type': self.config.service_type,
+            'source_addr_ton': self.config.source_addr_ton,
+            'source_addr_npi': self.config.source_addr_npi,
+            'dest_addr_ton': self.config.dest_addr_ton,
+            'dest_addr_npi': self.config.dest_addr_npi,
+            'registered_delivery': self.config.registered_delivery,
+        }
+        configured_param_values.update(configured_parameters)
         sequence_number = yield self.sequence_generator.next()
         pdu = SubmitSM(
             sequence_number=sequence_number,
             source_addr=source_addr,
             destination_addr=destination_addr,
-            service_type=service_type,
-            source_addr_ton=source_addr_ton,
-            source_addr_npi=source_addr_npi,
-            dest_addr_ton=dest_addr_ton,
-            dest_addr_npi=dest_addr_npi,
             esm_class=esm_class,
             protocol_id=protocol_id,
             priority_flag=priority_flag,
             schedule_delivery_time=schedule_delivery_time,
             validity_period=validity_period,
-            registered_delivery=registered_delivery,
             replace_if_present=replace_if_present,
             data_coding=data_coding,
             sm_default_msg_id=sm_default_msg_id,
             sm_length=sm_length,
-            short_message=short_message)
+            short_message=short_message,
+            **configured_param_values)
 
         if optional_parameters:
             for key, value in optional_parameters.items():
