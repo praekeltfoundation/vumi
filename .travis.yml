@@ -13,16 +13,21 @@ matrix:
     # This is a separate matrix inclusion to avoid spawning unnecessary builds.
     - python: "2.7"
       env: TWISTED_VERSION="Twisted==13.1.0"
+cache:
+  directories:
+    - wheelhouse
 services:
   - riak
   - redis-server
+before_install:
+  - sudo apt-get install -y protobuf-compiler
 install:
-  # We easy_install a binary riak_pb package because pip install needs `protoc'.
-  - "pip install ${TWISTED_VERSION}"
-  - "easy_install 'riak_pb<1.3.0'"
-  - "pip install -r requirements.pip --use-wheel"
-  - "pip install coveralls --use-wheel"
-  - "python setup.py install"
+  - "mkdir wheelhouse"
+  - "pip install wheel"
+  - "pip wheel --find-links=wheelhouse --wheel-dir=wheelhouse ${TWISTED_VERSION} coveralls"
+  - "pip wheel --find-links=wheelhouse --wheel-dir=wheelhouse -r requirements.pip"
+  - "pip install --use-wheel --find-links=wheelhouse ${TWISTED_VERSION} coveralls"
+  - "pip install --use-wheel --find-links=wheelhouse -r requirements.pip --use-wheel"
 script:
   - VUMITEST_REDIS_DB=1 VUMI_TEST_NODE_PATH="$(which node)" coverage run --source=vumi `which trial` vumi
 after_success:
