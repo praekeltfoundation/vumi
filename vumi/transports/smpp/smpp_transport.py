@@ -474,7 +474,7 @@ class SmppTransceiverTransportWithOldConfig(SmppTransceiverTransport):
 
         cfg = super(
             SmppTransceiverTransportWithOldConfig, self).get_static_config()
-        original = cfg._config_data.original.copy()
+        original = cfg._config_data.copy()
         config = convert_to_new_config(
             original,
             'vumi.transports.smpp.processors.DeliveryReportProcessor',
