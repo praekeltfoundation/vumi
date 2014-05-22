@@ -25,7 +25,7 @@ install:
   - "mkdir wheelhouse"
   - "pip install wheel"
   - "pip wheel --find-links=wheelhouse --wheel-dir=wheelhouse ${TWISTED_VERSION} coveralls"
-  - "pip wheel --find-links=wheelhouse --wheel-dir=wheelhouse -e ."
+  - "pip wheel --find-links=wheelhouse --wheel-dir=wheelhouse ."
   - "pip install --use-wheel --find-links=wheelhouse ${TWISTED_VERSION} coveralls"
   - "pip install --use-wheel --find-links=wheelhouse -r requirements.pip"
 script:
