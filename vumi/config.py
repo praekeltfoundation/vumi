@@ -123,6 +123,7 @@ from confmodel.config import (
     Config, ConfigField, ConfigInt, ConfigFloat, ConfigBool, ConfigList,
     ConfigDict, ConfigUrl, ConfigRegex)
 from confmodel.errors import ConfigError
+from confmodel.interfaces import IConfigData
 
 Config
 ConfigField
@@ -134,3 +135,4 @@ ConfigDict
 ConfigUrl
 ConfigRegex
 ConfigError
+IConfigData
