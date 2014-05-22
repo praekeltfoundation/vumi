@@ -25,9 +25,9 @@ install:
   - "mkdir wheelhouse"
   - "pip install wheel"
   - "pip wheel --find-links=wheelhouse --wheel-dir=wheelhouse ${TWISTED_VERSION} coveralls"
-  - "pip wheel --find-links=wheelhouse --wheel-dir=wheelhouse -r requirements.pip"
+  - "pip wheel --find-links=wheelhouse --wheel-dir=wheelhouse -e ."
   - "pip install --use-wheel --find-links=wheelhouse ${TWISTED_VERSION} coveralls"
-  - "pip install --use-wheel --find-links=wheelhouse -r requirements.pip --use-wheel"
+  - "pip install --use-wheel --find-links=wheelhouse -r requirements.pip"
 script:
   - VUMITEST_REDIS_DB=1 VUMI_TEST_NODE_PATH="$(which node)" coverage run --source=vumi `which trial` vumi
 after_success:
