@@ -130,7 +130,7 @@ ConfigField
 ConfigInt
 ConfigFloat
 ConfigBool
-ConfigList,
+ConfigList
 ConfigDict
 ConfigUrl
 ConfigRegex
