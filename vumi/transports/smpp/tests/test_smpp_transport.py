@@ -157,6 +157,16 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.assertTrue(protocol.is_bound())
 
     @inlineCallbacks
+    def test_setup_transport_host_port_fallback(self):
+        self.default_config.pop('twisted_endpoint')
+        transport = yield self.get_transport({
+            'host': '127.0.0.1',
+            'port': 0,
+        })
+        protocol = yield transport.service.get_protocol()
+        self.assertTrue(protocol.is_bound())
+
+    @inlineCallbacks
     def test_mo_sms(self):
         smpp_helper = yield self.get_smpp_helper()
         smpp_helper.send_mo(

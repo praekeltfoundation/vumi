@@ -1,6 +1,6 @@
 from vumi.config import (
     ConfigText, ConfigInt, ConfigBool, ConfigClientEndpoint, ConfigDict,
-    ConfigFloat, ConfigClassName)
+    ConfigFloat, ConfigClassName, ClientEndpointFallback)
 from vumi.transports.smpp.iprocessors import (
     IDeliveryReportProcessor, IDeliverShortMessageProcessor,
     ISubmitShortMessageProcessor)
@@ -11,7 +11,8 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
 
     twisted_endpoint = ConfigClientEndpoint(
         'The SMPP endpoint to connect to.',
-        required=True, static=True)
+        required=True, static=True,
+        fallbacks=[ClientEndpointFallback()])
     initial_reconnect_delay = ConfigInt(
         'How long (in seconds) to wait between reconnecting attempts. '
         'Defaults to 5 seconds.', default=5, static=True)
@@ -102,3 +103,11 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
         'Defaults to 0 which means no throttling is applied. '
         '(NOTE: 1 Vumi message may result in multiple PDUs)',
         default=0, static=True, required=False)
+
+    # TODO: Deprecate these fields when confmodel#5 is done.
+    host = ConfigText(
+        "*DEPRECATED* 'host' and 'port' fields may be used in place of the"
+        " 'twisted_endpoint' field.", static=True)
+    port = ConfigInt(
+        "*DEPRECATED* 'host' and 'port' fields may be used in place of the"
+        " 'twisted_endpoint' field.", static=True)

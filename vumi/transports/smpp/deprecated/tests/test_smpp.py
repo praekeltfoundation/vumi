@@ -838,10 +838,11 @@ class TestEsmeToSmscTx(VumiTestCase):
             "system_id": "VumiTestSMSC",
             "password": "password",
             "host": "127.0.0.1",
-            "port": 0,
             "transport_type": "smpp",
         }
-        self.service = SmppService(None, config=self.config)
+        server_config = self.config.copy()
+        server_config["twisted_endpoint"] = "tcp:0"
+        self.service = SmppService(None, config=server_config)
         self.add_cleanup(self.cleanup_service)
         yield self.service.startWorker()
         self.service.factory.protocol = SmscTestServer
@@ -907,10 +908,11 @@ class TestEsmeToSmscRx(VumiTestCase):
             "system_id": "VumiTestSMSC",
             "password": "password",
             "host": "127.0.0.1",
-            "port": 0,
             "transport_type": "smpp",
         }
-        self.service = SmppService(None, config=self.config)
+        server_config = self.config.copy()
+        server_config['twisted_endpoint'] = "tcp:0"
+        self.service = SmppService(None, config=server_config)
         self.add_cleanup(self.cleanup_service)
         yield self.service.startWorker()
         self.service.factory.protocol = SmscTestServer

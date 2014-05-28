@@ -1,11 +1,13 @@
 from twisted.internet.endpoints import TCP4ServerEndpoint, TCP4ClientEndpoint
 
+from confmodel.config import Config, ConfigInt, ConfigText
 from confmodel.errors import ConfigError
-from vumi.config import (
-    ConfigServerEndpoint, ConfigClientEndpoint, ConfigClassName)
-from vumi.tests.helpers import VumiTestCase
-
 from zope.interface import Interface, implements
+
+from vumi.config import (
+    ConfigClassName, ConfigServerEndpoint, ConfigClientEndpoint,
+    ServerEndpointFallback, ClientEndpointFallback)
+from vumi.tests.helpers import VumiTestCase
 
 
 class ITestConfigInterface(Interface):
@@ -80,67 +82,104 @@ class ConfigFieldTest(VumiTestCase):
             self.assertEqual(getattr(endpoint, '_%s' % name), value)
 
     def test_server_endpoint_field(self):
-        field = self.make_field(ConfigServerEndpoint)
-        self.check_endpoint(self.field_value(
-            field, 'tcp:60'),
-            TCP4ServerEndpoint, interface='', port=60)
-        self.check_endpoint(self.field_value(
-            field, config={'port': 80}),
-            TCP4ServerEndpoint, interface='', port=80)
-        self.check_endpoint(self.field_value(
-            field, config={'host': '127.0.0.1', 'port': 80}),
-            TCP4ServerEndpoint, interface='127.0.0.1', port=80)
-
-        self.assertEqual(self.field_value(field), None)
-
-        self.assert_field_invalid(field, config={'host': '127.0.0.1'})
-        self.assert_field_invalid(field, 'foo')
-
-    def test_server_endpoint_field_required(self):
         field = self.make_field(ConfigServerEndpoint, required=True)
         self.check_endpoint(self.field_value(
             field, 'tcp:60'),
             TCP4ServerEndpoint, interface='', port=60)
         self.check_endpoint(self.field_value(
-            field, config={'port': 80}),
-            TCP4ServerEndpoint, interface='', port=80)
+            field, 'tcp:interface=127.0.0.1:port=60'),
+            TCP4ServerEndpoint, interface='127.0.0.1', port=60)
 
         self.assert_field_invalid(field)
+        self.assert_field_invalid(field, 'foo')
+
+    def test_server_endpoint_field_with_fallback(self):
+        class MyConfig(Config):
+            host = ConfigText("host")
+            port = ConfigInt("port")
+            endpoint = ConfigServerEndpoint(
+                "endpoint", fallbacks=[ServerEndpointFallback()],
+                required=False)
+
+        self.check_endpoint(
+            MyConfig({'endpoint': 'tcp:60'}).endpoint,
+            TCP4ServerEndpoint, interface='', port=60)
+        self.check_endpoint(
+            MyConfig({'port': 80}).endpoint,
+            TCP4ServerEndpoint, interface='', port=80)
+        self.check_endpoint(
+            MyConfig({'host': '127.0.0.1', 'port': 80}).endpoint,
+            TCP4ServerEndpoint, interface='127.0.0.1', port=80)
+
+        self.assertEqual(MyConfig({}).endpoint, None)
+        self.assertEqual(MyConfig({'host': '127.0.0.1'}).endpoint, None)
+        self.assertRaises(ConfigError, MyConfig, {'port': 'foo'})
+
+    def test_server_endpoint_field_with_fallback_custom_fields(self):
+        class MyConfig(Config):
+            myhost = ConfigText("myhost")
+            myport = ConfigInt("myport")
+            endpoint = ConfigServerEndpoint(
+                "endpoint", required=False,
+                fallbacks=[ServerEndpointFallback('myhost', 'myport')])
+
+        self.check_endpoint(
+            MyConfig({'endpoint': 'tcp:60'}).endpoint,
+            TCP4ServerEndpoint, interface='', port=60)
+        self.check_endpoint(
+            MyConfig({'myport': 80}).endpoint,
+            TCP4ServerEndpoint, interface='', port=80)
+        self.check_endpoint(
+            MyConfig({'myhost': '127.0.0.1', 'myport': 80}).endpoint,
+            TCP4ServerEndpoint, interface='127.0.0.1', port=80)
+
+        self.assertEqual(MyConfig({}).endpoint, None)
+        self.assertEqual(MyConfig({'myhost': '127.0.0.1'}).endpoint, None)
+        self.assertRaises(ConfigError, MyConfig, {'myport': 'foo'})
 
     def test_client_endpoint_field(self):
         field = self.make_field(ConfigClientEndpoint)
         self.check_endpoint(
             self.field_value(field, 'tcp:127.0.0.1:60'),
             TCP4ClientEndpoint, host='127.0.0.1', port=60)
-        self.check_endpoint(self.field_value(
-            field, config={'host': '127.0.0.1', 'port': 80}),
-            TCP4ClientEndpoint, host='127.0.0.1', port=80)
 
         self.assertEqual(self.field_value(field), None)
-
-        self.assert_field_invalid(field, config={'port': 80})
-        self.assert_field_invalid(field, config={'host': '127.0.0.1'})
         self.assert_field_invalid(field, 'foo')
 
-    def test_client_endpoint_field_required(self):
-        field = self.make_field(ConfigClientEndpoint, required=True)
+    def test_client_endpoint_field_with_fallback(self):
+        class MyConfig(Config):
+            host = ConfigText("host")
+            port = ConfigInt("port")
+            endpoint = ConfigClientEndpoint(
+                "endpoint", fallbacks=[ClientEndpointFallback()],
+                required=True)
+
         self.check_endpoint(
-            self.field_value(field, 'tcp:127.0.0.1:60'),
-            TCP4ClientEndpoint, host='127.0.0.1', port=60)
-        self.check_endpoint(self.field_value(
-            field, config={'host': '127.0.0.1', 'port': 80}),
-            TCP4ClientEndpoint, host='127.0.0.1', port=80)
-
-        self.assert_field_invalid(field)
-
-    def test_client_endpoint_field_with_port_fallback(self):
-        field = self.make_field(
-            ConfigClientEndpoint, port_fallback_default=51)
+            MyConfig({'endpoint': 'tcp:example.com:80'}).endpoint,
+            TCP4ClientEndpoint, host='example.com', port=80)
         self.check_endpoint(
-            self.field_value(field, config={'host': '127.0.0.1'}),
-            TCP4ClientEndpoint, host='127.0.0.1', port=51)
-        self.check_endpoint(self.field_value(
-            field, config={'host': '127.0.0.1', 'port': 80}),
-            TCP4ClientEndpoint, host='127.0.0.1', port=80)
+            MyConfig({'host': 'example.com', 'port': 80}).endpoint,
+            TCP4ClientEndpoint, host='example.com', port=80)
 
-        self.assert_field_invalid(field, config={'port': 80})
+        self.assertRaises(ConfigError, MyConfig, {'port': 'foo'})
+        self.assertRaises(ConfigError, MyConfig, {'host': 'example.com'})
+        self.assertRaises(ConfigError, MyConfig, {'port': 80})
+
+    def test_client_endpoint_field_with_fallback_custom_fields(self):
+        class MyConfig(Config):
+            myhost = ConfigText("myhost")
+            myport = ConfigInt("myport")
+            endpoint = ConfigClientEndpoint(
+                "endpoint", required=True,
+                fallbacks=[ClientEndpointFallback('myhost', 'myport')])
+
+        self.check_endpoint(
+            MyConfig({'endpoint': 'tcp:example.com:80'}).endpoint,
+            TCP4ClientEndpoint, host='example.com', port=80)
+        self.check_endpoint(
+            MyConfig({'myhost': 'example.com', 'myport': 80}).endpoint,
+            TCP4ClientEndpoint, host='example.com', port=80)
+
+        self.assertRaises(ConfigError, MyConfig, {'myport': 'foo'})
+        self.assertRaises(ConfigError, MyConfig, {'myhost': 'example.com'})
+        self.assertRaises(ConfigError, MyConfig, {'myport': 80})

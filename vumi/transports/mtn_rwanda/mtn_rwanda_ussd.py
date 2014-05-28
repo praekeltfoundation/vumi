@@ -6,7 +6,9 @@ from twisted.internet.defer import inlineCallbacks, Deferred, returnValue
 
 from vumi.message import TransportUserMessage
 from vumi.transports.base import Transport
-from vumi.config import ConfigServerEndpoint, ConfigInt, ConfigDict, ConfigText
+from vumi.config import (
+    ConfigServerEndpoint, ConfigInt, ConfigDict, ConfigText,
+    ServerEndpointFallback)
 from vumi.components.session import SessionManager
 from vumi.transports.httprpc.httprpc import HttpRpcHealthResource
 from vumi.utils import build_web_site
@@ -18,7 +20,8 @@ class MTNRwandaUSSDTransportConfig(Transport.CONFIG_CLASS):
     """
     twisted_endpoint = ConfigServerEndpoint(
         "The listening endpoint that the remote client will connect to.",
-        required=True, static=True)
+        required=True, static=True,
+        fallbacks=[ServerEndpointFallback()])
     timeout = ConfigInt(
         "No. of seconds to wait before removing a request that hasn't "
         "received a response yet.",
@@ -34,6 +37,14 @@ class MTNRwandaUSSDTransportConfig(Transport.CONFIG_CLASS):
     health_path = ConfigText(
         "The path to serve the health resource on.", default='/health/',
         static=True)
+
+    # TODO: Deprecate these fields when confmodel#5 is done.
+    host = ConfigText(
+        "*DEPRECATED* 'host' and 'port' fields may be used in place of the"
+        " 'twisted_endpoint' field.", static=True)
+    port = ConfigInt(
+        "*DEPRECATED* 'host' and 'port' fields may be used in place of the"
+        " 'twisted_endpoint' field.", static=True)
 
 
 class RequestTimedOutError(Exception):

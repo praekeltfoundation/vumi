@@ -13,7 +13,7 @@ import binascii
 from smpp.pdu import unpack_pdu
 from smpp.pdu_builder import (
     BindTransceiver, BindTransmitter, BindReceiver, DeliverSMResp, SubmitSM,
-    EnquireLink, EnquireLinkResp, QuerySM, PDU, UnbindResp)
+    EnquireLink, EnquireLinkResp, QuerySM, UnbindResp)
 from smpp.pdu_inspector import (
     MultipartMessage, detect_multipart, multipart_key)
 
