@@ -42,10 +42,7 @@ class ServerEndpointFallback(FieldFallback):
     def __init__(self, host_field="host", port_field="port"):
         self.host_field = host_field
         self.port_field = port_field
-
-    def present(self, config):
-        port_field = self.get_field_descriptor(config, self.port_field)
-        return port_field.present(config)
+        self.required_fields = [port_field]
 
     def build_value(self, config):
         fields = {
