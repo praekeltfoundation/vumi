@@ -43,3 +43,18 @@ class TestTxRedisManager(VumiTestCase):
     def test_disconnect_twice(self):
         yield self.manager._close()
         yield self.manager._close()
+
+    @inlineCallbacks
+    def test_scan(self):
+        self.assertEqual([], (yield self.manager.keys()))
+        for i in range(10):
+            yield self.manager.set('key%d' % i, 'value%d' % i)
+        all_keys = set()
+        cursor = None
+        while True:
+            cursor, keys = yield self.manager.scan(cursor)
+            all_keys.update(keys)
+            if cursor == '0':
+                break
+        self.assertEqual(all_keys, set(
+            'key%d' % i for i in range(10)))

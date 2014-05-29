@@ -120,6 +120,20 @@ class VumiRedis(txr.Redis):
             d.addCallback(lambda r: [(v, score_cast_func(s)) for v, s in r])
         return d
 
+    def scan(self, cursor, match=None, count=None):
+        """
+        Scans through all the keys in database.
+        """
+        args = []
+        if cursor is None:
+            cursor = '0'
+        if match is not None:
+            args.extend(("MATCH", match))
+        if count is not None:
+            args.extend(("COUNT", count))
+        self._send("SCAN", cursor, *args)
+        return self.getResponse()
+
 
 class VumiRedisClientFactory(txr.RedisClientFactory):
     protocol = VumiRedis
