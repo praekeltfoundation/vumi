@@ -202,12 +202,18 @@ class Manager(object):
     def _unkeys(self, keys):
         return [self._unkey(k) for k in keys]
 
+    def _unkeys_scan(self, scan_results):
+        return [scan_results[0], self._unkeys(scan_results[1])]
+
     # Global operations
 
     type = RedisCall(['key'])
     exists = RedisCall(['key'])
     keys = RedisCall(['pattern'], defaults=['*'], key_args=['pattern'],
                      filter_func='_unkeys')
+    scan = RedisCall(['cursor', 'match', 'count'],
+                     defaults=['*', None], key_args=['match'],
+                     filter_func='_unkeys_scan')
 
     # String operations
 
