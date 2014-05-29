@@ -314,7 +314,7 @@ class EsmeTestCase(VumiTestCase):
     @inlineCallbacks
     def test_submit_sm_configured_parameters(self):
         transport, protocol = yield self.setup_bind({
-            'service_type': 'service',
+            'service_type': 'stype',
             'source_addr_ton': 2,
             'source_addr_npi': 2,
             'dest_addr_ton': 2,
@@ -326,8 +326,8 @@ class EsmeTestCase(VumiTestCase):
         [submit_sm] = yield wait_for_pdus(transport, 1)
         self.assertCommand(submit_sm, 'submit_sm', params={
             'short_message': 'foo',
-            'service_type': 'service',
-            'source_addr_ton': 'unknown',  # replaced by unpack_pdu()
+            'service_type': 'stype',
+            'source_addr_ton': 'national',  # replaced by unpack_pdu()
             'source_addr_npi': 2,
             'dest_addr_ton': 'national',  # replaced by unpack_pdu()
             'dest_addr_npi': 2,
