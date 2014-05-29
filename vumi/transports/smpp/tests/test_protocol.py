@@ -143,13 +143,17 @@ class EsmeTestCase(VumiTestCase):
         if status is not None:
             self.assertEqual(command_status(pdu), status)
 
+        pdu_params = {}
         if params:
             if 'body' not in pdu:
                 raise Exception('Body does not have parameters.')
 
             mandatory_parameters = pdu['body']['mandatory_parameters']
-            for key, value in params.items():
-                self.assertEqual(mandatory_parameters.get(key), value)
+            for key in params:
+                if key in mandatory_parameters:
+                    pdu_params[key] = mandatory_parameters[key]
+
+            self.assertEqual(params, pdu_params)
 
     @inlineCallbacks
     def setup_bind(self, config={}, clear=True, factory_class=None):
@@ -303,6 +307,31 @@ class EsmeTestCase(VumiTestCase):
         [submit_sm] = yield wait_for_pdus(transport, 1)
         self.assertCommand(submit_sm, 'submit_sm', params={
             'short_message': 'foo',
+        })
+        stored_ids = yield self.lookup_message_ids(protocol, seq_nums)
+        self.assertEqual(['abc123'], stored_ids)
+
+    @inlineCallbacks
+    def test_submit_sm_configured_parameters(self):
+        transport, protocol = yield self.setup_bind({
+            'service_type': 'service',
+            'source_addr_ton': 2,
+            'source_addr_npi': 2,
+            'dest_addr_ton': 2,
+            'dest_addr_npi': 2,
+            'registered_delivery': 0,
+        })
+        seq_nums = yield protocol.submit_sm(
+            'abc123', 'dest_addr', short_message='foo')
+        [submit_sm] = yield wait_for_pdus(transport, 1)
+        self.assertCommand(submit_sm, 'submit_sm', params={
+            'short_message': 'foo',
+            'service_type': 'service',
+            'source_addr_ton': 'unknown',  # replaced by unpack_pdu()
+            'source_addr_npi': 2,
+            'dest_addr_ton': 'national',  # replaced by unpack_pdu()
+            'dest_addr_npi': 2,
+            'registered_delivery': 0,
         })
         stored_ids = yield self.lookup_message_ids(protocol, seq_nums)
         self.assertEqual(['abc123'], stored_ids)
