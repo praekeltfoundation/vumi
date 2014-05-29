@@ -41,3 +41,17 @@ class TestRedisManager(VumiTestCase):
     def test_disconnect_twice(self):
         self.manager._close()
         self.manager._close()
+
+    def test_scan(self):
+        self.assertEqual([], self.manager.keys())
+        for i in range(10):
+            self.manager.set('key%d' % i, 'value%d' % i)
+        all_keys = set()
+        cursor = None
+        while True:
+            cursor, keys = self.manager.scan(cursor)
+            all_keys.update(keys)
+            if cursor == '0':
+                break
+        self.assertEqual(all_keys, set(
+            'key%d' % i for i in range(10)))

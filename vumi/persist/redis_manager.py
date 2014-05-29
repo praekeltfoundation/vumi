@@ -7,6 +7,25 @@ from vumi.persist.fake_redis import FakeRedis
 from vumi.utils import flatten_generator
 
 
+class VumiRedis(redis.Redis):
+    """
+    Custom Vumi redis client implementation.
+    """
+
+    def scan(self, cursor, match=None, count=None):
+        """
+        Scans through all the keys in database.
+        """
+        args = []
+        if cursor is None:
+            cursor = '0'
+        if match is not None:
+            args.extend(("MATCH", match))
+        if count is not None:
+            args.extend(("COUNT", count))
+        return self.execute_command("SCAN", cursor, *args)
+
+
 class RedisManager(Manager):
 
     call_decorator = staticmethod(flatten_generator)
@@ -31,7 +50,7 @@ class RedisManager(Manager):
             Key prefix for namespacing.
         """
 
-        return cls(redis.Redis(**config), **manager_config)
+        return cls(VumiRedis(**config), **manager_config)
 
     def _close(self):
         """Close redis connection."""
