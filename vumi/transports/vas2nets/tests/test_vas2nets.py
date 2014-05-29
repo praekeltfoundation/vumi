@@ -284,7 +284,7 @@ class TestVas2NetsTransport(VumiTestCase):
     def test_send_sms_noconn(self):
         # TODO: Figure out a solution that doesn't require hoping that
         #       nothing's listening on this port.
-        self.transport.config['url'] = 'http://localhost:9999/'
+        self.transport.config['url'] = 'http://127.0.0.1:9999/'
         msg = yield self.make_dispatch_outbound("hello")
 
         [twisted_failure] = self.flushLoggedErrors(TemporaryFailure)

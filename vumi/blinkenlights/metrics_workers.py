@@ -32,8 +32,9 @@ class AggregatedMetricConsumer(Consumer):
     durable = True
     routing_key = "vumi.metrics.aggregates"
 
-    def __init__(self, callback):
+    def __init__(self, channel, callback):
         self.queue_name = self.routing_key
+        super(AggregatedMetricConsumer, self).__init__(channel)
         self.callback = callback
 
     def consume_message(self, vumi_message):
@@ -75,9 +76,10 @@ class TimeBucketConsumer(Consumer):
     durable = True
     ROUTING_KEY_TEMPLATE = "bucket.%d"
 
-    def __init__(self, bucket, callback):
+    def __init__(self, channel, bucket, callback):
         self.queue_name = self.ROUTING_KEY_TEMPLATE % bucket
         self.routing_key = self.queue_name
+        super(TimeBucketConsumer, self).__init__(channel)
         self.callback = callback
 
     def consume_message(self, vumi_message):
@@ -286,7 +288,6 @@ class GraphitePublisher(Publisher):
     durable = True
     auto_delete = False
     delivery_mode = 2
-    require_bind = False  # Graphite uses a topic exchange
 
     def publish_metric(self, metric, value, timestamp):
         self.publish_raw("%f %d" % (value, timestamp), routing_key=metric)

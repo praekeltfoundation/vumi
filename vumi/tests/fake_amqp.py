@@ -141,9 +141,8 @@ class FakeAMQPBroker(object):
 
     def basic_consume(self, queue, tag):
         self._get_queue(queue).add_consumer(tag)
-        d = self.kick_delivery()
-        return d.addCallback(lambda _: Message(
-            mkMethod("consume-ok", 21), [("consumer_tag", tag)]))
+        self.kick_delivery()
+        return Message(mkMethod("consume-ok", 21), [("consumer_tag", tag)])
 
     def basic_cancel(self, tag, queue):
         if queue in self.queues:
@@ -179,18 +178,17 @@ class FakeAMQPBroker(object):
         self.message_processed()
 
     def try_deliver_to_channel(self, channel):
-        if not channel.deliverable():
-            return False
         delivered = False
         for ctag, queue in channel.consumers.items():
-            dtag, msg = self._get_queue(queue).get_message()
-            while dtag is not None:
+            while channel.deliverable(ctag):
+                dtag, msg = self._get_queue(queue).get_message()
+                if dtag is None:
+                    break
                 dmsg = mk_deliver(msg['content'], msg['exchange'],
                                   msg['routing_key'], ctag, dtag)
                 self._delivering['count'] += 1
-                channel.deliver_message(dmsg, queue)
+                channel.deliver_message(dmsg, ctag)
                 delivered = True
-                dtag, msg = self._get_queue(queue).get_message()
         return delivered
 
     def kick_delivery(self):
@@ -249,6 +247,8 @@ class FakeAMQPBroker(object):
         return done
 
     def clear_messages(self, exchange, rkey=None):
+        if exchange not in self.dispatched:
+            return
         if rkey:
             del self.dispatched[exchange][rkey][:]
         else:
@@ -281,18 +281,18 @@ class FakeAMQPBroker(object):
 
 
 class FakeAMQPChannel(object):
-    def __init__(self, channel_id, broker, delegate):
+    def __init__(self, channel_id, client):
         self.channel_id = channel_id
-        self.broker = broker
+        self.client = client
+        self.broker = client.broker
         self.qos_prefetch_count = 0
         self.consumers = {}
-        self.delegate = delegate
+        self.delegate = client.delegate
         self.unacked = []
-        self.flow_active = True
+        self._consumer_prefetch = {}
 
     def __repr__(self):
-        return '<FakeAMQPChannel: id=%s flow=%s>' % (
-            self.channel_id, self.flow_active)
+        return '<FakeAMQPChannel: id=%s>' % (self.channel_id,)
 
     def channel_open(self):
         return self.broker.channel_open(self)
@@ -301,16 +301,15 @@ class FakeAMQPChannel(object):
         return self.broker.channel_close(self)
 
     def channel_flow(self, active):
-        self.flow_active = active
-        if active:
-            # We've re-enabled flow, so deliver queued messages.
-            self.broker.kick_delivery()
-        return Message(mkMethod("flow-ok", 21), [('active', active)])
+        raise NotImplementedError(
+            "channel.flow() is no longer supported in RabbitMQ 3.3.0.")
 
     def close(self, _reason):
         pass
 
-    def basic_qos(self, _prefetch_size, prefetch_count, _global):
+    def basic_qos(self, _prefetch_size, prefetch_count, is_global):
+        if is_global:
+            raise NotImplementedError("global prefetch limits not supported.")
         self.qos_prefetch_count = prefetch_count
 
     def exchange_declare(self, exchange, type, durable=None):
@@ -326,6 +325,7 @@ class FakeAMQPChannel(object):
         if not tag:
             tag = gen_id('consumer.')
         assert tag not in self.consumers
+        self._consumer_prefetch[tag] = self.qos_prefetch_count
         self.consumers[tag] = queue
         return self.broker.basic_consume(queue, tag)
 
@@ -333,35 +333,43 @@ class FakeAMQPChannel(object):
         queue = self.consumers.pop(tag, None)
         if queue:
             self.broker.basic_cancel(tag, queue)
+        self._consumer_prefetch.pop(tag, None)
         return Message(mkMethod("cancel-ok", 31))
 
     def basic_publish(self, exchange, routing_key, content):
         return self.broker.basic_publish(exchange, routing_key, content)
 
     def basic_ack(self, delivery_tag, multiple):
-        assert delivery_tag in [d for d, _q in self.unacked]
-        for dtag, queue in self.unacked[:]:
+        assert delivery_tag in [dtag for dtag, _ctag, _queue in self.unacked]
+        for dtag, ctag, queue in self.unacked[:]:
             if multiple or (dtag == delivery_tag):
-                self.unacked.remove((dtag, queue))
+                self.unacked.remove((dtag, ctag, queue))
+                if ctag is not None and ctag not in self.consumers:
+                    raise Exception("Invalid consumer tag: %s" % (ctag,))
                 resp = self.broker.basic_ack(queue, dtag)
                 if (dtag == delivery_tag):
                     return resp
 
-    def deliverable(self):
-        if not self.flow_active:
-            return False
-        if self.qos_prefetch_count < 1:
-            return True
-        return len(self.unacked) < self.qos_prefetch_count
+    def _get_consumer_prefetch(self, consumer_tag):
+        return self._consumer_prefetch[consumer_tag]
 
-    def deliver_message(self, msg, queue):
-        self.unacked.append((msg.delivery_tag, queue))
+    def deliverable(self, consumer_tag):
+        if consumer_tag not in self.consumers:
+            return False
+        prefetch = self._get_consumer_prefetch(consumer_tag)
+        if prefetch < 1:
+            return True
+        return len(self.unacked) < prefetch
+
+    def deliver_message(self, msg, consumer_tag):
+        self.unacked.append(
+            (msg.delivery_tag, consumer_tag, self.consumers[consumer_tag]))
         self.delegate.basic_deliver(self, msg)
 
     def basic_get(self, queue):
         dtag, msg = self.broker.basic_get(queue)
         if msg:
-            self.unacked.append((dtag, queue))
+            self.unacked.append((dtag, None, queue))
             return mk_get_ok(msg['content'], msg['exchange'],
                              msg['routing_key'], dtag)
         return Message(mkMethod("get-empty", 72))
@@ -480,7 +488,7 @@ class FakeAMQClient(WorkerAMQClient):
             try:
                 ch = self.channels[id]
             except KeyError:
-                ch = FakeAMQPChannel(id, self.broker, self.delegate)
+                ch = FakeAMQPChannel(id, self)
                 self.channels[id] = ch
         finally:
             self.channelLock.release()

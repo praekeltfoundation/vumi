@@ -15,8 +15,7 @@ from txamqp.protocol import AMQClient
 
 from vumi.errors import VumiError
 from vumi.message import Message
-from vumi.utils import (load_class_by_string, vumi_resource_path, http_request,
-                        basic_auth_string, build_web_site)
+from vumi.utils import load_class_by_string, vumi_resource_path, build_web_site
 
 
 SPECS = {}
@@ -114,9 +113,8 @@ class WorkerAMQClient(AMQClient):
     @inlineCallbacks
     def start_consumer(self, consumer_class, *args, **kwargs):
         channel = yield self.get_channel()
-        consumer = consumer_class(*args, **kwargs)
-        if consumer.start_paused:
-            channel.channel_flow(active=False)
+
+        consumer = consumer_class(channel, *args, **kwargs)
         consumer.vumi_options = self.vumi_options
 
         # get the details for AMQP
@@ -133,11 +131,7 @@ class WorkerAMQClient(AMQClient):
         # bind it to the exchange with the routing key
         yield channel.queue_bind(queue=queue_name, exchange=exchange_name,
                                  routing_key=routing_key)
-        # register the consumer
-        reply = yield channel.basic_consume(queue=queue_name)
-        queue = yield self.queue(reply.consumer_tag)
-        # start consuming! nom nom nom
-        consumer.start(channel, queue)
+        yield consumer.start()
         # return the newly created & consuming consumer
         returnValue(consumer)
 
@@ -201,7 +195,7 @@ class Worker(MultiService, object):
 
     def consume(self, routing_key, callback, queue_name=None,
                 exchange_name='vumi', exchange_type='direct', durable=True,
-                message_class=None, paused=False):
+                message_class=None, paused=False, prefetch_count=None):
 
         # use the routing key to generate the name for the class
         # amq.routing.key -> AmqRoutingKey
@@ -214,6 +208,7 @@ class Worker(MultiService, object):
             'exchange_type': exchange_type,
             'durable': durable,
             'start_paused': paused,
+            'prefetch_count': prefetch_count,
         }
         log.msg('Starting %s with %s' % (class_name, kwargs))
         klass = type(class_name, (DynamicConsumer,), kwargs)
@@ -262,42 +257,65 @@ class Consumer(object):
 
     message_class = Message
     start_paused = False
+    prefetch_count = None
+
+    def __init__(self, channel):
+        self.channel = channel
+        self._notify_paused_and_quiet = []
+        self.keep_consuming = False
+        self._testing = hasattr(self.channel, 'message_processed')
+        self.queue = None
+        self._consumer_tag = None
 
     @inlineCallbacks
-    def start(self, channel, queue):
-        self._notify_paused_and_quiet = []
+    def start(self):
         self._in_progress = 0
-        self.channel = channel
-        self.queue = queue
         self.keep_consuming = True
-        self._testing = hasattr(channel, 'message_processed')
         self.paused = self.start_paused
-
-        @inlineCallbacks
-        def read_messages():
-            log.msg("Consumer starting...")
-            try:
-                while self.keep_consuming:
-                    message = yield self.queue.get()
-                    if isinstance(message, QueueCloseMarker):
-                        log.msg("Queue closed.")
-                        return
-                    yield self.consume(message)
-            except txamqp.queue.Closed, e:
-                log.err("Queue has closed", e)
-
-        read_messages()
-        yield None
+        self._unpause_d = None
+        if self.prefetch_count is not None:
+            yield self.channel.basic_qos(0, self.prefetch_count, False)
+        if not self.paused:
+            yield self.unpause()
         returnValue(self)
 
+    @inlineCallbacks
+    def _read_messages(self):
+        try:
+            while self.keep_consuming:
+                message = yield self.queue.get()
+                if isinstance(message, QueueCloseMarker):
+                    break
+                if self.paused:
+                    yield self._unpause_d
+                yield self.consume(message)
+        except txamqp.queue.Closed as e:
+            log.err("Queue has closed", e)
+
+    @inlineCallbacks
+    def _channel_consume(self):
+        if self._consumer_tag is not None:
+            raise RuntimeError("Consumer already registered.")
+        reply = yield self.channel.basic_consume(queue=self.queue_name)
+        self._consumer_tag = reply.consumer_tag
+        self.queue = yield self.channel.client.queue(self._consumer_tag)
+        self.keep_consuming = True
+        self._read_messages()
+
+    @inlineCallbacks
     def pause(self):
         self.paused = True
-        self.channel.channel_flow(active=False)
-        return self.notify_paused_and_quiet()
+        if self._unpause_d is None:
+            self._unpause_d = Deferred()
+        yield self.notify_paused_and_quiet()
 
     def unpause(self):
         self.paused = False
-        self.channel.channel_flow(active=True)
+        d, self._unpause_d = self._unpause_d, None
+        if d is not None:
+            d.callback(None)
+        if self._consumer_tag is None:
+            return self._channel_consume()
 
     def notify_paused_and_quiet(self):
         d = Deferred()
@@ -316,36 +334,34 @@ class Consumer(object):
         result = yield self.consume_message(self.message_class.from_json(
                                             message.content.body))
         self._in_progress -= 1
-        self._check_notify()
         if self._testing:
             self.channel.message_processed()
         if result is not False:
-            returnValue(self.ack(message))
+            yield self.channel.basic_ack(message.delivery_tag, False)
         else:
             log.msg('Received %s as a return value consume_message. '
                     'Not acknowledging AMQ message' % result)
+        self._check_notify()
 
     def consume_message(self, message):
         """helper method, override in implementation"""
         log.msg("Received message: %s" % message)
 
-    def ack(self, message):
-        self.channel.basic_ack(message.delivery_tag, True)
-
     @inlineCallbacks
     def stop(self):
         log.msg("Consumer stopping...")
         self.keep_consuming = False
+        yield self.pause()
         # This actually closes the channel on the server
         yield self.channel.channel_close()
         # This just marks the channel as closed on the client
         self.channel.close(None)
-        self.queue.put(QueueCloseMarker())
         returnValue(self.keep_consuming)
 
 
 class DynamicConsumer(Consumer):
-    def __init__(self, callback):
+    def __init__(self, channel, callback):
+        super(DynamicConsumer, self).__init__(channel)
         self.callback = callback
 
     def consume_message(self, message):
@@ -364,7 +380,6 @@ class Publisher(object):
     exchange_name = "vumi"
     exchange_type = "direct"
     routing_key = "routing_key"
-    require_bind = True
     durable = False
     auto_delete = False
     delivery_mode = 2  # save to disk
@@ -378,76 +393,16 @@ class Publisher(object):
         if not hasattr(self, 'vumi_options'):
             self.vumi_options = {}
 
-    @inlineCallbacks
-    def list_bindings(self):
-        try:
-            # Note utils.callback() does a POST not a GET
-            # which may lead to errors if the RabbitMQ Management REST api
-            # changes
-            resp = yield http_request(
-                "http://localhost:55672/api/bindings", headers={
-                    'Authorization': basic_auth_string(
-                        self.vumi_options['username'],
-                        self.vumi_options['password']),
-                    })
-            bindings = json.loads(resp)
-            bound_routing_keys = {}
-            for b in bindings:
-                if (b['vhost'] == self.vumi_options['vhost'] and
-                        b['source'] == self.exchange_name):
-                    bound_routing_keys[b['routing_key']] = \
-                            bound_routing_keys.get(b['routing_key'], []) + \
-                            [b['destination']]
-        except:
-            bound_routing_keys = {"bindings": "undetected"}
-        returnValue(bound_routing_keys)
-
-    @inlineCallbacks
-    def routing_key_is_bound(self, key):
-        # Don't check for bound routing keys on RPC reply exchanges
-        # The one-use queues are changing too frequently to cache efficiently,
-        # too many http calls to RabbitMQ Management will be required,
-        # and the auto-generated queues & routing_keys are unlikley to
-        # result in errors where routing keys are unbound
-        if self.exchange_name[-4:].lower() == '_rpc':
-            returnValue(True)
-        if (len(self.bound_routing_keys) == 1 and
-                self.bound_routing_keys.get("bindings") == "undetected"):
-            # The following is very noisy in the logs:
-            # log.msg("No bindings detected, is the RabbitMQ Management plugin"
-            #         " installed?")
-            returnValue(True)
-        if key in self.bound_routing_keys.keys():
-            returnValue(True)
-        self.bound_routing_keys = yield self.list_bindings()
-        if (len(self.bound_routing_keys) == 1 and
-                self.bound_routing_keys.get("bindings") == "undetected"):
-            # The following is very noisy in the logs:
-            # log.msg("No bindings detected, is the RabbitMQ Management plugin"
-            #         " installed?")
-            returnValue(True)
-        returnValue(key in self.bound_routing_keys.keys())
-
-    @inlineCallbacks
-    def check_routing_key(self, routing_key, require_bind):
+    def check_routing_key(self, routing_key):
         if(routing_key != routing_key.lower()):
             raise RoutingKeyError("The routing_key: %s is not all lower case!"
                                   % (routing_key))
-        if not require_bind:
-            return
-        is_bound = yield self.routing_key_is_bound(routing_key)
-        if not is_bound:
-            raise RoutingKeyError("The routing_key: %s is not bound to any"
-                                  " queues in vhost: %s  exchange: %s" % (
-                                  routing_key, self.vumi_options['vhost'],
-                                  self.exchange_name))
 
     @inlineCallbacks
     def publish(self, message, **kwargs):
         exchange_name = kwargs.get('exchange_name') or self.exchange_name
         routing_key = kwargs.get('routing_key') or self.routing_key
-        require_bind = kwargs.get('require_bind', self.require_bind)
-        yield self.check_routing_key(routing_key, require_bind)
+        self.check_routing_key(routing_key)
         yield self.channel.basic_publish(exchange=exchange_name,
                                          content=message,
                                          routing_key=routing_key)

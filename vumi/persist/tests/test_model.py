@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 """Tests for vumi.persist.model."""
 
 from datetime import datetime
@@ -87,6 +89,26 @@ class VersionedModelMigrator(ModelMigrator):
         # Actual migration
         migration_data.set_value('$VERSION', 2)
         migration_data.set_value('c', migration_data.old_data['b'])
+        migration_data.set_value('text', 'hello')
+        return migration_data
+
+    def migrate_from_2(self, migration_data):
+        # Migrator assertions
+        assert self.data_version == 2
+        assert self.model_class is IndexedVersionedModel
+        assert isinstance(self.manager, Manager)
+
+        # Data assertions
+        assert set(migration_data.old_data.keys()) == set(
+            ['$VERSION', 'c', 'text'])
+        assert migration_data.old_data['$VERSION'] == 2
+        assert migration_data.old_index == {}
+
+        # Actual migration
+        migration_data.set_value('$VERSION', 3)
+        migration_data.copy_values('c')
+        migration_data.set_value(
+            'text', migration_data.old_data['text'], index='text_bin')
         return migration_data
 
 
@@ -105,12 +127,45 @@ class VersionedModel(Model):
     VERSION = 2
     MIGRATOR = VersionedModelMigrator
     c = Integer()
+    text = Unicode(null=True)
+
+
+class IndexedVersionedModel(Model):
+    VERSION = 3
+    MIGRATOR = VersionedModelMigrator
+    bucket = 'versionedmodel'
+    c = Integer()
+    text = Unicode(null=True, index=True)
 
 
 class UnknownVersionedModel(Model):
-    VERSION = 3
+    VERSION = 4
     bucket = 'versionedmodel'
     d = Integer()
+
+
+class VersionedDynamicModelMigrator(ModelMigrator):
+    def migrate_from_unversioned(self, migration_data):
+        migration_data.copy_dynamic_values('keep-')
+        migration_data.set_value('$VERSION', 1)
+        return migration_data
+
+
+class UnversionedDynamicModel(Model):
+    bucket = 'versioneddynamicmodel'
+
+    drop = Dynamic(prefix='drop-')
+    keep = Dynamic(prefix='keep-')
+
+
+class VersionedDynamicModel(Model):
+    bucket = 'versioneddynamicmodel'
+
+    VERSION = 1
+    MIGRATOR = VersionedDynamicModelMigrator
+
+    drop = Dynamic(prefix='drop-')
+    keep = Dynamic(prefix='keep-')
 
 
 class TestModelOnTxRiak(VumiTestCase):
@@ -141,6 +196,12 @@ class TestModelOnTxRiak(VumiTestCase):
             if model is not None:
                 live_keys.append(key)
         returnValue(live_keys)
+
+    def get_model_indexes(self, model):
+        indexes = {}
+        for index in model._riak_object.get_indexes():
+            indexes.setdefault(index.get_field(), []).append(index.get_value())
+        return indexes
 
     def test_simple_class(self):
         field_names = SimpleModel.field_descriptors.keys()
@@ -280,6 +341,7 @@ class TestModelOnTxRiak(VumiTestCase):
 
     @Manager.calls_manager
     def test_load_all_bunches(self):
+        self.assertFalse(self.manager.USE_MAPREDUCE_BUNCH_LOADING)
         simple_model = self.manager.proxy(SimpleModel)
         yield simple_model("one", a=1, b=u'abc').save()
         yield simple_model("two", a=2, b=u'def').save()
@@ -292,6 +354,92 @@ class TestModelOnTxRiak(VumiTestCase):
         self.assertEqual(["one", "two"], sorted(obj.key for obj in objs))
 
     @Manager.calls_manager
+    def test_load_all_bunches_skips_tombstones(self):
+        self.assertFalse(self.manager.USE_MAPREDUCE_BUNCH_LOADING)
+        simple_model = self.manager.proxy(SimpleModel)
+        yield simple_model("one", a=1, b=u'abc').save()
+        yield simple_model("two", a=2, b=u'def').save()
+        tombstone = yield simple_model("tombstone", a=2, b=u'ghi').save()
+        yield tombstone.delete()
+
+        objs_iter = simple_model.load_all_bunches(['one', 'two', 'tombstone'])
+        objs = []
+        for obj_bunch in objs_iter:
+            objs.extend((yield obj_bunch))
+        self.assertEqual(["one", "two"], sorted(obj.key for obj in objs))
+
+    @Manager.calls_manager
+    def test_load_all_bunches_mapreduce(self):
+        self.manager.USE_MAPREDUCE_BUNCH_LOADING = True
+        simple_model = self.manager.proxy(SimpleModel)
+        yield simple_model("one", a=1, b=u'abc').save()
+        yield simple_model("two", a=2, b=u'def').save()
+        yield simple_model("three", a=2, b=u'ghi').save()
+
+        objs_iter = simple_model.load_all_bunches(['one', 'two', 'bad'])
+        objs = []
+        for obj_bunch in objs_iter:
+            objs.extend((yield obj_bunch))
+        self.assertEqual(["one", "two"], sorted(obj.key for obj in objs))
+
+    @Manager.calls_manager
+    def test_load_all_bunches_mapreduce_skips_tombstones(self):
+        self.manager.USE_MAPREDUCE_BUNCH_LOADING = True
+        simple_model = self.manager.proxy(SimpleModel)
+        yield simple_model("one", a=1, b=u'abc').save()
+        yield simple_model("two", a=2, b=u'def').save()
+        tombstone = yield simple_model("tombstone", a=2, b=u'ghi').save()
+        yield tombstone.delete()
+
+        objs_iter = simple_model.load_all_bunches(['one', 'two', 'tombstone'])
+        objs = []
+        for obj_bunch in objs_iter:
+            objs.extend((yield obj_bunch))
+        self.assertEqual(["one", "two"], sorted(obj.key for obj in objs))
+
+    @Manager.calls_manager
+    def test_load_all_bunches_performance(self):
+        """
+        A performance test that is handy to occasionally but shouldn't happen
+        on every test run.
+
+        This should go away once we're happy with the non-mapreduce bunch
+        loading.
+        """
+        import time
+        start_setup = time.time()
+        simple_model = self.manager.proxy(SimpleModel)
+        keys = []
+        for i in xrange(2000):
+            obj = yield simple_model("item%s" % i, a=i, b=u'abc').save()
+            keys.append(obj.key)
+
+        end_setup = time.time()
+        print "\n\nSetup time: %s" % (end_setup - start_setup,)
+
+        start_mr = time.time()
+        self.manager.USE_MAPREDUCE_BUNCH_LOADING = True
+        objs_iter = simple_model.load_all_bunches(keys)
+        objs = []
+        for obj_bunch in objs_iter:
+            objs.extend((yield obj_bunch))
+        end_mr = time.time()
+        print "Mapreduce time: %s" % (end_mr - start_mr,)
+
+        start_mult = time.time()
+        self.manager.USE_MAPREDUCE_BUNCH_LOADING = False
+        objs_iter = simple_model.load_all_bunches(keys)
+        objs = []
+        for obj_bunch in objs_iter:
+            objs.extend((yield obj_bunch))
+        end_mult = time.time()
+        print "Multiple time: %s\n" % (end_mult - start_mult,)
+
+        self.assertEqual(sorted(keys), sorted(obj.key for obj in objs))
+    test_load_all_bunches_performance.skip = (
+        "This takes a long time to run. Enable it if you need it.")
+
+    @Manager.calls_manager
     def test_simple_instance(self):
         simple_model = self.manager.proxy(SimpleModel)
         s1 = simple_model("foo", a=5, b=u'3')
@@ -300,6 +448,7 @@ class TestModelOnTxRiak(VumiTestCase):
         s2 = yield simple_model.load("foo")
         self.assertEqual(s2.a, 5)
         self.assertEqual(s2.b, u'3')
+        self.assertEqual(s2.was_migrated, False)
 
     @Manager.calls_manager
     def test_simple_instance_delete(self):
@@ -346,6 +495,22 @@ class TestModelOnTxRiak(VumiTestCase):
 
         keys = yield indexed_model.index_keys('b', u"one")
         self.assertEqual(sorted(keys), ["foo1", "foo2"])
+
+        keys = yield indexed_model.index_keys('b', None)
+        self.assertEqual(keys, ["foo3"])
+
+    @Manager.calls_manager
+    def test_index_keys_quoting(self):
+        indexed_model = self.manager.proxy(IndexedModel)
+        yield indexed_model("foo1", a=1, b=u"+one").save()
+        yield indexed_model("foo2", a=2, b=u"one").save()
+        yield indexed_model("foo3", a=2, b=None).save()
+
+        keys = yield indexed_model.index_keys('b', u"+one")
+        self.assertEqual(sorted(keys), ["foo1"])
+
+        keys = yield indexed_model.index_keys('b', u"one")
+        self.assertEqual(sorted(keys), ["foo2"])
 
         keys = yield indexed_model.index_keys('b', None)
         self.assertEqual(keys, ["foo3"])
@@ -785,6 +950,7 @@ class TestModelOnTxRiak(VumiTestCase):
 
         foo_new = yield new_model.load("foo")
         self.assertEqual(foo_new.c, 1)
+        self.assertEqual(foo_new.was_migrated, True)
 
     @Manager.calls_manager
     def test_version_migration(self):
@@ -795,6 +961,47 @@ class TestModelOnTxRiak(VumiTestCase):
 
         foo_new = yield new_model.load("foo")
         self.assertEqual(foo_new.c, 1)
+        self.assertEqual(foo_new.text, "hello")
+        self.assertEqual(foo_new.was_migrated, True)
+
+    @Manager.calls_manager
+    def test_version_migration_new_index(self):
+        old_model = self.manager.proxy(VersionedModel)
+        new_model = self.manager.proxy(IndexedVersionedModel)
+        foo_old = old_model("foo", c=1, text=u"hi")
+        yield foo_old.save()
+
+        foo_new = yield new_model.load("foo")
+        self.assertEqual(foo_new.c, 1)
+        self.assertEqual(foo_new.text, "hi")
+        self.assertEqual(self.get_model_indexes(foo_new), {"text_bin": ["hi"]})
+        self.assertEqual(foo_new.was_migrated, True)
+
+    @Manager.calls_manager
+    def test_version_migration_new_index_with_unicode(self):
+        old_model = self.manager.proxy(VersionedModel)
+        new_model = self.manager.proxy(IndexedVersionedModel)
+        foo_old = old_model("foo", c=1, text=u"hi Zoë")
+        yield foo_old.save()
+
+        foo_new = yield new_model.load("foo")
+        self.assertEqual(foo_new.c, 1)
+        self.assertEqual(foo_new.text, u"hi Zoë")
+        self.assertEqual(
+            self.get_model_indexes(foo_new), {"text_bin": ["hi Zo\xc3\xab"]})
+        self.assertEqual(foo_new.was_migrated, True)
+
+    @Manager.calls_manager
+    def test_version_migration_new_index_None(self):
+        old_model = self.manager.proxy(VersionedModel)
+        new_model = self.manager.proxy(IndexedVersionedModel)
+        foo_old = old_model("foo", c=1, text=None)
+        yield foo_old.save()
+
+        foo_new = yield new_model.load("foo")
+        self.assertEqual(foo_new.c, 1)
+        self.assertEqual(foo_new.text, None)
+        self.assertEqual(self.get_model_indexes(foo_new), {})
 
     @Manager.calls_manager
     def test_version_migration_failure(self):
@@ -808,7 +1015,22 @@ class TestModelOnTxRiak(VumiTestCase):
             self.fail('Expected ModelMigrationError.')
         except ModelMigrationError, e:
             self.assertEqual(
-                e.args[0], 'No migrators defined for VersionedModel version 3')
+                e.args[0], 'No migrators defined for VersionedModel version 4')
+
+    @Manager.calls_manager
+    def test_dynamic_field_migration(self):
+        old_model = self.manager.proxy(UnversionedDynamicModel)
+        new_model = self.manager.proxy(VersionedDynamicModel)
+        old = old_model("foo")
+        old.keep['bar'] = u"bar-val"
+        old.keep['baz'] = u"baz-val"
+        old.drop['bar'] = u"drop"
+        yield old.save()
+
+        new = yield new_model.load("foo")
+        self.assertEqual(new.keep['bar'], u"bar-val")
+        self.assertEqual(new.keep['baz'], u"baz-val")
+        self.assertFalse("bar" in new.drop)
 
 
 class TestModelOnRiak(TestModelOnTxRiak):

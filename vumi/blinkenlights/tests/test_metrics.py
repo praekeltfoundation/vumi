@@ -10,6 +10,56 @@ from vumi.service import Worker
 from vumi.tests.helpers import VumiTestCase, WorkerHelper
 
 
+class TestMetricPublisher(VumiTestCase):
+
+    def setUp(self):
+        self.worker_helper = self.add_helper(WorkerHelper())
+
+    @inlineCallbacks
+    def start_publisher(self, publisher):
+        channel = yield get_stubbed_channel(self.worker_helper.broker)
+        publisher.start(channel)
+
+    def _sleep(self, delay):
+        d = Deferred()
+        reactor.callLater(delay, lambda: d.callback(None))
+        return d
+
+    def _check_msg(self, prefix, metric, values):
+        msgs = self.worker_helper.get_dispatched_metrics()
+        if values is None:
+            self.assertEqual(msgs, [])
+            return
+        [datapoint] = msgs[-1]
+        self.assertEqual(datapoint[0], prefix + metric.name)
+        self.assertEqual(datapoint[1], list(metric.aggs))
+        # check datapoints within 2s of now -- the truncating of
+        # time.time() to an int for timestamps can cause a 1s
+        # difference by itself
+        now = time.time()
+        self.assertTrue(all(abs(p[0] - now) < 2.0
+                            for p in datapoint[2]),
+                        "Not all datapoints near now (%f): %r"
+                        % (now, datapoint))
+        self.assertEqual([dp[1] for dp in datapoint[2]], values)
+
+    @inlineCallbacks
+    def test_publish_single_metric(self):
+        publisher = metrics.MetricPublisher()
+        yield self.start_publisher(publisher)
+
+        msg = metrics.MetricMessage()
+        cnt = metrics.Count("my.count")
+        msg.append(
+            ("vumi.test.%s" % (cnt.name,), cnt.aggs, [(time.time(), 1)]))
+        publisher.publish_message(msg)
+        self._check_msg("vumi.test.", cnt, [1])
+
+    def test_publisher_provides_interface(self):
+        publisher = metrics.MetricPublisher()
+        self.assertTrue(metrics.IMetricPublisher.providedBy(publisher))
+
+
 class TestMetricManager(VumiTestCase):
 
     def setUp(self):
@@ -25,7 +75,7 @@ class TestMetricManager(VumiTestCase):
         return self._next_publish
 
     @inlineCallbacks
-    def start_manager(self, manager):
+    def start_manager_as_publisher(self, manager):
         channel = yield get_stubbed_channel(self.worker_helper.broker)
         manager.start(channel)
         self.add_cleanup(manager.stop)
@@ -36,15 +86,11 @@ class TestMetricManager(VumiTestCase):
         return d
 
     def _check_msg(self, manager, metric, values):
-        msgs = self.worker_helper.broker.get_dispatched(
-            "vumi.metrics", "vumi.metrics")
+        msgs = self.worker_helper.get_dispatched_metrics()
         if values is None:
             self.assertEqual(msgs, [])
             return
-        content = msgs[-1]
-        self.assertEqual(content.properties, {"delivery mode": 2})
-        msg = Message.from_json(content.body)
-        [datapoint] = msg.payload["datapoints"]
+        [datapoint] = msgs[-1]
         self.assertEqual(datapoint[0], manager.prefix + metric.name)
         self.assertEqual(datapoint[1], list(metric.aggs))
         # check datapoints within 2s of now -- the truncating of
@@ -56,6 +102,45 @@ class TestMetricManager(VumiTestCase):
                         "Not all datapoints near now (%f): %r"
                         % (now, datapoint))
         self.assertEqual([dp[1] for dp in datapoint[2]], values)
+
+    @inlineCallbacks
+    def test_start_manager_no_publisher(self):
+        mm = metrics.MetricManager("vumi.test.")
+        self.assertEqual(mm._publisher, None)
+        self.assertEqual(mm._task, None)
+        channel = yield get_stubbed_channel(self.worker_helper.broker)
+        mm.start(channel)
+        self.add_cleanup(mm.stop)
+        self.assertIsInstance(mm._publisher, metrics.MetricPublisher)
+        self.assertNotEqual(mm._task, None)
+
+    @inlineCallbacks
+    def test_start_manager_publisher_and_channel(self):
+        publisher = metrics.MetricPublisher()
+        mm = metrics.MetricManager("vumi.test.", publisher=publisher)
+        self.assertEqual(mm._publisher, publisher)
+        self.assertEqual(mm._task, None)
+        channel = yield get_stubbed_channel(self.worker_helper.broker)
+        self.assertRaises(RuntimeError, mm.start, channel)
+
+    def test_start_polling_no_publisher(self):
+        mm = metrics.MetricManager("vumi.test.")
+        self.assertEqual(mm._publisher, None)
+        self.assertEqual(mm._task, None)
+        mm.start_polling()
+        self.add_cleanup(mm.stop_polling)
+        self.assertEqual(mm._publisher, None)
+        self.assertNotEqual(mm._task, None)
+
+    def test_start_polling_with_publisher(self):
+        publisher = metrics.MetricPublisher()
+        mm = metrics.MetricManager("vumi.test.", publisher=publisher)
+        self.assertEqual(mm._publisher, publisher)
+        self.assertEqual(mm._task, None)
+        mm.start_polling()
+        self.add_cleanup(mm.stop_polling)
+        self.assertEqual(mm._publisher, publisher)
+        self.assertNotEqual(mm._task, None)
 
     def test_oneshot(self):
         self.patch(time, "time", lambda: 12345)
@@ -90,27 +175,27 @@ class TestMetricManager(VumiTestCase):
     def test_publish_metrics_poll(self):
         mm = metrics.MetricManager("vumi.test.", 0.1, self.on_publish)
         cnt = mm.register(metrics.Count("my.count"))
-        yield self.start_manager(mm)
+        yield self.start_manager_as_publisher(mm)
 
         cnt.inc()
-        mm._publish_metrics()
+        mm.publish_metrics()
         self._check_msg(mm, cnt, [1])
 
     @inlineCallbacks
     def test_publish_metrics_oneshot(self):
         mm = metrics.MetricManager("vumi.test.", 0.1, self.on_publish)
         cnt = metrics.Count("my.count")
-        yield self.start_manager(mm)
+        yield self.start_manager_as_publisher(mm)
 
         mm.oneshot(cnt, 1)
-        mm._publish_metrics()
+        mm.publish_metrics()
         self._check_msg(mm, cnt, [1])
 
     @inlineCallbacks
     def test_start(self):
         mm = metrics.MetricManager("vumi.test.", 0.1, self.on_publish)
         cnt = mm.register(metrics.Count("my.count"))
-        yield self.start_manager(mm)
+        yield self.start_manager_as_publisher(mm)
 
         self.assertTrue(mm._task is not None)
         self._check_msg(mm, cnt, None)
@@ -123,6 +208,24 @@ class TestMetricManager(VumiTestCase):
         cnt.inc()
         yield self.wait_publish()
         self._check_msg(mm, cnt, [1, 1])
+
+    @inlineCallbacks
+    def test_publish_metrics(self):
+        mm = metrics.MetricManager("vumi.test.", 0.1, self.on_publish)
+        cnt = metrics.Count("my.count")
+        yield self.start_manager_as_publisher(mm)
+
+        mm.oneshot(cnt, 1)
+        self.assertEqual(len(mm._oneshot_msgs), 1)
+        mm.publish_metrics()
+        self.assertEqual(mm._oneshot_msgs, [])
+        self._check_msg(mm, cnt, [1])
+
+    def test_publish_metrics_not_started_no_publisher(self):
+        mm = metrics.MetricManager("vumi.test.")
+        self.assertEqual(mm._publisher, None)
+        mm.oneshot(metrics.Count("my.count"), 1)
+        self.assertRaises(ValueError, mm.publish_metrics)
 
     def test_stop_unstarted(self):
         mm = metrics.MetricManager("vumi.test.", 0.1, self.on_publish)
@@ -388,7 +491,8 @@ class TestMetricsConsumer(VumiTestCase):
             ("vumi.test.v2", 3456, 2.0),
             ]
         datapoints = []
-        consumer = metrics.MetricsConsumer(lambda *v: datapoints.append(v))
+        callback = lambda *v: datapoints.append(v)
+        consumer = metrics.MetricsConsumer(None, callback)
         msg = metrics.MetricMessage()
         msg.extend(expected_datapoints)
         vumi_msg = Message.from_json(msg.to_json())

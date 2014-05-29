@@ -129,7 +129,7 @@ class FakeVas2NetsWorker(Worker):
     @inlineCallbacks
     def startWorker(self):
         url = urlparse(self.config.get('url'))
-        receipt_url = "http://localhost:%s%s" % (
+        receipt_url = "http://127.0.0.1:%s%s" % (
             self.config.get('web_port'), self.config.get('web_receipt_path'))
 
         self.receipt_resource = yield self.start_web_resources(

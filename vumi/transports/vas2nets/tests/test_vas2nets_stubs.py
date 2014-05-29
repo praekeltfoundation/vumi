@@ -80,7 +80,7 @@ class TestFakeVas2NetsWorker(VumiTestCase):
             'web_port': 9999,
             'web_receive_path': '/t/receive',
             'web_receipt_path': '/t/receipt',
-            'url': 'http://localhost:9998/t/send',
+            'url': 'http://127.0.0.1:9998/t/send',
         }
         self.worker = yield self.worker_helper.get_worker(
             StubbedFakeVas2NetsWorker, self.config, start=False)
@@ -98,7 +98,7 @@ class TestFakeVas2NetsWorker(VumiTestCase):
 
     @inlineCallbacks
     def test_receive_sent_sms(self):
-        resource = FakeVas2NetsHandler('http://localhost:9999/t/receipt', (0,))
+        resource = FakeVas2NetsHandler('http://127.0.0.1:9999/t/receipt', (0,))
         resource.schedule_delivery = lambda *a: None
 
         request = create_request({
@@ -121,7 +121,7 @@ class TestFakeVas2NetsWorker(VumiTestCase):
 
     @inlineCallbacks
     def test_deliver_receipt(self):
-        resource = FakeVas2NetsHandler('http://localhost:9999/t/receipt', (0,))
+        resource = FakeVas2NetsHandler('http://127.0.0.1:9999/t/receipt', (0,))
         yield self.test_worker.startWorker()
 
         yield resource.deliver_receipt('smsid', 'msgid', 'provider', 'sender')

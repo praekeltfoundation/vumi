@@ -5,8 +5,8 @@ from uuid import uuid4
 
 from twisted.internet import reactor
 from twisted.internet.defer import (
-    inlineCallbacks, DeferredQueue, maybeDeferred, returnValue, Deferred,
-    succeed)
+    inlineCallbacks, maybeDeferred, returnValue, Deferred, succeed)
+from twisted.internet.task import LoopingCall
 
 from vumi.reconnecting_client import ReconnectingClientService
 from vumi.transports.base import Transport
@@ -72,8 +72,20 @@ class SmppTransceiverProtocol(EsmeTransceiverFactory.protocol):
         d.addCallback(
             self.vumi_transport.set_remote_message_id, smpp_message_id)
         d.addCallback(
-            lambda message_id: cb(message_id, smpp_message_id, command_status))
+            self._handle_submit_sm_resp_callback, smpp_message_id,
+            command_status, cb)
         return d
+
+    def _handle_submit_sm_resp_callback(self, message_id, smpp_message_id,
+                                        command_status, cb):
+        if message_id is None:
+            # We have no message_id, so log a warning instead of calling the
+            # callback.
+            log.warning("Failed to retrieve message id for deliver_sm_resp."
+                        " ack/nack from %s discarded."
+                        % self.vumi_transport.transport_name)
+        else:
+            return cb(message_id, smpp_message_id, command_status)
 
 
 class SmppReceiverProtocol(SmppTransceiverProtocol):
@@ -108,9 +120,8 @@ class SmppService(ReconnectingClientService):
             return d
 
     def stopService(self):
-        protocol = self.get_protocol()
-        if protocol is not None:
-            d = protocol.disconnect()
+        if self._protocol is not None:
+            d = self._protocol.disconnect()
             d.addCallback(
                 lambda _: ReconnectingClientService.stopService(self))
             return d
@@ -123,6 +134,7 @@ class SmppTransceiverTransport(Transport):
 
     factory_class = SmppTransceiverClientFactory
     service_class = SmppService
+    sequence_class = RedisSequence
     clock = reactor
     start_message_consumer = False
 
@@ -143,11 +155,23 @@ class SmppTransceiverTransport(Transport):
             self, config.deliver_short_message_processor_config)
         self.submit_sm_processor = config.submit_short_message_processor(
             self, config.submit_short_message_processor_config)
-        self.sequence_generator = RedisSequence(self.redis)
+
+        self.sequence_generator = self.sequence_class(self.redis)
         self.throttled = None
+        self._throttled_message_ids = []
+        self._unthrottle_delayedCall = None
         self.factory = self.factory_class(self)
 
         self.service = self.start_service(self.factory)
+
+        self.tps_counter = 0
+        self.tps_limit = config.mt_tps
+        if config.mt_tps > 0:
+            self.mt_tps_lc = LoopingCall(self.reset_mt_tps)
+            self.mt_tps_lc.clock = self.clock
+            self.mt_tps_lc.start(1, now=True)
+        else:
+            self.mt_tps_lc = None
 
     def start_service(self, factory):
         config = self.get_static_config()
@@ -159,16 +183,59 @@ class SmppTransceiverTransport(Transport):
     def teardown_transport(self):
         if self.service:
             yield self.service.stopService()
+        if self.mt_tps_lc and self.mt_tps_lc.running:
+            self.mt_tps_lc.stop()
         yield self.redis._close()
+
+    def reset_mt_tps(self):
+        if self.throttled and self.need_mt_throttling():
+            self.reset_mt_throttle_counter()
+            self.stop_throttling(quiet=True)
+
+    def reset_mt_throttle_counter(self):
+        self.tps_counter = 0
+
+    def incr_mt_throttle_counter(self):
+        self.tps_counter += 1
+
+    def need_mt_throttling(self):
+        return self.tps_counter >= self.tps_limit
+
+    def bind_requires_throttling(self):
+        config = self.get_static_config()
+        return config.mt_tps > 0
+
+    def check_mt_throttling(self):
+        self.incr_mt_throttle_counter()
+        if self.need_mt_throttling():
+            # We can't yield here, because we need this message to finish
+            # processing before it will return.
+            self.start_throttling(quiet=True)
+
+    def _check_address_valid(self, message, field):
+        try:
+            message[field].encode('ascii')
+        except UnicodeError:
+            return False
+        return True
+
+    def _reject_for_invalid_address(self, message, field):
+        return self.publish_nack(
+            message['message_id'], u'Invalid %s: %s' % (field, message[field]))
 
     @inlineCallbacks
     def handle_outbound_message(self, message):
+        if self.bind_requires_throttling():
+            yield self.check_mt_throttling()
         protocol = yield self.service.get_protocol()
-        seq_nrs = yield self.submit_sm_processor.handle_outbound_message(
+        if not self._check_address_valid(message, 'to_addr'):
+            yield self._reject_for_invalid_address(message, 'to_addr')
+            return
+        if not self._check_address_valid(message, 'from_addr'):
+            yield self._reject_for_invalid_address(message, 'from_addr')
+            return
+        yield self.submit_sm_processor.handle_outbound_message(
             message, protocol)
-        yield DeferredQueue([
-            self.set_sequence_number_message_id(sqn, message['message_id'])
-            for sqn in seq_nrs])
         yield self.cache_message(message)
 
     def set_sequence_number_message_id(self, sequence_number, message_id):
@@ -199,6 +266,11 @@ class SmppTransceiverTransport(Transport):
         return self.redis.delete(message_key(message_id))
 
     def set_remote_message_id(self, message_id, smpp_message_id):
+        if message_id is None:
+            # If we store None, we end up with the string "None" in Redis. This
+            # confuses later lookups (which treat any non-None value as a valid
+            # identifier) and results in broken delivery reports.
+            return succeed(None)
         key = remote_message_key(smpp_message_id)
         config = self.get_static_config()
         d = self.redis.set(key, message_id)
@@ -212,10 +284,10 @@ class SmppTransceiverTransport(Transport):
 
     def handle_submit_sm_success(self, message_id, smpp_message_id,
                                  command_status):
-        if self.throttled:
-            self.stop_throttling()
         d = self.publish_ack(message_id, smpp_message_id)
         d.addCallback(lambda _: self.delete_cached_message(message_id))
+        if self.throttled:
+            d.addBoth(lambda _: self.check_stop_throttling(0))
         return d
 
     @inlineCallbacks
@@ -224,8 +296,8 @@ class SmppTransceiverTransport(Transport):
         error_message = yield self.get_cached_message(message_id)
         command_status = command_status or 'Unspecified'
         if error_message is None:
-            log.err("Could not retrieve failed message:%s" % (
-                message_id))
+            log.warning(
+                "Could not retrieve failed message: %s" % (message_id,))
         else:
             yield self.delete_cached_message(message_id)
             yield self.publish_nack(message_id, command_status)
@@ -233,32 +305,89 @@ class SmppTransceiverTransport(Transport):
                 FailureMessage(message=error_message.payload,
                                failure_code=None,
                                reason=command_status))
+        if self.throttled:
+            self.check_stop_throttling(0)
 
     @inlineCallbacks
     def handle_submit_sm_throttled(self, message_id, smpp_message_id,
                                    command_status):
+        yield self.start_throttling()
         config = self.get_static_config()
-        message = yield self.get_cached_message(message_id)
-        self.start_throttling()
-        if message is None:
-            log.err("Could not retrieve throttled message:%s" % (
-                message_id))
-            self.clock.callLater(config.throttle_delay, self.stop_throttling)
-        else:
-            self.clock.callLater(config.throttle_delay,
-                                 self.handle_outbound_message, message)
+        self._append_throttle_retry(message_id)
+        self.check_stop_throttling(config.throttle_delay)
 
-    def start_throttling(self):
+    def _append_throttle_retry(self, message_id):
+        if message_id not in self._throttled_message_ids:
+            self._throttled_message_ids.append(message_id)
+
+    def check_stop_throttling(self, delay):
+        if self._unthrottle_delayedCall is not None:
+            # We already have one of these scheduled.
+            return
+        self._unthrottle_delayedCall = self.clock.callLater(
+            delay, self._check_stop_throttling)
+
+    @inlineCallbacks
+    def _check_stop_throttling(self):
+        """
+        Check if we should stop throttling, and stop throttling if we should.
+
+        At a high level, we try each throttled message in our list until all of
+        them have been accepted by the SMSC, at which point we stop throttling.
+
+        In more detail:
+
+        We recursively process our list of throttled message_ids until either
+        we have none left (at which point we stop throttling) or we find one we
+        can successfully look up in our cache.
+
+        When we find a message we can retry, we retry it and return. We remain
+        throttled until the SMSC responds. If we're still throttled, the
+        message_id gets appended to our list and another check is scheduled for
+        later. If we're no longer throttled, this method gets called again
+        immediately.
+
+        When there are no more throttled message_ids in our list, we stop
+        throttling.
+        """
+        self._unthrottle_delayedCall = None
+
+        if not self._throttled_message_ids:
+            # We have no throttled messages waiting, so stop throttling.
+            log.msg("No more throttled messages to retry.")
+            self.stop_throttling()
+            return
+
+        message_id = self._throttled_message_ids.pop(0)
+        message = yield self.get_cached_message(message_id)
+        if message is None:
+            # We can't find this message, so log it and start again.
+            log.warning(
+                "Could not retrieve throttled message: %s" % (message_id,))
+            self.check_stop_throttling(0)
+        else:
+            # Try handle this message again and leave the rest to our
+            # submit_sm_resp handlers.
+            log.msg("Retrying throttled message: %s" % (message_id,))
+            yield self.handle_outbound_message(message)
+
+    def start_throttling(self, quiet=False):
         if self.throttled:
             return
-        log.warning("Throttling outbound messages.")
+        # We always want to log throttling messages, but we don't always want
+        # them to be warnings.
+        logger = log.msg if quiet else log.warning
+        logger("Throttling outbound messages.")
         self.throttled = True
-        self.pause_connectors()
+        return self.pause_connectors()
 
-    def stop_throttling(self):
+    def stop_throttling(self, quiet=False):
         if not self.throttled:
             return
-        log.warning("No longer throttling outbound messages.")
+        # We always want to log throttling messages, but we don't always want
+        # them to be warnings.
+        logger = log.msg if quiet else log.warning
+        logger("No longer throttling outbound messages.")
         self.throttled = False
         self.unpause_connectors()
 

@@ -59,21 +59,16 @@ class BaseConnector(object):
         self._publishers[mtype] = publisher
         returnValue(publisher)
 
-    def _set_prefetch_count(self, consumer):
-        if self._prefetch_count is not None:
-            consumer.channel.basic_qos(0, self._prefetch_count, False)
-
     @inlineCallbacks
     def _setup_consumer(self, mtype, msg_class, default_handler):
         def handler(msg):
             return self._consume_message(mtype, msg)
 
-        consumer = yield self.worker.consume(self._rkey(mtype), handler,
-                                             message_class=msg_class,
-                                             paused=True)
+        consumer = yield self.worker.consume(
+            self._rkey(mtype), handler, message_class=msg_class, paused=True,
+            prefetch_count=self._prefetch_count)
         self._consumers[mtype] = consumer
         self._set_default_endpoint_handler(mtype, default_handler)
-        self._set_prefetch_count(consumer)
         returnValue(consumer)
 
     def _set_endpoint_handler(self, mtype, handler, endpoint_name):

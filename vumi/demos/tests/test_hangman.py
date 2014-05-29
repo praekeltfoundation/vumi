@@ -147,7 +147,9 @@ class TestHangmanWorker(VumiTestCase):
         # it is a sad elephant (as seen in the wild)
         root.putChild("word", Data('\xef\xbb\xbfelephant\r\n', 'text/html'))
         site_factory = Site(root)
-        self.webserver = yield reactor.listenTCP(0, site_factory)
+        self.webserver = yield reactor.listenTCP(
+            0, site_factory, interface='127.0.0.1')
+        self.add_cleanup(self.webserver.loseConnection)
         addr = self.webserver.getHost()
         random_word_url = "http://%s:%s/word" % (addr.host, addr.port)
 
@@ -173,11 +175,6 @@ class TestHangmanWorker(VumiTestCase):
             return 'reply'
 
         returnValue([(reply_code(msg), msg['content']) for msg in msgs])
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield super(TestHangmanWorker, self).tearDown()
-        yield self.webserver.loseConnection()
 
     @inlineCallbacks
     def test_new_session(self):

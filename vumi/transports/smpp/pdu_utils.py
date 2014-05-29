@@ -20,6 +20,9 @@ def command_id(pdu):
 
 
 def message_id(pdu):
+    # If we have an unsuccessful response, we may not get a message_id.
+    if 'body' not in pdu and not pdu_ok(pdu):
+        return None
     return pdu['body']['mandatory_parameters']['message_id']
 
 

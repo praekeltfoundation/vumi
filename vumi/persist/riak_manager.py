@@ -4,8 +4,9 @@
 
 import json
 
-from riak import (RiakClient, RiakObject, RiakMapReduce, RiakHttpTransport,
-                    RiakPbcTransport)
+from riak import (
+    RiakClient, RiakObject, RiakMapReduce, RiakHttpTransport, RiakPbcTransport)
+from twisted.internet.defer import gatherResults
 
 from vumi.persist.model import Manager
 from vumi.utils import flatten_generator
@@ -87,15 +88,23 @@ class RiakManager(Manager):
         riak_object = self.riak_object(modelcls, key, result)
         if not result:
             riak_object.reload()
+        was_migrated = False
 
         # Run migrators until we have the correct version of the data.
         while riak_object.get_data() is not None:
             data_version = riak_object.get_data().get('$VERSION', None)
             if data_version == modelcls.VERSION:
-                return modelcls(self, key, _riak_object=riak_object)
+                obj = modelcls(self, key, _riak_object=riak_object)
+                obj.was_migrated = was_migrated
+                return obj
             migrator = modelcls.MIGRATOR(modelcls, self, data_version)
             riak_object = migrator(riak_object).get_riak_object()
+            was_migrated = True
         return None
+
+    def _load_multiple(self, modelcls, keys):
+        objs = (self.load(modelcls, key) for key in keys)
+        return [obj for obj in objs if obj is not None]
 
     def riak_map_reduce(self):
         return RiakMapReduce(self.client)
@@ -112,6 +121,9 @@ class RiakManager(Manager):
         bucket_name = self.bucket_name(modelcls)
         bucket = self.client.bucket(bucket_name)
         return bucket.enable_search()
+
+    def should_quote_index_values(self):
+        return not isinstance(self.client, RiakPbcTransport)
 
     def purge_all(self):
         buckets = self.client.get_buckets()
