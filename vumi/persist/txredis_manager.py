@@ -128,6 +128,10 @@ class VumiRedis(txr.Redis):
         for keys on each scan. ``cursor`` may be ``None`` or ``'0'`` to
         indicate a new scan. Any other value should be treated as an opaque
         string.
+
+        .. note::
+
+           Requires redis server 2.8 or later.
         """
         args = []
         if cursor is None:
