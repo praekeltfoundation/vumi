@@ -326,7 +326,7 @@ class EsmeTransceiver(Protocol):
         if not all([isinstance(part, unicode) for part in content_parts]):
             command_status = self.config.deliver_sm_decoding_error
             log.msg('Not all parts of the PDU were able to be decoded. '
-                    'Responding wtih %s.' % (command_status,),
+                    'Responding with %s.' % (command_status,),
                     parts=content_parts)
             self.send_pdu(DeliverSMResp(seq_no(pdu),
                           command_status=command_status))
