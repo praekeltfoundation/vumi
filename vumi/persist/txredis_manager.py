@@ -137,7 +137,10 @@ class VumiRedis(txr.Redis):
         if count is not None:
             args.extend(("COUNT", count))
         self._send("SCAN", cursor, *args)
-        return self.getResponse()
+        d = self.getResponse()
+        d.addCallback(
+            lambda r: ((None if r[0] == '0' else r[0]), r[1]))
+        return d
 
 
 class VumiRedisClientFactory(txr.RedisClientFactory):

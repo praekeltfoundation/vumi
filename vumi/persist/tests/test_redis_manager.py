@@ -51,7 +51,7 @@ class TestRedisManager(VumiTestCase):
         while True:
             cursor, keys = self.manager.scan(cursor)
             all_keys.update(keys)
-            if cursor == '0':
+            if cursor is None:
                 break
         self.assertEqual(all_keys, set(
             'key%d' % i for i in range(10)))

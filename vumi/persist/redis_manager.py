@@ -28,7 +28,10 @@ class VumiRedis(redis.Redis):
             args.extend(("MATCH", match))
         if count is not None:
             args.extend(("COUNT", count))
-        return self.execute_command("SCAN", cursor, *args)
+        cursor, keys = self.execute_command("SCAN", cursor, *args)
+        if cursor == '0':
+            cursor = None
+        return (cursor, keys)
 
 
 class RedisManager(Manager):
