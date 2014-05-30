@@ -18,6 +18,9 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
     throttle_delay = ConfigFloat(
         "Delay (in seconds) before retrying a message after receiving "
         "`ESME_RTHROTTLED` or `ESME_RMSGQFUL`.", default=0.1, static=True)
+    deliver_sm_decoding_error = ConfigText(
+        'The error to respond with when we were unable to decode all parts '
+        'of a PDU.', default='ESME_RDELIVERYFAILURE', static=True)
     submit_sm_expiry = ConfigInt(
         'How long (in seconds) to wait for the SMSC to return with a '
         '`submit_sm_resp`. Defaults to 24 hours.',
