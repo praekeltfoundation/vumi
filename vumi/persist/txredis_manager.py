@@ -122,7 +122,12 @@ class VumiRedis(txr.Redis):
 
     def scan(self, cursor, match=None, count=None):
         """
-        Scans through all the keys in database.
+        Scan through all the keys in the database returning those that
+        match the pattern ``match``. The ``cursor`` specifies where to
+        start a scan and ``count`` determines how much work to do looking
+        for keys on each scan. ``cursor`` may be ``None`` or ``'0'`` to
+        indicate a new scan. Any other value should be treated as an opaque
+        string.
         """
         args = []
         if cursor is None:
