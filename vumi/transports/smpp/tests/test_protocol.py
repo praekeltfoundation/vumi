@@ -252,6 +252,21 @@ class EsmeTestCase(VumiTestCase):
             status='ESME_RDELIVERYFAILURE')
 
     @inlineCallbacks
+    def test_deliver_sm_fail_with_custom_error(self):
+        self.patch(DeliverShortMessageProcessor, 'decode_pdus',
+                   lambda *a: [str('not a unicode string')])
+        transport, protocol = yield self.setup_bind(config={
+            "deliver_sm_decoding_error": "ESME_RSYSERR"
+        })
+        pdu = DeliverSM(
+            sequence_number=0, message_id='foo', short_message='bar')
+        protocol.dataReceived(pdu.get_bin())
+        [deliver_sm_resp] = yield wait_for_pdus(transport, 1)
+        self.assertCommand(
+            deliver_sm_resp, 'deliver_sm_resp', sequence_number=0,
+            status='ESME_RSYSERR')
+
+    @inlineCallbacks
     def test_on_enquire_link(self):
         transport, protocol = yield self.setup_bind()
         pdu = EnquireLink(sequence_number=0)
