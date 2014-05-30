@@ -118,6 +118,28 @@ class FakeRedis(object):
         return fnmatch.filter(self._data.keys(), pattern)
 
     @maybe_async
+    def scan(self, cursor, match=None, count=None):
+        if cursor is None:
+            start = 0
+        else:
+            start = int(cursor)
+        if match is None:
+            match = '*'
+        if count is None:
+            count = 10
+
+        keys = fnmatch.filter(self._data.keys(), match)
+        keys.sort()
+
+        end = start + count
+        if end >= len(keys):
+            cursor = None
+        else:
+            cursor = str(end)
+
+        return cursor, keys[start:end]
+
+    @maybe_async
     def flushdb(self):
         self._data = {}
 

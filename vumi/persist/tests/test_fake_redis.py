@@ -358,6 +358,14 @@ class TestFakeRedis(VumiTestCase):
         yield self.redis.hset("hash_key", "a", 1.0)
         yield self.assert_redis_op('hash', 'type', 'hash_key')
 
+    @inlineCallbacks
+    def test_scan(self):
+        for i in range(20):
+            yield self.redis.set("key%02d" % i, str(i))
+        self.assertEqual(
+            (yield self.redis.scan(None)),
+            ('10', ["key%02d" % i for i in range(10)]))
+
 
 class TestFakeRedisCharsetHandling(VumiTestCase):
 
