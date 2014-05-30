@@ -4,6 +4,7 @@ import fnmatch
 from functools import wraps
 from itertools import takewhile, dropwhile
 import os
+from zlib import crc32
 
 from twisted.internet import reactor
 from twisted.internet.defer import Deferred, execute
@@ -39,6 +40,7 @@ class FakeRedis(object):
 
     def __init__(self, charset='utf-8', errors='strict', async=False):
         self._data = {}
+        self._known_key_existence = {}
         self._expiries = {}
         self._is_async = async
         self.clock = Clock()
@@ -91,6 +93,23 @@ class FakeRedis(object):
         else:
             return func(self, *args, **kw)
 
+    def _set_key(self, key, value):
+        self._known_key_existence[key] = True
+        self._data[key] = value
+
+    def _setdefault_key(self, key, default):
+        self._known_key_existence[key] = True
+        return self._data.setdefault(key, default)
+
+    def _sort_keys_by_hash(self, keys):
+        """
+        Sort keys in a consistent but non-obvious way.
+
+        We sort by the crc32 of the key, that being cheap and good enough for
+        our purposes here.
+        """
+        return sorted(keys, key=crc32)
+
     # Global operations
 
     @maybe_async
@@ -118,8 +137,45 @@ class FakeRedis(object):
         return fnmatch.filter(self._data.keys(), pattern)
 
     @maybe_async
+    def scan(self, cursor, match=None, count=None):
+        if cursor is None:
+            start = 0
+        else:
+            start = int(cursor)
+        if match is None:
+            match = '*'
+        if count is None:
+            count = 10
+
+        output = []
+
+        # Start with all the keys we've ever seen, ordered in a consistent but
+        # non-obvious way.
+        keys = self._sort_keys_by_hash(self._known_key_existence.keys())
+
+        # Then throw away the number of keys our cursor has already walked.
+        # This means we may miss new keys that have been added since we started
+        # iterating and/or return duplicates, but that's what Redis does.
+        for i, key in enumerate(keys[start:]):
+            if not self._known_key_existence[key]:
+                # This key has been deleted.
+                continue
+            output.append(key)
+            if len(output) >= count:
+                break
+
+        # Update the cursor to reflect the new position in the key list.
+        if start + i + 1 >= len(keys):
+            cursor = None
+        else:
+            cursor = str(start + i + 1)
+
+        return cursor, fnmatch.filter(output, match)
+
+    @maybe_async
     def flushdb(self):
         self._data = {}
+        self._known_key_existence = {}
 
     # String operations
 
@@ -130,7 +186,7 @@ class FakeRedis(object):
     @maybe_async
     def set(self, key, value):
         value = self._encode(value)  # set() sets string value
-        self._data[key] = value
+        self._set_key(key, value)
 
     @maybe_async
     def setex(self, key, time, value):
@@ -142,7 +198,7 @@ class FakeRedis(object):
     def setnx(self, key, value):
         value = self._encode(value)  # set() sets string value
         if key not in self._data:
-            self._data[key] = value
+            self._set_key(key, value)
             return 1
         return 0
 
@@ -150,6 +206,8 @@ class FakeRedis(object):
     def delete(self, key):
         existed = (key in self._data)
         self._data.pop(key, None)
+        if existed:
+            self._known_key_existence[key] = False
         return existed
 
     # Integer operations
@@ -177,7 +235,7 @@ class FakeRedis(object):
 
     @maybe_async
     def hset(self, key, field, value):
-        mapping = self._data.setdefault(key, {})
+        mapping = self._setdefault_key(key, {})
         new_field = field not in mapping
         mapping[field] = value
         return int(new_field)
@@ -208,7 +266,7 @@ class FakeRedis(object):
 
     @maybe_async
     def hmset(self, key, mapping):
-        hval = self._data.setdefault(key, {})
+        hval = self._setdefault_key(key, {})
         hval.update(dict([(k, v) for k, v in mapping.items()]))
 
     @maybe_async
@@ -229,7 +287,7 @@ class FakeRedis(object):
         value = self._data.get(key, {}).get(field, "0")
         # the int(str(..)) coerces amount to an int but rejects floats
         value = int(value) + int(str(amount))
-        self._data.setdefault(key, {})[field] = str(value)
+        self._setdefault_key(key, {})[field] = str(value)
         return value
 
     @maybe_async
@@ -240,7 +298,7 @@ class FakeRedis(object):
 
     @maybe_async
     def sadd(self, key, *values):
-        sval = self._data.setdefault(key, set())
+        sval = self._setdefault_key(key, set())
         old_len = len(sval)
         sval.update(map(self._encode, values))
         return len(sval) - old_len
@@ -291,12 +349,12 @@ class FakeRedis(object):
 
     @maybe_async
     def zadd(self, key, **valscores):
-        zval = self._data.setdefault(key, Zset())
+        zval = self._setdefault_key(key, Zset())
         return zval.zadd(**valscores)
 
     @maybe_async
     def zrem(self, key, value):
-        zval = self._data.setdefault(key, Zset())
+        zval = self._setdefault_key(key, Zset())
         return zval.zrem(value)
 
     @maybe_async
@@ -337,7 +395,7 @@ class FakeRedis(object):
 
     @maybe_async
     def zremrangebyrank(self, key, start, stop):
-        zval = self._data.setdefault(key, Zset())
+        zval = self._setdefault_key(key, Zset())
         return zval.zremrangebyrank(start, stop)
 
     # List operations
@@ -357,11 +415,11 @@ class FakeRedis(object):
 
     @maybe_async
     def lpush(self, key, obj):
-        self._data.setdefault(key, []).insert(0, obj)
+        self._setdefault_key(key, []).insert(0, obj)
 
     @maybe_async
     def rpush(self, key, obj):
-        self._data.setdefault(key, []).append(obj)
+        self._setdefault_key(key, []).append(obj)
         return self.llen.sync(self, key) - 1
 
     @maybe_async
@@ -390,7 +448,7 @@ class FakeRedis(object):
             lval.reverse()
             lval = [v for v in lval if keep(v)]
             lval.reverse()
-        self._data[key] = lval
+        self._set_key(key, lval)
         return removed[0]
 
     @maybe_async
