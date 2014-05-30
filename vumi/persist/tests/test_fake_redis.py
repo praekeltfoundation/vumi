@@ -365,6 +365,18 @@ class TestFakeRedis(VumiTestCase):
         self.assertEqual(
             (yield self.redis.scan(None)),
             ('10', ["key%02d" % i for i in range(10)]))
+        self.assertEqual(
+            (yield self.redis.scan(None, count=5)),
+            ('5', ["key%02d" % i for i in range(5)]))
+        self.assertEqual(
+            (yield self.redis.scan('5', count=5)),
+            ('10', ["key%02d" % i for i in range(5, 10)]))
+        self.assertEqual(
+            (yield self.redis.scan('15', count=5)),
+            (None, ["key%02d" % i for i in range(15, 20)]))
+        self.assertEqual(
+            (yield self.redis.scan(None, count=20)),
+            (None, ["key%02d" % i for i in range(20)]))
 
 
 class TestFakeRedisCharsetHandling(VumiTestCase):
