@@ -120,7 +120,7 @@ class TestFreeSwitchESLProtocol(VumiTestCase):
             "arg": "playback_terminators=None",
         }, {
             "name": "playback",
-            "arg": "/tmp/voice5908486175754136239.wav",
+            "arg": "/tmp/voice%s.wav" % hash("Hello!"),
         }])
 
     @inlineCallbacks
