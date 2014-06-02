@@ -7,10 +7,12 @@ from twisted.internet.defer import (
 from twisted.protocols.basic import LineReceiver
 from twisted.internet import reactor, protocol
 from twisted.python import log
+from twisted.test import proto_helpers
 
 from vumi.message import TransportUserMessage
 from vumi.tests.helpers import VumiTestCase
 from vumi.transports.voice import VoiceServerTransport
+from vumi.transports.voice.voice import FreeSwitchESLProtocol
 from vumi.transports.tests.helpers import TransportHelper
 
 
@@ -57,6 +59,75 @@ class FakeFreeswitchProtocol(LineReceiver):
         self.disconnect_d.callback(None)
 
 
+class TestFreeSwitchESLProtocol(VumiTestCase):
+
+    transport_class = VoiceServerTransport
+    transport_type = 'voice'
+
+    @inlineCallbacks
+    def setUp(self):
+        self.tx_helper = self.add_helper(
+            TransportHelper(self.transport_class))
+        self.worker = yield self.tx_helper.get_transport(
+            {'freeswitch_listenport': 0})
+        self.proto = FreeSwitchESLProtocol(self.worker)
+        self.tr = proto_helpers.StringTransport()
+        self.proto.transport = self.tr
+
+    def send_event(self, params):
+        for key, value in params:
+            self.proto.dataReceived("%s:%s\n" % (key, value))
+        self.proto.dataReceived("\n")
+
+    def send_command_reply(self, response):
+        self.send_event([
+            ("Content_Type", "command/reply"),
+            ("Reply_Text", response),
+        ])
+
+    def assert_commands(self, expected_commands):
+        commands = []
+        command = None
+        for line in self.tr.value().splitlines():
+            line = line.strip()
+            if not line:
+                if command is not None:
+                    commands.append(command)
+                command = None
+            elif line == "sendmsg":
+                command = {}
+            else:
+                key, value = line.split(":", 1)
+                command[key] = value.strip()
+        for cmd in expected_commands:
+            cmd.setdefault("call-command", "execute")
+            cmd.setdefault("event-lock", "true")
+            if "name" in cmd:
+                cmd["execute-app-name"] = cmd.pop("name")
+            if "arg" in cmd:
+                cmd["execute-app-arg"] = cmd.pop("arg")
+        self.assertEqual(commands, expected_commands)
+
+    @inlineCallbacks
+    def test_create_and_stream_text_as_speech_file_found(self):
+        d = self.proto.create_and_stream_text_as_speech(
+            "engine", "voice1", "Hello!")
+        self.send_command_reply("+OK")
+        self.send_command_reply("+OK")
+        yield d
+        self.assert_commands([{
+            "name": "set",
+            "arg": "playback_terminators=None",
+        }, {
+            "name": "playback",
+            "arg": "/tmp/voice5908486175754136239.wav",
+        }])
+
+    @inlineCallbacks
+    def test_create_and_stream_text_as_speech_file_not_found(self):
+        yield None
+
+
 class TestVoiceServerTransport(VumiTestCase):
 
     transport_class = VoiceServerTransport
@@ -64,14 +135,12 @@ class TestVoiceServerTransport(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        log.msg("TRACE:Set Up ")
         self.tx_helper = self.add_helper(TransportHelper(self.transport_class))
         self.worker = yield self.tx_helper.get_transport(
-            {'freeswitch_listenport': 8084})
+            {'freeswitch_listenport': 0})
         self.client = yield self.make_client()
         self.add_cleanup(self.wait_for_client_deregistration)
         yield self.wait_for_client_start()
-        log.msg("TRACE:Set Up Complete")
 
     @inlineCallbacks
     def wait_for_client_deregistration(self):
