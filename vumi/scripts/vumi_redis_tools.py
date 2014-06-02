@@ -7,9 +7,43 @@ from twisted.python import usage
 from vumi.persist.redis_manager import RedisManager
 
 
+class TaskError(Exception):
+    """An error occurred while using tasks."""
+
+
 class Task(object):
+
+    name = None
+
     def __init__(self):
         pass
+
+    @classmethod
+    def parse(cls, task_desc):
+        """
+        Parse a task description into a task.
+
+        Task description format:
+
+          <task-type>[:[<param>=<value>,<param>=<value>]]
+        """
+        task_type, _, param_desc = task_desc.partition(':')
+        task_cls = cls._parse_task_type(task_type)
+        params = cls._parse_param_desc(param_desc)
+        return task_cls(**params)
+
+    @classmethod
+    def _parse_task_type(cls, task_type):
+        names = dict((t.name, t) for t in cls.__subclasses__())
+        if task_type not in names:
+            raise TaskError("Unknown task type %r" % (task_type,))
+        return names[task_type]
+
+    @classmethod
+    def _parse_param_desc(cls, param_desc):
+        params = [x.partition('=') for x in param_desc.split(',')]
+        params = [(p, v) for p, _sep, v in params]
+        return dict(params)
 
     def setup(self):
         pass
@@ -19,6 +53,20 @@ class Task(object):
 
     def apply(self, key):
         pass
+
+
+class Count(Task):
+    def __init__(self):
+        self._count = None
+
+    def setup(self):
+        self._count = 0
+
+    def teardown(self):
+        pass
+
+    def apply(self, key):
+        self._count += 1
 
 
 class Options(usage.Options):
@@ -35,8 +83,9 @@ class Options(usage.Options):
         self['config'] = yaml.safe_load(open(config_file))
         self['match_pattern'] = match_pattern
 
-    def opt_task(self, task):
-        self['tasks'].append()
+    def opt_task(self, task_desc):
+        task = Task.parse(task_desc)
+        self['tasks'].append(task)
 
     opt_t = opt_task
 
