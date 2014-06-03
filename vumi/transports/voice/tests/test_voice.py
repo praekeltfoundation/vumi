@@ -92,6 +92,10 @@ class TestFreeSwitchESLProtocol(VumiTestCase):
     transport_class = VoiceServerTransport
     transport_type = 'voice'
 
+    VOICE_CMD = """
+        python -c open("{filename}","w").write("{text}")
+    """
+
     @inlineCallbacks
     def setUp(self):
         self.tx_helper = self.add_helper(
@@ -144,7 +148,7 @@ class TestFreeSwitchESLProtocol(VumiTestCase):
 
         with LogCatcher() as lc:
             d = self.proto.create_and_stream_text_as_speech(
-                self.voice_cache_folder, "echo", "voice1", content)
+                self.voice_cache_folder, self.VOICE_CMD, "wav", content)
             self.assertEqual(lc.messages(), [
                 "Using cached voice file %r" % (voice_filename,)
             ])
@@ -160,6 +164,9 @@ class TestFreeSwitchESLProtocol(VumiTestCase):
 
         yield d
 
+        with open(voice_filename) as f:
+            self.assertEqual(f.read(), "Dummy voice file")
+
     @inlineCallbacks
     def test_create_and_stream_text_as_speech_file_not_found(self):
         content = "Hello!"
@@ -169,7 +176,7 @@ class TestFreeSwitchESLProtocol(VumiTestCase):
 
         with LogCatcher() as lc:
             d = self.proto.create_and_stream_text_as_speech(
-                self.voice_cache_folder, "echo", "voice1", content)
+                self.voice_cache_folder, self.VOICE_CMD, "wav", content)
             self.assertEqual(lc.messages(), [
                 "Generating voice file %r" % (voice_filename,)
             ])
@@ -184,6 +191,9 @@ class TestFreeSwitchESLProtocol(VumiTestCase):
             }, "+OK")
 
         yield d
+
+        with open(voice_filename) as f:
+            self.assertEqual(f.read(), "Hello!")
 
 
 class TestVoiceServerTransport(VumiTestCase):
