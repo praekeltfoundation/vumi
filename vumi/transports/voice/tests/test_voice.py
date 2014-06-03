@@ -137,6 +137,15 @@ class TestFreeSwitchESLProtocol(VumiTestCase):
         self.assert_command(cmd, expected)
         self.send_command_reply(response)
 
+    def test_create_tts_command(self):
+        self.assertEqual(
+            self.proto.create_tts_command("foo", "myfile", "hi!"),
+            ("foo", []))
+        self.assertEqual(
+            self.proto.create_tts_command(
+                "foo -f {filename} -t {text}", "myfile", "hi!"),
+            ("foo", ["-f", "myfile", "-t", "hi!"]))
+
     @inlineCallbacks
     def test_create_and_stream_text_as_speech_file_found(self):
         content = "Hello!"
