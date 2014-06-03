@@ -224,6 +224,13 @@ class TestFreeSwitchESLProtocol(VumiTestCase):
 
         yield d
 
+    def test_unboundEvent(self):
+        with LogCatcher() as lc:
+            self.proto.unboundEvent({"some": "data"}, "custom_event")
+            self.assertEqual(lc.messages(), [
+                "Unbound event 'custom_event': {'some': 'data'}",
+            ])
+
 
 class TestVoiceServerTransport(VumiTestCase):
 
