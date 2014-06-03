@@ -126,13 +126,17 @@ class FreeSwitchESLProtocol(freeswitchesl.FreeSwitchEventProtocol):
         self.vumi_transport.deregister_client(self)
 
     def unboundEvent(self, evdata, evname):
-        pass
+        log.msg("Unbound event %r: %r" % (evname, evdata))
 
 
 class VoiceServerTransportConfig(Transport.CONFIG_CLASS):
     """
     Configuration parameters for the voice transport
     """
+
+    to_addr = ConfigText(
+        "The ``to_addr`` to use for inbound messages.",
+        default="freeswitchvoice", static=True)
 
     tts_type = ConfigText(
         "Either 'freeswitch' or 'local' to specify where TTS is executed.",
@@ -219,7 +223,7 @@ class VoiceServerTransport(Transport):
         self._clients = {}
 
         self.config = self.get_static_config()
-        self._to_addr = "freeswitchvoice"
+        self._to_addr = self.config.to_addr
         self._transport_type = "voice"
 
         def protocol():
