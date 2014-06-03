@@ -19,7 +19,7 @@ from eventsocket import EventProtocol
 
 from vumi.transports import Transport
 from vumi.message import TransportUserMessage
-from vumi.config import ConfigInt, ConfigText
+from vumi.config import ConfigServerEndpoint, ConfigText
 from vumi.errors import VumiError
 
 
@@ -172,9 +172,10 @@ class VoiceServerTransportConfig(Transport.CONFIG_CLASS):
         "Specify the file extension used for cached voice files (only affects"
         " tts_type 'local').", default="wav", static=True)
 
-    freeswitch_listenport = ConfigInt(
-        "Port number that freeswitch will attempt to connect on",
-        default=8084, static=True)
+    twisted_endpoint = ConfigServerEndpoint(
+        "The endpoint the voice transport will listen on (and that Freeswitch"
+        " will connect to).",
+        required=True, default="tcp:port=8084", static=True)
 
 
 class VoiceServerTransport(Transport):
@@ -237,8 +238,7 @@ class VoiceServerTransport(Transport):
         factory = ServerFactory()
         factory.protocol = protocol
 
-        self.voice_server = yield reactor.listenTCP(
-            self.config.freeswitch_listenport, factory)
+        self.voice_server = yield self.config.twisted_endpoint.listen(factory)
 
     @inlineCallbacks
     def teardown_transport(self):

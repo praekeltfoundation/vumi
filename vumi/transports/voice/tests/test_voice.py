@@ -101,7 +101,7 @@ class TestFreeSwitchESLProtocol(VumiTestCase):
         self.tx_helper = self.add_helper(
             TransportHelper(self.transport_class))
         self.worker = yield self.tx_helper.get_transport(
-            {'freeswitch_listenport': 0})
+            {'twisted_endpoint': 'tcp:port=0'})
 
         self.tr = EslTransport()
 
@@ -241,7 +241,7 @@ class TestVoiceServerTransport(VumiTestCase):
     def setUp(self):
         self.tx_helper = self.add_helper(TransportHelper(self.transport_class))
         self.worker = yield self.tx_helper.get_transport(
-            {'freeswitch_listenport': 0})
+            {'twisted_endpoint': 'tcp:port=0'})
         self.client = yield self.make_client()
         self.add_cleanup(self.wait_for_client_deregistration)
         yield self.wait_for_client_start()
