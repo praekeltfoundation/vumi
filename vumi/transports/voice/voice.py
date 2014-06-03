@@ -276,6 +276,7 @@ class VoiceServerTransport(Transport):
             transport_type=self._transport_type,
         )
 
+    @inlineCallbacks
     def handle_outbound_message(self, message):
         text = message['content']
         if text is None:
@@ -290,15 +291,15 @@ class VoiceServerTransport(Transport):
         client.set_input_type(None)
         if ('helper_metadata' in message):
             meta = message['helper_metadata']
-            if ('voice' in meta):
+            if 'voice' in meta:
                 voicemeta = meta['voice']
                 client.set_input_type(voicemeta.get('wait_for', None))
                 overrideURL = voicemeta.get('speech_url', None)
 
         if (overrideURL is None):
-            client.output_message("%s\n" % text)
+            yield client.output_message("%s\n" % text)
         else:
-            client.output_stream(overrideURL)
+            yield client.output_stream(overrideURL)
 
         if message['session_event'] == TransportUserMessage.SESSION_CLOSE:
             client.close_call()
