@@ -43,10 +43,10 @@ class FreeSwitchESLProtocol(freeswitchesl.FreeSwitchEventProtocol):
         yield self.vumi_transport.register_client(self)
 
     def onDtmf(self, ev):
-        if(self.input_type is None):
+        if self.input_type is None:
             return self.vumi_transport.handle_input(self, ev.DTMF_Digit)
         else:
-            if (ev.DTMF_Digit == self.input_type):
+            if ev.DTMF_Digit == self.input_type:
                 ret_value = self.current_input
                 self.current_input = ''
                 return self.vumi_transport.handle_input(self, ret_value)
@@ -64,7 +64,7 @@ class FreeSwitchESLProtocol(freeswitchesl.FreeSwitchEventProtocol):
     def create_and_stream_text_as_speech(self, folder, command, ext, message):
         key = md5.md5(message).hexdigest()
         filename = os.path.join(folder, "voice-%s.%s" % (key, ext))
-        if (not os.path.exists(filename)):
+        if not os.path.exists(filename):
             log.msg("Generating voice file %r" % (filename,))
             cmd, args = self.create_tts_command(command, filename, message)
             yield getProcessOutput(cmd, args=args)
@@ -130,10 +130,10 @@ class FreeSwitchESLProtocol(freeswitchesl.FreeSwitchEventProtocol):
 
 
 class VoiceServerTransportConfig(Transport.CONFIG_CLASS):
-
     """
     Configuration parameters for the voice transport
     """
+
     tts_type = ConfigText(
         "Either 'freeswitch' or 'local' to specify where TTS is executed.",
         default="freeswitch", static=True)
@@ -169,8 +169,8 @@ class VoiceServerTransportConfig(Transport.CONFIG_CLASS):
 
 
 class VoiceServerTransport(Transport):
-
-    """Transport for Freeswitch Voice Service.
+    """
+    Transport for Freeswitch Voice Service.
 
     Voice transports may receive additional hints for how to handle
     outbound messages the ``voice`` section of ``helper_metadata``.
@@ -289,14 +289,14 @@ class VoiceServerTransport(Transport):
         text = text.encode('utf-8')
         overrideURL = None
         client.set_input_type(None)
-        if ('helper_metadata' in message):
+        if 'helper_metadata' in message:
             meta = message['helper_metadata']
             if 'voice' in meta:
                 voicemeta = meta['voice']
                 client.set_input_type(voicemeta.get('wait_for', None))
                 overrideURL = voicemeta.get('speech_url', None)
 
-        if (overrideURL is None):
+        if overrideURL is None:
             yield client.output_message("%s\n" % text)
         else:
             yield client.output_stream(overrideURL)
