@@ -15,32 +15,37 @@ from twisted.internet.defer import inlineCallbacks, Deferred, gatherResults
 from twisted.internet.utils import getProcessOutput
 from twisted.python import log
 
+from eventsocket import EventProtocol
+
 from vumi.transports import Transport
 from vumi.message import TransportUserMessage
 from vumi.config import ConfigInt, ConfigText
 from vumi.errors import VumiError
-from vumi.transports.voice import freeswitchesl
 
 
 class VoiceError(VumiError):
     """Raised when errors occur while processing voice messages."""
 
 
-class FreeSwitchESLProtocol(freeswitchesl.FreeSwitchEventProtocol):
+class FreeSwitchESLProtocol(EventProtocol):
 
     def __init__(self, vumi_transport):
+        EventProtocol.__init__(self)
         self.vumi_transport = vumi_transport
-        freeswitchesl.FreeSwitchEventProtocol.__init__(self)
         self.request_hang_up = False
         self.current_input = ''
         self.input_type = None
+        self.uniquecallid = None
 
     @inlineCallbacks
     def connectionMade(self):
-        yield self.connect()
+        yield self.connect().addCallback(self.on_connect)
         yield self.myevents()
         yield self.answer()
         yield self.vumi_transport.register_client(self)
+
+    def on_connect(self, ctx):
+        self.uniquecallid = ctx.variable_call_uuid
 
     def onDtmf(self, ev):
         if self.input_type is None:
@@ -121,7 +126,7 @@ class FreeSwitchESLProtocol(freeswitchesl.FreeSwitchEventProtocol):
         log.msg("Channel HangUp")
         self.vumi_transport.deregister_client(self)
 
-    def on_disconnect(self, ev):
+    def onDisconnect(self, ev):
         log.msg("Channel disconnect received")
         self.vumi_transport.deregister_client(self)
 
