@@ -98,8 +98,9 @@ class FreeSwitchESLProtocol(freeswitchesl.FreeSwitchEventProtocol):
     def get_address(self):
         return self.uniquecallid
 
+    @inlineCallbacks
     def output_message(self, text):
-        self.stream_text_as_speech(text)
+        yield self.stream_text_as_speech(text)
 
     @inlineCallbacks
     def output_stream(self, url):
