@@ -61,13 +61,24 @@ class CalculatorApp(ApplicationWorker):
                 return self.new_session(message)
 
             session['action'] = action_index
-            d = self.reply_to(message, 'What is the first number?',helper_metadata={'voice':{ 'wait_for':'#'}})
+            d = self.reply_to(
+                message, 'What is the first number?', helper_metadata={
+                    'voice': {
+                        'wait_for': '#',
+                    }
+                })
             d.addCallback(lambda *a: self.save_session(user_id, session))
             return d
 
         if 'first_number' not in session:
             session['first_number'] = numeric_input
-            d = self.reply_to(message, 'What is the second number?',helper_metadata={'voice':{ 'wait_for':'#'}})
+            d = self.reply_to(
+                message, 'What is the second number?',
+                helper_metadata={
+                    'voice': {
+                        'wait_for': '#',
+                    }
+                })
             d.addCallback(lambda *a: self.save_session(user_id, session))
             return d
 
