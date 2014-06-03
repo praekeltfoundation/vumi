@@ -204,6 +204,26 @@ class TestFreeSwitchESLProtocol(VumiTestCase):
         with open(voice_filename) as f:
             self.assertEqual(f.read(), "Hello!")
 
+    @inlineCallbacks
+    def test_send_text_as_speech(self):
+        d = self.proto.send_text_as_speech(
+            "thomas", "his_masters_voice", "hi!")
+
+        yield self.assert_and_reply({
+            "name": "set",
+            "arg": "tts_engine=thomas",
+        }, "+OK")
+        yield self.assert_and_reply({
+            "name": "set",
+            "arg": "tts_voice=his_masters_voice",
+        }, "+OK")
+        yield self.assert_and_reply({
+            "name": "speak",
+            "arg": "hi!",
+        }, "+OK")
+
+        yield d
+
 
 class TestVoiceServerTransport(VumiTestCase):
 
