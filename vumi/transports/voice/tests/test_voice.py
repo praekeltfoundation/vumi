@@ -165,11 +165,11 @@ class TestFreeSwitchESLProtocol(VumiTestCase):
         yield self.assert_and_reply({
             "name": "set",
             "arg": "playback_terminators=None",
-            }, "+OK")
+        }, "+OK")
         yield self.assert_and_reply({
             "name": "playback",
             "arg": voice_filename,
-            }, "+OK")
+        }, "+OK")
 
         yield d
 
@@ -193,11 +193,11 @@ class TestFreeSwitchESLProtocol(VumiTestCase):
         yield self.assert_and_reply({
             "name": "set",
             "arg": "playback_terminators=None",
-            }, "+OK")
+        }, "+OK")
         yield self.assert_and_reply({
             "name": "playback",
             "arg": voice_filename,
-            }, "+OK")
+        }, "+OK")
 
         yield d
 
