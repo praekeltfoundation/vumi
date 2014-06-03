@@ -9,7 +9,6 @@ through as a vumi message
 import md5
 import os
 
-from twisted.internet import reactor
 from twisted.internet.protocol import ServerFactory
 from twisted.internet.defer import inlineCallbacks, Deferred, gatherResults
 from twisted.internet.utils import getProcessOutput
