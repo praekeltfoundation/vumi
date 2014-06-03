@@ -79,16 +79,17 @@ class FreeSwitchESLProtocol(freeswitchesl.FreeSwitchEventProtocol):
         yield self.set("tts_voice=" + voice)
         yield self.execute("speak", message)
 
+    @inlineCallbacks
     def stream_text_as_speech(self, message):
         finalmessage = message.replace("\n", " . ")
         log.msg("TTS: " + finalmessage)
         cfg = self.vumi_transport.config
         if cfg.tts_type == "local":
-            self.create_and_stream_text_as_speech(
+            yield self.create_and_stream_text_as_speech(
                 cfg.tts_local_cache, cfg.tts_local_command,
                 cfg.tts_local_ext, finalmessage)
         elif cfg.tts_type == "freeswitch":
-            self.send_text_as_speech(
+            yield self.send_text_as_speech(
                 cfg.tts_fs_engine, cfg.tts_fs_voice, finalmessage)
         else:
             raise VoiceError("Unknown tts_type %r" % (
