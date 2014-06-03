@@ -53,13 +53,21 @@ class FreeSwitchESLProtocol(freeswitchesl.FreeSwitchEventProtocol):
             else:
                 self.current_input = self.current_input + ev.DTMF_Digit
 
+    def create_tts_command(self, command_template, filename, message):
+        params = {"filename": filename, "text": message}
+        args = command_template.strip().split()
+        cmd, args = args[0], args[1:]
+        args = [arg.format(**params) for arg in args]
+        return cmd, args
+
     @inlineCallbacks
-    def create_and_stream_text_as_speech(self, folder, engine, voice, message):
+    def create_and_stream_text_as_speech(self, folder, command, ext, message):
         key = md5.md5(message).hexdigest()
-        filename = os.path.join(folder, "voice-%s.wav" % key)
+        filename = os.path.join(folder, "voice-%s.%s" % (key, ext))
         if (not os.path.exists(filename)):
             log.msg("Generating voice file %r" % (filename,))
-            yield getProcessOutput(engine, args=("-w", filename, message))
+            cmd, args = self.create_tts_command(command, filename, message)
+            yield getProcessOutput(cmd, args=args)
         else:
             log.msg("Using cached voice file %r" % (filename,))
 
@@ -74,20 +82,17 @@ class FreeSwitchESLProtocol(freeswitchesl.FreeSwitchEventProtocol):
     def stream_text_as_speech(self, message):
         finalmessage = message.replace("\n", " . ")
         log.msg("TTS: " + finalmessage)
-        if self.vumi_transport.config.tts_type == "local":
+        cfg = self.vumi_transport.config
+        if cfg.tts_type == "local":
             self.create_and_stream_text_as_speech(
-                self.vumi_transport.config.tts_cache_folder,
-                self.vumi_transport.config.tts_engine,
-                self.vumi_transport.config.tts_voice,
-                finalmessage)
-        elif self.vumi_transport.config.tts_type == "freeswitch":
+                cfg.tts_local_cache, cfg.tts_local_command,
+                cfg.tts_local_ext, finalmessage)
+        elif cfg.tts_type == "freeswitch":
             self.send_text_as_speech(
-                self.vumi_transport.config.tts_engine,
-                self.vumi_transport.config.tts_voice,
-                finalmessage)
+                cfg.tts_fs_engine, cfg.tts_fs_voice, finalmessage)
         else:
             raise VoiceError("Unknown tts_type %r" % (
-                self.vumi_transport.config.tts_type,))
+                cfg.tts_type,))
 
     def get_address(self):
         return self.uniquecallid
@@ -131,15 +136,30 @@ class VoiceServerTransportConfig(Transport.CONFIG_CLASS):
         "Either 'freeswitch' or 'local' to specify where TTS is executed.",
         default="freeswitch", static=True)
 
-    tts_engine = ConfigText(
-        "Specify Freeswitch TTS engine to use.", default="flite", static=True)
+    tts_fs_engine = ConfigText(
+        "Specify Freeswitch TTS engine to use (only affects tts_type"
+        " 'freeswitch').",
+        default="flite", static=True)
 
-    tts_voice = ConfigText(
-        "Specify Freeswitch TTS voice to use.", default="kal", static=True)
+    tts_fs_voice = ConfigText(
+        "Specify Freeswitch TTS voice to use (only affects tts_type"
+        " 'freeswitch').",
+        default="kal", static=True)
 
-    tts_cache_folder = ConfigText(
-        "Specify folder to cache voice files in when performing TTS locally"
-        " using tts_type 'local'", default=".", static=True)
+    tts_local_command = ConfigText(
+        "Specify command template to use for generating voice files (only"
+        " affects tts_type 'local'). E.g. 'flite -o {filename} -t {text}'."
+        " Command parameters are split on whitespace (no shell-like escape"
+        " processing is performed on the command).",
+        default=None, static=True)
+
+    tts_local_cache = ConfigText(
+        "Specify folder to cache voice files (only affects tts_type"
+        " 'local').", default=".", static=True)
+
+    tts_local_ext = ConfigText(
+        "Specify the file extension used for cached voice files (only affects"
+        " tts_type 'local').", default="wav", static=True)
 
     freeswitch_listenport = ConfigInt(
         "Port number that freeswitch will attempt to connect on",
