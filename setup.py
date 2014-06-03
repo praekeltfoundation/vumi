@@ -36,6 +36,7 @@ setup(
         'txJSON-RPC==0.3.1',
         'txTwitter>=0.1.4a',
         'treq==0.2.1',
+        'eventsocket==0.1.4',
     ],
     classifiers=[
         'Development Status :: 4 - Beta',
