@@ -3,6 +3,7 @@
 """Tests for vumi.transports.voice."""
 
 import md5
+import os
 
 from twisted.internet.defer import (
     inlineCallbacks, DeferredQueue, returnValue, Deferred)
@@ -13,6 +14,7 @@ from twisted.test.proto_helpers import StringTransport
 
 from vumi.message import TransportUserMessage
 from vumi.tests.helpers import VumiTestCase
+from vumi.tests.utils import LogCatcher
 from vumi.transports.voice import VoiceServerTransport
 from vumi.transports.voice.voice import FreeSwitchESLProtocol
 from vumi.transports.tests.helpers import TransportHelper
@@ -102,6 +104,9 @@ class TestFreeSwitchESLProtocol(VumiTestCase):
         self.proto = FreeSwitchESLProtocol(self.worker)
         self.proto.transport = self.tr
 
+        self.voice_cache_folder = self.mktemp()
+        os.mkdir(self.voice_cache_folder)
+
     def send_event(self, params):
         for key, value in params:
             self.proto.dataReceived("%s:%s\n" % (key, value))
@@ -130,9 +135,19 @@ class TestFreeSwitchESLProtocol(VumiTestCase):
 
     @inlineCallbacks
     def test_create_and_stream_text_as_speech_file_found(self):
-        d = self.proto.create_and_stream_text_as_speech(
-            "/tmp", "echo", "voice1", "Hello!")
-        voice_key = md5.md5("Hello!").hexdigest()
+        content = "Hello!"
+        voice_key = md5.md5(content).hexdigest()
+        voice_filename = os.path.join(
+            self.voice_cache_folder, "voice-%s.wav" % voice_key)
+        with open(voice_filename, "w") as f:
+            f.write("Dummy voice file")
+
+        with LogCatcher() as lc:
+            d = self.proto.create_and_stream_text_as_speech(
+                self.voice_cache_folder, "echo", "voice1", content)
+            self.assertEqual(lc.messages(), [
+                "Using cached voice file %r" % (voice_filename,)
+            ])
 
         yield self.assert_and_reply({
             "name": "set",
@@ -140,14 +155,35 @@ class TestFreeSwitchESLProtocol(VumiTestCase):
             }, "+OK")
         yield self.assert_and_reply({
             "name": "playback",
-            "arg": "/tmp/voice-%s.wav" % voice_key,
+            "arg": voice_filename,
             }, "+OK")
 
         yield d
 
     @inlineCallbacks
     def test_create_and_stream_text_as_speech_file_not_found(self):
-        yield None
+        content = "Hello!"
+        voice_key = md5.md5(content).hexdigest()
+        voice_filename = os.path.join(
+            self.voice_cache_folder, "voice-%s.wav" % voice_key)
+
+        with LogCatcher() as lc:
+            d = self.proto.create_and_stream_text_as_speech(
+                self.voice_cache_folder, "echo", "voice1", content)
+            self.assertEqual(lc.messages(), [
+                "Generating voice file %r" % (voice_filename,)
+            ])
+
+        yield self.assert_and_reply({
+            "name": "set",
+            "arg": "playback_terminators=None",
+            }, "+OK")
+        yield self.assert_and_reply({
+            "name": "playback",
+            "arg": voice_filename,
+            }, "+OK")
+
+        yield d
 
 
 class TestVoiceServerTransport(VumiTestCase):
