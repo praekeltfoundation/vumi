@@ -2,12 +2,14 @@
 
 """Tests for vumi.transports.voice."""
 
+import md5
+
 from twisted.internet.defer import (
     inlineCallbacks, DeferredQueue, returnValue, Deferred)
 from twisted.protocols.basic import LineReceiver
 from twisted.internet import reactor, protocol
 from twisted.python import log
-from twisted.test import proto_helpers
+from twisted.test.proto_helpers import StringTransport
 
 from vumi.message import TransportUserMessage
 from vumi.tests.helpers import VumiTestCase
@@ -59,6 +61,30 @@ class FakeFreeswitchProtocol(LineReceiver):
         self.disconnect_d.callback(None)
 
 
+class EslTransport(StringTransport):
+
+    def __init__(self):
+        StringTransport.__init__(self)
+        self.cmds = DeferredQueue()
+
+    def write(self, data):
+        StringTransport.write(self, data)
+        self.parse_commands()
+
+    def parse_commands(self):
+        data = self.value()
+        while "\n\n" in data:
+            cmd_data, data = data.split("\n\n", 1)
+            command = {}
+            for line in cmd_data.splitlines():
+                if ":" in line:
+                    key, value = line.split(":", 1)
+                    command[key] = value.strip()
+            self.cmds.put(command)
+        self.clear()
+        self.io.write(data)
+
+
 class TestFreeSwitchESLProtocol(VumiTestCase):
 
     transport_class = VoiceServerTransport
@@ -70,8 +96,10 @@ class TestFreeSwitchESLProtocol(VumiTestCase):
             TransportHelper(self.transport_class))
         self.worker = yield self.tx_helper.get_transport(
             {'freeswitch_listenport': 0})
+
+        self.tr = EslTransport()
+
         self.proto = FreeSwitchESLProtocol(self.worker)
-        self.tr = proto_helpers.StringTransport()
         self.proto.transport = self.tr
 
     def send_event(self, params):
@@ -85,43 +113,37 @@ class TestFreeSwitchESLProtocol(VumiTestCase):
             ("Reply_Text", response),
         ])
 
-    def assert_commands(self, expected_commands):
-        commands = []
-        command = None
-        for line in self.tr.value().splitlines():
-            line = line.strip()
-            if not line:
-                if command is not None:
-                    commands.append(command)
-                command = None
-            elif line == "sendmsg":
-                command = {}
-            else:
-                key, value = line.split(":", 1)
-                command[key] = value.strip()
-        for cmd in expected_commands:
-            cmd.setdefault("call-command", "execute")
-            cmd.setdefault("event-lock", "true")
-            if "name" in cmd:
-                cmd["execute-app-name"] = cmd.pop("name")
-            if "arg" in cmd:
-                cmd["execute-app-arg"] = cmd.pop("arg")
-        self.assertEqual(commands, expected_commands)
+    def assert_command(self, cmd, expected):
+        expected.setdefault("call-command", "execute")
+        expected.setdefault("event-lock", "true")
+        if "name" in expected:
+            expected["execute-app-name"] = expected.pop("name")
+        if "arg" in expected:
+            expected["execute-app-arg"] = expected.pop("arg")
+        self.assertEqual(cmd, expected)
+
+    @inlineCallbacks
+    def assert_and_reply(self, expected, response):
+        cmd = yield self.tr.cmds.get()
+        self.assert_command(cmd, expected)
+        self.send_command_reply(response)
 
     @inlineCallbacks
     def test_create_and_stream_text_as_speech_file_found(self):
         d = self.proto.create_and_stream_text_as_speech(
-            "engine", "voice1", "Hello!")
-        self.send_command_reply("+OK")
-        self.send_command_reply("+OK")
-        yield d
-        self.assert_commands([{
+            "/tmp", "echo", "voice1", "Hello!")
+        voice_key = md5.md5("Hello!").hexdigest()
+
+        yield self.assert_and_reply({
             "name": "set",
             "arg": "playback_terminators=None",
-        }, {
+            }, "+OK")
+        yield self.assert_and_reply({
             "name": "playback",
-            "arg": "/tmp/voice%s.wav" % hash("Hello!"),
-        }])
+            "arg": "/tmp/voice-%s.wav" % voice_key,
+            }, "+OK")
+
+        yield d
 
     @inlineCallbacks
     def test_create_and_stream_text_as_speech_file_not_found(self):
