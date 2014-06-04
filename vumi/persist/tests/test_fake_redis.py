@@ -358,6 +358,55 @@ class TestFakeRedis(VumiTestCase):
         yield self.redis.hset("hash_key", "a", 1.0)
         yield self.assert_redis_op('hash', 'type', 'hash_key')
 
+    @inlineCallbacks
+    def test_scan_simple(self):
+        for i in range(20):
+            yield self.redis.set("key%02d" % i, str(i))
+        # Ordered the way FakeRedis.scan() returns them.
+        result_keys = self.redis._sort_keys_by_hash(
+            ["key%02d" % i for i in range(20)])
+
+        self.assertEqual(
+            (yield self.redis.scan(None)),
+            ('10', result_keys[:10]))
+        self.assertEqual(
+            (yield self.redis.scan(None, count=5)),
+            ('5', result_keys[:5]))
+        self.assertEqual(
+            (yield self.redis.scan('5', count=5)),
+            ('10', result_keys[5:10]))
+        self.assertEqual(
+            (yield self.redis.scan('15', count=5)),
+            (None, result_keys[15:]))
+        self.assertEqual(
+            (yield self.redis.scan(None, count=20)),
+            (None, result_keys))
+
+    @inlineCallbacks
+    def test_scan_interleaved_key_changes(self):
+        for i in range(20):
+            yield self.redis.set("key%02d" % i, str(i))
+        # Ordered the way FakeRedis.scan() returns them.
+        result_keys = self.redis._sort_keys_by_hash(
+            ["key%02d" % i for i in range(20)])
+
+        self.assertEqual(
+            (yield self.redis.scan(None)),
+            ('10', result_keys[:10]))
+
+        # Set and delete a bunch of keys to change some internal state. The
+        # next call to scan() will return duplicates.
+        for i in range(20):
+            yield self.redis.set("transient%02d" % i, str(i))
+            yield self.redis.delete("transient%02d" % i)
+
+        self.assertEqual(
+            (yield self.redis.scan('10')),
+            ('31', result_keys[5:15]))
+        self.assertEqual(
+            (yield self.redis.scan('31')),
+            (None, result_keys[15:]))
+
 
 class TestFakeRedisCharsetHandling(VumiTestCase):
 

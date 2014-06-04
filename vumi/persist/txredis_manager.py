@@ -120,6 +120,32 @@ class VumiRedis(txr.Redis):
             d.addCallback(lambda r: [(v, score_cast_func(s)) for v, s in r])
         return d
 
+    def scan(self, cursor, match=None, count=None):
+        """
+        Scan through all the keys in the database returning those that
+        match the pattern ``match``. The ``cursor`` specifies where to
+        start a scan and ``count`` determines how much work to do looking
+        for keys on each scan. ``cursor`` may be ``None`` or ``'0'`` to
+        indicate a new scan. Any other value should be treated as an opaque
+        string.
+
+        .. note::
+
+           Requires redis server 2.8 or later.
+        """
+        args = []
+        if cursor is None:
+            cursor = '0'
+        if match is not None:
+            args.extend(("MATCH", match))
+        if count is not None:
+            args.extend(("COUNT", count))
+        self._send("SCAN", cursor, *args)
+        d = self.getResponse()
+        d.addCallback(
+            lambda r: ((None if r[0] == '0' else r[0]), r[1]))
+        return d
+
 
 class VumiRedisClientFactory(txr.RedisClientFactory):
     protocol = VumiRedis
