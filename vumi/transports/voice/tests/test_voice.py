@@ -9,7 +9,6 @@ from twisted.internet.defer import (
     inlineCallbacks, DeferredQueue, returnValue, Deferred)
 from twisted.protocols.basic import LineReceiver
 from twisted.internet import reactor, protocol
-from twisted.python import log
 from twisted.test.proto_helpers import StringTransport
 
 from vumi.message import TransportUserMessage
@@ -20,11 +19,39 @@ from vumi.transports.voice.voice import FreeSwitchESLProtocol
 from vumi.transports.tests.helpers import TransportHelper
 
 
+class EslParser(object):
+    def __init__(self):
+        self.data = ""
+
+    def parse(self, new_data):
+        data = self.data + new_data
+        cmds = []
+        while "\n\n" in data:
+            cmd_data, data = data.split("\n\n", 1)
+            command = {}
+            first_line = True
+            for line in cmd_data.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                if first_line:
+                    command["type"] = line.strip()
+                    first_line = False
+                    continue
+                if ":" in line:
+                    key, value = line.split(":", 1)
+                    command[key] = value.strip()
+            cmds.append(command)
+        self.data = data
+        return cmds
+
+
 class FakeFreeswitchProtocol(LineReceiver):
 
     testAddr = 'TESTTEST'
 
     def __init__(self):
+        self.esl_parser = EslParser()
         self.queue = DeferredQueue()
         self.connect_d = Deferred()
         self.disconnect_d = Deferred()
@@ -48,15 +75,19 @@ class FakeFreeswitchProtocol(LineReceiver):
             (len(data), data))
 
     def rawDataReceived(self, data):
-        log.msg('TRACE: Client Protocol got raw data: ' + data)
-        if data.startswith('connect'):
-            self.sendCommandReply('variable-call-uuid: %s' % self.testAddr)
-        if data.startswith('myevents'):
-            self.sendCommandReply()
-        if data.startswith('sendmsg'):
-            self.sendCommandReply()
-            if (data.find("execute-app-name: speak") > 0):
-                self.queue.put("TTS")
+        for cmd in self.esl_parser.parse(data):
+            cmd_type = cmd.get("type")
+            if cmd_type == "connect":
+                self.sendCommandReply('variable-call-uuid: %s' % self.testAddr)
+            elif cmd_type == "myevents":
+                self.sendCommandReply()
+            elif cmd_type == "sendmsg":
+                self.sendCommandReply()
+                cmd_name = cmd.get('execute-app-name')
+                if cmd_name == "speak":
+                    self.queue.put("TTS")
+                elif cmd_name == "playback":
+                    self.queue.put("playback")
 
     def connectionLost(self, reason):
         self.connected = False
@@ -68,23 +99,12 @@ class EslTransport(StringTransport):
     def __init__(self):
         StringTransport.__init__(self)
         self.cmds = DeferredQueue()
+        self.esl_parser = EslParser()
 
     def write(self, data):
         StringTransport.write(self, data)
-        self.parse_commands()
-
-    def parse_commands(self):
-        data = self.value()
-        while "\n\n" in data:
-            cmd_data, data = data.split("\n\n", 1)
-            command = {}
-            for line in cmd_data.splitlines():
-                if ":" in line:
-                    key, value = line.split(":", 1)
-                    command[key] = value.strip()
-            self.cmds.put(command)
-        self.clear()
-        self.io.write(data)
+        for cmd in self.esl_parser.parse(data):
+            self.cmds.put(cmd)
 
 
 class TestFreeSwitchESLProtocol(VumiTestCase):
@@ -163,11 +183,11 @@ class TestFreeSwitchESLProtocol(VumiTestCase):
             ])
 
         yield self.assert_and_reply({
-            "name": "set",
+            "type": "sendmsg", "name": "set",
             "arg": "playback_terminators=None",
         }, "+OK")
         yield self.assert_and_reply({
-            "name": "playback",
+            "type": "sendmsg", "name": "playback",
             "arg": voice_filename,
         }, "+OK")
 
@@ -191,11 +211,11 @@ class TestFreeSwitchESLProtocol(VumiTestCase):
             ])
 
         yield self.assert_and_reply({
-            "name": "set",
+            "type": "sendmsg", "name": "set",
             "arg": "playback_terminators=None",
         }, "+OK")
         yield self.assert_and_reply({
-            "name": "playback",
+            "type": "sendmsg", "name": "playback",
             "arg": voice_filename,
         }, "+OK")
 
@@ -210,15 +230,15 @@ class TestFreeSwitchESLProtocol(VumiTestCase):
             "thomas", "his_masters_voice", "hi!")
 
         yield self.assert_and_reply({
-            "name": "set",
+            "type": "sendmsg", "name": "set",
             "arg": "tts_engine=thomas",
         }, "+OK")
         yield self.assert_and_reply({
-            "name": "set",
+            "type": "sendmsg", "name": "set",
             "arg": "tts_voice=his_masters_voice",
         }, "+OK")
         yield self.assert_and_reply({
-            "name": "speak",
+            "type": "sendmsg", "name": "speak",
             "arg": "hi!",
         }, "+OK")
 
@@ -313,3 +333,18 @@ class TestVoiceServerTransport(VumiTestCase):
         self.client.sendDtmfEvent('#')
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assertEqual(msg['content'], '572')
+
+    @inlineCallbacks
+    def test_speech_url(self):
+        [reg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        self.tx_helper.clear_dispatched_inbound()
+
+        yield self.tx_helper.make_dispatch_reply(
+            reg, 'speech url test', helper_metadata={
+                'voice': {
+                    'speech_url': 'http://example.com/speech_url_test.off'
+                }
+            })
+
+        line = yield self.client.queue.get()
+        self.assertEqual(line, "playback")
