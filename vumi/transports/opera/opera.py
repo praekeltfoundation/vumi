@@ -16,10 +16,18 @@ from vumi.transports.opera import utils
 from vumi.components.session import SessionManager
 
 
+class BadRequestError(Exception):
+    """
+    An exception we can throw while parsing a request to return a 400 response.
+    """
+
+
 def get_receipts_xml(content):
     if content.startswith('<'):
         return content
     decoded = parse_qs(content)
+    if 'XmlMsg' not in decoded:
+        raise BadRequestError("XmlMsg missing.")
     return decoded['XmlMsg'][0]
 
 
@@ -55,8 +63,17 @@ class OperaReceiveResource(Resource):
         Resource.__init__(self)
 
     def render_POST(self, request):
-        content = get_receipts_xml(request.content.read())
-        sms = utils.parse_post_event_xml(content)
+        try:
+            content = get_receipts_xml(request.content.read())
+            sms = utils.parse_post_event_xml(content)
+            for field in [
+                    'Local', 'Remote', 'Text', 'MessageID', 'MobileNetwork']:
+                if field not in sms:
+                    raise BadRequestError("Missing field: %s" % (field,))
+        except BadRequestError as err:
+            request.setResponseCode(http.BAD_REQUEST)
+            request.setHeader('Content-Type', 'text/plain; charset=utf8')
+            return err.args[0]
         self.callback(
             to_addr=normalize_msisdn(sms['Local'], country_code='27'),
             from_addr=normalize_msisdn(sms['Remote'], country_code='27'),

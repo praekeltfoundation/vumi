@@ -6,7 +6,7 @@ from twisted.internet import defer
 from twisted.internet.defer import inlineCallbacks, maybeDeferred
 from twisted.web import xmlrpc
 
-from vumi.utils import http_request
+from vumi.utils import http_request, http_request_full
 from vumi.transports.failures import PermanentFailure, TemporaryFailure
 from vumi.transports.opera import OperaTransport
 from vumi.transports.tests.helpers import TransportHelper
@@ -199,6 +199,68 @@ class TestOperaTransport(VumiTestCase):
         })
 
         self.assertEqual(resp, xml_data)
+
+    @inlineCallbacks
+    def test_incoming_sms_no_data(self):
+        resp = yield http_request_full(
+            self.transport.get_transport_url('receive.xml'), None)
+
+        self.assertEqual([], self.tx_helper.get_dispatched_failures())
+        self.assertEqual([], self.tx_helper.get_dispatched_events())
+        self.assertEqual([], self.tx_helper.get_dispatched_inbound())
+
+        self.assertEqual(resp.code, 400)
+        self.assertEqual(resp.delivered_body, "XmlMsg missing.")
+
+    @inlineCallbacks
+    def test_incoming_sms_partial_data(self):
+
+        xml_data = """
+        <?xml version="1.0"?>
+        <!DOCTYPE bspostevent>
+        <bspostevent>
+          <field name="MOReference" type = "string">282341913</field>
+          <field name="IsReceipt" type = "string">NO</field>
+          <field name="RemoteNetwork" type = "string">mtn-za</field>
+          <field name="BSDate-tomorrow" type = "string">20100605</field>
+          <field name="BSDate-today" type = "string">20100604</field>
+          <field name="ReceiveDate" type = "date">
+                 2010-06-04 15:51:25 +0000</field>
+          <field name="ClientID" type = "string">4</field>
+          <field name="ChannelID" type = "string">111</field>
+          <field name="MessageID" type = "string">373736741</field>
+          <field name="ReceiptStatus" type = "string"></field>
+          <field name="Prefix" type = "string"></field>
+          <field name="ClientName" type = "string">Praekelt</field>
+          <field name="MobileDevice" type = "string"></field>
+          <field name="BSDate-yesterday" type = "string">20100603</field>
+          <field name="Remote" type = "string">+27831234567</field>
+          <field name="State" type = "string">5</field>
+          <field name="MobileNetwork" type = "string">mtn-za</field>
+          <field name="MobileNumber" type = "string">+27831234567</field>
+          <field name="Text" type = "string">Hello World</field>
+          <field name="ServiceID" type = "string">20222</field>
+          <field name="RegType" type = "string">1</field>
+          <field name="NewSubscriber" type = "string">NO</field>
+          <field name="Subscriber" type = "string">+27831234567</field>
+          <field name="Parsed" type = "string"></field>
+          <field name="ServiceName" type = "string">Prktl Vumi</field>
+          <field name="BSDate-thisweek" type = "string">20100531</field>
+          <field name="ServiceEndDate" type = "string">
+                 2010-06-30 07:47:00 +0200</field>
+          <field name="Now" type = "date">2010-06-04 15:51:27 +0000</field>
+        </bspostevent>
+        """.strip()
+
+        resp = yield http_request_full(
+            self.transport.get_transport_url('receive.xml'), xml_data)
+
+        self.assertEqual([], self.tx_helper.get_dispatched_failures())
+        self.assertEqual([], self.tx_helper.get_dispatched_events())
+        self.assertEqual([], self.tx_helper.get_dispatched_inbound())
+
+        self.assertEqual(resp.code, 400)
+        self.assertEqual(resp.delivered_body, "Missing field: Local")
 
     @inlineCallbacks
     def test_outbound_ok(self):
