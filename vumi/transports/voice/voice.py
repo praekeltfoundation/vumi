@@ -119,7 +119,7 @@ class FreeSwitchESLProtocol(EventProtocol):
     def onChannelExecuteComplete(self, ev):
         log.msg("execute complete " + ev.variable_call_uuid)
         if self.request_hang_up:
-            self.hangup()
+            return self.hangup()
 
     def onChannelHangup(self, ev):
         log.msg("Channel HangUp")
