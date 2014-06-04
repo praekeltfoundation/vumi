@@ -1,5 +1,6 @@
 # Source distribution files.
 include .coveragerc
+include AUTHORS
 include LICENSE
 include README.rst
 include Vagrantfile
