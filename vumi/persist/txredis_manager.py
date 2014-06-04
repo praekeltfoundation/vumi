@@ -143,7 +143,7 @@ class VumiRedis(txr.Redis):
         self._send("SCAN", cursor, *args)
         d = self.getResponse()
         d.addCallback(
-            lambda r: ((None if r[0] == '0' else r[0]), r[1]))
+            lambda r: ((None if r[0] == '0' or r[0] == 0 else r[0]), r[1]))
         return d
 
 
