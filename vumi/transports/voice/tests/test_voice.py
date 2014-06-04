@@ -19,7 +19,52 @@ from vumi.transports.voice.voice import FreeSwitchESLProtocol
 from vumi.transports.tests.helpers import TransportHelper
 
 
+class EslCommand(object):
+    """
+    An object representing an ESL command.
+    """
+    def __init__(self, cmd_type, params=None):
+        self.cmd_type = cmd_type
+        self.params = params if params is not None else {}
+
+    def __repr__(self):
+        return "<%s cmd_type=%r params=%r>" % (
+            self.__class__.__name__, self.cmd_type, self.params)
+
+    def __eq__(self, other):
+        if not isinstance(other, EslCommand):
+            return NotImplemented
+        return (self.cmd_type == other.cmd_type and
+                self.params == other.params)
+
+    def __getitem__(self, name):
+        return self.params.get(name)
+
+    def __setitem__(self, name, value):
+        self.params[name] = value
+
+    @classmethod
+    def from_dict(cls, d):
+        """
+        Convert a dict to an :class:`EslCommand`.
+        """
+        cmd_type = d.get("type")
+        params = {
+            "call-command": d.get("call-command", "execute"),
+            "event-lock": d.get("event-lock", "true"),
+        }
+        if "name" in d:
+            params["execute-app-name"] = d.get("name")
+        if "arg" in d:
+            params["execute-app-arg"] = d.get("arg")
+        return cls(cmd_type, params)
+
+
 class EslParser(object):
+    """
+    Simple in-efficient parser for the FreeSwitch eventsocket protocol.
+    """
+
     def __init__(self):
         self.data = ""
 
@@ -28,14 +73,14 @@ class EslParser(object):
         cmds = []
         while "\n\n" in data:
             cmd_data, data = data.split("\n\n", 1)
-            command = {}
+            command = EslCommand("unknown")
             first_line = True
             for line in cmd_data.splitlines():
                 line = line.strip()
                 if not line:
                     continue
                 if first_line:
-                    command["type"] = line.strip()
+                    command.cmd_type = line.strip()
                     first_line = False
                     continue
                 if ":" in line:
@@ -76,14 +121,13 @@ class FakeFreeswitchProtocol(LineReceiver):
 
     def rawDataReceived(self, data):
         for cmd in self.esl_parser.parse(data):
-            cmd_type = cmd.get("type")
-            if cmd_type == "connect":
+            if cmd.cmd_type == "connect":
                 self.sendCommandReply('variable-call-uuid: %s' % self.testAddr)
-            elif cmd_type == "myevents":
+            elif cmd.cmd_type == "myevents":
                 self.sendCommandReply()
-            elif cmd_type == "sendmsg":
+            elif cmd.cmd_type == "sendmsg":
                 self.sendCommandReply()
-                cmd_name = cmd.get('execute-app-name')
+                cmd_name = cmd.params.get('execute-app-name')
                 if cmd_name == "speak":
                     self.queue.put("TTS")
                 elif cmd_name == "playback":
@@ -142,19 +186,11 @@ class TestFreeSwitchESLProtocol(VumiTestCase):
             ("Reply_Text", response),
         ])
 
-    def assert_command(self, cmd, expected):
-        expected.setdefault("call-command", "execute")
-        expected.setdefault("event-lock", "true")
-        if "name" in expected:
-            expected["execute-app-name"] = expected.pop("name")
-        if "arg" in expected:
-            expected["execute-app-arg"] = expected.pop("arg")
-        self.assertEqual(cmd, expected)
-
     @inlineCallbacks
     def assert_and_reply(self, expected, response):
         cmd = yield self.tr.cmds.get()
-        self.assert_command(cmd, expected)
+        expected_cmd = EslCommand.from_dict(expected)
+        self.assertEqual(cmd, expected_cmd)
         self.send_command_reply(response)
 
     def test_create_tts_command(self):
@@ -342,7 +378,7 @@ class TestVoiceServerTransport(VumiTestCase):
         yield self.tx_helper.make_dispatch_reply(
             reg, 'speech url test', helper_metadata={
                 'voice': {
-                    'speech_url': 'http://example.com/speech_url_test.off'
+                    'speech_url': 'http://example.com/speech_url_test.ogg'
                 }
             })
 
