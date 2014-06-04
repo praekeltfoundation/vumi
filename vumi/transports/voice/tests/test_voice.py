@@ -129,9 +129,9 @@ class FakeFreeswitchProtocol(LineReceiver):
                 self.sendCommandReply()
                 cmd_name = cmd.params.get('execute-app-name')
                 if cmd_name == "speak":
-                    self.queue.put("TTS")
+                    self.queue.put(cmd)
                 elif cmd_name == "playback":
-                    self.queue.put("playback")
+                    self.queue.put(cmd)
 
     def connectionLost(self, reason):
         self.connected = False
@@ -343,8 +343,10 @@ class TestVoiceServerTransport(VumiTestCase):
     def test_simplemessage(self):
         [reg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         yield self.tx_helper.make_dispatch_reply(reg, "voice test")
-        line = yield self.client.queue.get()
-        self.assertEqual(line, "TTS")
+        cmd = yield self.client.queue.get()
+        self.assertEqual(cmd, EslCommand.from_dict({
+            'type': 'sendmsg', 'name': 'speak', 'arg': 'voice test .',
+        }))
 
     @inlineCallbacks
     def test_simpledigitcapture(self):
@@ -361,8 +363,12 @@ class TestVoiceServerTransport(VumiTestCase):
 
         yield self.tx_helper.make_dispatch_reply(
             reg, 'voice test', helper_metadata={'voice': {'wait_for': '#'}})
-        line = yield self.client.queue.get()
-        self.assertEqual(line, "TTS")
+
+        cmd = yield self.client.queue.get()
+        self.assertEqual(cmd, EslCommand.from_dict({
+            'type': 'sendmsg', 'name': 'speak', 'arg': 'voice test .',
+        }))
+
         self.client.sendDtmfEvent('5')
         self.client.sendDtmfEvent('7')
         self.client.sendDtmfEvent('2')
@@ -382,5 +388,8 @@ class TestVoiceServerTransport(VumiTestCase):
                 }
             })
 
-        line = yield self.client.queue.get()
-        self.assertEqual(line, "playback")
+        cmd = yield self.client.queue.get()
+        self.assertEqual(cmd, EslCommand.from_dict({
+            'type': 'sendmsg', 'name': 'playback',
+            'arg': 'http://example.com/speech_url_test.ogg',
+        }))
