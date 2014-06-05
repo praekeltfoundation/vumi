@@ -48,10 +48,15 @@ class TestRedisManager(VumiTestCase):
             self.manager.set('key%d' % i, 'value%d' % i)
         all_keys = set()
         cursor = None
-        while True:
+        for i in range(20):
+            # loop enough times to have gone through all the keys in our test
+            # redis instance but not forever so we can assert on the value of
+            # cursor if we get stuck. Also prevents hanging the whole test
+            # suite (since this test doesn't yield to the reactor).
             cursor, keys = self.manager.scan(cursor)
             all_keys.update(keys)
             if cursor is None:
                 break
+        self.assertEqual(cursor, None)
         self.assertEqual(all_keys, set(
             'key%d' % i for i in range(10)))

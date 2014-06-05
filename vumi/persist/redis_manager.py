@@ -33,7 +33,7 @@ class VumiRedis(redis.Redis):
         if count is not None:
             args.extend(("COUNT", count))
         cursor, keys = self.execute_command("SCAN", cursor, *args)
-        if cursor == '0':
+        if cursor == '0' or cursor == 0:
             cursor = None
         return (cursor, keys)
 
