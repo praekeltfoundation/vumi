@@ -18,9 +18,6 @@ class Task(object):
 
     name = None
 
-    def __init__(self):
-        pass
-
     @classmethod
     def parse(cls, task_desc):
         """
@@ -59,6 +56,8 @@ class Task(object):
 
 
 class Count(Task):
+    """A task that counts the number of keys."""
+
     def __init__(self):
         self._count = None
 
