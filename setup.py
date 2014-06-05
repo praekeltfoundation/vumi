@@ -36,7 +36,7 @@ setup(
         'txJSON-RPC==0.3.1',
         'txTwitter>=0.1.4a',
         'treq==0.2.1',
-        'confmodel>=0.1.1',
+        'confmodel>=0.2.0',
     ],
     classifiers=[
         'Development Status :: 4 - Beta',

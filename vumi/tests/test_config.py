@@ -1,7 +1,8 @@
 from twisted.internet.endpoints import TCP4ServerEndpoint, TCP4ClientEndpoint
 
-from confmodel.config import Config, ConfigInt, ConfigText
+from confmodel import Config
 from confmodel.errors import ConfigError
+from confmodel.fields import ConfigInt, ConfigText
 from zope.interface import Interface, implements
 
 from vumi.config import (

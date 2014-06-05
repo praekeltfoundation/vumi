@@ -1,6 +1,7 @@
 # -*- test-case-name: vumi.tests.test_config -*-
 
-from confmodel.config import ConfigField, FieldFallback
+from confmodel.fields import ConfigField
+from confmodel.fallbacks import FieldFallback
 
 from vumi.utils import load_class_by_string
 
@@ -94,13 +95,15 @@ class ConfigContext(object):
 
 
 # Re-export these for compatibility.
-from confmodel.config import (
-    Config, ConfigInt, ConfigFloat, ConfigBool, ConfigList, ConfigDict,
-    ConfigText, ConfigUrl, ConfigRegex)
+from confmodel import Config
 from confmodel.errors import ConfigError
+from confmodel.fields import (
+    ConfigInt, ConfigFloat, ConfigBool, ConfigList, ConfigDict, ConfigText,
+    ConfigUrl, ConfigRegex)
 from confmodel.interfaces import IConfigData
 
 Config
+ConfigError
 ConfigInt
 ConfigFloat
 ConfigBool
@@ -109,5 +112,4 @@ ConfigDict
 ConfigText
 ConfigUrl
 ConfigRegex
-ConfigError
 IConfigData
