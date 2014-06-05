@@ -8,10 +8,13 @@ from vumi.persist.redis_manager import RedisManager
 
 
 class TaskError(Exception):
-    """An error occurred while using tasks."""
+    """Raised when an error is encoutered while using tasks."""
 
 
 class Task(object):
+    """
+    A task to perform on a redis key.
+    """
 
     name = None
 
@@ -21,11 +24,11 @@ class Task(object):
     @classmethod
     def parse(cls, task_desc):
         """
-        Parse a task description into a task.
+        Parse a string description into a task.
 
-        Task description format:
+        Task description format::
 
-          <task-type>[:[<param>=<value>,<param>=<value>]]
+          <task-type>[:[<param>=<value>[,...]]]
         """
         task_type, _, param_desc = task_desc.partition(':')
         task_cls = cls._parse_task_type(task_type)
@@ -84,6 +87,7 @@ class Options(usage.Options):
         self['match_pattern'] = match_pattern
 
     def opt_task(self, task_desc):
+        """A task to perform on all matching keys."""
         task = Task.parse(task_desc)
         self['tasks'].append(task)
 
@@ -92,6 +96,20 @@ class Options(usage.Options):
     def postOptions(self):
         if self.subCommand is None:
             raise usage.UsageError("Please specify a sub-command.")
+
+
+def scan_keys(redis, match):
+    """Iterate over matching keys."""
+    prev_cursor = None
+    while True:
+        cursor, keys = redis.scan(prev_cursor, match=match)
+        for key in keys:
+            yield key
+        if cursor is None:
+            break
+        if cursor == prev_cursor:
+            raise TaskError("Redis scan stuck on cursor %r" % (cursor,))
+        prev_cursor = cursor
 
 
 class ConfigHolder(object):
@@ -121,17 +139,12 @@ class ConfigHolder(object):
         for task in self.tasks:
             task.setup()
 
-        cursor = None
         redis = self.get_redis()
-        while True:
-            cursor, keys = redis.scan(cursor, match=self.match_pattern)
-            for key in keys:
-                for task in self.tasks:
-                    key = task.apply(key)
-                    if key is None:
-                        break
-            if cursor is None:
-                break
+        for key in scan_keys(redis, self.match_pattern):
+            for task in self.tasks:
+                key = task.apply(key)
+                if key is None:
+                    break
 
         for task in self.tasks:
             task.teardown()
