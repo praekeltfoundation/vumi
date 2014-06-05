@@ -13,7 +13,8 @@ from txssmi import constants
 from vumi import log
 from vumi.components.session import SessionManager
 from vumi.config import (
-    ConfigText, ConfigInt, ConfigClientEndpoint, ConfigBool, ConfigDict)
+    ConfigText, ConfigInt, ConfigClientEndpoint, ConfigBool, ConfigDict,
+    ClientEndpointFallback)
 from vumi.message import TransportUserMessage
 from vumi.reconnecting_client import ReconnectingClientService
 from vumi.transports.base import Transport
@@ -27,7 +28,8 @@ class TruteqTransportConfig(Transport.CONFIG_CLASS):
         'Password for the TruTeq account.', static=True)
     twisted_endpoint = ConfigClientEndpoint(
         'The endpoint to connect to.',
-        default='tcp:host=sms.truteq.com:port=50008', static=True)
+        default='tcp:host=sms.truteq.com:port=50008', static=True,
+        fallbacks=[ClientEndpointFallback()])
     link_check_period = ConfigInt(
         'Number of seconds between link checks sent to the server.',
         default=60, static=True)
@@ -38,6 +40,14 @@ class TruteqTransportConfig(Transport.CONFIG_CLASS):
         'Print verbose log output.', default=False, static=True)
     redis_manager = ConfigDict(
         'How to connect to Redis.', default={}, static=True)
+
+    # TODO: Deprecate these fields when confmodel#5 is done.
+    host = ConfigText(
+        "*DEPRECATED* 'host' and 'port' fields may be used in place of the"
+        " 'twisted_endpoint' field.", static=True)
+    port = ConfigInt(
+        "*DEPRECATED* 'host' and 'port' fields may be used in place of the"
+        " 'twisted_endpoint' field.", static=True)
 
 
 class TruteqTransportProtocol(SSMIProtocol):

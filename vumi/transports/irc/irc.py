@@ -7,7 +7,9 @@ from twisted.internet import protocol
 from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
 
-from vumi.config import ConfigClientEndpoint, ConfigText, ConfigList
+from vumi.config import (
+    ConfigClientEndpoint, ConfigText, ConfigList, ConfigInt,
+    ClientEndpointFallback)
 from vumi.reconnecting_client import ReconnectingClientService
 from vumi.transports import Transport
 from vumi.transports.failures import TemporaryFailure
@@ -188,8 +190,7 @@ class IrcConfig(Transport.CONFIG_CLASS):
     """
     twisted_endpoint = ConfigClientEndpoint(
         "Endpoint to connect to the IRC server on.",
-        fallbacks=('network', 'port'),
-        port_fallback_default=6667,
+        fallbacks=[ClientEndpointFallback('network', 'port')],
         required=True, static=True)
     nickname = ConfigText(
         "IRC nickname for the transport IRC client to use.",
@@ -197,6 +198,14 @@ class IrcConfig(Transport.CONFIG_CLASS):
     channels = ConfigList(
         "List of channels to join.",
         default=(), static=True)
+
+    # TODO: Deprecate these fields when confmodel#5 is done.
+    network = ConfigText(
+        "*DEPRECATED* 'network' and 'port' fields may be used in place of the"
+        " 'twisted_endpoint' field.", static=True)
+    port = ConfigInt(
+        "*DEPRECATED* 'network' and 'port' fields may be used in place of the"
+        " 'twisted_endpoint' field.", static=True, default=6667)
 
 
 class IrcTransport(Transport):

@@ -1,6 +1,8 @@
 # -*- test-case-name: vumi.transports.netcore.tests.test_netcore -*-
 
-from vumi.config import ConfigServerEndpoint, ConfigText, ConfigBool
+from vumi.config import (
+    ConfigServerEndpoint, ConfigText, ConfigBool, ConfigInt,
+    ServerEndpointFallback)
 from vumi.transports import Transport
 from vumi.transports.httprpc.httprpc import HttpRpcHealthResource
 from vumi.utils import build_web_site
@@ -15,7 +17,8 @@ class NetcoreTransportConfig(Transport.CONFIG_CLASS):
 
     twisted_endpoint = ConfigServerEndpoint(
         'The endpoint to listen on.',
-        required=True, static=True)
+        required=True, static=True,
+        fallbacks=[ServerEndpointFallback()])
     web_path = ConfigText(
         "The path to serve this resource on.",
         default='/api/v1/netcore/', static=True)
@@ -25,6 +28,14 @@ class NetcoreTransportConfig(Transport.CONFIG_CLASS):
     reject_none = ConfigBool(
         "Reject messages where the content parameter equals 'None'",
         required=False, default=True, static=True)
+
+    # TODO: Deprecate these fields when confmodel#5 is done.
+    host = ConfigText(
+        "*DEPRECATED* 'host' and 'port' fields may be used in place of the"
+        " 'twisted_endpoint' field.", static=True)
+    port = ConfigInt(
+        "*DEPRECATED* 'host' and 'port' fields may be used in place of the"
+        " 'twisted_endpoint' field.", static=True)
 
 
 class NetcoreResource(Resource):

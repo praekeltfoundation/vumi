@@ -6,7 +6,9 @@ from twisted.web.resource import NoResource, Resource
 from twisted.web.server import NOT_DONE_YET
 
 from vumi.components.message_store import MessageStore
-from vumi.config import ConfigDict, ConfigText, ConfigServerEndpoint
+from vumi.config import (
+    ConfigDict, ConfigText, ConfigServerEndpoint, ConfigInt,
+    ServerEndpointFallback)
 from vumi.persist.txriak_manager import TxRiakManager
 from vumi.persist.txredis_manager import TxRedisManager
 from vumi.transports.httprpc import httprpc
@@ -136,7 +138,8 @@ class MessageStoreResourceWorker(BaseWorker):
             'Name of the this message store resource worker',
             required=True, static=True)
         twisted_endpoint = ConfigServerEndpoint(
-            'Twisted endpoint to listen on.', required=True, static=True)
+            'Twisted endpoint to listen on.', required=True, static=True,
+            fallbacks=[ServerEndpointFallback()])
         web_path = ConfigText(
             'The path to serve this resource on.', required=True, static=True)
         health_path = ConfigText(
@@ -146,6 +149,14 @@ class MessageStoreResourceWorker(BaseWorker):
             'Riak client configuration.', default={}, static=True)
         redis_manager = ConfigDict(
             'Redis client configuration.', default={}, static=True)
+
+        # TODO: Deprecate these fields when confmodel#5 is done.
+        host = ConfigText(
+            "*DEPRECATED* 'host' and 'port' fields may be used in place of"
+            " the 'twisted_endpoint' field.", static=True)
+        port = ConfigInt(
+            "*DEPRECATED* 'host' and 'port' fields may be used in place of"
+            " the 'twisted_endpoint' field.", static=True)
 
     def get_health_response(self):
         return 'OK'

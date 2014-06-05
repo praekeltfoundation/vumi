@@ -14,7 +14,8 @@ from twisted.web.server import NOT_DONE_YET
 
 from vumi import log
 from vumi.config import (
-    ConfigText, ConfigServerEndpoint, ConfigDict, ConfigInt, ConfigBool)
+    ConfigText, ConfigServerEndpoint, ConfigDict, ConfigInt, ConfigBool,
+    ServerEndpointFallback)
 from vumi.transports import Transport
 from vumi.transports.httprpc.httprpc import HttpRpcHealthResource
 from vumi.transports.wechat.errors import WeChatException, WeChatApiException
@@ -56,7 +57,7 @@ class WeChatConfig(Transport.CONFIG_CLASS):
         required=True, static=True)
     twisted_endpoint = ConfigServerEndpoint(
         'The endpoint to listen on.',
-        required=True, static=True)
+        required=True, static=True, fallbacks=[ServerEndpointFallback()])
     web_path = ConfigText(
         "The path to serve this resource on.",
         default='/api/v1/wechat/', static=True)
@@ -83,11 +84,19 @@ class WeChatConfig(Transport.CONFIG_CLASS):
         'What language to request User Profile as.', required=False,
         default='en', static=True)
     embed_user_profile_lifetime = ConfigInt(
-        'How long to cache User Profiles for.', default=60*60, required=False,
-        static=True)
+        'How long to cache User Profiles for.', default=(60 * 60),
+        required=False, static=True)
     double_delivery_lifetime = ConfigInt(
         'How long to keep track of Message IDs and responses for double '
-        'delivery tracking.', default=60*60, required=False, static=True)
+        'delivery tracking.', default=(60 * 60), required=False, static=True)
+
+    # TODO: Deprecate these fields when confmodel#5 is done.
+    host = ConfigText(
+        "*DEPRECATED* 'host' and 'port' fields may be used in place of the"
+        " 'twisted_endpoint' field.", static=True)
+    port = ConfigInt(
+        "*DEPRECATED* 'host' and 'port' fields may be used in place of the"
+        " 'twisted_endpoint' field.", static=True)
 
 
 class WeChatResource(Resource):
