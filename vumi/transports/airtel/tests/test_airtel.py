@@ -100,6 +100,18 @@ class TestAirtelUSSDTransport(AirtelUSSDTransportTestCase):
         self.assertEqual(response.headers.getRawHeaders('amount'), ['0'])
 
     @inlineCallbacks
+    def test_strip_leading_newlines(self):
+        # Second connect is the actual start of the session
+        deferred = self.mk_ussd_request('121')
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        yield self.tx_helper.make_dispatch_reply(msg, "\nfoo\n")
+        response = yield deferred
+        self.assertEqual(response.delivered_body, 'foo\n')
+        self.assertEqual(response.headers.getRawHeaders('Freeflow'), ['FC'])
+        self.assertEqual(response.headers.getRawHeaders('charge'), ['N'])
+        self.assertEqual(response.headers.getRawHeaders('amount'), ['0'])
+
+    @inlineCallbacks
     def test_inbound_resume_and_reply_with_end(self):
         # first pre-populate the redis datastore to simulate prior BEG message
         yield self.session_manager.create_session(self.session_id,
