@@ -15,8 +15,9 @@ from vumi.transports.smpp.deprecated.clientserver.client import (
 from vumi.transports.failures import FailureMessage
 from vumi.message import Message, TransportUserMessage
 from vumi.persist.txredis_manager import TxRedisManager
-from vumi.config import (ConfigText, ConfigInt, ConfigBool, ConfigDict,
-                         ConfigFloat, ConfigRegex, ConfigClientEndpoint)
+from vumi.config import (
+    ConfigText, ConfigInt, ConfigBool, ConfigDict, ConfigFloat, ConfigRegex,
+    ConfigClientEndpoint, ClientEndpointFallback)
 
 
 class SmppTransportConfig(Transport.CONFIG_CLASS):
@@ -56,7 +57,8 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
 
     twisted_endpoint = ConfigClientEndpoint(
         'The SMPP endpoint to connect to.',
-        required=True, static=True)
+        required=True, static=True,
+        fallbacks=[ClientEndpointFallback()])
     system_id = ConfigText(
         'User id used to connect to the SMPP server.', required=True,
         static=True)
@@ -162,6 +164,14 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
         "E.g. { 'NETWORK1': '27761234567'}", default={}, static=True)
     redis_manager = ConfigDict(
         'How to connect to Redis', default={}, static=True)
+
+    # TODO: Deprecate these fields when confmodel#5 is done.
+    host = ConfigText(
+        "*DEPRECATED* 'host' and 'port' fields may be used in place of the"
+        " 'twisted_endpoint' field.", static=True)
+    port = ConfigInt(
+        "*DEPRECATED* 'host' and 'port' fields may be used in place of the"
+        " 'twisted_endpoint' field.", static=True)
 
     def post_validate(self):
         long_message_params = (

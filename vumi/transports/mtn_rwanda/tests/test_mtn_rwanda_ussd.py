@@ -7,8 +7,7 @@ from twisted.web.xmlrpc import Proxy
 
 from vumi.message import TransportUserMessage
 from vumi.transports.mtn_rwanda.mtn_rwanda_ussd import (
-        MTNRwandaUSSDTransport, MTNRwandaXMLRPCResource, RequestTimedOutError,
-        InvalidRequest)
+        MTNRwandaUSSDTransport, RequestTimedOutError, InvalidRequest)
 from vumi.tests.helpers import VumiTestCase
 from vumi.transports.tests.helpers import TransportHelper
 

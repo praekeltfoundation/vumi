@@ -144,14 +144,12 @@ class TestBaseWorker(VumiTestCase):
 
     def test_get_static_config(self):
         cfg = self.worker.get_static_config()
-        self.assertEqual([f.name for f in cfg.fields], ['amqp_prefetch_count'])
         self.assertEqual(cfg.amqp_prefetch_count, 20)
 
     @inlineCallbacks
     def test_get_config(self):
         msg = self.msg_helper.make_inbound("inbound")
         cfg = yield self.worker.get_config(msg)
-        self.assertEqual([f.name for f in cfg.fields], ['amqp_prefetch_count'])
         self.assertEqual(cfg.amqp_prefetch_count, 20)
 
     def test__validate_config(self):
