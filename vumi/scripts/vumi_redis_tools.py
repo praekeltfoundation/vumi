@@ -73,6 +73,7 @@ class Count(Task):
 
     def apply(self, key):
         self._count += 1
+        return key
 
 
 class Options(usage.Options):
@@ -97,8 +98,8 @@ class Options(usage.Options):
     opt_t = opt_task
 
     def postOptions(self):
-        if self.subCommand is None:
-            raise usage.UsageError("Please specify a sub-command.")
+        if not self['tasks']:
+            raise usage.UsageError("Please specify a task.")
 
 
 def scan_keys(redis, match):
