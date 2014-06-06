@@ -29,7 +29,9 @@ class Task(object):
         """
         task_type, _, param_desc = task_desc.partition(':')
         task_cls = cls._parse_task_type(task_type)
-        params = cls._parse_param_desc(param_desc)
+        params = {}
+        if param_desc:
+            params = cls._parse_param_desc(param_desc)
         return task_cls(**params)
 
     @classmethod
@@ -57,6 +59,8 @@ class Task(object):
 
 class Count(Task):
     """A task that counts the number of keys."""
+
+    name = "count"
 
     def __init__(self):
         self._count = None
