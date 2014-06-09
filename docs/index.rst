@@ -12,6 +12,7 @@ Contents:
    :maxdepth: 1
 
    overview.rst
+   intro/index.rst
    first-smpp-bind.rst
    applications/index.rst
    transports/index.rst
