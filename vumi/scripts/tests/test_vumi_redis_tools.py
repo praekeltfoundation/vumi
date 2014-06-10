@@ -2,6 +2,8 @@
 
 import yaml
 
+from twisted.python.usage import UsageError
+
 from vumi.scripts.vumi_redis_tools import (
     ConfigHolder, Options, Task, TaskError, Count, Expire, ListKeys)
 from vumi.tests.helpers import VumiTestCase, PersistenceHelper
@@ -30,7 +32,10 @@ class DummyConfigHolder(object):
 
 
 class DummyTask(Task):
+    """Dummy task for testing."""
+
     name = "dummy"
+    hidden = True
 
     def __init__(self, a=None, b=None):
         self.a = a
@@ -172,7 +177,70 @@ class ListKeysTestCase(VumiTestCase):
 
 
 class OptionsTestCase(VumiTestCase):
-    pass  # TODO: implement tests
+    def mk_file(self, data):
+        name = self.mktemp()
+        with open(name, "wb") as data_file:
+            data_file.write(data)
+        return name
+
+    def mk_redis_config(self, key_prefix):
+        config = {
+            'redis_manager': {
+                'key_prefix': key_prefix,
+            },
+        }
+        return self.mk_file(yaml.safe_dump(config))
+
+    def mk_opts_raw(self, args):
+        opts = Options()
+        opts.parseOptions(args)
+        return opts
+
+    def mk_opts(self, args):
+        config = self.mk_redis_config("foo")
+        return self.mk_opts_raw(args + [config, "*"])
+
+    def test_no_config(self):
+        self.assertRaisesRegexp(
+            UsageError,
+            "Wrong number of arguments.",
+            self.mk_opts_raw, [])
+
+    def test_no_pattern(self):
+        self.assertRaisesRegexp(
+            UsageError,
+            "Wrong number of arguments.",
+            self.mk_opts_raw, ["config.yaml"])
+
+    def test_no_tasks(self):
+        self.assertRaisesRegexp(
+            UsageError,
+            "Please specify a task.",
+            self.mk_opts, [])
+
+    def test_one_task(self):
+        opts = self.mk_opts(["-t", "count"])
+        self.assertEqual(
+            [t.name for t in opts["tasks"]],
+            ["count"]
+        )
+
+    def test_multiple_tasks(self):
+        opts = self.mk_opts(["-t", "list", "-t", "count"])
+        self.assertEqual(
+            [t.name for t in opts["tasks"]],
+            ["list", "count"]
+        )
+
+    def test_help(self):
+        opts = Options()
+        lines = opts.getUsage().splitlines()
+        self.assertEqual(lines[-4:], [
+            "Available tasks:",
+            "      --count   A task that counts the number of keys.",
+            "      --expire  A task that sets an expiry time on each key.",
+            "      --list    A task that prints out each key.",
+        ])
 
 
 class ConfigHolderTestCase(VumiTestCase):

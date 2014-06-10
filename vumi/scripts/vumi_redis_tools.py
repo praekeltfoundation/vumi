@@ -17,6 +17,7 @@ class Task(object):
     """
 
     name = None
+    hidden = False  # set to True to hide from docs
     cfg = None
     redis = None
 
@@ -37,8 +38,12 @@ class Task(object):
         return task_cls(**params)
 
     @classmethod
+    def task_types(cls):
+        return cls.__subclasses__()
+
+    @classmethod
     def _parse_task_type(cls, task_type):
-        names = dict((t.name, t) for t in cls.__subclasses__())
+        names = dict((t.name, t) for t in cls.task_types())
         if task_type not in names:
             raise TaskError("Unknown task type %r" % (task_type,))
         return names[task_type]
@@ -109,11 +114,21 @@ class Options(usage.Options):
 
     synopsis = "<config-file.yaml> <match-pattern> [-t <task> ...]"
 
-    longdesc = """Perform operation on Redis keys."""
+    longdesc = "Perform tasks on Redis keys."
 
     def __init__(self):
         usage.Options.__init__(self)
         self['tasks'] = []
+
+    def getUsage(self, width=None):
+        doc = usage.Options.getUsage(self, width=width)
+        header = "Available tasks:"
+        tasks = sorted(Task.task_types(), key=lambda t: t.name)
+        tasks_doc = "".join(usage.docMakeChunks([{
+            'long': task.name,
+            'doc': task.__doc__,
+        } for task in tasks if not task.hidden]))
+        return "\n".join([doc, header, tasks_doc])
 
     def parseArgs(self, config_file, match_pattern):
         self['config'] = yaml.safe_load(open(config_file))
