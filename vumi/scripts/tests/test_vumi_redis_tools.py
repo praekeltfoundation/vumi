@@ -21,6 +21,14 @@ class TestConfigHolder(ConfigHolder):
         return self.testcase.get_sub_redis(redis_config)
 
 
+class DummyConfigHolder(object):
+    def __init__(self):
+        self.output = []
+
+    def emit(self, s):
+        self.output.append(s)
+
+
 class DummyTask(Task):
     name = "dummy"
 
@@ -61,6 +69,16 @@ class TaskTestCase(VumiTestCase):
 
 
 class CountTestCase(VumiTestCase):
+
+    def setUp(self):
+        self.cfg = DummyConfigHolder()
+
+    def mk_count(self):
+        t = Count()
+        t.init(self.cfg, None)
+        t.setup()
+        return t
+
     def test_name(self):
         t = Count()
         self.assertEqual(t.name, "count")
@@ -70,7 +88,23 @@ class CountTestCase(VumiTestCase):
         self.assertEqual(t.name, "count")
         self.assertEqual(type(t), Count)
 
-    # TODO: add tests for setup, apply, teardown
+    def test_setup(self):
+        t = self.mk_count()
+        self.assertEqual(t.count, 0)
+
+    def test_apply(self):
+        t = self.mk_count()
+        t.apply("foo")
+        self.assertEqual(t.count, 1)
+
+    def test_teardown(self):
+        t = self.mk_count()
+        for i in range(5):
+            t.apply(str(i))
+        t.teardown()
+        self.assertEqual(self.cfg.output, [
+            "Found 5 matching keys.",
+        ])
 
 
 class ExpireTestCase(VumiTestCase):

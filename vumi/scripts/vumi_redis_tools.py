@@ -69,16 +69,16 @@ class Count(Task):
     name = "count"
 
     def __init__(self):
-        self._count = None
+        self.count = None
 
     def setup(self):
-        self._count = 0
+        self.count = 0
 
     def teardown(self):
-        self.cfg.emit("Found %d matching keys." % (self._count,))
+        self.cfg.emit("Found %d matching keys." % (self.count,))
 
     def apply(self, key):
-        self._count += 1
+        self.count += 1
         return key
 
 
