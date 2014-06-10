@@ -201,22 +201,22 @@ class OptionsTestCase(VumiTestCase):
         return self.mk_opts_raw(args + [config, "*"])
 
     def test_no_config(self):
-        self.assertRaisesRegexp(
+        exc = self.assertRaises(
             UsageError,
-            "Wrong number of arguments.",
             self.mk_opts_raw, [])
+        self.assertEqual(str(exc), "Wrong number of arguments.")
 
     def test_no_pattern(self):
-        self.assertRaisesRegexp(
+        exc = self.assertRaises(
             UsageError,
-            "Wrong number of arguments.",
             self.mk_opts_raw, ["config.yaml"])
+        self.assertEqual(str(exc), "Wrong number of arguments.")
 
     def test_no_tasks(self):
-        self.assertRaisesRegexp(
+        exc = self.assertRaises(
             UsageError,
-            "Please specify a task.",
             self.mk_opts, [])
+        self.assertEqual(str(exc), "Please specify a task.")
 
     def test_one_task(self):
         opts = self.mk_opts(["-t", "count"])
