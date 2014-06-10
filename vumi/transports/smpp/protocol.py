@@ -475,7 +475,7 @@ class EsmeTransceiver(Protocol):
             for key, value in optional_parameters.items():
                 pdu.add_optional_parameter(key, value)
 
-        yield self.vumi_transport.set_sequence_number_message_id(
+        yield self.vumi_transport.message_stash.set_sequence_number_message_id(
             sequence_number, vumi_message_id)
         self.send_pdu(pdu)
         returnValue([sequence_number])

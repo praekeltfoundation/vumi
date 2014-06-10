@@ -184,7 +184,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
     def test_mo_delivery_report_pdu(self):
         smpp_helper = yield self.get_smpp_helper()
         transport = smpp_helper.transport
-        yield transport.set_remote_message_id('bar', 'foo')
+        yield transport.message_stash.set_remote_message_id('bar', 'foo')
 
         pdu = DeliverSM(sequence_number=1)
         pdu.add_optional_parameter('receipted_message_id', 'foo')
@@ -200,7 +200,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
     def test_mo_delivery_report_content(self):
         smpp_helper = yield self.get_smpp_helper()
         transport = smpp_helper.transport
-        yield transport.set_remote_message_id('bar', 'foo')
+        yield transport.message_stash.set_remote_message_id('bar', 'foo')
 
         smpp_helper.send_mo(
             sequence_number=1, short_message=self.DR_TEMPLATE % ('foo',),
@@ -492,7 +492,8 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
                 SubmitSMResp(sequence_number=0xbad, message_id='bad'))
 
         # Make sure we didn't store 'None' in redis.
-        message_id = yield smpp_helper.transport.get_internal_message_id('bad')
+        message_stash = smpp_helper.transport.message_stash
+        message_id = yield message_stash.get_internal_message_id('bad')
         self.assertEqual(message_id, None)
 
         # check that failure to send ack/nack was logged
@@ -726,35 +727,38 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
     def test_message_persistence(self):
         smpp_helper = yield self.get_smpp_helper()
         transport = smpp_helper.transport
+        message_stash = transport.message_stash
         config = transport.get_static_config()
 
         msg = self.tx_helper.make_outbound("hello world")
-        yield transport.cache_message(msg)
+        yield message_stash.cache_message(msg)
 
         ttl = yield transport.redis.ttl(message_key(msg['message_id']))
         self.assertTrue(0 < ttl <= config.submit_sm_expiry)
 
-        retrieved_msg = yield transport.get_cached_message(
+        retrieved_msg = yield message_stash.get_cached_message(
             msg['message_id'])
         self.assertEqual(msg, retrieved_msg)
-        yield transport.delete_cached_message(msg['message_id'])
+        yield message_stash.delete_cached_message(msg['message_id'])
         self.assertEqual(
-            (yield transport.get_cached_message(msg['message_id'])),
+            (yield message_stash.get_cached_message(msg['message_id'])),
             None)
 
     @inlineCallbacks
     def test_message_clearing(self):
         smpp_helper = yield self.get_smpp_helper()
         transport = smpp_helper.transport
+        message_stash = transport.message_stash
         msg = self.tx_helper.make_outbound('hello world')
-        yield transport.set_sequence_number_message_id(3, msg['message_id'])
-        yield transport.cache_message(msg)
+        yield message_stash.set_sequence_number_message_id(
+            3, msg['message_id'])
+        yield message_stash.cache_message(msg)
         yield smpp_helper.handle_pdu(SubmitSMResp(sequence_number=3,
                                                   message_id='foo',
                                                   command_status='ESME_ROK'))
         self.assertEqual(
             None,
-            (yield transport.get_cached_message(msg['message_id'])))
+            (yield message_stash.get_cached_message(msg['message_id'])))
 
     @inlineCallbacks
     def test_link_remote_message_id(self):
@@ -772,7 +776,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
                          command_status='ESME_ROK'))
         self.assertEqual(
             msg['message_id'],
-            (yield transport.get_internal_message_id('foo')))
+            (yield transport.message_stash.get_internal_message_id('foo')))
 
         ttl = yield transport.redis.ttl(remote_message_key('foo'))
         self.assertTrue(0 < ttl <= config.third_party_id_expiry)

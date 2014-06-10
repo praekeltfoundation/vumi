@@ -68,9 +68,10 @@ class SmppTransceiverProtocol(EsmeTransceiverFactory.protocol):
             'ESME_RTHROTTLED': self.vumi_transport.handle_submit_sm_throttled,
             'ESME_RMSGQFUL': self.vumi_transport.handle_submit_sm_throttled,
         }.get(command_status, self.vumi_transport.handle_submit_sm_failure)
-        d = self.vumi_transport.get_sequence_number_message_id(sequence_number)
+        message_stash = self.vumi_transport.message_stash
+        d = message_stash.get_sequence_number_message_id(sequence_number)
         d.addCallback(
-            self.vumi_transport.set_remote_message_id, smpp_message_id)
+            message_stash.set_remote_message_id, smpp_message_id)
         d.addCallback(
             self._handle_submit_sm_resp_callback, smpp_message_id,
             command_status, cb)
@@ -128,6 +129,59 @@ class SmppService(ReconnectingClientService):
         return ReconnectingClientService.stopService(self)
 
 
+class SmppMessageDataStash(object):
+    """
+    Stash message data in Redis.
+    """
+
+    def __init__(self, redis, config):
+        self.redis = redis
+        self.config = config
+
+    def set_sequence_number_message_id(self, sequence_number, message_id):
+        key = sequence_number_key(sequence_number)
+        expiry = self.config.third_party_id_expiry
+        d = self.redis.set(key, message_id)
+        d.addCallback(lambda _: self.redis.expire(key, expiry))
+        return d
+
+    def get_sequence_number_message_id(self, sequence_number):
+        return self.redis.get(sequence_number_key(sequence_number))
+
+    def cache_message(self, message):
+        key = message_key(message['message_id'])
+        expire = self.config.submit_sm_expiry
+        d = self.redis.set(key, message.to_json())
+        d.addCallback(lambda _: self.redis.expire(key, expire))
+        return d
+
+    def get_cached_message(self, message_id):
+        d = self.redis.get(message_key(message_id))
+        d.addCallback(lambda json_data: (
+            TransportUserMessage.from_json(json_data)
+            if json_data else None))
+        return d
+
+    def delete_cached_message(self, message_id):
+        return self.redis.delete(message_key(message_id))
+
+    def set_remote_message_id(self, message_id, smpp_message_id):
+        if message_id is None:
+            # If we store None, we end up with the string "None" in Redis. This
+            # confuses later lookups (which treat any non-None value as a valid
+            # identifier) and results in broken delivery reports.
+            return succeed(None)
+        key = remote_message_key(smpp_message_id)
+        d = self.redis.set(key, message_id)
+        d.addCallback(lambda _: self.redis.expire(
+            key, self.config.third_party_id_expiry))
+        d.addCallback(lambda _: message_id)
+        return d
+
+    def get_internal_message_id(self, smpp_message_id):
+        return self.redis.get(remote_message_key(smpp_message_id))
+
+
 class SmppTransceiverTransport(Transport):
 
     CONFIG_CLASS = SmppTransportConfig
@@ -157,6 +211,7 @@ class SmppTransceiverTransport(Transport):
             self, config.submit_short_message_processor_config)
 
         self.sequence_generator = self.sequence_class(self.redis)
+        self.message_stash = SmppMessageDataStash(self.redis, config)
         self.throttled = None
         self._throttled_message_ids = []
         self._unthrottle_delayedCall = None
@@ -236,56 +291,13 @@ class SmppTransceiverTransport(Transport):
             return
         yield self.submit_sm_processor.handle_outbound_message(
             message, protocol)
-        yield self.cache_message(message)
-
-    def set_sequence_number_message_id(self, sequence_number, message_id):
-        key = sequence_number_key(sequence_number)
-        expiry = self.get_static_config().third_party_id_expiry
-        d = self.redis.set(key, message_id)
-        d.addCallback(lambda _: self.redis.expire(key, expiry))
-        return d
-
-    def get_sequence_number_message_id(self, sequence_number):
-        return self.redis.get(sequence_number_key(sequence_number))
-
-    def cache_message(self, message):
-        key = message_key(message['message_id'])
-        expire = self.get_static_config().submit_sm_expiry
-        d = self.redis.set(key, message.to_json())
-        d.addCallback(lambda _: self.redis.expire(key, expire))
-        return d
-
-    def get_cached_message(self, message_id):
-        d = self.redis.get(message_key(message_id))
-        d.addCallback(lambda json_data: (
-            TransportUserMessage.from_json(json_data)
-            if json_data else None))
-        return d
-
-    def delete_cached_message(self, message_id):
-        return self.redis.delete(message_key(message_id))
-
-    def set_remote_message_id(self, message_id, smpp_message_id):
-        if message_id is None:
-            # If we store None, we end up with the string "None" in Redis. This
-            # confuses later lookups (which treat any non-None value as a valid
-            # identifier) and results in broken delivery reports.
-            return succeed(None)
-        key = remote_message_key(smpp_message_id)
-        config = self.get_static_config()
-        d = self.redis.set(key, message_id)
-        d.addCallback(
-            lambda _: self.redis.expire(key, config.third_party_id_expiry))
-        d.addCallback(lambda _: message_id)
-        return d
-
-    def get_internal_message_id(self, smpp_message_id):
-        return self.redis.get(remote_message_key(smpp_message_id))
+        yield self.message_stash.cache_message(message)
 
     def handle_submit_sm_success(self, message_id, smpp_message_id,
                                  command_status):
         d = self.publish_ack(message_id, smpp_message_id)
-        d.addCallback(lambda _: self.delete_cached_message(message_id))
+        d.addCallback(
+            lambda _: self.message_stash.delete_cached_message(message_id))
         if self.throttled:
             d.addBoth(lambda _: self.check_stop_throttling(0))
         return d
@@ -293,13 +305,13 @@ class SmppTransceiverTransport(Transport):
     @inlineCallbacks
     def handle_submit_sm_failure(self, message_id, smpp_message_id,
                                  command_status):
-        error_message = yield self.get_cached_message(message_id)
+        error_message = yield self.message_stash.get_cached_message(message_id)
         command_status = command_status or 'Unspecified'
         if error_message is None:
             log.warning(
                 "Could not retrieve failed message: %s" % (message_id,))
         else:
-            yield self.delete_cached_message(message_id)
+            yield self.message_stash.delete_cached_message(message_id)
             yield self.publish_nack(message_id, command_status)
             yield self.failure_publisher.publish_message(
                 FailureMessage(message=error_message.payload,
@@ -359,7 +371,7 @@ class SmppTransceiverTransport(Transport):
             return
 
         message_id = self._throttled_message_ids.pop(0)
-        message = yield self.get_cached_message(message_id)
+        message = yield self.message_stash.get_cached_message(message_id)
         if message is None:
             # We can't find this message, so log it and start again.
             log.warning(
@@ -423,7 +435,8 @@ class SmppTransceiverTransport(Transport):
 
     @inlineCallbacks
     def handle_delivery_report(self, receipted_message_id, delivery_status):
-        message_id = yield self.get_internal_message_id(receipted_message_id)
+        message_id = yield self.message_stash.get_internal_message_id(
+            receipted_message_id)
         if message_id is None:
             log.warning("Failed to retrieve message id for delivery report."
                         " Delivery report from %s discarded."

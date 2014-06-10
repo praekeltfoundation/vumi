@@ -163,7 +163,8 @@ class EsmeTestCase(VumiTestCase):
         returnValue((transport, protocol))
 
     def lookup_message_ids(self, protocol, seq_nums):
-        lookup_func = protocol.vumi_transport.get_sequence_number_message_id
+        message_stash = protocol.vumi_transport.message_stash
+        lookup_func = message_stash.get_sequence_number_message_id
         return gatherResults([lookup_func(seq_num) for seq_num in seq_nums])
 
     @inlineCallbacks
