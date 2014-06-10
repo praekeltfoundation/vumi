@@ -108,6 +108,20 @@ class CountTestCase(VumiTestCase):
 
 
 class ExpireTestCase(VumiTestCase):
+
+    def setUp(self):
+        self.cfg = DummyConfigHolder()
+        self.persistence_helper = self.add_helper(
+            PersistenceHelper(is_sync=True))
+        self.redis = self.persistence_helper.get_redis_manager()
+        self.redis._purge_all()  # Make sure we start fresh.
+
+    def mk_expire(self, seconds=10):
+        t = Expire(seconds)
+        t.init(self.cfg, self.redis)
+        t.setup()
+        return t
+
     def test_name(self):
         t = Expire(seconds=20)
         self.assertEqual(t.name, "expire")
@@ -118,7 +132,15 @@ class ExpireTestCase(VumiTestCase):
         self.assertEqual(t.seconds, 20)
         self.assertEqual(type(t), Expire)
 
-    # TODO: add tests for setup, apply, teardown
+    def test_apply(self):
+        t = self.mk_expire(seconds=10)
+        self.redis.set("key1", "bar")
+        self.redis.set("key2", "baz")
+        t.apply("key1")
+        self.assertTrue(
+            0 < self.redis.ttl("key1") <= 10)
+        self.assertEqual(
+            self.redis.ttl("key2"), None)
 
 
 class OptionsTestCase(VumiTestCase):
