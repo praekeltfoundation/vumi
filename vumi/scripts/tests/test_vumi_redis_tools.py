@@ -189,12 +189,31 @@ class ConfigHolderTestCase(VumiTestCase):
         ])
 
     def test_multiple_task(self):
-        # TODO: use different commands
+        self.redis.set("bar:key1", "k1")
+        self.redis.set("bar:key2", "k2")
         cfg = self.make_cfg([
-            "-t", "count", "-t", "count", self.mk_redis_config("bar"), "*",
+            "-t", "expire:seconds=10",
+            "-t", "count",
+            self.mk_redis_config("bar"), "*",
         ])
         cfg.run()
         self.assertEqual(cfg.output, [
-            'Found 0 matching keys.',
-            'Found 0 matching keys.',
+            'Found 2 matching keys.',
         ])
+        self.assertTrue(0 < self.redis.ttl("bar:key1") <= 10)
+        self.assertTrue(0 < self.redis.ttl("bar:key2") <= 10)
+
+    def test_match(self):
+        self.redis.set("bar:coffee:key1", "k1")
+        self.redis.set("bar:tea:key2", "k2")
+        cfg = self.make_cfg([
+            "-t", "expire:seconds=10",
+            "-t", "count",
+            self.mk_redis_config("bar"), "coffee:*",
+        ])
+        cfg.run()
+        self.assertEqual(cfg.output, [
+            'Found 1 matching keys.',
+        ])
+        self.assertTrue(0 < self.redis.ttl("bar:coffee:key1") <= 10)
+        self.assertEqual(self.redis.ttl("bar:tea:key2"), None)
