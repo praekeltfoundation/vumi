@@ -17,6 +17,8 @@ class Task(object):
     """
 
     name = None
+    cfg = None
+    redis = None
 
     @classmethod
     def parse(cls, task_desc):
@@ -47,10 +49,14 @@ class Task(object):
         params = [(p, v) for p, _sep, v in params]
         return dict(params)
 
-    def setup(self, cfg):
+    def init(self, cfg, redis):
+        self.cfg = cfg
+        self.redis = redis
+
+    def setup(self):
         pass
 
-    def teardown(self, cfg):
+    def teardown(self):
         pass
 
     def apply(self, key):
@@ -65,14 +71,27 @@ class Count(Task):
     def __init__(self):
         self._count = None
 
-    def setup(self, cfg):
+    def setup(self):
         self._count = 0
 
-    def teardown(self, cfg):
-        cfg.emit("Found %d matching keys." % (self._count,))
+    def teardown(self):
+        self.cfg.emit("Found %d matching keys." % (self._count,))
 
     def apply(self, key):
         self._count += 1
+        return key
+
+
+class Expire(Task):
+    """A task that sets an expiry time on each key."""
+
+    name = "expire"
+
+    def __init__(self, seconds):
+        self.seconds = int(seconds)
+
+    def apply(self, key):
+        self.redis.expire(key, self.seconds)
         return key
 
 
@@ -140,10 +159,14 @@ class ConfigHolder(object):
         """
         Apply all tasks to all keys.
         """
-        for task in self.tasks:
-            task.setup(self)
-
         redis = self.get_redis()
+
+        for task in self.tasks:
+            task.init(self, redis)
+
+        for task in self.tasks:
+            task.setup()
+
         for key in scan_keys(redis, self.match_pattern):
             for task in self.tasks:
                 key = task.apply(key)
@@ -151,7 +174,7 @@ class ConfigHolder(object):
                     break
 
         for task in self.tasks:
-            task.teardown(self)
+            task.teardown()
 
 
 if __name__ == '__main__':

@@ -3,7 +3,7 @@
 import yaml
 
 from vumi.scripts.vumi_redis_tools import (
-    ConfigHolder, Options, Task, TaskError, Count)
+    ConfigHolder, Options, Task, TaskError, Count, Expire)
 from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 
 
@@ -51,6 +51,14 @@ class TaskTestCase(VumiTestCase):
     def test_parse_no_task(self):
         self.assertRaises(TaskError, Task.parse, "unknown")
 
+    def test_init(self):
+        t = Task()
+        cfg = object()
+        redis = object()
+        t.init(cfg, redis)
+        self.assertEqual(t.cfg, cfg)
+        self.assertEqual(t.redis, redis)
+
 
 class CountTestCase(VumiTestCase):
     def test_name(self):
@@ -61,6 +69,20 @@ class CountTestCase(VumiTestCase):
         t = Task.parse("count")
         self.assertEqual(t.name, "count")
         self.assertEqual(type(t), Count)
+
+    # TODO: add tests for setup, apply, teardown
+
+
+class ExpireTestCase(VumiTestCase):
+    def test_name(self):
+        t = Expire(seconds=20)
+        self.assertEqual(t.name, "expire")
+
+    def test_create(self):
+        t = Task.parse("expire:seconds=20")
+        self.assertEqual(t.name, "expire")
+        self.assertEqual(t.seconds, 20)
+        self.assertEqual(type(t), Expire)
 
     # TODO: add tests for setup, apply, teardown
 
