@@ -102,11 +102,21 @@ class ConfigHolderTestCase(VumiTestCase):
         return self.persistence_helper.get_redis_manager(config)
 
     def test_single_task(self):
-        cfg = self.make_cfg(["-t", "count", self.mk_redis_config("bar"), "*"])
+        cfg = self.make_cfg([
+            "-t", "count", self.mk_redis_config("bar"), "*",
+        ])
         cfg.run()
         self.assertEqual(cfg.output, [
-            # TODO: add output
+            'Found 0 matching keys.',
         ])
 
     def test_multiple_task(self):
-        pass  # TODO: implement test
+        # TODO: use different commands
+        cfg = self.make_cfg([
+            "-t", "count", "-t", "count", self.mk_redis_config("bar"), "*",
+        ])
+        cfg.run()
+        self.assertEqual(cfg.output, [
+            'Found 0 matching keys.',
+            'Found 0 matching keys.',
+        ])

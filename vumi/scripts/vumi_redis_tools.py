@@ -47,10 +47,10 @@ class Task(object):
         params = [(p, v) for p, _sep, v in params]
         return dict(params)
 
-    def setup(self):
+    def setup(self, cfg):
         pass
 
-    def teardown(self):
+    def teardown(self, cfg):
         pass
 
     def apply(self, key):
@@ -65,11 +65,11 @@ class Count(Task):
     def __init__(self):
         self._count = None
 
-    def setup(self):
+    def setup(self, cfg):
         self._count = 0
 
-    def teardown(self):
-        pass
+    def teardown(self, cfg):
+        cfg.emit("Found %d matching keys." % (self._count,))
 
     def apply(self, key):
         self._count += 1
@@ -141,7 +141,7 @@ class ConfigHolder(object):
         Apply all tasks to all keys.
         """
         for task in self.tasks:
-            task.setup()
+            task.setup(self)
 
         redis = self.get_redis()
         for key in scan_keys(redis, self.match_pattern):
@@ -151,7 +151,7 @@ class ConfigHolder(object):
                     break
 
         for task in self.tasks:
-            task.teardown()
+            task.teardown(self)
 
 
 if __name__ == '__main__':
