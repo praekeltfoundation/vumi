@@ -95,6 +95,16 @@ class Expire(Task):
         return key
 
 
+class ListKeys(Task):
+    """A task that prints out each key."""
+
+    name = "list"
+
+    def apply(self, key):
+        self.cfg.emit(key)
+        return key
+
+
 class Options(usage.Options):
 
     synopsis = "<config-file.yaml> <match-pattern> [-t <task> ...]"

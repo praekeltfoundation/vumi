@@ -3,7 +3,7 @@
 import yaml
 
 from vumi.scripts.vumi_redis_tools import (
-    ConfigHolder, Options, Task, TaskError, Count, Expire)
+    ConfigHolder, Options, Task, TaskError, Count, Expire, ListKeys)
 from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 
 
@@ -141,6 +141,34 @@ class ExpireTestCase(VumiTestCase):
             0 < self.redis.ttl("key1") <= 10)
         self.assertEqual(
             self.redis.ttl("key2"), None)
+
+
+class ListKeysTestCase(VumiTestCase):
+
+    def setUp(self):
+        self.cfg = DummyConfigHolder()
+
+    def mk_list(self):
+        t = ListKeys()
+        t.init(self.cfg, None)
+        t.setup()
+        return t
+
+    def test_name(self):
+        t = ListKeys()
+        self.assertEqual(t.name, "list")
+
+    def test_create(self):
+        t = Task.parse("list")
+        self.assertEqual(t.name, "list")
+        self.assertEqual(type(t), ListKeys)
+
+    def test_apply(self):
+        t = self.mk_list()
+        t.apply("key1")
+        self.assertEqual(self.cfg.output, [
+            "key1",
+        ])
 
 
 class OptionsTestCase(VumiTestCase):
