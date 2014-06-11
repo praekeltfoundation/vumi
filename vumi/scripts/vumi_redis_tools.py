@@ -18,7 +18,7 @@ class Task(object):
 
     name = None
     hidden = False  # set to True to hide from docs
-    cfg = None
+    runner = None
     redis = None
 
     @classmethod
@@ -54,8 +54,8 @@ class Task(object):
         params = [(p, v) for p, _sep, v in params]
         return dict(params)
 
-    def init(self, cfg, redis):
-        self.cfg = cfg
+    def init(self, runner, redis):
+        self.runner = runner
         self.redis = redis
 
     def setup(self):
@@ -80,7 +80,7 @@ class Count(Task):
         self.count = 0
 
     def teardown(self):
-        self.cfg.emit("Found %d matching keys." % (self.count,))
+        self.runner.emit("Found %d matching keys." % (self.count,))
 
     def apply(self, key):
         self.count += 1
@@ -106,7 +106,7 @@ class ListKeys(Task):
     name = "list"
 
     def apply(self, key):
-        self.cfg.emit(key)
+        self.runner.emit(key)
         return key
 
 
@@ -160,39 +160,41 @@ def scan_keys(redis, match):
         prev_cursor = cursor
 
 
-class ConfigHolder(object):
+class TaskRunner(object):
+
+    stdout = sys.stdout
+
     def __init__(self, options):
         self.options = options
-        self.config = options['config']
         self.match_pattern = options['match_pattern']
         self.tasks = options['tasks']
+        self.redis = self.get_redis(options['config'])
 
     def emit(self, s):
         """
         Print the given string and then a newline.
         """
-        print s
+        self.stdout.write(s)
+        self.stdout.write("\n")
 
-    def get_redis(self):
+    def get_redis(self, config):
         """
         Create and return a redis manager.
         """
-        redis_config = self.config.get('redis_manager', {})
+        redis_config = config.get('redis_manager', {})
         return RedisManager.from_config(redis_config)
 
     def run(self):
         """
         Apply all tasks to all keys.
         """
-        redis = self.get_redis()
-
         for task in self.tasks:
-            task.init(self, redis)
+            task.init(self, self.redis)
 
         for task in self.tasks:
             task.setup()
 
-        for key in scan_keys(redis, self.match_pattern):
+        for key in scan_keys(self.redis, self.match_pattern):
             for task in self.tasks:
                 key = task.apply(key)
                 if key is None:
@@ -211,5 +213,5 @@ if __name__ == '__main__':
         print '%s: Try --help for usage details.' % (sys.argv[0])
         sys.exit(1)
 
-    cfg = ConfigHolder(options)
-    cfg.run()
+    tasks = TaskRunner(options)
+    tasks.run()

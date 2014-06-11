@@ -1,29 +1,17 @@
 """Tests for vumi.scripts.vumi_redis_tools."""
 
+import StringIO
+
 import yaml
 
 from twisted.python.usage import UsageError
 
 from vumi.scripts.vumi_redis_tools import (
-    ConfigHolder, Options, Task, TaskError, Count, Expire, ListKeys)
+    TaskRunner, Options, Task, TaskError, Count, Expire, ListKeys)
 from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 
 
-class TestConfigHolder(ConfigHolder):
-    def __init__(self, testcase, *args, **kwargs):
-        self.testcase = testcase
-        self.output = []
-        super(TestConfigHolder, self).__init__(*args, **kwargs)
-
-    def emit(self, s):
-        self.output.append(s)
-
-    def get_redis(self):
-        redis_config = self.config.get('redis_manager', {})
-        return self.testcase.get_sub_redis(redis_config)
-
-
-class DummyConfigHolder(object):
+class DummyTaskRunner(object):
     def __init__(self):
         self.output = []
 
@@ -66,21 +54,21 @@ class TaskTestCase(VumiTestCase):
 
     def test_init(self):
         t = Task()
-        cfg = object()
+        runner = object()
         redis = object()
-        t.init(cfg, redis)
-        self.assertEqual(t.cfg, cfg)
+        t.init(runner, redis)
+        self.assertEqual(t.runner, runner)
         self.assertEqual(t.redis, redis)
 
 
 class CountTestCase(VumiTestCase):
 
     def setUp(self):
-        self.cfg = DummyConfigHolder()
+        self.runner = DummyTaskRunner()
 
     def mk_count(self):
         t = Count()
-        t.init(self.cfg, None)
+        t.init(self.runner, None)
         t.setup()
         return t
 
@@ -107,7 +95,7 @@ class CountTestCase(VumiTestCase):
         for i in range(5):
             t.apply(str(i))
         t.teardown()
-        self.assertEqual(self.cfg.output, [
+        self.assertEqual(self.runner.output, [
             "Found 5 matching keys.",
         ])
 
@@ -115,7 +103,7 @@ class CountTestCase(VumiTestCase):
 class ExpireTestCase(VumiTestCase):
 
     def setUp(self):
-        self.cfg = DummyConfigHolder()
+        self.runner = DummyTaskRunner()
         self.persistence_helper = self.add_helper(
             PersistenceHelper(is_sync=True))
         self.redis = self.persistence_helper.get_redis_manager()
@@ -123,7 +111,7 @@ class ExpireTestCase(VumiTestCase):
 
     def mk_expire(self, seconds=10):
         t = Expire(seconds)
-        t.init(self.cfg, self.redis)
+        t.init(self.runner, self.redis)
         t.setup()
         return t
 
@@ -151,11 +139,11 @@ class ExpireTestCase(VumiTestCase):
 class ListKeysTestCase(VumiTestCase):
 
     def setUp(self):
-        self.cfg = DummyConfigHolder()
+        self.runner = DummyTaskRunner()
 
     def mk_list(self):
         t = ListKeys()
-        t.init(self.cfg, None)
+        t.init(self.runner, None)
         t.setup()
         return t
 
@@ -171,7 +159,7 @@ class ListKeysTestCase(VumiTestCase):
     def test_apply(self):
         t = self.mk_list()
         t.apply("key1")
-        self.assertEqual(self.cfg.output, [
+        self.assertEqual(self.runner.output, [
             "key1",
         ])
 
@@ -243,17 +231,24 @@ class OptionsTestCase(VumiTestCase):
         ])
 
 
-class ConfigHolderTestCase(VumiTestCase):
-    def setUp(self):
-        self.persistence_helper = self.add_helper(
-            PersistenceHelper(is_sync=True))
-        self.redis = self.persistence_helper.get_redis_manager()
-        self.redis._purge_all()  # Make sure we start fresh.
+class StubbedTaskRunner(TaskRunner):
+    def __init__(self, *args, **kw):
+        super(StubbedTaskRunner, self).__init__(*args, **kw)
+        self.stdout = StringIO.StringIO()
 
-    def make_cfg(self, args):
+    @property
+    def output(self):
+        return self.stdout.getvalue().splitlines()
+
+
+class TaskRunnerTestCase(VumiTestCase):
+    def make_runner(self, tasks, redis=None, pattern="*"):
+        if redis is None:
+            redis = self.mk_redis_config()
+        args = tasks + [redis, pattern]
         options = Options()
         options.parseOptions(args)
-        return TestConfigHolder(self, options)
+        return StubbedTaskRunner(options)
 
     def mk_file(self, data):
         name = self.mktemp()
@@ -261,55 +256,47 @@ class ConfigHolderTestCase(VumiTestCase):
             data_file.write(data)
         return name
 
-    def mk_redis_config(self, key_prefix):
+    def mk_redis_config(self):
         config = {
             'redis_manager': {
-                'key_prefix': key_prefix,
+                'FAKE_REDIS': True,
             },
         }
         return self.mk_file(yaml.safe_dump(config))
 
-    def get_sub_redis(self, config):
-        config = config.copy()
-        config['FAKE_REDIS'] = self.redis._client
-        config['key_prefix'] = self.redis._key(config['key_prefix'])
-        return self.persistence_helper.get_redis_manager(config)
-
     def test_single_task(self):
-        cfg = self.make_cfg([
-            "-t", "count", self.mk_redis_config("bar"), "*",
+        runner = self.make_runner([
+            "-t", "count",
         ])
-        cfg.run()
-        self.assertEqual(cfg.output, [
+        runner.run()
+        self.assertEqual(runner.output, [
             'Found 0 matching keys.',
         ])
 
     def test_multiple_task(self):
-        self.redis.set("bar:key1", "k1")
-        self.redis.set("bar:key2", "k2")
-        cfg = self.make_cfg([
+        runner = self.make_runner([
             "-t", "expire:seconds=10",
             "-t", "count",
-            self.mk_redis_config("bar"), "*",
         ])
-        cfg.run()
-        self.assertEqual(cfg.output, [
+        runner.redis.set("key1", "k1")
+        runner.redis.set("key2", "k2")
+        runner.run()
+        self.assertEqual(runner.output, [
             'Found 2 matching keys.',
         ])
-        self.assertTrue(0 < self.redis.ttl("bar:key1") <= 10)
-        self.assertTrue(0 < self.redis.ttl("bar:key2") <= 10)
+        self.assertTrue(0 < runner.redis.ttl("key1") <= 10)
+        self.assertTrue(0 < runner.redis.ttl("key2") <= 10)
 
     def test_match(self):
-        self.redis.set("bar:coffee:key1", "k1")
-        self.redis.set("bar:tea:key2", "k2")
-        cfg = self.make_cfg([
+        runner = self.make_runner([
             "-t", "expire:seconds=10",
             "-t", "count",
-            self.mk_redis_config("bar"), "coffee:*",
-        ])
-        cfg.run()
-        self.assertEqual(cfg.output, [
+        ], pattern="coffee:*")
+        runner.redis.set("coffee:key1", "k1")
+        runner.redis.set("tea:key2", "k2")
+        runner.run()
+        self.assertEqual(runner.output, [
             'Found 1 matching keys.',
         ])
-        self.assertTrue(0 < self.redis.ttl("bar:coffee:key1") <= 10)
-        self.assertEqual(self.redis.ttl("bar:tea:key2"), None)
+        self.assertTrue(0 < runner.redis.ttl("coffee:key1") <= 10)
+        self.assertEqual(runner.redis.ttl("tea:key2"), None)
