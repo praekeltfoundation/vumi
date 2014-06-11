@@ -235,16 +235,6 @@ class TestOptions(VumiTestCase):
         ])
 
 
-class StubbedTaskRunner(TaskRunner):
-    def __init__(self, *args, **kw):
-        super(StubbedTaskRunner, self).__init__(*args, **kw)
-        self.stdout = StringIO.StringIO()
-
-    @property
-    def output(self):
-        return self.stdout.getvalue().splitlines()
-
-
 class TestTaskRunner(VumiTestCase):
     def make_runner(self, tasks, redis=None, pattern="*"):
         if redis is None:
@@ -252,9 +242,13 @@ class TestTaskRunner(VumiTestCase):
         args = tasks + [redis, pattern]
         options = Options()
         options.parseOptions(args)
-        runner = StubbedTaskRunner(options)
+        runner = TaskRunner(options)
         runner.redis._purge_all()   # Make sure we start fresh.
+        runner.stdout = StringIO.StringIO()
         return runner
+
+    def output(self, runner):
+        return runner.stdout.getvalue().splitlines()
 
     def mk_file(self, data):
         name = self.mktemp()
@@ -275,7 +269,7 @@ class TestTaskRunner(VumiTestCase):
             "-t", "count",
         ])
         runner.run()
-        self.assertEqual(runner.output, [
+        self.assertEqual(self.output(runner), [
             'Found 0 matching keys.',
         ])
 
@@ -287,7 +281,7 @@ class TestTaskRunner(VumiTestCase):
         runner.redis.set("key1", "k1")
         runner.redis.set("key2", "k2")
         runner.run()
-        self.assertEqual(runner.output, [
+        self.assertEqual(self.output(runner), [
             'Found 2 matching keys.',
         ])
         self.assertTrue(0 < runner.redis.ttl("key1") <= 10)
@@ -301,7 +295,7 @@ class TestTaskRunner(VumiTestCase):
         runner.redis.set("coffee:key1", "k1")
         runner.redis.set("tea:key2", "k2")
         runner.run()
-        self.assertEqual(runner.output, [
+        self.assertEqual(self.output(runner), [
             'Found 1 matching keys.',
         ])
         self.assertTrue(0 < runner.redis.ttl("coffee:key1") <= 10)
