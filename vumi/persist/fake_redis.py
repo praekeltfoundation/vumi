@@ -156,6 +156,7 @@ class FakeRedis(object):
         # Then throw away the number of keys our cursor has already walked.
         # This means we may miss new keys that have been added since we started
         # iterating and/or return duplicates, but that's what Redis does.
+        i = None
         for i, key in enumerate(keys[start:]):
             if not self._known_key_existence[key]:
                 # This key has been deleted.
@@ -165,7 +166,7 @@ class FakeRedis(object):
                 break
 
         # Update the cursor to reflect the new position in the key list.
-        if start + i + 1 >= len(keys):
+        if i is None or start + i + 1 >= len(keys):
             cursor = None
         else:
             cursor = str(start + i + 1)

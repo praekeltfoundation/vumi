@@ -407,6 +407,12 @@ class TestFakeRedis(VumiTestCase):
             (yield self.redis.scan('31')),
             (None, result_keys[15:]))
 
+    @inlineCallbacks
+    def test_scan_no_keys(self):
+        self.assertEqual(
+            (yield self.redis.scan(None)),
+            (None, []))
+
 
 class TestFakeRedisCharsetHandling(VumiTestCase):
 
