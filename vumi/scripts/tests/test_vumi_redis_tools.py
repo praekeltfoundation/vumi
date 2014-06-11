@@ -252,7 +252,9 @@ class TaskRunnerTestCase(VumiTestCase):
         args = tasks + [redis, pattern]
         options = Options()
         options.parseOptions(args)
-        return StubbedTaskRunner(options)
+        runner = StubbedTaskRunner(options)
+        runner.redis._purge_all()   # Make sure we start fresh.
+        return runner
 
     def mk_file(self, data):
         name = self.mktemp()
