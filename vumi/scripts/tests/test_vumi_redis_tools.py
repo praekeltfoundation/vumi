@@ -31,7 +31,7 @@ class DummyTask(Task):
         self.b = b
 
 
-class TaskTestCase(VumiTestCase):
+class TestTask(VumiTestCase):
     def test_name(self):
         t = Task()
         self.assertEqual(t.name, None)
@@ -62,7 +62,7 @@ class TaskTestCase(VumiTestCase):
         self.assertEqual(t.redis, redis)
 
 
-class CountTestCase(VumiTestCase):
+class TestCount(VumiTestCase):
 
     def setUp(self):
         self.runner = DummyTaskRunner()
@@ -102,7 +102,7 @@ class CountTestCase(VumiTestCase):
         ])
 
 
-class ExpireTestCase(VumiTestCase):
+class TestExpire(VumiTestCase):
 
     def setUp(self):
         self.runner = DummyTaskRunner()
@@ -139,7 +139,7 @@ class ExpireTestCase(VumiTestCase):
             self.redis.ttl("key2"), None)
 
 
-class ListKeysTestCase(VumiTestCase):
+class TestListKeys(VumiTestCase):
 
     def setUp(self):
         self.runner = DummyTaskRunner()
@@ -168,7 +168,7 @@ class ListKeysTestCase(VumiTestCase):
         ])
 
 
-class OptionsTestCase(VumiTestCase):
+class TestOptions(VumiTestCase):
     def mk_file(self, data):
         name = self.mktemp()
         with open(name, "wb") as data_file:
@@ -245,7 +245,7 @@ class StubbedTaskRunner(TaskRunner):
         return self.stdout.getvalue().splitlines()
 
 
-class TaskRunnerTestCase(VumiTestCase):
+class TestTaskRunner(VumiTestCase):
     def make_runner(self, tasks, redis=None, pattern="*"):
         if redis is None:
             redis = self.mk_redis_config()
@@ -308,7 +308,7 @@ class TaskRunnerTestCase(VumiTestCase):
         self.assertEqual(runner.redis.ttl("tea:key2"), None)
 
 
-class ScanKeysTestCase(VumiTestCase):
+class TestScanKeys(VumiTestCase):
     def setUp(self):
         self.persistence_helper = self.add_helper(
             PersistenceHelper(is_sync=True))
