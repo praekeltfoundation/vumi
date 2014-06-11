@@ -178,6 +178,7 @@ class SmppMessageDataStash(object):
         part_key = 'part:%s' % (remote_id,)
         mp_info[part_key] = 'fail'
         d = self.redis.hset(key, part_key, 'fail')
+        d.addCallback(lambda _: self.redis.hset(key, 'event_result', 'fail'))
         d.addCallback(lambda _: mp_info)
         return d
 
@@ -196,17 +197,23 @@ class SmppMessageDataStash(object):
 
         part_status_dict = dict(
             (k[5:], v) for k, v in mp_info.items() if k.startswith('part:'))
-        if len(part_status_dict) < int(mp_info['parts']):
+        remote_id = ','.join(sorted(part_status_dict.keys()))
+        event_result = mp_info.get('event_result', None)
+
+        if event_result is not None:
+            # We already have a result, even if we don't have all the parts.
+            event_type = event_result
+        elif len(part_status_dict) >= int(mp_info['parts']):
+            # We have all the parts, so we can determine the event type.
+            if set(part_status_dict.values()) == set(['ack']):
+                # All parts happy.
+                event_type = 'ack'
+            else:
+                # At least one part failed.
+                event_type = 'fail'
+        else:
             # We don't have all the parts yet.
             return (False, None, None)
-
-        remote_id = ','.join(sorted(part_status_dict.keys()))
-        if set(part_status_dict.values()) == set(['ack']):
-            # All parts happy.
-            event_type = 'ack'
-        else:
-            # At least one part failed.
-            event_type = 'fail'
 
         # Atomic increment in Redis to avoid race condition
         d = self.redis.hincrby(

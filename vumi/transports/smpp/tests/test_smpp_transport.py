@@ -780,6 +780,27 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.assertEqual(event['user_message_id'], msg['message_id'])
 
     @inlineCallbacks
+    def test_mt_sms_multipart_fail_no_remote_id(self):
+        smpp_helper = yield self.get_smpp_helper(config={
+            'submit_short_message_processor_config': {
+                'send_multipart_udh': True,
+            }
+        })
+        content = '1' * 161
+        msg = self.tx_helper.make_outbound(content)
+        yield self.tx_helper.dispatch_outbound(msg)
+        [submit_sm1, submit_sm2] = yield smpp_helper.wait_for_pdus(2)
+        smpp_helper.send_pdu(
+            SubmitSMResp(sequence_number=seq_no(submit_sm1),
+                         message_id='', command_status='ESME_RINVDSTADR'))
+        smpp_helper.send_pdu(
+            SubmitSMResp(sequence_number=seq_no(submit_sm2),
+                         message_id='', command_status='ESME_RINVDSTADR'))
+        [event] = yield self.tx_helper.wait_for_dispatched_events(1)
+        self.assertEqual(event['event_type'], 'nack')
+        self.assertEqual(event['user_message_id'], msg['message_id'])
+
+    @inlineCallbacks
     def test_message_persistence(self):
         smpp_helper = yield self.get_smpp_helper()
         transport = smpp_helper.transport
