@@ -219,12 +219,12 @@ class SmppMessageDataStash(object):
         d = self.redis.hincrby(
             multipart_info_key(message_id), 'event_counter', 1)
 
-        def confirm_multpart_event_cb(counter_value):
+        def confirm_multipart_event_cb(counter_value):
             if int(counter_value) == 1:
                 return (True, event_type, remote_id)
             else:
                 return (False, None, None)
-        d.addCallback(confirm_multpart_event_cb)
+        d.addCallback(confirm_multipart_event_cb)
         return d
 
     def get_multipart_event_info(self, message_id, event_type, remote_id):
