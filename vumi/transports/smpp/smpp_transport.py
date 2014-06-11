@@ -32,6 +32,10 @@ def sequence_number_key(seq_no):
     return 'sequence_number:%s' % (seq_no,)
 
 
+def multipart_info_key(seq_no):
+    return 'multipart_info:%s' % (seq_no,)
+
+
 def message_key(message_id):
     return 'message:%s' % (message_id,)
 
@@ -137,6 +141,91 @@ class SmppMessageDataStash(object):
     def __init__(self, redis, config):
         self.redis = redis
         self.config = config
+
+    def init_multipart_info(self, message_id, part_count):
+        key = multipart_info_key(message_id)
+        expiry = self.config.third_party_id_expiry
+        d = self.redis.hmset(key, {
+            'parts': part_count,
+        })
+        d.addCallback(lambda _: self.redis.expire(key, expiry))
+        return d
+
+    def get_multipart_info(self, message_id):
+        key = multipart_info_key(message_id)
+        return self.redis.hgetall(key)
+
+    def _update_multipart_info_success_cb(self, mp_info, key, remote_id):
+        if not mp_info:
+            # No multipart data, so do nothing.
+            return
+        part_key = 'part:%s' % (remote_id,)
+        mp_info[part_key] = 'ack'
+        d = self.redis.hset(key, part_key, 'ack')
+        d.addCallback(lambda _: mp_info)
+        return d
+
+    def update_multipart_info_success(self, message_id, remote_id):
+        key = multipart_info_key(message_id)
+        d = self.get_multipart_info(message_id)
+        d.addCallback(self._update_multipart_info_success_cb, key, remote_id)
+        return d
+
+    def _update_multipart_info_failure_cb(self, mp_info, key, remote_id):
+        if not mp_info:
+            # No multipart data, so do nothing.
+            return
+        part_key = 'part:%s' % (remote_id,)
+        mp_info[part_key] = 'fail'
+        d = self.redis.hset(key, part_key, 'fail')
+        d.addCallback(lambda _: mp_info)
+        return d
+
+    def update_multipart_info_failure(self, message_id, remote_id):
+        key = multipart_info_key(message_id)
+        d = self.get_multipart_info(message_id)
+        d.addCallback(self._update_multipart_info_failure_cb, key, remote_id)
+        return d
+
+    def _determine_multipart_event_cb(self, mp_info, message_id, event_type,
+                                      remote_id):
+        if not mp_info:
+            # We don't seem to have a multipart message, so just return the
+            # single-message data.
+            return (True, event_type, remote_id)
+
+        part_status_dict = dict(
+            (k[5:], v) for k, v in mp_info.items() if k.startswith('part:'))
+        if len(part_status_dict) < int(mp_info['parts']):
+            # We don't have all the parts yet.
+            return (False, None, None)
+
+        remote_id = ','.join(sorted(part_status_dict.keys()))
+        if set(part_status_dict.values()) == set(['ack']):
+            # All parts happy.
+            event_type = 'ack'
+        else:
+            # At least one part failed.
+            event_type = 'fail'
+
+        # Atomic increment in Redis to avoid race condition
+        d = self.redis.hincrby(
+            multipart_info_key(message_id), 'event_counter', 1)
+
+        def confirm_multpart_event_cb(counter_value):
+            if int(counter_value) == 1:
+                return (True, event_type, remote_id)
+            else:
+                return (False, None, None)
+        d.addCallback(confirm_multpart_event_cb)
+        return d
+
+    def get_multipart_event_info(self, message_id, event_type, remote_id):
+        d = self.get_multipart_info(message_id)
+        d.addCallback(
+            self._determine_multipart_event_cb, message_id, event_type,
+            remote_id)
+        return d
 
     def set_sequence_number_message_id(self, sequence_number, message_id):
         key = sequence_number_key(sequence_number)
@@ -293,30 +382,59 @@ class SmppTransceiverTransport(Transport):
             message, protocol)
         yield self.message_stash.cache_message(message)
 
+    @inlineCallbacks
+    def process_submit_sm_event(self, message_id, event_type, remote_id,
+                                command_status):
+        if event_type == 'ack':
+            yield self.publish_ack(message_id, remote_id)
+            yield self.message_stash.delete_cached_message(message_id)
+        else:
+            if event_type != 'fail':
+                log.warning(
+                    "Unexpected multipart event type %r, assuming 'fail'" % (
+                        event_type,))
+            err_msg = yield self.message_stash.get_cached_message(message_id)
+            command_status = command_status or 'Unspecified'
+            if err_msg is None:
+                log.warning(
+                    "Could not retrieve failed message: %s" % (message_id,))
+            else:
+                yield self.message_stash.delete_cached_message(message_id)
+                yield self.publish_nack(message_id, command_status)
+                yield self.failure_publisher.publish_message(
+                    FailureMessage(message=err_msg.payload,
+                                   failure_code=None,
+                                   reason=command_status))
+
+    @inlineCallbacks
     def handle_submit_sm_success(self, message_id, smpp_message_id,
                                  command_status):
-        d = self.publish_ack(message_id, smpp_message_id)
-        d.addCallback(
-            lambda _: self.message_stash.delete_cached_message(message_id))
+        yield self.message_stash.update_multipart_info_success(
+            message_id, smpp_message_id)
+
+        event_info = yield self.message_stash.get_multipart_event_info(
+            message_id, 'ack', smpp_message_id)
+        event_required, event_type, remote_id = event_info
+        if event_required:
+            yield self.process_submit_sm_event(
+                message_id, event_type, remote_id, command_status)
+
         if self.throttled:
-            d.addBoth(lambda _: self.check_stop_throttling(0))
-        return d
+            yield self.check_stop_throttling(0)
 
     @inlineCallbacks
     def handle_submit_sm_failure(self, message_id, smpp_message_id,
                                  command_status):
-        error_message = yield self.message_stash.get_cached_message(message_id)
-        command_status = command_status or 'Unspecified'
-        if error_message is None:
-            log.warning(
-                "Could not retrieve failed message: %s" % (message_id,))
-        else:
-            yield self.message_stash.delete_cached_message(message_id)
-            yield self.publish_nack(message_id, command_status)
-            yield self.failure_publisher.publish_message(
-                FailureMessage(message=error_message.payload,
-                               failure_code=None,
-                               reason=command_status))
+        yield self.message_stash.update_multipart_info_failure(
+            message_id, smpp_message_id)
+
+        event_info = yield self.message_stash.get_multipart_event_info(
+            message_id, 'fail', smpp_message_id)
+        event_required, event_type, remote_id = event_info
+        if event_required:
+            yield self.process_submit_sm_event(
+                message_id, event_type, remote_id, command_status)
+
         if self.throttled:
             self.check_stop_throttling(0)
 

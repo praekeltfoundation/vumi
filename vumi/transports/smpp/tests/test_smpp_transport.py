@@ -681,8 +681,6 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
                 'send_multipart_udh': True,
             }
         })
-        # SMPP specifies that messages longer than 254 bytes should
-        # be put in the message_payload field using TLVs
         content = '1' * 161
         msg = self.tx_helper.make_outbound(content)
         yield self.tx_helper.dispatch_outbound(msg)
@@ -708,8 +706,6 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
                 'send_multipart_sar': True,
             }
         })
-        # SMPP specifies that messages longer than 254 bytes should
-        # be put in the message_payload field using TLVs
         content = '1' * 161
         msg = self.tx_helper.make_outbound(content)
         yield self.tx_helper.dispatch_outbound(msg)
@@ -722,6 +718,66 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.assertEqual(pdu_tlv(submit_sm2, 'sar_msg_ref_num'), ref_num)
         self.assertEqual(pdu_tlv(submit_sm2, 'sar_total_segments'), 2)
         self.assertEqual(pdu_tlv(submit_sm2, 'sar_segment_seqnum'), 2)
+
+    @inlineCallbacks
+    def test_mt_sms_multipart_ack(self):
+        smpp_helper = yield self.get_smpp_helper(config={
+            'submit_short_message_processor_config': {
+                'send_multipart_udh': True,
+            }
+        })
+        content = '1' * 161
+        msg = self.tx_helper.make_outbound(content)
+        yield self.tx_helper.dispatch_outbound(msg)
+        [submit_sm1, submit_sm2] = yield smpp_helper.wait_for_pdus(2)
+        smpp_helper.send_pdu(
+            SubmitSMResp(sequence_number=seq_no(submit_sm1), message_id='foo'))
+        smpp_helper.send_pdu(
+            SubmitSMResp(sequence_number=seq_no(submit_sm2), message_id='bar'))
+        [event] = yield self.tx_helper.wait_for_dispatched_events(1)
+        self.assertEqual(event['event_type'], 'ack')
+        self.assertEqual(event['user_message_id'], msg['message_id'])
+        self.assertEqual(event['sent_message_id'], 'bar,foo')
+
+    @inlineCallbacks
+    def test_mt_sms_multipart_fail_first_part(self):
+        smpp_helper = yield self.get_smpp_helper(config={
+            'submit_short_message_processor_config': {
+                'send_multipart_udh': True,
+            }
+        })
+        content = '1' * 161
+        msg = self.tx_helper.make_outbound(content)
+        yield self.tx_helper.dispatch_outbound(msg)
+        [submit_sm1, submit_sm2] = yield smpp_helper.wait_for_pdus(2)
+        smpp_helper.send_pdu(
+            SubmitSMResp(sequence_number=seq_no(submit_sm1),
+                         message_id='foo', command_status='ESME_RSUBMITFAIL'))
+        smpp_helper.send_pdu(
+            SubmitSMResp(sequence_number=seq_no(submit_sm2), message_id='bar'))
+        [event] = yield self.tx_helper.wait_for_dispatched_events(1)
+        self.assertEqual(event['event_type'], 'nack')
+        self.assertEqual(event['user_message_id'], msg['message_id'])
+
+    @inlineCallbacks
+    def test_mt_sms_multipart_fail_second_part(self):
+        smpp_helper = yield self.get_smpp_helper(config={
+            'submit_short_message_processor_config': {
+                'send_multipart_udh': True,
+            }
+        })
+        content = '1' * 161
+        msg = self.tx_helper.make_outbound(content)
+        yield self.tx_helper.dispatch_outbound(msg)
+        [submit_sm1, submit_sm2] = yield smpp_helper.wait_for_pdus(2)
+        smpp_helper.send_pdu(
+            SubmitSMResp(sequence_number=seq_no(submit_sm1), message_id='foo'))
+        smpp_helper.send_pdu(
+            SubmitSMResp(sequence_number=seq_no(submit_sm2),
+                         message_id='bar', command_status='ESME_RSUBMITFAIL'))
+        [event] = yield self.tx_helper.wait_for_dispatched_events(1)
+        self.assertEqual(event['event_type'], 'nack')
+        self.assertEqual(event['user_message_id'], msg['message_id'])
 
     @inlineCallbacks
     def test_message_persistence(self):

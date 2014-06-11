@@ -563,6 +563,8 @@ class EsmeTransceiver(Protocol):
         split_msg = self.csm_split_message(pdu_params.pop('short_message'))
         ref_num = yield self.sequence_generator.next()
         sequence_numbers = []
+        yield self.vumi_transport.message_stash.init_multipart_info(
+            vumi_message_id, len(split_msg))
         for i, msg in enumerate(split_msg):
             pdu_params = pdu_params.copy()
             optional_parameters.update({
@@ -600,6 +602,8 @@ class EsmeTransceiver(Protocol):
         split_msg = self.csm_split_message(pdu_params.pop('short_message'))
         ref_num = yield self.sequence_generator.next()
         sequence_numbers = []
+        yield self.vumi_transport.message_stash.init_multipart_info(
+            vumi_message_id, len(split_msg))
         for i, msg in enumerate(split_msg):
             # 0x40 is the UDHI flag indicating that this payload contains a
             # user data header.
