@@ -240,9 +240,7 @@ class SmppMessageDataStash(object):
     def set_sequence_number_message_id(self, sequence_number, message_id):
         key = sequence_number_key(sequence_number)
         expiry = self.config.third_party_id_expiry
-        d = self.redis.set(key, message_id)
-        d.addCallback(lambda _: self.redis.expire(key, expiry))
-        return d
+        return self.redis.setex(key, expiry, message_id)
 
     def get_sequence_number_message_id(self, sequence_number):
         return self.redis.get(sequence_number_key(sequence_number))
@@ -250,9 +248,7 @@ class SmppMessageDataStash(object):
     def cache_message(self, message):
         key = message_key(message['message_id'])
         expire = self.config.submit_sm_expiry
-        d = self.redis.set(key, message.to_json())
-        d.addCallback(lambda _: self.redis.expire(key, expire))
-        return d
+        return self.redis.setex(key, expire, message.to_json())
 
     def get_cached_message(self, message_id):
         d = self.redis.get(message_key(message_id))
@@ -270,10 +266,10 @@ class SmppMessageDataStash(object):
             # confuses later lookups (which treat any non-None value as a valid
             # identifier) and results in broken delivery reports.
             return succeed(None)
+
         key = remote_message_key(smpp_message_id)
-        d = self.redis.set(key, message_id)
-        d.addCallback(lambda _: self.redis.expire(
-            key, self.config.third_party_id_expiry))
+        expire = self.config.third_party_id_expiry
+        d = self.redis.setex(key, expire, message_id)
         d.addCallback(lambda _: message_id)
         return d
 
