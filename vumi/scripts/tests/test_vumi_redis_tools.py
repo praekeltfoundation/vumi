@@ -8,7 +8,7 @@ from twisted.python.usage import UsageError
 
 from vumi.scripts.vumi_redis_tools import (
     scan_keys, TaskRunner, Options, Task, TaskError,
-    Count, Expire, ListKeys)
+    Count, Expire, ListKeys, Skip)
 from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 
 
@@ -168,6 +168,33 @@ class TestListKeys(VumiTestCase):
         ])
 
 
+class TestSkip(VumiTestCase):
+
+    def setUp(self):
+        self.runner = DummyTaskRunner()
+
+    def mk_skip(self, pattern=".*"):
+        t = Skip(pattern)
+        t.init(self.runner, None)
+        t.before()
+        return t
+
+    def test_name(self):
+        t = Skip(".*")
+        self.assertEqual(t.name, "skip")
+
+    def test_create(self):
+        t = Task.parse("skip:pattern=.*")
+        self.assertEqual(t.name, "skip")
+        self.assertEqual(t.regex.pattern, ".*")
+        self.assertEqual(type(t), Skip)
+
+    def test_process_key(self):
+        t = self.mk_skip("skip_.*")
+        self.assertEqual(t.process_key("skip_this"), None)
+        self.assertEqual(t.process_key("dont_skip"), "dont_skip")
+
+
 class TestOptions(VumiTestCase):
     def mk_file(self, data):
         name = self.mktemp()
@@ -227,11 +254,13 @@ class TestOptions(VumiTestCase):
     def test_help(self):
         opts = Options()
         lines = opts.getUsage().splitlines()
-        self.assertEqual(lines[-4:], [
+        self.assertEqual(lines[-5:], [
             "Available tasks:",
             "      --count   A task that counts the number of keys.",
             "      --expire  A task that sets an expiry time on each key.",
             "      --list    A task that prints out each key.",
+            "      --skip    A task that skips keys that match a regular"
+            " expression.",
         ])
 
 
@@ -300,6 +329,18 @@ class TestTaskRunner(VumiTestCase):
         ])
         self.assertTrue(0 < runner.redis.ttl("coffee:key1") <= 10)
         self.assertEqual(runner.redis.ttl("tea:key2"), None)
+
+    def test_key_skipping(self):
+        runner = self.make_runner([
+            "-t", "skip:pattern=key1",
+            "-t", "list",
+        ])
+        runner.redis.set("key1", "k1")
+        runner.redis.set("key2", "k2")
+        runner.run()
+        self.assertEqual(self.output(runner), [
+            'key2',
+        ])
 
 
 class TestScanKeys(VumiTestCase):

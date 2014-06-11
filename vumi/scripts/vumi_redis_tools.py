@@ -1,4 +1,5 @@
 # -*- test-case-name: vumi.scripts.tests.test_vumi_redis_tools -*-
+import re
 import sys
 
 import yaml
@@ -115,6 +116,20 @@ class ListKeys(Task):
 
     def process_key(self, key):
         self.runner.emit(key)
+        return key
+
+
+class Skip(Task):
+    """A task that skips keys that match a regular expression."""
+
+    name = "skip"
+
+    def __init__(self, pattern):
+        self.regex = re.compile(pattern)
+
+    def process_key(self, key):
+        if self.regex.match(key):
+            return None
         return key
 
 
