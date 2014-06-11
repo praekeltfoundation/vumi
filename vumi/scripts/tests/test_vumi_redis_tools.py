@@ -69,7 +69,7 @@ class CountTestCase(VumiTestCase):
     def mk_count(self):
         t = Count()
         t.init(self.runner, None)
-        t.setup()
+        t.before()
         return t
 
     def test_name(self):
@@ -81,20 +81,21 @@ class CountTestCase(VumiTestCase):
         self.assertEqual(t.name, "count")
         self.assertEqual(type(t), Count)
 
-    def test_setup(self):
+    def test_before(self):
         t = self.mk_count()
         self.assertEqual(t.count, 0)
 
-    def test_apply(self):
+    def test_process_key(self):
         t = self.mk_count()
-        t.apply("foo")
+        key = t.process_key("foo")
         self.assertEqual(t.count, 1)
+        self.assertEqual(key, "foo")
 
-    def test_teardown(self):
+    def test_after(self):
         t = self.mk_count()
         for i in range(5):
-            t.apply(str(i))
-        t.teardown()
+            t.process_key(str(i))
+        t.after()
         self.assertEqual(self.runner.output, [
             "Found 5 matching keys.",
         ])
@@ -112,7 +113,7 @@ class ExpireTestCase(VumiTestCase):
     def mk_expire(self, seconds=10):
         t = Expire(seconds)
         t.init(self.runner, self.redis)
-        t.setup()
+        t.before()
         return t
 
     def test_name(self):
@@ -125,11 +126,12 @@ class ExpireTestCase(VumiTestCase):
         self.assertEqual(t.seconds, 20)
         self.assertEqual(type(t), Expire)
 
-    def test_apply(self):
+    def test_process_key(self):
         t = self.mk_expire(seconds=10)
         self.redis.set("key1", "bar")
         self.redis.set("key2", "baz")
-        t.apply("key1")
+        key = t.process_key("key1")
+        self.assertEqual(key, "key1")
         self.assertTrue(
             0 < self.redis.ttl("key1") <= 10)
         self.assertEqual(
@@ -144,7 +146,7 @@ class ListKeysTestCase(VumiTestCase):
     def mk_list(self):
         t = ListKeys()
         t.init(self.runner, None)
-        t.setup()
+        t.before()
         return t
 
     def test_name(self):
@@ -156,9 +158,10 @@ class ListKeysTestCase(VumiTestCase):
         self.assertEqual(t.name, "list")
         self.assertEqual(type(t), ListKeys)
 
-    def test_apply(self):
+    def test_process_key(self):
         t = self.mk_list()
-        t.apply("key1")
+        key = t.process_key("key1")
+        self.assertEqual(key, "key1")
         self.assertEqual(self.runner.output, [
             "key1",
         ])

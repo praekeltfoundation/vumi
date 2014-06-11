@@ -58,14 +58,22 @@ class Task(object):
         self.runner = runner
         self.redis = redis
 
-    def setup(self):
-        pass
+    def before(self):
+        """Run once before the task applied to any keys."""
 
-    def teardown(self):
-        pass
+    def after(self):
+        """Run once afer the task has been applied to all keys."""
 
-    def apply(self, key):
-        pass
+    def process_key(self, key):
+        """Run once for each key.
+
+        May return either the name of the key (if the key should
+        be processed by later tasks), the new name of the key (if
+        the key was renamed and should be processed by later tasks)
+        or ``None`` (if the key has been deleted or should not be
+        processed by further tasks).
+        """
+        return key
 
 
 class Count(Task):
@@ -76,13 +84,13 @@ class Count(Task):
     def __init__(self):
         self.count = None
 
-    def setup(self):
+    def before(self):
         self.count = 0
 
-    def teardown(self):
+    def after(self):
         self.runner.emit("Found %d matching keys." % (self.count,))
 
-    def apply(self, key):
+    def process_key(self, key):
         self.count += 1
         return key
 
@@ -95,7 +103,7 @@ class Expire(Task):
     def __init__(self, seconds):
         self.seconds = int(seconds)
 
-    def apply(self, key):
+    def process_key(self, key):
         self.redis.expire(key, self.seconds)
         return key
 
@@ -105,7 +113,7 @@ class ListKeys(Task):
 
     name = "list"
 
-    def apply(self, key):
+    def process_key(self, key):
         self.runner.emit(key)
         return key
 
@@ -192,16 +200,16 @@ class TaskRunner(object):
             task.init(self, self.redis)
 
         for task in self.tasks:
-            task.setup()
+            task.before()
 
         for key in scan_keys(self.redis, self.match_pattern):
             for task in self.tasks:
-                key = task.apply(key)
+                key = task.process_key(key)
                 if key is None:
                     break
 
         for task in self.tasks:
-            task.teardown()
+            task.after()
 
 
 if __name__ == '__main__':
