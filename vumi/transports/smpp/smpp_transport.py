@@ -218,7 +218,7 @@ class SmppMessageDataStash(object):
         # There's a race condition when we process multiple submit_sm_resps for
         # parts of the same messages concurrently. We only want to send one
         # event, so we do an atomic increment and ignore the event if we're
-        # not the first to succed.
+        # not the first to succeed.
         d = self.redis.hincrby(
             multipart_info_key(message_id), 'event_counter', 1)
 
