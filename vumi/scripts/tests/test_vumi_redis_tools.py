@@ -7,7 +7,8 @@ import yaml
 from twisted.python.usage import UsageError
 
 from vumi.scripts.vumi_redis_tools import (
-    TaskRunner, Options, Task, TaskError, Count, Expire, ListKeys)
+    scan_keys, TaskRunner, Options, Task, TaskError,
+    Count, Expire, ListKeys)
 from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 
 
@@ -303,3 +304,35 @@ class TaskRunnerTestCase(VumiTestCase):
         ])
         self.assertTrue(0 < runner.redis.ttl("coffee:key1") <= 10)
         self.assertEqual(runner.redis.ttl("tea:key2"), None)
+
+
+class ScanKeysTestCase(VumiTestCase):
+    def setUp(self):
+        self.persistence_helper = self.add_helper(
+            PersistenceHelper(is_sync=True))
+        self.redis = self.persistence_helper.get_redis_manager()
+        self.redis._purge_all()  # Make sure we start fresh.
+
+    def test_no_keys(self):
+        keys = list(scan_keys(self.redis, "*"))
+        self.assertEqual(keys, [])
+
+    def test_single_scan_loop(self):
+        expected_keys = ["key%d" % i for i in range(5)]
+        for key in expected_keys:
+            self.redis.set(key, "foo")
+        keys = sorted(scan_keys(self.redis, "*"))
+        self.assertEqual(keys, expected_keys)
+
+    def test_multiple_scan_loops(self):
+        expected_keys = ["key%02d" % i for i in range(100)]
+        for key in expected_keys:
+            self.redis.set(key, "foo")
+        keys = sorted(scan_keys(self.redis, "*"))
+        self.assertEqual(keys, expected_keys)
+
+    def test_match(self):
+        self.redis.set("coffee:latte", "yes")
+        self.redis.set("tea:rooibos", "yes")
+        keys = list(scan_keys(self.redis, "coffee:*"))
+        self.assertEqual(keys, ["coffee:latte"])
