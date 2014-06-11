@@ -205,7 +205,7 @@ class SmppMessageDataStash(object):
             event_type = event_result
         elif len(part_status_dict) >= int(mp_info['parts']):
             # We have all the parts, so we can determine the event type.
-            if set(part_status_dict.values()) == set(['ack']):
+            if all(pv == 'ack' for pv in part_status_dict.values()):
                 # All parts happy.
                 event_type = 'ack'
             else:
