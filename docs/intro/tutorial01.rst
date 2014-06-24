@@ -89,7 +89,7 @@ This utilizes Twisted_ to start a Vumi ``EchoWorker`` process connected to the p
 
     An *application worker* is responsible for processing messages received from a *transport worker* and generating replies - it holds the application logic. For this example we are using an *echo* worker that will simply echo messages it receives back to the *transport worker*. In subsequent parts of this tutorial we'll be utilizing A.I. to generate *seemingly intelligent* replies.
 
-Now if you enter something in your previously created Telnet session you should immediately receive an *echo*. The *application worker's* output should reflecting the activity, for example when entering ``hallo world``::
+Now if you enter something in your previously created Telnet session you should immediately receive an *echo*. The *application worker's* output should reflect the activity, for example when entering ``hallo world``::
 
     2012-03-06 12:10:39+0200 [WorkerAMQClient,client] User message: hallo world
 
