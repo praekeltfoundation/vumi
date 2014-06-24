@@ -17,7 +17,7 @@ Environment Setup
 
 Before we proceed let's create an isolated working environment using VirtualEnv_.
 
-From the command line ``cd`` into a directory were you'd like to store your code then run the following command::
+From the command line ``cd`` into a directory where you'd like to store your code then run the following command::
 
     $ virtualenv --no-site-packages ve
 
