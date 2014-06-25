@@ -13,28 +13,12 @@ from vumi.utils import to_kwargs
 VUMI_DATE_FORMAT = "%Y-%m-%d %H:%M:%S.%f"
 
 
-def date_time_decoder(json_object):
-    for key, value in json_object.items():
-        try:
-            json_object[key] = datetime.strptime(value,
-                    VUMI_DATE_FORMAT)
-        except ValueError:
-            continue
-        except TypeError:
-            continue
-    return json_object
-
-
 class JSONMessageEncoder(json.JSONEncoder):
     """A JSON encoder that is able to serialize datetime"""
     def default(self, obj):
         if isinstance(obj, datetime):
             return obj.strftime(VUMI_DATE_FORMAT)
         return super(JSONMessageEncoder, self).default(obj)
-
-
-def from_json(json_string):
-    return json.loads(json_string, object_hook=date_time_decoder)
 
 
 def to_json(obj):
@@ -50,6 +34,7 @@ class Message(object):
     scary transport format -> Vumi Tansport -> Unified Message -> Vumi Worker
 
     """
+    DATE_FIELDS = ['timestamp']
 
     def __init__(self, _process_fields=True, **kwargs):
         if _process_fields:
@@ -78,7 +63,11 @@ class Message(object):
 
     @classmethod
     def from_json(cls, json_string):
-        return cls(_process_fields=False, **to_kwargs(from_json(json_string)))
+        data = json.loads(json_string)
+        for field in cls.DATE_FIELDS:
+            if field in data:
+                data[field] = datetime.strptime(data[field], VUMI_DATE_FORMAT)
+        return cls(_process_fields=False, **to_kwargs(data))
 
     def __str__(self):
         return u"<Message payload=\"%s\">" % repr(self.payload)

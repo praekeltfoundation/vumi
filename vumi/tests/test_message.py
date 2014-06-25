@@ -1,3 +1,6 @@
+import json
+from datetime import datetime
+
 from vumi.tests.utils import RegexMatcher, UTCNearNow
 from vumi.message import (Message, TransportMessage, TransportEvent,
                           TransportUserMessage)
@@ -15,6 +18,12 @@ class MessageTest(VumiTestCase):
     def test_message_contains(self):
         self.assertTrue('a' in Message(a=5))
         self.assertFalse('a' in Message(b=5))
+
+    def test_from_json_date_parsing(self):
+        msg = Message.from_json(json.dumps({
+            'timestamp': '1969-08-18 08:00:00.00'
+        }))
+        self.assertEqual(msg['timestamp'], datetime(1969, 8, 18, 8, 0))
 
 
 class TransportMessageTestMixin(object):
