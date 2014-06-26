@@ -37,9 +37,19 @@ class TestFailureMessage(VumiTestCase):
             reason='bar')
         self.assertEqual(failure['message'], msg.payload)
 
+    def test_construct_with_non_msg(self):
+        failure = FailureMessage(
+            message='some text', failure_code='foo', reason='bar')
+        self.assertEqual(failure['message'], 'some text')
+
     def test_json_round_trip(self):
         msg = self.msg_helper.make_inbound('hello')
         failure = FailureMessage(message=msg, failure_code='foo', reason='bar')
+        self.assertEqual(failure, FailureMessage.from_json(failure.to_json()))
+
+    def test_json_round_trip_with_non_message(self):
+        failure = FailureMessage(
+            message='some text', failure_code='foo', reason='bar')
         self.assertEqual(failure, FailureMessage.from_json(failure.to_json()))
 
 

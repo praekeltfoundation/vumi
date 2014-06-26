@@ -22,9 +22,10 @@ class FailureMessage(TransportMessage):
         fields = super(FailureMessage, self).preprocess_fields(fields)
         if 'message' in fields:
             msg = fields['message']
-            if not isinstance(msg, Message):
+            if isinstance(msg, dict):
                 msg = TransportMessage(_process_fields=False, **msg)
-            fields['message'] = msg.payload
+            if isinstance(msg, Message):
+                fields['message'] = msg.payload
         return fields
 
     def process_fields(self, fields):
@@ -43,7 +44,7 @@ class FailureMessage(TransportMessage):
         orig_fields = super(FailureMessage, self).serialize_fields()
         fields = {}
         for field, value in orig_fields.iteritems():
-            if field == 'message':
+            if field == 'message' and isinstance(value, dict):
                 msg = TransportMessage(_process_fields=False, **value)
                 fields[field] = msg.serialize_fields()
             else:
