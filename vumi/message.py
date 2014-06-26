@@ -13,32 +13,20 @@ from vumi.utils import to_kwargs
 VUMI_DATE_FORMAT = "%Y-%m-%d %H:%M:%S.%f"
 
 
-def date_time_decoder(json_object):
-    for key, value in json_object.items():
-        try:
-            json_object[key] = datetime.strptime(value,
-                    VUMI_DATE_FORMAT)
-        except ValueError:
-            continue
-        except TypeError:
-            continue
-    return json_object
+def vumi_decode_datetime(dt_string):
+    return datetime.strptime(dt_string, VUMI_DATE_FORMAT)
 
 
-class JSONMessageEncoder(json.JSONEncoder):
-    """A JSON encoder that is able to serialize datetime"""
-    def default(self, obj):
-        if isinstance(obj, datetime):
-            return obj.strftime(VUMI_DATE_FORMAT)
-        return super(JSONMessageEncoder, self).default(obj)
+def vumi_encode_datetime(dt):
+    return dt.strftime(VUMI_DATE_FORMAT)
 
 
 def from_json(json_string):
-    return json.loads(json_string, object_hook=date_time_decoder)
+    return json.loads(json_string)
 
 
 def to_json(obj):
-    return json.dumps(obj, cls=JSONMessageEncoder)
+    return json.dumps(obj)
 
 
 class Message(object):
@@ -71,6 +59,11 @@ class Message(object):
     def assert_field_value(self, field, *values):
         self.assert_field_present(field)
         if self.payload[field] not in values:
+            raise InvalidMessageField(field)
+
+    def assert_field_types(self, field, *types):
+        self.assert_field_present(field)
+        if not isinstance(field, types):
             raise InvalidMessageField(field)
 
     def to_json(self):
@@ -132,7 +125,10 @@ class TransportMessage(Message):
     def process_fields(self, fields):
         fields.setdefault('message_version', self.MESSAGE_VERSION)
         fields.setdefault('message_type', self.MESSAGE_TYPE)
-        fields.setdefault('timestamp', datetime.utcnow())
+        fields.setdefault('timestamp', vumi_encode_datetime(datetime.utcnow()))
+        if isinstance(fields['timestamp'], datetime):
+            # convenience for initially setting datetimes
+            fields['timestamp'] = vumi_encode_datetime(fields['timestamp'])
         fields.setdefault('routing_metadata', {})
         fields.setdefault('helper_metadata', {})
         return fields
@@ -144,9 +140,9 @@ class TransportMessage(Message):
         self.payload.setdefault('helper_metadata', {})
         self.assert_field_present(
             'message_type',
-            'timestamp',
             'helper_metadata',
             )
+        self.assert_field_types('timestamp', basestring)
         if self['message_type'] is None:
             raise InvalidMessageField('message_type')
 
