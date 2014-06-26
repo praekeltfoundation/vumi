@@ -5,13 +5,42 @@ from datetime import datetime, timedelta
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.message import Message
-from vumi.transports.failures import FailureWorker
-from vumi.tests.helpers import VumiTestCase, PersistenceHelper, WorkerHelper
+from vumi.transports.failures import FailureMessage, FailureWorker
+from vumi.tests.helpers import (
+    VumiTestCase, PersistenceHelper, WorkerHelper, MessageHelper)
 
 
 def mktimestamp(delta=0):
     timestamp = datetime.utcnow() + timedelta(seconds=delta)
     return timestamp.isoformat().split('.')[0]
+
+
+class TestFailureMessage(VumiTestCase):
+    def setUp(self):
+        self.msg_helper = self.add_helper(MessageHelper())
+
+    def test_construct_with_msg(self):
+        msg = self.msg_helper.make_inbound('hello')
+        failure = FailureMessage(message=msg, failure_code='foo', reason='bar')
+        self.assertEqual(failure['message'], msg.payload)
+
+    def test_construct_with_msg_payload(self):
+        msg = self.msg_helper.make_inbound('hello')
+        failure = FailureMessage(
+            message=msg.payload, failure_code='foo', reason='bar')
+        self.assertEqual(failure['message'], msg.payload)
+
+    def test_construct_with_decoded_msg_json(self):
+        msg = self.msg_helper.make_inbound('hello')
+        failure = FailureMessage(
+            message=json.loads(msg.to_json()), failure_code='foo',
+            reason='bar')
+        self.assertEqual(failure['message'], msg.payload)
+
+    def test_json_round_trip(self):
+        msg = self.msg_helper.make_inbound('hello')
+        failure = FailureMessage(message=msg, failure_code='foo', reason='bar')
+        self.assertEqual(failure, FailureMessage.from_json(failure.to_json()))
 
 
 class TestFailureWorker(VumiTestCase):

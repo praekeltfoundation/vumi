@@ -6,7 +6,7 @@ from twisted.python import usage
 from twisted.internet import reactor
 from twisted.internet.defer import maybeDeferred
 import datetime
-from vumi.message import to_json
+from vumi.message import vumi_encode_datetime, to_json
 
 
 DATE_PATTERN = re.compile(
@@ -109,7 +109,12 @@ class LogParser(object):
                 return
             if self.stop and date > self.stop:
                 return
-            self.emit(to_json(eval(data['message'])))
+            msg_payload = eval(data['message'])
+            # Horrible hack to handle timestamps.
+            if 'timestamp' in msg_payload:
+                msg_payload['timestamp'] = vumi_encode_datetime(
+                    msg_payload['timestamp'])
+            self.emit(to_json(msg_payload))
 
 
 if __name__ == '__main__':

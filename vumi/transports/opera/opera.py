@@ -9,6 +9,7 @@ from twisted.web import xmlrpc, http
 from twisted.web.resource import Resource
 from twisted.internet.defer import inlineCallbacks
 
+from vumi.message import vumi_decode_datetime
 from vumi.utils import normalize_msisdn
 from vumi.transports import Transport
 from vumi.transports.failures import TemporaryFailure, PermanentFailure
@@ -246,7 +247,11 @@ class OperaTransport(Transport):
         metadata = message["transport_metadata"]
 
         delivery = metadata.get('deliver_at', datetime.utcnow())
+        if isinstance(delivery, basestring):
+            delivery = vumi_decode_datetime(delivery)
         expiry = metadata.get('expire_at', (delivery + timedelta(days=1)))
+        if isinstance(expiry, basestring):
+            expiry = vumi_decode_datetime(expiry)
         priority = metadata.get('priority', 'standard')
         receipt = metadata.get('receipt', 'Y')
 

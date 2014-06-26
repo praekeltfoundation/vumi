@@ -131,7 +131,7 @@ class TestTransportHelper(VumiTestCase):
         self._add_to_dispatched(
             tx_helper.worker_helper.broker, 'fooconn.failures', msg)
         dispatched = tx_helper.get_dispatched_failures('fooconn')
-        self.assertEqual(dispatched, [msg])
+        self.assertEqual(dispatched, [FailureMessage.from_json(msg.to_json())])
 
     def test_get_dispatched_failures_no_connector(self):
         """
@@ -147,4 +147,4 @@ class TestTransportHelper(VumiTestCase):
         self._add_to_dispatched(
             tx_helper.worker_helper.broker, 'fooconn.failures', msg)
         dispatched = tx_helper.get_dispatched_failures()
-        self.assertEqual(dispatched, [msg])
+        self.assertEqual(dispatched, [FailureMessage.from_json(msg.to_json())])

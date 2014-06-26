@@ -16,7 +16,7 @@ from vumi.persist.txredis_manager import TxRedisManager
 from vumi.config import (
     ConfigUrl, ConfigText, ConfigInt, ConfigDict, ConfigBool, ConfigContext,
     ConfigList)
-from vumi.message import to_json, TransportUserMessage
+from vumi.message import from_json, to_json, TransportUserMessage
 from vumi.utils import http_request_full
 from vumi.errors import ConfigError, InvalidEndpoint
 from vumi import log
@@ -40,7 +40,7 @@ class SendResource(Resource):
 
     def finish_request(self, request, msgs):
         request.setResponseCode(http.OK)
-        request.write(to_json([msg.payload for msg in msgs]))
+        request.write(to_json([from_json(msg.to_json()) for msg in msgs]))
         request.finish()
 
     def fail_request(self, request, f):

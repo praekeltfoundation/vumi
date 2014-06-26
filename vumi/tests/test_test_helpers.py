@@ -5,13 +5,21 @@ from twisted.internet.defer import Deferred, succeed, inlineCallbacks
 from twisted.trial.unittest import SkipTest, TestCase, FailTest
 
 from vumi.blinkenlights.metrics import MetricMessage
-from vumi.message import TransportUserMessage, TransportEvent
+from vumi.message import TransportMessage, TransportUserMessage, TransportEvent
 from vumi.tests.fake_amqp import FakeAMQPBroker, FakeAMQClient
 from vumi.tests.helpers import (
     VumiTestCase, proxyable, generate_proxies, IHelper, import_skip,
     MessageHelper, WorkerHelper, MessageDispatchHelper, PersistenceHelper,
     success_result_of, RiakDisabledForTest)
 from vumi.worker import BaseWorker
+
+
+def get_messages(broker, exchange, rkey, msgcls=TransportMessage):
+    """
+    Helper to get TransportMessage instances (which convert the `timestamp`
+    field) by default rather than Message instances (which don't).
+    """
+    return broker.get_messages(exchange, rkey, msgcls=msgcls)
 
 
 class TestHelperHelpers(TestCase):
@@ -1119,10 +1127,10 @@ class TestWorkerHelper(VumiTestCase):
         worker_helper = WorkerHelper()
         broker = worker_helper.broker
         broker.exchange_declare('vumi', 'direct')
-        self.assertEqual(broker.get_messages('vumi', 'fooconn.foo'), [])
+        self.assertEqual(get_messages(broker, 'vumi', 'fooconn.foo'), [])
         msg = msg_helper.make_inbound('message')
         yield worker_helper.dispatch_raw('fooconn.foo', msg)
-        self.assertEqual(broker.get_messages('vumi', 'fooconn.foo'), [msg])
+        self.assertEqual(get_messages(broker, 'vumi', 'fooconn.foo'), [msg])
 
     @inlineCallbacks
     def test_dispatch_raw_with_exchange(self):
@@ -1134,10 +1142,10 @@ class TestWorkerHelper(VumiTestCase):
         worker_helper = WorkerHelper()
         broker = worker_helper.broker
         broker.exchange_declare('blah', 'direct')
-        self.assertEqual(broker.get_messages('blah', 'fooconn.foo'), [])
+        self.assertEqual(get_messages(broker, 'blah', 'fooconn.foo'), [])
         msg = msg_helper.make_inbound('message')
         yield worker_helper.dispatch_raw('fooconn.foo', msg, exchange='blah')
-        self.assertEqual(broker.get_messages('blah', 'fooconn.foo'), [msg])
+        self.assertEqual(get_messages(broker, 'blah', 'fooconn.foo'), [msg])
 
     @inlineCallbacks
     def test_dispatch_event(self):
@@ -1148,10 +1156,10 @@ class TestWorkerHelper(VumiTestCase):
         worker_helper = WorkerHelper()
         broker = worker_helper.broker
         broker.exchange_declare('vumi', 'direct')
-        self.assertEqual(broker.get_messages('vumi', 'fooconn.event'), [])
+        self.assertEqual(get_messages(broker, 'vumi', 'fooconn.event'), [])
         msg = msg_helper.make_ack()
         yield worker_helper.dispatch_event(msg, 'fooconn')
-        self.assertEqual(broker.get_messages('vumi', 'fooconn.event'), [msg])
+        self.assertEqual(get_messages(broker, 'vumi', 'fooconn.event'), [msg])
 
     @inlineCallbacks
     def test_dispatch_event_no_connector(self):
@@ -1163,10 +1171,10 @@ class TestWorkerHelper(VumiTestCase):
         worker_helper = WorkerHelper(connector_name='fooconn')
         broker = worker_helper.broker
         broker.exchange_declare('vumi', 'direct')
-        self.assertEqual(broker.get_messages('vumi', 'fooconn.event'), [])
+        self.assertEqual(get_messages(broker, 'vumi', 'fooconn.event'), [])
         msg = msg_helper.make_ack()
         yield worker_helper.dispatch_event(msg)
-        self.assertEqual(broker.get_messages('vumi', 'fooconn.event'), [msg])
+        self.assertEqual(get_messages(broker, 'vumi', 'fooconn.event'), [msg])
 
     @inlineCallbacks
     def test_dispatch_inbound(self):
@@ -1177,10 +1185,10 @@ class TestWorkerHelper(VumiTestCase):
         worker_helper = WorkerHelper()
         broker = worker_helper.broker
         broker.exchange_declare('vumi', 'direct')
-        self.assertEqual(broker.get_messages('vumi', 'fooconn.inbound'), [])
+        self.assertEqual(get_messages(broker, 'vumi', 'fooconn.inbound'), [])
         msg = msg_helper.make_inbound('message')
         yield worker_helper.dispatch_inbound(msg, 'fooconn')
-        self.assertEqual(broker.get_messages('vumi', 'fooconn.inbound'), [msg])
+        self.assertEqual(get_messages(broker, 'vumi', 'fooconn.inbound'), [msg])
 
     @inlineCallbacks
     def test_dispatch_inbound_no_connector(self):
@@ -1192,10 +1200,10 @@ class TestWorkerHelper(VumiTestCase):
         worker_helper = WorkerHelper(connector_name='fooconn')
         broker = worker_helper.broker
         broker.exchange_declare('vumi', 'direct')
-        self.assertEqual(broker.get_messages('vumi', 'fooconn.inbound'), [])
+        self.assertEqual(get_messages(broker, 'vumi', 'fooconn.inbound'), [])
         msg = msg_helper.make_inbound('message')
         yield worker_helper.dispatch_inbound(msg)
-        self.assertEqual(broker.get_messages('vumi', 'fooconn.inbound'), [msg])
+        self.assertEqual(get_messages(broker, 'vumi', 'fooconn.inbound'), [msg])
 
     @inlineCallbacks
     def test_dispatch_outbound(self):
@@ -1206,11 +1214,11 @@ class TestWorkerHelper(VumiTestCase):
         worker_helper = WorkerHelper()
         broker = worker_helper.broker
         broker.exchange_declare('vumi', 'direct')
-        self.assertEqual(broker.get_messages('vumi', 'fooconn.outbound'), [])
+        self.assertEqual(get_messages(broker, 'vumi', 'fooconn.outbound'), [])
         msg = msg_helper.make_outbound('message')
         yield worker_helper.dispatch_outbound(msg, 'fooconn')
         self.assertEqual(
-            broker.get_messages('vumi', 'fooconn.outbound'), [msg])
+            get_messages(broker, 'vumi', 'fooconn.outbound'), [msg])
 
     @inlineCallbacks
     def test_dispatch_outbound_no_connector(self):
@@ -1222,11 +1230,11 @@ class TestWorkerHelper(VumiTestCase):
         worker_helper = WorkerHelper(connector_name='fooconn')
         broker = worker_helper.broker
         broker.exchange_declare('vumi', 'direct')
-        self.assertEqual(broker.get_messages('vumi', 'fooconn.outbound'), [])
+        self.assertEqual(get_messages(broker, 'vumi', 'fooconn.outbound'), [])
         msg = msg_helper.make_outbound('message')
         yield worker_helper.dispatch_outbound(msg)
         self.assertEqual(
-            broker.get_messages('vumi', 'fooconn.outbound'), [msg])
+            get_messages(broker, 'vumi', 'fooconn.outbound'), [msg])
 
     def test_get_dispatched_metrics(self):
         """
@@ -1297,9 +1305,9 @@ class TestMessageDispatchHelper(VumiTestCase):
             MessageHelper(), WorkerHelper('fooconn'))
         broker = md_helper.worker_helper.broker
         broker.exchange_declare('vumi', 'direct')
-        self.assertEqual(broker.get_messages('vumi', 'fooconn.inbound'), [])
+        self.assertEqual(get_messages(broker, 'vumi', 'fooconn.inbound'), [])
         msg = yield md_helper.make_dispatch_inbound('inbound message')
-        self.assertEqual(broker.get_messages('vumi', 'fooconn.inbound'), [msg])
+        self.assertEqual(get_messages(broker, 'vumi', 'fooconn.inbound'), [msg])
         self.assert_message_fields(msg, {
             'content': 'inbound message',
             'from_addr': md_helper.msg_helper.mobile_addr,
@@ -1320,10 +1328,10 @@ class TestMessageDispatchHelper(VumiTestCase):
             MessageHelper(), WorkerHelper('fooconn'))
         broker = md_helper.worker_helper.broker
         broker.exchange_declare('vumi', 'direct')
-        self.assertEqual(broker.get_messages('vumi', 'fooconn.inbound'), [])
+        self.assertEqual(get_messages(broker, 'vumi', 'fooconn.inbound'), [])
         msg = yield md_helper.make_dispatch_inbound(
             'inbound message', from_addr='ib_from', to_addr='ib_to')
-        self.assertEqual(broker.get_messages('vumi', 'fooconn.inbound'), [msg])
+        self.assertEqual(get_messages(broker, 'vumi', 'fooconn.inbound'), [msg])
         self.assert_message_fields(msg, {
             'content': 'inbound message',
             'from_addr': 'ib_from',
@@ -1344,10 +1352,10 @@ class TestMessageDispatchHelper(VumiTestCase):
             MessageHelper(), WorkerHelper('fooconn'))
         broker = md_helper.worker_helper.broker
         broker.exchange_declare('vumi', 'direct')
-        self.assertEqual(broker.get_messages('vumi', 'fooconn.outbound'), [])
+        self.assertEqual(get_messages(broker, 'vumi', 'fooconn.outbound'), [])
         msg = yield md_helper.make_dispatch_outbound('outbound message')
         self.assertEqual(
-            broker.get_messages('vumi', 'fooconn.outbound'), [msg])
+            get_messages(broker, 'vumi', 'fooconn.outbound'), [msg])
         self.assert_message_fields(msg, {
             'content': 'outbound message',
             'from_addr': md_helper.msg_helper.transport_addr,
@@ -1368,11 +1376,11 @@ class TestMessageDispatchHelper(VumiTestCase):
             MessageHelper(), WorkerHelper('fooconn'))
         broker = md_helper.worker_helper.broker
         broker.exchange_declare('vumi', 'direct')
-        self.assertEqual(broker.get_messages('vumi', 'fooconn.outbound'), [])
+        self.assertEqual(get_messages(broker, 'vumi', 'fooconn.outbound'), [])
         msg = yield md_helper.make_dispatch_outbound(
             'outbound message', from_addr='ob_from', to_addr='ob_to')
         self.assertEqual(
-            broker.get_messages('vumi', 'fooconn.outbound'), [msg])
+            get_messages(broker, 'vumi', 'fooconn.outbound'), [msg])
         self.assert_message_fields(msg, {
             'content': 'outbound message',
             'from_addr': 'ob_from',
@@ -1392,10 +1400,10 @@ class TestMessageDispatchHelper(VumiTestCase):
             MessageHelper(), WorkerHelper('fooconn'))
         broker = md_helper.worker_helper.broker
         broker.exchange_declare('vumi', 'direct')
-        self.assertEqual(broker.get_messages('vumi', 'fooconn.event'), [])
+        self.assertEqual(get_messages(broker, 'vumi', 'fooconn.event'), [])
         event = yield md_helper.make_dispatch_ack()
         self.assertEqual(
-            broker.get_messages('vumi', 'fooconn.event'), [event])
+            get_messages(broker, 'vumi', 'fooconn.event'), [event])
         self.assert_message_fields(event, {
             'event_type': 'ack',
             'sent_message_id': event['user_message_id'],
@@ -1411,12 +1419,12 @@ class TestMessageDispatchHelper(VumiTestCase):
             MessageHelper(), WorkerHelper('fooconn'))
         broker = md_helper.worker_helper.broker
         broker.exchange_declare('vumi', 'direct')
-        self.assertEqual(broker.get_messages('vumi', 'fooconn.event'), [])
+        self.assertEqual(get_messages(broker, 'vumi', 'fooconn.event'), [])
         msg = md_helper.msg_helper.make_outbound('test message')
         event = yield md_helper.make_dispatch_ack(
             msg, sent_message_id='abc123')
         self.assertEqual(
-            broker.get_messages('vumi', 'fooconn.event'), [event])
+            get_messages(broker, 'vumi', 'fooconn.event'), [event])
         self.assert_message_fields(event, {
             'event_type': 'ack',
             'user_message_id': msg['message_id'],
@@ -1432,10 +1440,10 @@ class TestMessageDispatchHelper(VumiTestCase):
             MessageHelper(), WorkerHelper('fooconn'))
         broker = md_helper.worker_helper.broker
         broker.exchange_declare('vumi', 'direct')
-        self.assertEqual(broker.get_messages('vumi', 'fooconn.event'), [])
+        self.assertEqual(get_messages(broker, 'vumi', 'fooconn.event'), [])
         event = yield md_helper.make_dispatch_nack()
         self.assertEqual(
-            broker.get_messages('vumi', 'fooconn.event'), [event])
+            get_messages(broker, 'vumi', 'fooconn.event'), [event])
         self.assert_message_fields(event, {
             'event_type': 'nack',
             'nack_reason': 'sunspots',
@@ -1451,12 +1459,12 @@ class TestMessageDispatchHelper(VumiTestCase):
             MessageHelper(), WorkerHelper('fooconn'))
         broker = md_helper.worker_helper.broker
         broker.exchange_declare('vumi', 'direct')
-        self.assertEqual(broker.get_messages('vumi', 'fooconn.event'), [])
+        self.assertEqual(get_messages(broker, 'vumi', 'fooconn.event'), [])
         msg = md_helper.msg_helper.make_outbound('test message')
         event = yield md_helper.make_dispatch_nack(
             msg, nack_reason='bogon emissions')
         self.assertEqual(
-            broker.get_messages('vumi', 'fooconn.event'), [event])
+            get_messages(broker, 'vumi', 'fooconn.event'), [event])
         self.assert_message_fields(event, {
             'event_type': 'nack',
             'user_message_id': msg['message_id'],
@@ -1473,10 +1481,10 @@ class TestMessageDispatchHelper(VumiTestCase):
             MessageHelper(), WorkerHelper('fooconn'))
         broker = md_helper.worker_helper.broker
         broker.exchange_declare('vumi', 'direct')
-        self.assertEqual(broker.get_messages('vumi', 'fooconn.event'), [])
+        self.assertEqual(get_messages(broker, 'vumi', 'fooconn.event'), [])
         event = yield md_helper.make_dispatch_delivery_report()
         self.assertEqual(
-            broker.get_messages('vumi', 'fooconn.event'), [event])
+            get_messages(broker, 'vumi', 'fooconn.event'), [event])
         self.assert_message_fields(event, {
             'event_type': 'delivery_report',
             'delivery_status': 'delivered',
@@ -1492,12 +1500,12 @@ class TestMessageDispatchHelper(VumiTestCase):
             MessageHelper(), WorkerHelper('fooconn'))
         broker = md_helper.worker_helper.broker
         broker.exchange_declare('vumi', 'direct')
-        self.assertEqual(broker.get_messages('vumi', 'fooconn.event'), [])
+        self.assertEqual(get_messages(broker, 'vumi', 'fooconn.event'), [])
         msg = md_helper.msg_helper.make_outbound('test message')
         event = yield md_helper.make_dispatch_delivery_report(
             msg, delivery_status='pending')
         self.assertEqual(
-            broker.get_messages('vumi', 'fooconn.event'), [event])
+            get_messages(broker, 'vumi', 'fooconn.event'), [event])
         self.assert_message_fields(event, {
             'event_type': 'delivery_report',
             'user_message_id': msg['message_id'],
@@ -1513,11 +1521,11 @@ class TestMessageDispatchHelper(VumiTestCase):
             MessageHelper(), WorkerHelper('fooconn'))
         broker = md_helper.worker_helper.broker
         broker.exchange_declare('vumi', 'direct')
-        self.assertEqual(broker.get_messages('vumi', 'fooconn.outbound'), [])
+        self.assertEqual(get_messages(broker, 'vumi', 'fooconn.outbound'), [])
         msg = md_helper.msg_helper.make_inbound('inbound')
         reply = yield md_helper.make_dispatch_reply(msg, 'reply content')
         self.assertEqual(
-            broker.get_messages('vumi', 'fooconn.outbound'), [reply])
+            get_messages(broker, 'vumi', 'fooconn.outbound'), [reply])
         self.assert_message_fields(reply, {
             'content': 'reply content',
             'to_addr': msg['from_addr'],

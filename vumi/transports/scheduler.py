@@ -10,11 +10,30 @@ import warnings
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet.task import LoopingCall
 
-from vumi import message
+from vumi.message import vumi_decode_datetime, vumi_encode_datetime
 
 
 warnings.warn("vumi.transport.scheduler is deprecated. A replacement is coming"
               " soon.", category=DeprecationWarning)
+
+
+def date_time_decoder(json_object):
+    for key, value in json_object.items():
+        try:
+            json_object[key] = vumi_decode_datetime(value)
+        except ValueError:
+            continue
+        except TypeError:
+            continue
+    return json_object
+
+
+class JSONMessageEncoder(json.JSONEncoder):
+    """A JSON encoder that is able to serialize datetime"""
+    def default(self, obj):
+        if isinstance(obj, datetime):
+            return vumi_encode_datetime(obj)
+        return super(JSONMessageEncoder, self).default(obj)
 
 
 class Scheduler(object):
@@ -32,8 +51,8 @@ class Scheduler(object):
         self.delivery_period = delivery_period
         self._scheduled_timestamps_key = self.r_key("scheduled_timestamps")
         self.callback = callback
-        self.json_encoder = json_encoder or message.JSONMessageEncoder
-        self.json_decoder = json_decoder or message.date_time_decoder
+        self.json_encoder = json_encoder or JSONMessageEncoder
+        self.json_decoder = json_decoder or date_time_decoder
         self.loop = LoopingCall(self.deliver_scheduled)
 
     @property

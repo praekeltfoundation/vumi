@@ -8,7 +8,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet.task import LoopingCall
 
 from vumi.service import Worker
-from vumi.message import TransportMessage, to_json
+from vumi.message import Message, TransportMessage, to_json
 from vumi.persist.txredis_manager import TxRedisManager
 
 
@@ -17,6 +17,15 @@ class FailureMessage(TransportMessage):
 
     FC_UNSPECIFIED, FC_PERMANENT, FC_TEMPORARY = (None, 'permanent',
                                                   'temporary')
+
+    def preprocess_fields(self, fields):
+        fields = super(FailureMessage, self).preprocess_fields(fields)
+        if 'message' in fields:
+            msg = fields['message']
+            if not isinstance(msg, Message):
+                msg = TransportMessage(_process_fields=False, **msg)
+            fields['message'] = msg.payload
+        return fields
 
     def process_fields(self, fields):
         fields = super(FailureMessage, self).process_fields(fields)
@@ -29,6 +38,17 @@ class FailureMessage(TransportMessage):
             'failure_code',
             'reason',
             )
+
+    def serialize_fields(self):
+        orig_fields = super(FailureMessage, self).serialize_fields()
+        fields = {}
+        for field, value in orig_fields.iteritems():
+            if field == 'message':
+                msg = TransportMessage(_process_fields=False, **value)
+                fields[field] = msg.serialize_fields()
+            else:
+                fields[field] = value
+        return fields
 
 
 class FailureCodeException(Exception):
@@ -241,7 +261,7 @@ class FailureWorker(Worker):
             message, reason, message['retry_metadata']['delay'])
 
     def process_message(self, failure_message):
-        message = failure_message.payload['message']
-        failure_code = failure_message.payload['failure_code']
-        reason = failure_message.payload['reason']
+        message = failure_message.serialize_fields()['message']
+        failure_code = failure_message.serialize_fields()['failure_code']
+        reason = failure_message.serialize_fields()['reason']
         return self.handle_failure(message, failure_code, reason)

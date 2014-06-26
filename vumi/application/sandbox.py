@@ -1031,11 +1031,11 @@ class SandboxApi(object):
     def sandbox_inbound_message(self, msg):
         self._inbound_messages[msg['message_id']] = msg
         self.sandbox_send(SandboxCommand(cmd="inbound-message",
-                                         msg=msg.payload))
+                                         msg=msg.serialize_fields()))
 
     def sandbox_inbound_event(self, event):
         self.sandbox_send(SandboxCommand(cmd="inbound-event",
-                                         msg=event.payload))
+                                         msg=event.serialize_fields()))
 
     def sandbox_send(self, msg):
         self._sandbox.send(msg)

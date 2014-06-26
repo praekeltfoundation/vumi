@@ -722,13 +722,13 @@ class WorkerHelper(object):
             probably be :class:`~vumi.message.TransportUserMessage` or
             :class:`~vumi.message.TransportEvent`.
         """
-        msgs = self.broker.get_dispatched(
-            'vumi', self._rkey(connector_name, name))
-        return [message_class.from_json(msg.body) for msg in msgs]
+        return self.broker.get_messages(
+            'vumi', self._rkey(connector_name, name), msgcls=message_class)
 
-    def _wait_for_dispatched(self, connector_name, name, amount):
+    from vumi.message import Message
+    def _wait_for_dispatched(self, connector_name, name, amount, msgcls=Message):
         rkey = self._rkey(connector_name, name)
-        return self.broker.wait_messages('vumi', rkey, amount)
+        return self.broker.wait_messages('vumi', rkey, amount, msgcls=msgcls)
 
     @proxyable
     def clear_all_dispatched(self):
@@ -801,10 +801,8 @@ class WorkerHelper(object):
             A :class:`Deferred` that fires with a list of
             :class:`~vumi.message.TransportEvent` instances.
         """
-        d = self._wait_for_dispatched(connector_name, 'event', amount)
-        d.addCallback(lambda msgs: [
-            TransportEvent(**msg.payload) for msg in msgs])
-        return d
+        return self._wait_for_dispatched(
+            connector_name, 'event', amount, TransportEvent)
 
     @proxyable
     def wait_for_dispatched_inbound(self, amount, connector_name=None):
@@ -822,10 +820,8 @@ class WorkerHelper(object):
             A :class:`Deferred` that fires with a list of
             :class:`~vumi.message.TransportUserMessage` instances.
         """
-        d = self._wait_for_dispatched(connector_name, 'inbound', amount)
-        d.addCallback(lambda msgs: [
-            TransportUserMessage(**msg.payload) for msg in msgs])
-        return d
+        return self._wait_for_dispatched(
+            connector_name, 'inbound', amount, TransportUserMessage)
 
     @proxyable
     def wait_for_dispatched_outbound(self, amount, connector_name=None):
@@ -843,10 +839,8 @@ class WorkerHelper(object):
             A :class:`Deferred` that fires with a list of
             :class:`~vumi.message.TransportUserMessage` instances.
         """
-        d = self._wait_for_dispatched(connector_name, 'outbound', amount)
-        d.addCallback(lambda msgs: [
-            TransportUserMessage(**msg.payload) for msg in msgs])
-        return d
+        return self._wait_for_dispatched(
+            connector_name, 'outbound', amount, TransportUserMessage)
 
     @proxyable
     def clear_dispatched_events(self, connector_name=None):

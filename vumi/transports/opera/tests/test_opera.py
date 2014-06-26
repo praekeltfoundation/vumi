@@ -6,6 +6,7 @@ from twisted.internet import defer
 from twisted.internet.defer import inlineCallbacks, maybeDeferred
 from twisted.web import xmlrpc
 
+from vumi.message import vumi_encode_datetime
 from vumi.utils import http_request, http_request_full
 from vumi.transports.failures import PermanentFailure, TemporaryFailure
 from vumi.transports.opera import OperaTransport
@@ -331,8 +332,8 @@ class TestOperaTransport(VumiTestCase):
         self.transport.proxy = FakeXMLRPCService(_cb)
 
         yield self.tx_helper.make_dispatch_outbound("hi", transport_metadata={
-            'deliver_at': fixed_date,
-            'expire_at': fixed_date + timedelta(hours=1),
+            'deliver_at': vumi_encode_datetime(fixed_date),
+            'expire_at': vumi_encode_datetime(fixed_date + timedelta(hours=1)),
             'priority': 'high',
             'receipt': 'N',
         })

@@ -13,7 +13,7 @@ from vumi.transports.smpp.deprecated.clientserver.client import (
     EsmeTransceiverFactory, EsmeTransmitterFactory, EsmeReceiverFactory,
     EsmeCallbacks)
 from vumi.transports.failures import FailureMessage
-from vumi.message import Message, TransportUserMessage
+from vumi.message import TransportMessage, TransportUserMessage
 from vumi.persist.txredis_manager import TxRedisManager
 from vumi.config import (
     ConfigText, ConfigInt, ConfigBool, ConfigDict, ConfigFloat, ConfigRegex,
@@ -313,7 +313,7 @@ class SmppTransport(Transport):
     def r_get_message(self, message_id):
         json_string = yield self.r_get_message_json(message_id)
         if json_string:
-            returnValue(Message.from_json(json_string))
+            returnValue(TransportMessage.from_json(json_string))
         else:
             returnValue(None)
 

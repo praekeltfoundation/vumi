@@ -58,6 +58,12 @@ class TransportMessageTestMixin(object):
         msg.set_routing_endpoint('foo')
         self.assertEqual('foo', msg.routing_metadata['endpoint_name'])
 
+    def test_json_round_trip(self):
+        msg = self.make_message()
+        msg_json = msg.to_json()
+        msg_from_json = msg.from_json(msg_json)
+        self.assertEqual(msg_from_json, msg)
+
 
 class TransportMessageTest(TransportMessageTestMixin, VumiTestCase):
     def make_message(self, **extra_fields):

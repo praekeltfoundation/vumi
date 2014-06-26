@@ -234,9 +234,9 @@ class FakeAMQPBroker(object):
         d.callback(None)
         return d
 
-    def wait_messages(self, exchange, rkey, n):
+    def wait_messages(self, exchange, rkey, n, msgcls=VumiMessage):
         def check(d):
-            msgs = self.get_messages(exchange, rkey)
+            msgs = self.get_messages(exchange, rkey, msgcls=msgcls)
             if len(msgs) >= n:
                 d.callback(msgs)
             else:
@@ -257,9 +257,9 @@ class FakeAMQPBroker(object):
     def get_dispatched(self, exchange, rkey):
         return self.dispatched.get(exchange, {}).get(rkey, [])
 
-    def get_messages(self, exchange, rkey):
+    def get_messages(self, exchange, rkey, msgcls=VumiMessage):
         contents = self.get_dispatched(exchange, rkey)
-        messages = [VumiMessage.from_json(content.body)
+        messages = [msgcls.from_json(content.body)
                     for content in contents]
         return messages
 

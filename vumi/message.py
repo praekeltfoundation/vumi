@@ -13,32 +13,20 @@ from vumi.utils import to_kwargs
 VUMI_DATE_FORMAT = "%Y-%m-%d %H:%M:%S.%f"
 
 
-def date_time_decoder(json_object):
-    for key, value in json_object.items():
-        try:
-            json_object[key] = datetime.strptime(value,
-                    VUMI_DATE_FORMAT)
-        except ValueError:
-            continue
-        except TypeError:
-            continue
-    return json_object
+def vumi_decode_datetime(dt_string):
+    return datetime.strptime(dt_string, VUMI_DATE_FORMAT)
 
 
-class JSONMessageEncoder(json.JSONEncoder):
-    """A JSON encoder that is able to serialize datetime"""
-    def default(self, obj):
-        if isinstance(obj, datetime):
-            return obj.strftime(VUMI_DATE_FORMAT)
-        return super(JSONMessageEncoder, self).default(obj)
+def vumi_encode_datetime(dt):
+    return dt.strftime(VUMI_DATE_FORMAT)
 
 
 def from_json(json_string):
-    return json.loads(json_string, object_hook=date_time_decoder)
+    return json.loads(json_string)
 
 
 def to_json(obj):
-    return json.dumps(obj, cls=JSONMessageEncoder)
+    return json.dumps(obj)
 
 
 class Message(object):
@@ -48,16 +36,30 @@ class Message(object):
     over AMQP
 
     scary transport format -> Vumi Tansport -> Unified Message -> Vumi Worker
-
     """
 
-    def __init__(self, _process_fields=True, **kwargs):
+    def __init__(self, _process_fields=True, **fields):
+        fields = self.preprocess_fields(fields)
         if _process_fields:
-            kwargs = self.process_fields(kwargs)
-        self.payload = kwargs
+            fields = self.process_fields(fields)
+        self.payload = fields
         self.validate_fields()
 
+    def preprocess_fields(self, fields):
+        """
+        Transform fields from JSON representation if necessary.
+
+        Unlike :meth:`process_fields`, this method is always called.
+        """
+        return fields
+
     def process_fields(self, fields):
+        """
+        Process fields during message creation.
+
+        Default values should be added to ``fields`` in here. This method is
+        not called when using :meth:`from_json`.
+        """
         return fields
 
     def validate_fields(self):
@@ -73,8 +75,21 @@ class Message(object):
         if self.payload[field] not in values:
             raise InvalidMessageField(field)
 
+    def serialize_fields(self):
+        """
+        Process fields before converting to JSON.
+
+        This should return `self.payload` or a modified copy thereof.
+        Subclasses should override this if they contain fields that need
+        modification before being converted to JSON.
+
+        Reverse transformations (from decoded-JSON to field values) should be
+        done in `self.process_fields` if necessary.
+        """
+        return self.payload
+
     def to_json(self):
-        return to_json(self.payload)
+        return to_json(self.serialize_fields())
 
     @classmethod
     def from_json(cls, json_string):
@@ -129,12 +144,20 @@ class TransportMessage(Message):
         """
         return uuid4().get_hex()
 
+    def preprocess_fields(self, fields):
+        if 'timestamp' in fields:
+            if isinstance(fields['timestamp'], basestring):
+                # We have a string representation, probably from JSON.
+                fields['timestamp'] = vumi_decode_datetime(fields['timestamp'])
+        return fields
+
     def process_fields(self, fields):
         fields.setdefault('message_version', self.MESSAGE_VERSION)
         fields.setdefault('message_type', self.MESSAGE_TYPE)
         fields.setdefault('timestamp', datetime.utcnow())
         fields.setdefault('routing_metadata', {})
         fields.setdefault('helper_metadata', {})
+
         return fields
 
     def validate_fields(self):
@@ -149,6 +172,20 @@ class TransportMessage(Message):
             )
         if self['message_type'] is None:
             raise InvalidMessageField('message_type')
+
+    def serialize_fields(self):
+        """
+        Process fields before converting to JSON.
+
+        We turn our `timestamp` field into a string.
+        """
+        orig_fields = super(TransportMessage, self).serialize_fields()
+        fields = {}
+        for field, value in orig_fields.iteritems():
+            if field == 'timestamp':
+                value = vumi_encode_datetime(value)
+            fields[field] = value
+        return fields
 
     @property
     def routing_metadata(self):
