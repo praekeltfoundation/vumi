@@ -179,12 +179,8 @@ class TransportMessage(Message):
 
         We turn our `timestamp` field into a string.
         """
-        orig_fields = super(TransportMessage, self).serialize_fields()
-        fields = {}
-        for field, value in orig_fields.iteritems():
-            if field == 'timestamp':
-                value = vumi_encode_datetime(value)
-            fields[field] = value
+        fields = super(TransportMessage, self).serialize_fields().copy()
+        fields['timestamp'] = vumi_encode_datetime(fields['timestamp'])
         return fields
 
     @property

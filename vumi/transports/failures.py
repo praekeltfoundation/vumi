@@ -41,14 +41,11 @@ class FailureMessage(TransportMessage):
             )
 
     def serialize_fields(self):
-        orig_fields = super(FailureMessage, self).serialize_fields()
-        fields = {}
-        for field, value in orig_fields.iteritems():
-            if field == 'message' and isinstance(value, dict):
-                msg = TransportMessage(_process_fields=False, **value)
-                fields[field] = msg.serialize_fields()
-            else:
-                fields[field] = value
+        fields = super(FailureMessage, self).serialize_fields().copy()
+        message = fields.get('message', None)
+        if isinstance(message, dict):
+            msg = TransportMessage(_process_fields=False, **message)
+            fields['message'] = msg.serialize_fields()
         return fields
 
 
