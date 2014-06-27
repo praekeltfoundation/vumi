@@ -725,8 +725,7 @@ class WorkerHelper(object):
         return self.broker.get_messages(
             'vumi', self._rkey(connector_name, name), msgcls=message_class)
 
-    from vumi.message import Message
-    def _wait_for_dispatched(self, connector_name, name, amount, msgcls=Message):
+    def _wait_for_dispatched(self, connector_name, name, amount, msgcls):
         rkey = self._rkey(connector_name, name)
         return self.broker.wait_messages('vumi', rkey, amount, msgcls=msgcls)
 
