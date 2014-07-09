@@ -65,6 +65,12 @@ class Timer(object):
     def mean(self):
         return self.total() / self.loops()
 
+    def max(self):
+        return max(self.times)
+
+    def min(self):
+        return min(self.times)
+
 
 @inlineCallbacks
 def run_bench(loops):
@@ -119,7 +125,8 @@ def run_bench(loops):
 
     print "Total time: %.2f" % timer.total()
     print "Time per message: %g" % timer.mean()
-    print "  Loops: %d" % timer.loops()
+    print "  max: %g, min: %g" % (timer.max(), timer.min())
+    print "  loops: %d" % timer.loops()
 
     yield transport.stopService()
     yield app.stopService()
@@ -127,6 +134,13 @@ def run_bench(loops):
 
 
 if __name__ == "__main__":
-    # log.startLogging(sys.stdout)
-    reactor.callLater(0, run_bench, loops=100)
+    args = sys.argv[1:]
+    if "log" in args:
+        log.startLogging(sys.stdout)
+        args.remove("log")
+    if args:
+        loops = int(args[0])
+    else:
+        loops = 100
+    reactor.callLater(0, run_bench, loops=loops)
     reactor.run()
