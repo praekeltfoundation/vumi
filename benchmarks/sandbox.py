@@ -52,7 +52,10 @@ def run_bench(loops=100):
         "transport_name": "dummy",
         "javascript": """
             api.on_inbound_message = function(command) {
-                this.request('outbound.reply', {content: 'reply'},
+                this.request('outbound.reply_to', {
+                    content: 'reply',
+                    in_reply_to: command.msg.message_id,
+                },
                 function (reply) {
                     this.done();
                 });
@@ -86,16 +89,20 @@ def run_bench(loops=100):
             transport_type="ussd",
         )
         reply = yield transport.message_queue.get()
-        print reply
+        log.msg(reply['message_id'])
 
     elapsed = time.time() - start
-    print elapsed
+
+    print "Total time: %.2f" % (elapsed,)
+    print "Time per message: %g" % (elapsed / loops)
+    print "  Messages sent: %d" % (loops,)
 
     yield transport.stopService()
     yield app.stopService()
+    reactor.stop()
 
 
 if __name__ == "__main__":
-    log.startLogging(sys.stdout)
+    #log.startLogging(sys.stdout)
     reactor.callLater(0, run_bench, loops=100)
     reactor.run()
