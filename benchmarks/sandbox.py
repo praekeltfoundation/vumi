@@ -41,6 +41,10 @@ class BenchApp(JsSandbox):
     def sandbox_id_for_message(self, msg_or_event):
         return "DUMMY_SANDBOX_ID"
 
+    def get_rlimits(self, config):
+        # let the benchmark sandbox do what it likes
+        return {}
+
 
 class Timer(object):
     def __init__(self):
@@ -92,6 +96,9 @@ def run_bench(loops):
             };
         """,
         "sandbox": {
+            'log': {
+                'cls': 'vumi.application.sandbox.LoggingResource',
+            },
             'outbound': {
                 'cls': 'vumi.application.sandbox.OutboundResource',
             },
@@ -121,7 +128,7 @@ def run_bench(loops):
                 transport_type="ussd",
             )
             reply = yield transport.message_queue.get()
-            log.msg(reply['message_id'])
+            log.msg("Reply ID: %s" % reply['message_id'])
 
     print "Total time: %.2f" % timer.total()
     print "Time per message: %g" % timer.mean()
