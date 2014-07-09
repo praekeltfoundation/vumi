@@ -10,6 +10,7 @@ from twisted.internet.defer import inlineCallbacks, DeferredQueue
 from twisted.python import log
 
 from vumi.application.sandbox import JsSandbox
+from vumi.transports.base import Transport
 from vumi.service import WorkerCreator
 from vumi.servicemaker import VumiOptions
 
@@ -29,27 +30,32 @@ def run_bench(loops=100):
     opts = VumiOptions()
     opts.postOptions()
     worker_creator = WorkerCreator(opts.vumi_options)
-    config = {
+
+    app = worker_creator.create_worker_by_class(JsSandbox, {
         "transport_name": "dummy",
         "javascript": "",
-    }
+    })
 
-    worker = worker_creator.create_worker_by_class(JsSandbox, config)
+    transport = worker_creator.create_worker_by_class(Transport, {
+        "transport_name": "dummy",
+    })
 
-    yield worker.startService()
+    yield app.startService()
+    yield transport.startService()
     print "Waiting for worker ..."
     worker = yield BenchWorker.WORKER_QUEUE.get()
     print worker
 
     start = time.time()
     for i in range(loops):
-        # send message ...
-        pass
+        transport.publish_message(content="Hi!")
+        # TODO: wait for message
 
     elapsed = time.time() - start
     print elapsed
 
-    yield worker.stopService()
+    yield transport.stopService()
+    yield app.stopService()
 
 
 if __name__ == "__main__":
