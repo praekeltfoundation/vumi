@@ -93,7 +93,9 @@ var SandboxRunner = function (api) {
     });
 
     self.exit = function() {
-        process.exit(0);
+        //process.exit(0);
+        var cmd = self.api.populate_command("log.done", {});
+        self.send_command(cmd);
     };
 
     self.load_code = function (command) {
