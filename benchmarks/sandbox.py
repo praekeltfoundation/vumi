@@ -15,7 +15,17 @@ from vumi.service import WorkerCreator
 from vumi.servicemaker import VumiOptions
 
 
-class BenchWorker(JsSandbox):
+class BenchTransport(Transport):
+
+    WORKER_QUEUE = DeferredQueue()
+
+    @inlineCallbacks
+    def startWorker(self):
+        yield Transport.startWorker(self)
+        self.WORKER_QUEUE.put(self)
+
+
+class BenchApp(JsSandbox):
 
     WORKER_QUEUE = DeferredQueue()
 
@@ -24,6 +34,9 @@ class BenchWorker(JsSandbox):
         yield JsSandbox.startWorker(self)
         self.WORKER_QUEUE.put(self)
 
+    def sandbox_id_for_message(self, msg_or_event):
+        return "DUMMY_SANDBOX_ID"
+
 
 @inlineCallbacks
 def run_bench(loops=100):
@@ -31,24 +44,31 @@ def run_bench(loops=100):
     opts.postOptions()
     worker_creator = WorkerCreator(opts.vumi_options)
 
-    app = worker_creator.create_worker_by_class(JsSandbox, {
+    app = worker_creator.create_worker_by_class(BenchApp, {
         "transport_name": "dummy",
         "javascript": "",
     })
 
-    transport = worker_creator.create_worker_by_class(Transport, {
+    transport = worker_creator.create_worker_by_class(BenchTransport, {
         "transport_name": "dummy",
     })
 
-    yield app.startService()
     yield transport.startService()
+    print "Waiting for transport ..."
+    yield BenchTransport.WORKER_QUEUE.get()
+
+    yield app.startService()
     print "Waiting for worker ..."
-    worker = yield BenchWorker.WORKER_QUEUE.get()
-    print worker
+    yield BenchApp.WORKER_QUEUE.get()
 
     start = time.time()
     for i in range(loops):
-        transport.publish_message(content="Hi!")
+        transport.publish_message(
+            content="Hi!",
+            to_addr="+1234",
+            from_addr="+5678",
+            transport_type="ussd",
+        )
         # TODO: wait for message
 
     elapsed = time.time() - start
