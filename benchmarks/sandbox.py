@@ -22,7 +22,11 @@ class BenchTransport(Transport):
     @inlineCallbacks
     def startWorker(self):
         yield Transport.startWorker(self)
+        self.message_queue = DeferredQueue()
         self.WORKER_QUEUE.put(self)
+
+    def handle_outbound_message(self, msg):
+        self.message_queue.put(msg)
 
 
 class BenchApp(JsSandbox):
@@ -46,7 +50,19 @@ def run_bench(loops=100):
 
     app = worker_creator.create_worker_by_class(BenchApp, {
         "transport_name": "dummy",
-        "javascript": "",
+        "javascript": """
+            api.on_inbound_message = function(command) {
+                this.request('outbound.reply', {content: 'reply'},
+                function (reply) {
+                    this.done();
+                });
+            };
+        """,
+        "sandbox": {
+            'outbound': {
+                'cls': 'vumi.application.sandbox.OutboundResource',
+            },
+        },
     })
 
     transport = worker_creator.create_worker_by_class(BenchTransport, {
@@ -69,7 +85,8 @@ def run_bench(loops=100):
             from_addr="+5678",
             transport_type="ussd",
         )
-        # TODO: wait for message
+        reply = yield transport.message_queue.get()
+        print reply
 
     elapsed = time.time() - start
     print elapsed
