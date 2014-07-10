@@ -107,15 +107,9 @@ class SandboxProtocol(ProcessProtocol):
         self.error_lines = []
         api.set_sandbox(self)
 
-    spawned = False
-
     def spawn(self):
-        if self.spawned:
-            self._done = MultiDeferred()
-            return
         SandboxRlimiter.spawn(
             reactor, self, self.executable, self.rlimits, **self.spawn_kwargs)
-        self.spawned = True
 
     def done(self):
         """Returns a deferred that will be called when the process ends."""
@@ -717,9 +711,6 @@ class LoggingResource(SandboxResource):
         """
         return self.handle_log(api, command, level=logging.CRITICAL)
 
-    def handle_done(self, api, command):
-        api._sandbox._done.callback(0)
-
 
 try:
     from twisted.web.client import BrowserLikePolicyForHTTPS
@@ -1234,17 +1225,14 @@ class Sandbox(ApplicationWorker):
         """
         return msg_or_event['sandbox_id']
 
-    cached_protocol = None
-
     def sandbox_protocol_for_message(self, msg_or_event, config):
         """Return a sandbox protocol for a message or event.
 
         Sub-classes may override this to retrieve an appropriate protocol.
         """
         api = self.create_sandbox_api(self.resources, config)
-        if self.cached_protocol is None:
-            self.cached_protocol = self.create_sandbox_protocol(api)
-        return self.cached_protocol
+        protocol = self.create_sandbox_protocol(api)
+        return protocol
 
     def _process_in_sandbox(self, sandbox_protocol, api_callback):
         sandbox_protocol.spawn()
