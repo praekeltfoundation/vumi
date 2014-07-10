@@ -908,6 +908,48 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.assertFalse(connector._consumers['outbound'].paused)
 
     @inlineCallbacks
+    def test_bind_params(self):
+        smpp_helper = yield self.get_smpp_helper(bind=False, config={
+            'system_id': 'myusername',
+            'password': 'mypasswd',
+            'system_type': 'SMPP',
+            'interface_version': '33',
+            'address_range': '*12345',
+        })
+        transport = smpp_helper.transport
+        bind_pdu = yield self.create_smpp_bind(transport)
+        # This test runs for multiple bind types, so we only assert on the
+        # common prefix of the command.
+        self.assertEqual(bind_pdu['header']['command_id'][:5], 'bind_')
+        self.assertEqual(bind_pdu['body'], {'mandatory_parameters': {
+            'system_id': 'myusername',
+            'password': 'mypasswd',
+            'system_type': 'SMPP',
+            'interface_version': '33',
+            'address_range': '*12345',
+            'addr_ton': 'unknown',
+            'addr_npi': 'unknown',
+        }})
+
+    @inlineCallbacks
+    def test_default_bind_params(self):
+        smpp_helper = yield self.get_smpp_helper(bind=False, config={})
+        transport = smpp_helper.transport
+        bind_pdu = yield self.create_smpp_bind(transport)
+        # This test runs for multiple bind types, so we only assert on the
+        # common prefix of the command.
+        self.assertEqual(bind_pdu['header']['command_id'][:5], 'bind_')
+        self.assertEqual(bind_pdu['body'], {'mandatory_parameters': {
+            'system_id': 'foo',  # Mandatory param, defaulted by helper.
+            'password': 'bar',   # Mandatory param, defaulted by helper.
+            'system_type': '',
+            'interface_version': '34',
+            'address_range': '',
+            'addr_ton': 'unknown',
+            'addr_npi': 'unknown',
+        }})
+
+    @inlineCallbacks
     def test_startup_with_backlog(self):
         smpp_helper = yield self.get_smpp_helper(bind=False)
 

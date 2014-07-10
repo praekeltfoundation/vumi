@@ -50,7 +50,12 @@ class SmppTransceiverProtocol(EsmeTransceiverFactory.protocol):
     def connectionMade(self):
         EsmeTransceiverFactory.protocol.connectionMade(self)
         config = self.vumi_transport.get_static_config()
-        self.bind(config.system_id, config.password, config.system_type)
+        self.bind(
+            system_id=config.system_id,
+            password=config.password,
+            system_type=config.system_type,
+            interface_version=config.interface_version,
+            address_range=config.address_range)
 
     def connectionLost(self, reason):
         d = maybeDeferred(self.vumi_transport.pause_connectors)
