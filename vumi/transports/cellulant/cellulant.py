@@ -3,9 +3,14 @@
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.components.session import SessionManager
+from vumi.errors import VumiError
 from vumi.transports.httprpc import HttpRpcTransport
 from vumi.message import TransportUserMessage
 from vumi import log
+
+
+class CellulantError(VumiError):
+    """Used to log errors specific to the Cellulant transport."""
 
 
 def pack_ussd_message(message):
@@ -92,7 +97,8 @@ class CellulantTransport(HttpRpcTransport):
         if to_addr is None:
             # we can't continue so finish request and log error
             self.finish_request(message_id, '')
-            log.error("Failed redis USSD to_addr lookup for %s" % request.args)
+            log.error(CellulantError(
+                "Failed redis USSD to_addr lookup for %s" % request.args))
         else:
             transport_metadata = {
                 'session_id': request.args.get('sessionID')[0],

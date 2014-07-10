@@ -3,7 +3,7 @@ from urllib import urlencode
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.tests.helpers import VumiTestCase
-from vumi.transports.cellulant import CellulantTransport
+from vumi.transports.cellulant import CellulantTransport, CellulantError
 from vumi.message import TransportUserMessage
 from vumi.utils import http_request
 from vumi.transports.tests.helpers import TransportHelper
@@ -96,6 +96,9 @@ class TestCellulantTransport(VumiTestCase):
         deferred = self.mk_request(MSISDN='123456', INPUT='hi', opCode='')
         response = yield deferred
         self.assertEqual(response, '')
+        [f] = self.flushLoggedErrors(CellulantError)
+        self.assertTrue(str(f.value).startswith(
+            "Failed redis USSD to_addr lookup for {"))
 
     @inlineCallbacks
     def test_inbound_abort_opcode(self):
