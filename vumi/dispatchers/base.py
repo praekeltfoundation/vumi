@@ -8,7 +8,7 @@ import functools
 from twisted.internet.defer import inlineCallbacks, returnValue, maybeDeferred
 
 from vumi.service import Worker
-from vumi.errors import ConfigError
+from vumi.errors import ConfigError, DispatcherError
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.utils import load_class_by_string, get_first_word
 from vumi.middleware import MiddlewareStack, setup_middlewares_from_config
@@ -253,8 +253,9 @@ class SimpleDispatchRouter(BaseDispatchRouter):
         if name in self.dispatcher.transport_publisher:
             self.dispatcher.publish_outbound_message(name, msg)
         else:
-            log.error('Unknown transport_name: %s, discarding %r' % (
-                name, msg.payload))
+            log.error(DispatcherError(
+                'Unknown transport_name: %s, discarding %r' % (
+                    name, msg.payload)))
 
 
 class TransportToTransportRouter(BaseDispatchRouter):
@@ -536,7 +537,8 @@ class ContentKeywordRouter(SimpleDispatchRouter):
             if self.fallback_application is not None:
                 self.publish_exposed_inbound(self.fallback_application, msg)
             else:
-                log.error('Message could not be routed: %r' % (msg,))
+                log.error(DispatcherError(
+                    'Message could not be routed: %r' % (msg,)))
 
     @inlineCallbacks
     def dispatch_inbound_event(self, msg):
@@ -545,13 +547,14 @@ class ContentKeywordRouter(SimpleDispatchRouter):
         session = yield self.session_manager.load_session(message_key)
         name = session.get('name')
         if not name:
-            log.error("No transport_name for return route found in Redis"
-                      " while dispatching transport event for message %s"
-                      % (msg['user_message_id'],))
+            log.error(DispatcherError(
+                "No transport_name for return route found in Redis"
+                " while dispatching transport event for message %s"
+                % (msg['user_message_id'],)))
         try:
             self.publish_exposed_event(name, msg)
         except:
-            log.error("No publishing route for %s" % (name,))
+            log.error(DispatcherError("No publishing route for %s" % (name,)))
 
     @inlineCallbacks
     def dispatch_outbound_message(self, msg):
@@ -563,7 +566,8 @@ class ContentKeywordRouter(SimpleDispatchRouter):
             yield self.session_manager.create_session(
                 message_key, name=msg['transport_name'])
         else:
-            log.error("No transport for %s" % (msg['from_addr'],))
+            log.error(DispatcherError(
+                "No transport for %s" % (msg['from_addr'],)))
 
 
 class RedirectRouter(BaseDispatchRouter):
@@ -605,8 +609,9 @@ class RedirectRouter(BaseDispatchRouter):
         if redirect_to:
             self.dispatcher.publish_outbound_message(redirect_to, msg)
         else:
-            log.error('No redirect_outbound specified for %s' % (
-                transport_name,))
+            log.error(DispatcherError(
+                'No redirect_outbound specified for %s' % (
+                    transport_name,)))
 
 
 class RedirectOutboundRouter(RedirectRouter):
