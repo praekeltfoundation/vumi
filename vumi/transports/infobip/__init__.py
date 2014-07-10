@@ -1,5 +1,5 @@
 """Infobip transport."""
 
-from vumi.transports.infobip.infobip import InfobipTransport
+from vumi.transports.infobip.infobip import InfobipTransport, InfobipError
 
-__all__ = ['InfobipTransport']
+__all__ = ['InfobipTransport', 'InfobipError']
