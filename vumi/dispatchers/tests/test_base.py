@@ -3,6 +3,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from vumi.dispatchers.base import (
     BaseDispatchWorker, ToAddrRouter, FromAddrMultiplexRouter)
 from vumi.dispatchers.tests.helpers import DispatcherHelper, DummyDispatcher
+from vumi.errors import DispatcherError
 from vumi.tests.utils import LogCatcher
 from vumi.tests.helpers import VumiTestCase, MessageHelper
 
@@ -172,7 +173,9 @@ class TestBaseDispatchWorker(VumiTestCase):
             yield router.dispatch_outbound_message(msg)
             [error] = log.errors
             self.assertTrue(('Unknown transport_name: foo' in
-                                error['message'][0]))
+                                str(error['failure'].value)))
+        [f] = self.flushLoggedErrors(DispatcherError)
+        self.assertEqual(f, error['failure'])
 
     @inlineCallbacks
     def test_outbound_message_routing_transport_mapping(self):
@@ -541,11 +544,20 @@ class TestContentKeywordRouter(VumiTestCase):
 
     @inlineCallbacks
     def test_inbound_event_routing_failing_no_routing_back_in_redis(self):
-        yield self.ch('transport1').make_dispatch_ack(
+        ack = yield self.ch('transport1').make_dispatch_ack(
             transport_name='transport1')
 
         self.assertEqual([], self.disp_helper.get_dispatched_events('app1'))
         self.assertEqual([], self.disp_helper.get_dispatched_events('app2'))
+
+        [redis_lookup_fail, no_route_fail] = self.flushLoggedErrors(
+            DispatcherError)
+        self.assertEqual(str(redis_lookup_fail.value), (
+            'No transport_name for return route found in Redis while'
+            ' dispatching transport event for message %s'
+            % ack['user_message_id']))
+        self.assertEqual(str(no_route_fail.value),
+                         'No publishing route for None')
 
     @inlineCallbacks
     def test_outbound_message_routing(self):
@@ -632,7 +644,9 @@ class TestRedirectOutboundRouterForSMPP(VumiTestCase):
             yield self.disp_helper.dispatch_outbound(msgt1, 'upstream')
             [err] = log.errors
             self.assertTrue('No redirect_outbound specified for foo' in
-                                err['message'][0])
+                                str(err['failure'].value))
+        [f] = self.flushLoggedErrors(DispatcherError)
+        self.assertEqual(f, err['failure'])
 
 
 class TestRedirectOutboundRouter(VumiTestCase):
@@ -695,4 +709,6 @@ class TestRedirectOutboundRouter(VumiTestCase):
             yield self.disp_helper.dispatch_outbound(msgt1, 'app2')
             [err] = log.errors
             self.assertTrue('No redirect_outbound specified for app3' in
-                                err['message'][0])
+                                str(err['failure'].value))
+        [f] = self.flushLoggedErrors(DispatcherError)
+        self.assertEqual(f, err['failure'])
