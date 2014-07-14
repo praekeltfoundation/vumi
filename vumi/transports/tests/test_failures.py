@@ -2,11 +2,11 @@ import time
 import json
 from datetime import datetime, timedelta
 
-from twisted.trial import unittest
 from twisted.internet.defer import inlineCallbacks
 
-from vumi.tests.utils import get_stubbed_worker, FakeRedis
+from vumi.message import Message
 from vumi.transports.failures import FailureWorker
+from vumi.tests.helpers import VumiTestCase, PersistenceHelper, WorkerHelper
 
 
 def mktimestamp(delta=0):
@@ -14,44 +14,59 @@ def mktimestamp(delta=0):
     return timestamp.isoformat().split('.')[0]
 
 
-class FailureWorkerTestCase(unittest.TestCase):
+class TestFailureWorker(VumiTestCase):
 
     def setUp(self):
+        self.persistence_helper = self.add_helper(PersistenceHelper())
         return self.make_worker()
-
-    def tearDown(self):
-        return self.worker.stopWorker()
 
     @inlineCallbacks
     def make_worker(self, retry_delivery_period=0):
-        self.config = {
+        self.worker_helper = self.add_helper(WorkerHelper('sphex'))
+        config = self.persistence_helper.mk_config({
             'transport_name': 'sphex',
             'retry_routing_key': 'sms.outbound.%(transport_name)s',
             'failures_routing_key': 'sms.failures.%(transport_name)s',
             'retry_delivery_period': retry_delivery_period,
-        }
-        self.worker = get_stubbed_worker(FailureWorker, self.config)
-        self.worker.r_server = FakeRedis()
-        self.worker.r_server.flushdb()
-        self.redis = self.worker.r_server
-        yield self.worker.startWorker()
-        self.broker = self.worker._amqp_client.broker
-        self.retry_timestamps_key = self.worker._retry_timestamps_key
+        })
+        self.worker = yield self.worker_helper.get_worker(
+            FailureWorker, config)
+        self.redis = self.worker.redis
+        yield self.redis._purge_all()  # Just in case
 
     def assert_write_timestamp(self, expected, delta, now):
         self.assertEqual(expected,
                          self.worker.get_next_write_timestamp(delta, now=now))
 
+    @inlineCallbacks
     def assert_zcard(self, expected, key):
-        self.assertEqual(expected, self.redis.zcard(key))
+        self.assertEqual(expected, (yield self.redis.zcard(key)))
 
+    @inlineCallbacks
+    def assert_equal_d(self, expected, value):
+        self.assertEqual((yield expected), (yield value))
+
+    @inlineCallbacks
+    def assert_not_equal_d(self, expected, value):
+        self.assertNotEqual((yield expected), (yield value))
+
+    @inlineCallbacks
+    def assert_get_retry_key(self, exists=True):
+        retry_key = yield self.worker.get_next_retry_key()
+        if exists:
+            self.assertNotEqual(None, retry_key)
+        else:
+            self.assertEqual(None, retry_key)
+
+    @inlineCallbacks
     def assert_stored_timestamps(self, *expected):
-        self.assertEqual(list(expected),
-                         self.redis.zrange(self.retry_timestamps_key, 0, -1))
+        timestamps = yield self.redis.zrange('retry_timestamps', 0, -1)
+        self.assertEqual(list(expected), timestamps)
 
     def assert_published_retries(self, expected):
-        msgs = self.broker.get_dispatched('vumi', 'sms.outbound.sphex')
-        self.assertEqual(expected, [json.loads(m.body) for m in msgs])
+        msgs = self.worker_helper.get_dispatched(
+            'sms.outbound', 'sphex', Message)
+        self.assertEqual(expected, [m.payload for m in msgs])
 
     def store_failure(self, reason=None, message=None):
         if not reason:
@@ -60,12 +75,14 @@ class FailureWorkerTestCase(unittest.TestCase):
             message = {'message': 'foo', 'reason': reason}
         return self.worker.store_failure(message, reason)
 
+    @inlineCallbacks
     def store_retry(self, retry_delay=0, now_delta=0, reason=None,
                     message_json=None):
-        key = self.store_failure(reason, message_json)
+        key = yield self.store_failure(reason, message_json)
         now = time.time() + now_delta
-        self.worker.store_retry(key, retry_delay, now=now)
+        yield self.worker.store_retry(key, retry_delay, now=now)
 
+    @inlineCallbacks
     def test_redis_access(self):
         """
         Sanity check that we can put stuff in redis (or our fake) and
@@ -73,32 +90,34 @@ class FailureWorkerTestCase(unittest.TestCase):
         """
 
         def r_get(key):
-            return self.worker.r_server.get(self.worker.r_key(key))
+            return self.worker.redis.get(key)
 
-        self.assertEqual(None, r_get("foo"))
-        self.assertEqual([], self.redis.keys())
-        self.worker.r_server.set(self.worker.r_key("foo"), "bar")
-        self.assertEqual("bar", r_get("foo"))
-        self.assertEqual(['failures:sphex#foo'], self.redis.keys())
+        yield self.assert_equal_d(None, r_get("foo"))
+        yield self.assert_equal_d([], self.redis.keys())
+        yield self.worker.redis.set("foo", "bar")
+        yield self.assert_equal_d("bar", r_get("foo"))
+        yield self.assert_equal_d(['foo'], self.redis.keys())
 
+    @inlineCallbacks
     def test_store_failure(self):
         """
         Store a failure in redis and make sure we can get at it again.
         """
-        key = self.store_failure(reason="reason")
-        self.assertEqual(set([key]), self.worker.get_failure_keys())
+        key = yield self.store_failure(reason="reason")
+        yield self.assert_equal_d(set([key]), self.worker.get_failure_keys())
         message_json = json.dumps({"message": "foo", "reason": "reason"})
-        self.assertEqual({
+        yield self.assert_equal_d({
                 "message": message_json,
                 "retry_delay": "0",
                 "reason": "reason",
                 }, self.redis.hgetall(key))
         # Test a second one, this time with a JSON-encoded message
-        key2 = self.store_failure(message=json.dumps({"foo": "bar"}),
-                                  reason="reason")
-        self.assertEqual(set([key, key2]), self.worker.get_failure_keys())
+        key2 = yield self.store_failure(
+            message=json.dumps({"foo": "bar"}), reason="reason")
+        yield self.assert_equal_d(
+            set([key, key2]), self.worker.get_failure_keys())
         message_json = json.dumps({"foo": "bar"})
-        self.assertEqual({
+        yield self.assert_equal_d({
                 "message": message_json,
                 "retry_delay": "0",
                 "reason": "reason",
@@ -158,6 +177,7 @@ class FailureWorkerTestCase(unittest.TestCase):
         self.assert_write_timestamp("1970-01-01T00:00:24", 12, 9)
         self.assert_write_timestamp("1970-01-01T00:00:24", 12, 11)
 
+    @inlineCallbacks
     def test_store_read_timestamp(self):
         """
         We need to store granular timestamps.
@@ -165,134 +185,145 @@ class FailureWorkerTestCase(unittest.TestCase):
         timestamp1 = "1977-07-28T12:34:56"
         timestamp2 = "1980-07-30T12:34:56"
         timestamp3 = "1980-09-02T12:34:56"
-        self.assert_stored_timestamps()
-        self.worker.store_read_timestamp(timestamp2)
-        self.assert_stored_timestamps(timestamp2)
-        self.worker.store_read_timestamp(timestamp1)
-        self.assert_stored_timestamps(timestamp1, timestamp2)
-        self.worker.store_read_timestamp(timestamp3)
-        self.assert_stored_timestamps(timestamp1, timestamp2, timestamp3)
+        yield self.assert_stored_timestamps()
+        yield self.worker.store_read_timestamp(timestamp2)
+        yield self.assert_stored_timestamps(timestamp2)
+        yield self.worker.store_read_timestamp(timestamp1)
+        yield self.assert_stored_timestamps(timestamp1, timestamp2)
+        yield self.worker.store_read_timestamp(timestamp3)
+        yield self.assert_stored_timestamps(timestamp1, timestamp2, timestamp3)
 
+    @inlineCallbacks
     def test_read_timestamp(self):
         """
         We need to read the next timestamp.
         """
         past = mktimestamp(-10)
         future = mktimestamp(10)
-        self.assertEqual(None, self.worker.get_next_read_timestamp())
-        self.worker.store_read_timestamp(future)
-        self.assertEqual(None, self.worker.get_next_read_timestamp())
-        self.worker.store_read_timestamp(past)
-        self.assertEqual(past, self.worker.get_next_read_timestamp())
+        yield self.assert_equal_d(None, self.worker.get_next_read_timestamp())
+        yield self.worker.store_read_timestamp(future)
+        yield self.assert_equal_d(None, self.worker.get_next_read_timestamp())
+        yield self.worker.store_read_timestamp(past)
+        yield self.assert_equal_d(past, self.worker.get_next_read_timestamp())
 
+    @inlineCallbacks
     def test_store_retry(self):
         """
         Store a retry in redis and make sure we can get at it again.
         """
         timestamp = "1970-01-01T00:00:05"
-        retry_key = "failures:sphex#retry_keys." + timestamp
-        key = self.store_failure()
-        self.assert_zcard(0, self.retry_timestamps_key)
+        retry_key = "retry_keys." + timestamp
+        key = yield self.store_failure()
+        yield self.assert_zcard(0, 'retry_timestamps')
 
-        self.worker.store_retry(key, 0, now=0)
-        self.assert_zcard(1, self.retry_timestamps_key)
-        self.assertEqual([timestamp],
-                         self.redis.zrange(self.retry_timestamps_key, 0, 0))
-        self.assertEqual(set([key]), self.redis.smembers(retry_key))
+        yield self.worker.store_retry(key, 0, now=0)
+        yield self.assert_zcard(1, 'retry_timestamps')
+        yield self.assert_equal_d([timestamp],
+                                  self.redis.zrange('retry_timestamps', 0, 0))
+        yield self.assert_equal_d(set([key]), self.redis.smembers(retry_key))
 
     def test_get_retry_key_none(self):
         """
         If there are no stored retries, get None.
         """
-        self.assertEqual(None, self.worker.get_next_retry_key())
+        return self.assert_get_retry_key(False)
 
+    @inlineCallbacks
     def test_get_retry_key_future(self):
         """
         If there are no retries due, get None.
         """
-        self.store_retry(10)
-        self.assert_zcard(1, self.retry_timestamps_key)
-        self.assertEqual(None, self.worker.get_next_retry_key())
-        self.assert_zcard(1, self.retry_timestamps_key)
+        yield self.store_retry(10)
+        yield self.assert_zcard(1, 'retry_timestamps')
+        yield self.assert_get_retry_key(False)
+        yield self.assert_zcard(1, 'retry_timestamps')
 
+    @inlineCallbacks
     def test_get_retry_key_one_due(self):
         """
         Get a retry from redis when we have one due.
         """
-        self.store_retry(0, -5)
-        self.assert_zcard(1, self.retry_timestamps_key)
-        self.assertNotEqual(None, self.worker.get_next_retry_key())
-        self.assert_zcard(0, self.retry_timestamps_key)
-        self.assertEqual(None, self.worker.get_next_retry_key())
+        yield self.store_retry(0, -5)
+        yield self.assert_zcard(1, 'retry_timestamps')
+        yield self.assert_get_retry_key()
+        yield self.assert_zcard(0, 'retry_timestamps')
+        yield self.assert_get_retry_key(False)
 
+    @inlineCallbacks
     def test_get_retry_key_two_due(self):
         """
         Get a retry from redis when we have two due.
         """
-        self.store_retry(0, -5)
-        self.store_retry(0, -5)
-        self.assert_zcard(1, self.retry_timestamps_key)
-        self.assertNotEqual(None, self.worker.get_next_retry_key())
-        self.assert_zcard(1, self.retry_timestamps_key)
+        yield self.store_retry(0, -5)
+        yield self.store_retry(0, -5)
+        yield self.assert_zcard(1, 'retry_timestamps')
+        yield self.assert_get_retry_key()
+        yield self.assert_zcard(1, 'retry_timestamps')
 
+    @inlineCallbacks
     def test_get_retry_key_two_due_different_times(self):
         """
         Get a retry from redis when we have two due at different times.
         """
-        self.store_retry(0, -5)
-        self.store_retry(0, -15)
-        self.assert_zcard(2, self.retry_timestamps_key)
-        self.assertNotEqual(None, self.worker.get_next_retry_key())
-        self.assert_zcard(1, self.retry_timestamps_key)
-        self.assertNotEqual(None, self.worker.get_next_retry_key())
-        self.assert_zcard(0, self.retry_timestamps_key)
+        yield self.store_retry(0, -5)
+        yield self.store_retry(0, -15)
+        yield self.assert_zcard(2, 'retry_timestamps')
+        yield self.assert_get_retry_key()
+        yield self.assert_zcard(1, 'retry_timestamps')
+        yield self.assert_get_retry_key()
+        yield self.assert_zcard(0, 'retry_timestamps')
 
+    @inlineCallbacks
     def test_get_retry_key_one_due_one_future(self):
         """
         Get a retry from redis when we have one due and one in the future.
         """
-        self.store_retry(0, -5)
-        self.worker.store_retry(self.store_failure(), 0)
-        self.assert_zcard(2, self.retry_timestamps_key)
-        self.assertNotEqual(None, self.worker.get_next_retry_key())
-        self.assert_zcard(1, self.retry_timestamps_key)
-        self.assertEqual(None, self.worker.get_next_retry_key())
-        self.assert_zcard(1, self.retry_timestamps_key)
+        yield self.store_retry(0, -5)
+        yield self.worker.store_retry(self.store_failure(), 0)
+        yield self.assert_zcard(2, 'retry_timestamps')
+        yield self.assert_get_retry_key()
+        yield self.assert_zcard(1, 'retry_timestamps')
+        yield self.assert_get_retry_key(False)
+        yield self.assert_zcard(1, 'retry_timestamps')
 
+    @inlineCallbacks
     def test_deliver_retries_none(self):
         """
         Delivering no retries should do nothing.
         """
-        self.worker.deliver_retries()
+        yield self.worker.deliver_retries()
         self.assert_published_retries([])
 
+    @inlineCallbacks
     def test_deliver_retries_future(self):
         """
         Delivering no current retries should do nothing.
         """
-        self.worker.store_retry(self.store_failure(), 0)
-        self.worker.deliver_retries()
+        yield self.worker.store_retry(self.store_failure(), 0)
+        yield self.worker.deliver_retries()
         self.assert_published_retries([])
 
+    @inlineCallbacks
     def test_deliver_retries_one_due(self):
         """
         Delivering a current retry should deliver one message.
         """
-        self.store_retry(0, -5)
-        self.worker.deliver_retries()
+        yield self.store_retry(0, -5)
+        yield self.worker.deliver_retries()
         self.assert_published_retries([{
                     'message': 'foo',
                     'reason': 'bad stuff happened',
                     }])
 
+    @inlineCallbacks
     def test_deliver_retries_many_due(self):
         """
         Delivering current retries should deliver all messages.
         """
-        self.store_retry(0, -5)
-        self.store_retry(0, -15)
-        self.store_retry(0, -5)
-        self.worker.deliver_retries()
+        yield self.store_retry(0, -5)
+        yield self.store_retry(0, -15)
+        yield self.store_retry(0, -5)
+        yield self.worker.deliver_retries()
         self.assert_published_retries([{
                     'message': 'foo',
                     'reason': 'bad stuff happened',
@@ -320,8 +351,8 @@ class FailureWorkerTestCase(unittest.TestCase):
         The retry publisher should start when configured appropriately.
         """
         self.assertEqual(None, self.worker.delivery_loop)
+        yield self.worker.stopWorker()
         yield self.make_worker(1)
         self.assertEqual(self.worker.deliver_retries,
                          self.worker.delivery_loop.f)
         self.assertTrue(self.worker.delivery_loop.running)
-        yield self.worker.stopWorker()

@@ -3,20 +3,91 @@
 
 """TruTeq USSD transport."""
 
-from twisted.internet.defer import Deferred
-from twisted.python import log
-from twisted.internet import reactor
+from twisted.internet.defer import inlineCallbacks, maybeDeferred
+from twisted.internet.protocol import Factory
 
-from ssmi import client
-import redis
 
-from vumi.utils import normalize_msisdn
+from txssmi.protocol import SSMIProtocol
+from txssmi import constants
+
+from vumi import log
+from vumi.components.session import SessionManager
+from vumi.config import (
+    ConfigText, ConfigInt, ConfigClientEndpoint, ConfigBool, ConfigDict,
+    ClientEndpointFallback)
 from vumi.message import TransportUserMessage
+from vumi.reconnecting_client import ReconnectingClientService
 from vumi.transports.base import Transport
+from vumi.utils import normalize_msisdn
 
 
-# # Turn on debug logging in the SSMI library.
-# client.set_debug(True)
+class TruteqTransportConfig(Transport.CONFIG_CLASS):
+    username = ConfigText(
+        'Username of the TruTeq account to connect to.', static=True)
+    password = ConfigText(
+        'Password for the TruTeq account.', static=True)
+    twisted_endpoint = ConfigClientEndpoint(
+        'The endpoint to connect to.',
+        default='tcp:host=sms.truteq.com:port=50008', static=True,
+        fallbacks=[ClientEndpointFallback()])
+    link_check_period = ConfigInt(
+        'Number of seconds between link checks sent to the server.',
+        default=60, static=True)
+    ussd_session_lifetime = ConfigInt(
+        'Maximum number of seconds to retain USSD session information.',
+        default=300, static=True)
+    debug = ConfigBool(
+        'Print verbose log output.', default=False, static=True)
+    redis_manager = ConfigDict(
+        'How to connect to Redis.', default={}, static=True)
+
+    # TODO: Deprecate these fields when confmodel#5 is done.
+    host = ConfigText(
+        "*DEPRECATED* 'host' and 'port' fields may be used in place of the"
+        " 'twisted_endpoint' field.", static=True)
+    port = ConfigInt(
+        "*DEPRECATED* 'host' and 'port' fields may be used in place of the"
+        " 'twisted_endpoint' field.", static=True)
+
+
+class TruteqTransportProtocol(SSMIProtocol):
+
+    def connectionMade(self):
+        config = self.factory.vumi_transport.get_static_config()
+        self.factory.protocol_instance = self
+        self.noisy = config.debug
+        d = self.authenticate(config.username, config.password)
+        d.addCallback(
+            lambda success: (
+                self.link_check.start(config.link_check_period)
+                if success else self.loseConnection()))
+        return d
+
+    def connectionLost(self, reason):
+        if self.link_check.running:
+            self.link_check.stop()
+        SSMIProtocol.connectionLost(self, reason)
+
+    def handle_MO(self, mo):
+        return self.factory.vumi_transport.handle_unhandled_message(mo)
+
+    def handle_BINARY_MO(self, mo):
+        return self.factory.vumi_transport.handle_unhandled_message(mo)
+
+    def handle_PREMIUM_MO(self, mo):
+        return self.factory.vumi_transport.handle_unhandled_message(mo)
+
+    def handle_PREMIUM_BINARY_MO(self, mo):
+        return self.factory.vumi_transport.handle_unhandled_message(mo)
+
+    def handle_USSD_MESSAGE(self, um):
+        return self.factory.vumi_transport.handle_raw_inbound_message(um)
+
+    def handle_EXTENDED_USSD_MESSAGE(self, um):
+        return self.factory.vumi_transport.handle_raw_inbound_message(um)
+
+    def handle_LOGOUT(self, msg):
+        return self.factory.vumi_transport.handle_remote_logout(msg)
 
 
 class TruteqTransport(Transport):
@@ -25,142 +96,113 @@ class TruteqTransport(Transport):
 
     Currently only USSD messages are supported.
 
-    TruTeq transport options:
-
-    :type username: str
-    :param username:
-        Username of the TruTeq account to connect to.
-    :type password: str
-    :param password:
-        Password for the TruTeq account.
-    :type host: str
-    :param host:
-        Hostname of the TruTeq SSMI server to connect to.
-    :type port: int
-    :param port:
-        Port of the TruTeq SSMI server.
-    :ussd_session_lifetime: int
-    :param ussd_session_lifetime:
-        Maximum number of seconds to retain USSD session information.
-        Default is 300.
     """
 
+    CONFIG_CLASS = TruteqTransportConfig
+    service_class = ReconnectingClientService
+    protocol_class = TruteqTransportProtocol
+    encoding = 'iso-8859-1'
+
     SSMI_TO_VUMI_EVENT = {
-        client.SSMI_USSD_TYPE_NEW: TransportUserMessage.SESSION_NEW,
-        client.SSMI_USSD_TYPE_EXISTING: TransportUserMessage.SESSION_RESUME,
-        client.SSMI_USSD_TYPE_END: TransportUserMessage.SESSION_CLOSE,
-        client.SSMI_USSD_TYPE_TIMEOUT: TransportUserMessage.SESSION_CLOSE,
+        constants.USSD_NEW: TransportUserMessage.SESSION_NEW,
+        constants.USSD_RESPONSE: TransportUserMessage.SESSION_RESUME,
+        constants.USSD_END: TransportUserMessage.SESSION_CLOSE,
+        constants.USSD_TIMEOUT: TransportUserMessage.SESSION_CLOSE,
     }
 
     VUMI_TO_SSMI_EVENT = {
-        TransportUserMessage.SESSION_NONE: client.SSMI_USSD_TYPE_EXISTING,
-        TransportUserMessage.SESSION_NEW: client.SSMI_USSD_TYPE_NEW,
-        TransportUserMessage.SESSION_RESUME: client.SSMI_USSD_TYPE_EXISTING,
-        TransportUserMessage.SESSION_CLOSE: client.SSMI_USSD_TYPE_END,
+        TransportUserMessage.SESSION_NONE: constants.USSD_RESPONSE,
+        TransportUserMessage.SESSION_NEW: constants.USSD_NEW,
+        TransportUserMessage.SESSION_RESUME: constants.USSD_RESPONSE,
+        TransportUserMessage.SESSION_CLOSE: constants.USSD_END,
     }
 
-    # default maximum lifetime of USSD sessions (in seconds)
-    DEFAULT_USSD_SESSION_LIFETIME = 5 * 60
-
-    # TODO: Check that UTF-8 is in fact what TruTeq use to encode their
-    #       messages
-    SSMI_ENCODING = "UTF-8"
-
-    def validate_config(self):
-        """
-        Transport-specific config validation happens in here.
-        """
-        self.username = self.config['username']
-        self.password = self.config['password']
-        self.host = self.config['host']
-        self.port = int(self.config['port'])
-        self.ussd_session_lifetime = self.config.get(
-                'ussd_session_lifetime', self.DEFAULT_USSD_SESSION_LIFETIME)
-        self.transport_type = self.config.get('transport_type', 'ussd')
-        self.r_config = self.config.get('redis', {})
-        self.r_prefix = "%(transport_name)s:ussd_codes" % self.config
-
+    @inlineCallbacks
     def setup_transport(self):
-        self.r_server = redis.Redis(**self.r_config)
-        self.ssmi_client = None
-        self._setup_d = Deferred()
-        # the strange wrapping of the funciton in a lambda is to get around
-        # an odd type check in client.SSMIClient.__init__.
-        factory = client.SSMIFactory(
-            lambda ssmi_client: self._setup_ssmi_client(ssmi_client))
-        self.ssmi_connector = reactor.connectTCP(self.host, self.port, factory)
-        return self._setup_d
+        config = self.get_static_config()
+        self.client_factory = Factory.forProtocol(self.protocol_class)
+        self.client_factory.vumi_transport = self
 
-    def _setup_ssmi_client(self, ssmi_client):
-        ssmi_client.app_setup(self.username, self.password,
-                              ussd_callback=self.ussd_callback,
-                              sms_callback=self.sms_callback,
-                              errback=self.ssmi_errback)
-        self.ssmi_client = ssmi_client
-        if self._setup_d is not None:
-            d, self._setup_d = self._setup_d, None
-            d.callback(None)
+        prefix = "%s:ussd_codes" % (config.transport_name,)
+        self.session_manager = yield SessionManager.from_redis_config(
+            config.redis_manager, prefix, config.ussd_session_lifetime)
+        self.client_service = self.get_service(
+            config.twisted_endpoint, self.client_factory)
+
+    def get_service(self, endpoint, factory):
+        client_service = self.service_class(endpoint, factory)
+        client_service.startService()
+        return client_service
 
     def teardown_transport(self):
-        self.ssmi_connector.disconnect()
+        d = maybeDeferred(self.client_service.stopService)
+        d.addCallback(lambda _: self.session_manager.stop())
+        return d
 
-    def msisdn_key(self, msisdn):
-        return "%s:%s" % (self.r_prefix, msisdn)
+    @inlineCallbacks
+    def handle_raw_inbound_message(self, ussd_message):
+        if ussd_message.command_name == 'EXTENDED_USSD_MESSAGE':
+            genfields = {
+                'IMSI': '',
+                'Subscriber Type': '',
+                'OperatorID': '',
+                'SessionID': '',
+                'ValiPort': '',
+            }
+            genfield_values = ussd_message.genfields.split(':')
+            genfields.update(
+                dict(zip(genfields.keys(), genfield_values)))
+        else:
+            genfields = {}
 
-    def get_ussd_code(self, msisdn, delete=False):
-        rkey = self.msisdn_key(msisdn)
-        ussd_code = self.r_server.get(rkey)
-        if ussd_code is not None and delete:
-            self.r_server.delete(rkey)
-        return ussd_code
-
-    def set_ussd_code(self, msisdn, ussd_code):
-        rkey = self.msisdn_key(msisdn)
-        ussd_code = self.r_server.set(rkey, ussd_code)
-        self.r_server.expire(rkey, self.ussd_session_lifetime)
-
-    def ussd_callback(self, msisdn, ussd_type, phase, message):
-        log.msg("Received USSD, from: %s, message: %s" % (msisdn, message))
-        session_event = self.SSMI_TO_VUMI_EVENT[ussd_type]
-        msisdn = normalize_msisdn(msisdn)
-        message = message.decode(self.SSMI_ENCODING)
+        session_event = self.SSMI_TO_VUMI_EVENT[ussd_message.type]
+        msisdn = normalize_msisdn(ussd_message.msisdn)
+        message = ussd_message.message.decode(self.encoding)
 
         if session_event == TransportUserMessage.SESSION_NEW:
             # If it's a new session then store the message as the USSD code
-            ussd_code = message
-            self.set_ussd_code(msisdn, ussd_code)
+            if not message.endswith('#'):
+                message = '%s#' % (message,)
+            session = yield self.session_manager.create_session(
+                msisdn, ussd_code=message)
             text = None
-        elif session_event == TransportUserMessage.SESSION_CLOSE:
-            ussd_code = self.get_ussd_code(msisdn, delete=True)
-            text = message
-        elif session_event == TransportUserMessage.SESSION_RESUME:
-            ussd_code = self.get_ussd_code(msisdn)
+        else:
+            session = yield self.session_manager.load_session(msisdn)
             text = message
 
-        self.publish_message(
+        if session_event == TransportUserMessage.SESSION_CLOSE:
+            yield self.session_manager.clear_session(msisdn)
+
+        yield self.publish_message(
             from_addr=msisdn,
-            to_addr=ussd_code,
+            to_addr=session['ussd_code'],
             session_event=session_event,
             content=text,
-            transport_name=self.transport_name,
-            transport_type=self.transport_type,
+            transport_type='ussd',
             transport_metadata={},
-            )
-
-    def sms_callback(self, *args, **kwargs):
-        log.err("Got SMS from SSMI but SMSes not supported: %r, %r"
-                % (args, kwargs))
-
-    def ssmi_errback(self, *args, **kwargs):
-        log.err("Got error from SSMI: %r, %r" % (args, kwargs))
+            helper_metadata={
+                'truteq': {
+                    'genfields': genfields,
+                }
+            })
 
     def handle_outbound_message(self, message):
-        log.msg("Outbound USSD message: %s" % (message,))
-        text = message['content']
-        if text is None:
-            text = ''
+        protocol = self.client_factory.protocol_instance
+        text = message.get('content') or ''
+
+        # Truteq uses \r as a message delimiter in the protocol.
+        # Make sure we're only sending \n for new lines.
+        text = '\n'.join(text.splitlines()).encode(self.encoding)
+
         ssmi_session_type = self.VUMI_TO_SSMI_EVENT[message['session_event']]
-        # Everything we send to ssmi_client needs to be bytestrings.
-        data = text.encode(self.SSMI_ENCODING)
-        msisdn = message['to_addr'].strip('+').encode(self.SSMI_ENCODING)
-        self.ssmi_client.send_ussd(msisdn, data, ssmi_session_type)
+        # We need to send unicode data to ssmi_client, but bytes for msisdn.
+        msisdn = message['to_addr'].strip('+').encode(self.encoding)
+        return protocol.send_ussd_message(msisdn, text, ssmi_session_type)
+
+    def handle_remote_logout(self, msg):
+        log.warning('Received remote logout command: %r' % (
+            msg,))
+
+    def handle_unhandled_message(self, mo):
+        log.warning('Received unsupported message, dropping: %r.' % (
+            mo,))

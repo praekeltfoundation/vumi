@@ -3,63 +3,39 @@ from datetime import datetime, timedelta
 from urlparse import parse_qs
 
 from twisted.internet import defer
-from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.defer import inlineCallbacks, maybeDeferred
 from twisted.web import xmlrpc
 
-from vumi.message import TransportUserMessage
-from vumi.tests.utils import FakeRedis
-from vumi.utils import http_request
+from vumi.utils import http_request, http_request_full
 from vumi.transports.failures import PermanentFailure, TemporaryFailure
-from vumi.transports.opera.tests.test_opera_stubs import FakeXMLRPCService
 from vumi.transports.opera import OperaTransport
-from vumi.transports.tests.test_base import TransportTestCase
+from vumi.transports.tests.helpers import TransportHelper
+from vumi.tests.helpers import VumiTestCase
 
 
-class OperaTransportTestCase(TransportTestCase):
+class FakeXMLRPCService(object):
+    def __init__(self, callback):
+        self.callback = callback
+
+    def callRemote(self, *args, **kwargs):
+        return maybeDeferred(self.callback, *args, **kwargs)
+
+
+class TestOperaTransport(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        yield super(OperaTransportTestCase, self).setUp()
-        self.port = 9999
-        self.host = "localhost"
-        self.url = 'http://%s:%s' % (self.host, self.port)
-        self.transport = yield self.mk_transport()
-
-    @inlineCallbacks
-    def tearDown(self):
-        # teardown fake redis, prevents DelayedCall's from leaving the reactor
-        # in a dirty state.
-        yield self.r_server.teardown()
-        yield super(OperaTransportTestCase, self).tearDown()
-
-    @inlineCallbacks
-    def mk_transport(self, cls=OperaTransport, **config):
-        default_config = {
+        self.tx_helper = self.add_helper(
+            TransportHelper(OperaTransport, mobile_addr='27761234567'))
+        self.transport = yield self.tx_helper.get_transport({
             'url': 'http://testing.domain',
             'channel': 'channel',
             'service': 'service',
             'password': 'password',
             'web_receipt_path': '/receipt.xml',
             'web_receive_path': '/receive.xml',
-            'web_port': self.port
-        }
-        default_config.update(config)
-        self.r_server = FakeRedis()
-        worker = yield self.get_transport(default_config, cls)
-        worker.r_server = self.r_server
-        returnValue(worker)
-
-    def mk_msg(self, **kwargs):
-        defaults = {
-            'to_addr': '27761234567',
-            'from_addr': '27761234567',
-            'content': 'hello world',
-            'transport_name': self.transport_name,
-            'transport_type': 'sms',
-            'transport_metadata': {},
-        }
-        defaults.update(kwargs)
-        return TransportUserMessage(**defaults)
+            'web_port': 0,
+        })
 
     @inlineCallbacks
     def test_receipt_processing(self):
@@ -69,7 +45,8 @@ class OperaTransportTestCase(TransportTestCase):
         message_id = '123456'
         # prime redis to match the incoming identifier to an
         # internal message id
-        self.transport.set_message_id_for_identifier(identifier, message_id)
+        yield self.transport.set_message_id_for_identifier(
+            identifier, message_id)
 
         xml_data = """
         <?xml version="1.0"?>
@@ -85,10 +62,11 @@ class OperaTransportTestCase(TransportTestCase):
           </receipt>
         </receipts>
         """.strip() % identifier
-        yield http_request('%s/receipt.xml' % self.url, xml_data)
-        self.assertEqual([], self.get_dispatched_failures())
-        self.assertEqual([], self.get_dispatched_messages())
-        [event] = self.get_dispatched_events()
+        yield http_request(
+            self.transport.get_transport_url('receipt.xml'), xml_data)
+        self.assertEqual([], self.tx_helper.get_dispatched_failures())
+        self.assertEqual([], self.tx_helper.get_dispatched_inbound())
+        [event] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(event['delivery_status'], 'delivered')
         self.assertEqual(event['message_type'], 'event')
         self.assertEqual(event['event_type'], 'delivery_report')
@@ -146,11 +124,12 @@ class OperaTransportTestCase(TransportTestCase):
             '%20%3D%20%22date%22%3E2012-03-16%2011:50:05%20%2B0000%3C/field%3E'
             '%0A%3C/bspostevent%3E%0A')
 
-        resp = yield http_request('%s/receive.xml' % self.url, xml_data)
+        resp = yield http_request(
+            self.transport.get_transport_url('receive.xml'), xml_data)
 
-        self.assertEqual([], self.get_dispatched_failures())
-        self.assertEqual([], self.get_dispatched_events())
-        [msg] = self.get_dispatched_messages()
+        self.assertEqual([], self.tx_helper.get_dispatched_failures())
+        self.assertEqual([], self.tx_helper.get_dispatched_events())
+        [msg] = self.tx_helper.get_dispatched_inbound()
         self.assertEqual(msg['message_id'], '1487577162')
         self.assertEqual(msg['to_addr'], '32323')
         self.assertEqual(msg['from_addr'], '+27831234567')
@@ -205,11 +184,12 @@ class OperaTransportTestCase(TransportTestCase):
         </bspostevent>
         """.strip()
 
-        resp = yield http_request('%s/receive.xml' % self.url, xml_data)
+        resp = yield http_request(
+            self.transport.get_transport_url('receive.xml'), xml_data)
 
-        self.assertEqual([], self.get_dispatched_failures())
-        self.assertEqual([], self.get_dispatched_events())
-        [msg] = self.get_dispatched_messages()
+        self.assertEqual([], self.tx_helper.get_dispatched_failures())
+        self.assertEqual([], self.tx_helper.get_dispatched_events())
+        [msg] = self.tx_helper.get_dispatched_inbound()
         self.assertEqual(msg['message_id'], '373736741')
         self.assertEqual(msg['to_addr'], '32323')
         self.assertEqual(msg['from_addr'], '+27831234567')
@@ -219,6 +199,68 @@ class OperaTransportTestCase(TransportTestCase):
         })
 
         self.assertEqual(resp, xml_data)
+
+    @inlineCallbacks
+    def test_incoming_sms_no_data(self):
+        resp = yield http_request_full(
+            self.transport.get_transport_url('receive.xml'), None)
+
+        self.assertEqual([], self.tx_helper.get_dispatched_failures())
+        self.assertEqual([], self.tx_helper.get_dispatched_events())
+        self.assertEqual([], self.tx_helper.get_dispatched_inbound())
+
+        self.assertEqual(resp.code, 400)
+        self.assertEqual(resp.delivered_body, "XmlMsg missing.")
+
+    @inlineCallbacks
+    def test_incoming_sms_partial_data(self):
+
+        xml_data = """
+        <?xml version="1.0"?>
+        <!DOCTYPE bspostevent>
+        <bspostevent>
+          <field name="MOReference" type = "string">282341913</field>
+          <field name="IsReceipt" type = "string">NO</field>
+          <field name="RemoteNetwork" type = "string">mtn-za</field>
+          <field name="BSDate-tomorrow" type = "string">20100605</field>
+          <field name="BSDate-today" type = "string">20100604</field>
+          <field name="ReceiveDate" type = "date">
+                 2010-06-04 15:51:25 +0000</field>
+          <field name="ClientID" type = "string">4</field>
+          <field name="ChannelID" type = "string">111</field>
+          <field name="MessageID" type = "string">373736741</field>
+          <field name="ReceiptStatus" type = "string"></field>
+          <field name="Prefix" type = "string"></field>
+          <field name="ClientName" type = "string">Praekelt</field>
+          <field name="MobileDevice" type = "string"></field>
+          <field name="BSDate-yesterday" type = "string">20100603</field>
+          <field name="Remote" type = "string">+27831234567</field>
+          <field name="State" type = "string">5</field>
+          <field name="MobileNetwork" type = "string">mtn-za</field>
+          <field name="MobileNumber" type = "string">+27831234567</field>
+          <field name="Text" type = "string">Hello World</field>
+          <field name="ServiceID" type = "string">20222</field>
+          <field name="RegType" type = "string">1</field>
+          <field name="NewSubscriber" type = "string">NO</field>
+          <field name="Subscriber" type = "string">+27831234567</field>
+          <field name="Parsed" type = "string"></field>
+          <field name="ServiceName" type = "string">Prktl Vumi</field>
+          <field name="BSDate-thisweek" type = "string">20100531</field>
+          <field name="ServiceEndDate" type = "string">
+                 2010-06-30 07:47:00 +0200</field>
+          <field name="Now" type = "date">2010-06-04 15:51:27 +0000</field>
+        </bspostevent>
+        """.strip()
+
+        resp = yield http_request_full(
+            self.transport.get_transport_url('receive.xml'), xml_data)
+
+        self.assertEqual([], self.tx_helper.get_dispatched_failures())
+        self.assertEqual([], self.tx_helper.get_dispatched_events())
+        self.assertEqual([], self.tx_helper.get_dispatched_inbound())
+
+        self.assertEqual(resp.code, 400)
+        self.assertEqual(resp.delivered_body, "Missing field: Local")
 
     @inlineCallbacks
     def test_outbound_ok(self):
@@ -253,20 +295,18 @@ class OperaTransportTestCase(TransportTestCase):
 
         self.transport.proxy = FakeXMLRPCService(_cb)
 
-        msg = self.mk_msg()
-        yield self.dispatch(msg,
-            rkey='%s.outbound' % self.transport_name)
+        msg = yield self.tx_helper.make_dispatch_outbound('hello world')
 
-        self.assertEqual(self.get_dispatched_failures(), [])
-        self.assertEqual(self.get_dispatched_messages(), [])
-        [event_msg] = self.get_dispatched_events()
+        self.assertEqual(self.tx_helper.get_dispatched_failures(), [])
+        self.assertEqual(self.tx_helper.get_dispatched_inbound(), [])
+        [event_msg] = self.tx_helper.get_dispatched_events()
         self.assertEqual(event_msg['message_type'], 'event')
         self.assertEqual(event_msg['event_type'], 'ack')
         self.assertEqual(event_msg['sent_message_id'], 'abc123')
         # test that we've properly linked the identifier to our
         # internal id of the given message
         self.assertEqual(
-            self.transport.get_message_id_for_identifier('abc123'),
+            (yield self.transport.get_message_id_for_identifier('abc123')),
             msg['message_id'])
 
     @inlineCallbacks
@@ -290,13 +330,12 @@ class OperaTransportTestCase(TransportTestCase):
 
         self.transport.proxy = FakeXMLRPCService(_cb)
 
-        yield self.dispatch(self.mk_msg(transport_metadata={
+        yield self.tx_helper.make_dispatch_outbound("hi", transport_metadata={
             'deliver_at': fixed_date,
             'expire_at': fixed_date + timedelta(hours=1),
             'priority': 'high',
             'receipt': 'N',
-            }),
-            rkey='%s.outbound' % self.transport_name)
+        })
 
     @inlineCallbacks
     def test_outbound_temporary_failure(self):
@@ -316,20 +355,19 @@ class OperaTransportTestCase(TransportTestCase):
 
         # send a message to the transport which'll hit the FakeXMLRPCService
         # and as a result raise an error
-        yield self.dispatch(self.mk_msg(),
-            rkey='%s.outbound' % self.transport_name)
+        yield self.tx_helper.make_dispatch_outbound("hello world")
 
         [twisted_failure] = self.flushLoggedErrors(TemporaryFailure)
         logged_failure = twisted_failure.value
         self.assertEqual(logged_failure.failure_code, 'temporary')
 
-        self.assertEqual(self.get_dispatched_events(), [])
-        self.assertEqual(self.get_dispatched_messages(), [])
-        [failure] = self.get_dispatched_failures()
+        self.assertEqual(self.tx_helper.get_dispatched_events(), [])
+        self.assertEqual(self.tx_helper.get_dispatched_inbound(), [])
+        [failure] = self.tx_helper.get_dispatched_failures()
         self.assertEqual(failure['failure_code'], 'temporary')
         original_msg = failure['message']
         self.assertEqual(original_msg['to_addr'], '27761234567')
-        self.assertEqual(original_msg['from_addr'], '27761234567')
+        self.assertEqual(original_msg['from_addr'], '9292')
         self.assertEqual(original_msg['content'], 'hello world')
 
     @inlineCallbacks
@@ -351,15 +389,16 @@ class OperaTransportTestCase(TransportTestCase):
 
         # send a message to the transport which'll hit the FakeXMLRPCService
         # and as a result raise an error
-        yield self.dispatch(self.mk_msg(),
-            rkey='%s.outbound' % self.transport_name)
+        msg = yield self.tx_helper.make_dispatch_outbound("hi")
 
         [twisted_failure] = self.flushLoggedErrors(PermanentFailure)
         logged_failure = twisted_failure.value
         self.assertEqual(logged_failure.failure_code, 'permanent')
 
-        [failure] = self.get_dispatched_failures()
+        [failure] = self.tx_helper.get_dispatched_failures()
+        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(failure['failure_code'], 'permanent')
+        self.assertEqual(nack['user_message_id'], msg['message_id'])
 
     @inlineCallbacks
     def test_outbound_unicode_encoding(self):
@@ -376,5 +415,4 @@ class OperaTransportTestCase(TransportTestCase):
             return {'Identifier': '1'}
 
         self.transport.proxy = FakeXMLRPCService(_cb)
-        yield self.dispatch(self.mk_msg(content=content),
-            rkey='%s.outbound' % self.transport_name)
+        yield self.tx_helper.make_dispatch_outbound(content)

@@ -82,10 +82,12 @@ class HealthResource(Resource):
 
     def render(self, request):
         request.setResponseCode(http.OK)
+        request.do_not_log = True
         return 'OK'
 
 
 class IntegratTransport(Transport):
+    """Integrat USSD transport over HTTP."""
 
     def validate_config(self):
         """
@@ -125,7 +127,7 @@ class IntegratTransport(Transport):
         if message['session_event'] == message.SESSION_CLOSE:
             flags = '1'
         session_id = message['transport_metadata']['session_id']
-        yield http_request(self.integrat_url, hxg.build({
+        response = yield http_request(self.integrat_url, hxg.build({
             'Flags': flags,
             'SessionID': session_id,
             'Type': 'USSReply',
@@ -135,3 +137,12 @@ class IntegratTransport(Transport):
         }), headers={
             'Content-Type': ['text/xml; charset=utf-8']
         })
+        error = hxg.parse_response(response)
+        if not error:
+            yield self.publish_ack(user_message_id=message['message_id'],
+                    sent_message_id=message['message_id'])
+        else:
+            yield self.publish_nack(user_message_id=message['message_id'],
+                sent_message_id=message['message_id'],
+                reason=', '.join([': '.join(ef.items()[0])
+                            for ef in error['error_fields']]))

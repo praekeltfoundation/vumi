@@ -6,6 +6,9 @@ from datetime import datetime
 
 from errors import MissingMessageField, InvalidMessageField
 
+from vumi.utils import to_kwargs
+
+
 # This is the date format we work with internally
 VUMI_DATE_FORMAT = "%Y-%m-%d %H:%M:%S.%f"
 
@@ -75,7 +78,7 @@ class Message(object):
 
     @classmethod
     def from_json(cls, json_string):
-        return cls(_process_fields=False, **from_json(json_string))
+        return cls(_process_fields=False, **to_kwargs(from_json(json_string)))
 
     def __str__(self):
         return u"<Message payload=\"%s\">" % repr(self.payload)
@@ -103,6 +106,9 @@ class Message(object):
     def items(self):
         return self.payload.items()
 
+    def copy(self):
+        return self.from_json(self.to_json())
+
 
 class TransportMessage(Message):
     """Common base class for messages sent to or from a transport."""
@@ -110,6 +116,7 @@ class TransportMessage(Message):
     # sub-classes should set the message type
     MESSAGE_TYPE = None
     MESSAGE_VERSION = '20110921'
+    DEFAULT_ENDPOINT_NAME = 'default'
 
     @staticmethod
     def generate_id():
@@ -126,16 +133,40 @@ class TransportMessage(Message):
         fields.setdefault('message_version', self.MESSAGE_VERSION)
         fields.setdefault('message_type', self.MESSAGE_TYPE)
         fields.setdefault('timestamp', datetime.utcnow())
+        fields.setdefault('routing_metadata', {})
+        fields.setdefault('helper_metadata', {})
         return fields
 
     def validate_fields(self):
         self.assert_field_value('message_version', self.MESSAGE_VERSION)
+        # We might get older event messages without the `helper_metadata`
+        # field.
+        self.payload.setdefault('helper_metadata', {})
         self.assert_field_present(
             'message_type',
             'timestamp',
+            'helper_metadata',
             )
         if self['message_type'] is None:
             raise InvalidMessageField('message_type')
+
+    @property
+    def routing_metadata(self):
+        return self.payload.setdefault('routing_metadata', {})
+
+    @classmethod
+    def check_routing_endpoint(cls, endpoint_name):
+        if endpoint_name is None:
+            return cls.DEFAULT_ENDPOINT_NAME
+        return endpoint_name
+
+    def set_routing_endpoint(self, endpoint_name=None):
+        endpoint_name = self.check_routing_endpoint(endpoint_name)
+        self.routing_metadata['endpoint_name'] = endpoint_name
+
+    def get_routing_endpoint(self):
+        endpoint_name = self.routing_metadata.get('endpoint_name')
+        return self.check_routing_endpoint(endpoint_name)
 
 
 class TransportUserMessage(TransportMessage):
@@ -174,8 +205,10 @@ class TransportUserMessage(TransportMessage):
     TT_SMS = 'sms'
     TT_USSD = 'ussd'
     TT_XMPP = 'xmpp'
+    TT_MXIT = 'mxit'
+    TT_WECHAT = 'wechat'
     TRANSPORT_TYPES = set([TT_HTTP_API, TT_IRC, TT_TELNET, TT_TWITTER, TT_SMS,
-                           TT_USSD, TT_XMPP])
+                           TT_USSD, TT_XMPP, TT_MXIT, TT_WECHAT])
 
     def process_fields(self, fields):
         fields = super(TransportUserMessage, self).process_fields(fields)
@@ -184,7 +217,6 @@ class TransportUserMessage(TransportMessage):
         fields.setdefault('session_event', None)
         fields.setdefault('content', None)
         fields.setdefault('transport_metadata', {})
-        fields.setdefault('helper_metadata', {})
         fields.setdefault('group', None)
         return fields
 
@@ -202,7 +234,6 @@ class TransportUserMessage(TransportMessage):
             'transport_name',
             'transport_type',
             'transport_metadata',
-            'helper_metadata',
             'group',
             )
         if self['session_event'] not in self.SESSION_EVENTS:
@@ -223,20 +254,48 @@ class TransportUserMessage(TransportMessage):
         :meth:`reply` suitable for constructing both one-to-one messages (such
         as SMS) and directed messages within a group chat (such as
         name-prefixed content in an IRC channel message).
+
+        If `session_event` is provided in the the keyword args,
+        `continue_session` will be ignored.
+
+        NOTE: Certain fields are required to come from the message being
+              replied to and may not be overridden by this method:
+
+              # If we're not using this addressing, we shouldn't be replying.
+              'to_addr', 'from_addr', 'group', 'in_reply_to',
+              # These three belong together and are supposed to be opaque.
+              'transport_name', 'transport_type', 'transport_metadata'
+
+        FIXME: `helper_metadata` should *not* be copied to the reply message.
+               We only do it here because a bunch of legacy code relies on it.
         """
         session_event = None if continue_session else self.SESSION_CLOSE
-        out_msg = TransportUserMessage(
-            to_addr=self['from_addr'],
-            from_addr=self['to_addr'],
-            group=self['group'],
-            in_reply_to=self['message_id'],
-            content=content,
-            session_event=session_event,
-            transport_name=self['transport_name'],
-            transport_type=self['transport_type'],
-            transport_metadata=self['transport_metadata'],
-            helper_metadata=self['helper_metadata'],
-            **kw)
+
+        for field in [
+                # If we're not using this addressing, we shouldn't be replying.
+                'to_addr', 'from_addr', 'group', 'in_reply_to',
+                # These three belong together and are supposed to be opaque.
+                'transport_name', 'transport_type', 'transport_metadata']:
+            if field in kw:
+                # Other "bad keyword argument" conditions cause TypeErrors.
+                raise TypeError("'%s' may not be overridden." % (field,))
+
+        fields = {
+            'helper_metadata': self['helper_metadata'],  # XXX: See above.
+            'session_event': session_event,
+            'to_addr': self['from_addr'],
+            'from_addr': self['to_addr'],
+            'group': self['group'],
+            'in_reply_to': self['message_id'],
+            'transport_name': self['transport_name'],
+            'transport_type': self['transport_type'],
+            'transport_metadata': self['transport_metadata'],
+        }
+        fields.update(kw)
+
+        out_msg = TransportUserMessage(content=content, **fields)
+        # The reply should go out the same endpoint it came in.
+        out_msg.set_routing_endpoint(self.get_routing_endpoint())
         return out_msg
 
     def reply_group(self, *args, **kw):
@@ -285,6 +344,9 @@ class TransportEvent(TransportMessage):
     # map of event_types -> extra fields
     EVENT_TYPES = {
         'ack': {'sent_message_id': lambda v: v is not None},
+        'nack': {
+            'nack_reason': lambda v: v is not None,
+        },
         'delivery_report': {
             'delivery_status': lambda v: v in TransportEvent.DELIVERY_STATUSES,
             },

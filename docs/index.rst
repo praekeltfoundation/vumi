@@ -12,19 +12,30 @@ Contents:
    :maxdepth: 1
 
    overview.rst
+   intro/index.rst
    first-smpp-bind.rst
-   transports.rst
-   dispatchers.rst
-   middleware.rst
+   applications/index.rst
+   transports/index.rst
+   dispatchers/index.rst
+   middleware/index.rst
    metrics.rst
    roadmap.rst
    release-notes.rst
+
+.. note::
+
+   Looking for documentation for writing Javascript applications for the
+   hosted Vumi Go environment? Visit http://vumi-go.readthedocs.org for
+   documentation on the hosted platform and
+   http://vumi-jssandbox-toolkit.readthedocs.org for documentation on
+   the Javascript sandbox.
 
 Getting Started:
 
 * :doc:`installation`
 * :doc:`getting-started`
 * :doc:`Writing your first Vumi app - Part 1</intro/tutorial01>` | :doc:`Part 2</intro/tutorial02>`
+* :doc:`ScaleConf workshop instructions</intro/scaleconf01>`
 
 For developers:
 

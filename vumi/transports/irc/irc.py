@@ -3,10 +3,14 @@
 """IRC transport."""
 
 from twisted.words.protocols import irc
-from twisted.internet import protocol, reactor
+from twisted.internet import protocol
 from twisted.internet.defer import inlineCallbacks
 from twisted.python import log
 
+from vumi.config import (
+    ConfigClientEndpoint, ConfigText, ConfigList, ConfigInt,
+    ClientEndpointFallback)
+from vumi.reconnecting_client import ReconnectingClientService
 from vumi.transports import Transport
 from vumi.transports.failures import TemporaryFailure
 
@@ -75,6 +79,7 @@ class VumiBotProtocol(irc.IRCClient):
     """An IRC bot that bridges IRC to Vumi."""
 
     def __init__(self, nickname, channels, irc_transport):
+        self.connected = False
         self.nickname = nickname
         self.channels = channels
         self.irc_transport = irc_transport
@@ -94,10 +99,12 @@ class VumiBotProtocol(irc.IRCClient):
 
     def connectionMade(self):
         irc.IRCClient.connectionMade(self)
+        self.connected = True
         log.msg("Connected (nickname is: %s)" % (self.nickname,))
 
     def connectionLost(self, reason):
         irc.IRCClient.connectionLost(self, reason)
+        self.connected = False
         log.msg("Disconnected (nickname was: %s)." % (self.nickname,))
 
     # callbacks for events
@@ -148,8 +155,8 @@ class VumiBotProtocol(irc.IRCClient):
         return nickname + '^'
 
 
-class VumiBotFactory(protocol.ReconnectingClientFactory):
-    """A factory for :class:`VumiBotClient`s.
+class VumiBotFactory(protocol.ClientFactory):
+    """A factory for :class:`VumiBotClient` instances.
 
     A new protocol instance will be created each time we connect to
     the server.
@@ -160,52 +167,71 @@ class VumiBotFactory(protocol.ReconnectingClientFactory):
 
     def __init__(self, vumibot_args):
         self.vumibot_args = vumibot_args
+        self.irc_server = None
         self.vumibot = None
 
+    def format_server_address(self, addr):
+        # getattr is used in case someone connects to an
+        # endpoint that isn't an IPv4 or IPv6 endpoint.
+        return "%s:%s" % (
+            getattr(addr, 'host', 'unknown'),
+            getattr(addr, 'port', 'unknown')
+        )
+
     def buildProtocol(self, addr):
-        self.resetDelay()
+        self.irc_server = self.format_server_address(addr)
         self.vumibot = self.protocol(*self.vumibot_args)
         return self.vumibot
 
 
-class IrcTransport(Transport):
-    """IRC based transport.
-
-    IRC transport options:
-
-    :type network: str
-    :param network:
-        Host name of the IRC server to connect to.
-    :type nickname: str
-    :param nickname:
-        IRC nickname for the transport IRC client to use.
-    :type port: int
-    :param port:
-        Port of the IRC server to connect to. Default: 6667.
-    :type channels: list
-    :param channels:
-        List of channels to join. Defaults: [].
+class IrcConfig(Transport.CONFIG_CLASS):
     """
+    IRC transport config.
+    """
+    twisted_endpoint = ConfigClientEndpoint(
+        "Endpoint to connect to the IRC server on.",
+        fallbacks=[ClientEndpointFallback('network', 'port')],
+        required=True, static=True)
+    nickname = ConfigText(
+        "IRC nickname for the transport IRC client to use.",
+        required=True, static=True)
+    channels = ConfigList(
+        "List of channels to join.",
+        default=(), static=True)
 
-    def validate_config(self):
-        self.network = self.config['network']
-        self.nickname = self.config['nickname']
-        self.port = int(self.config.get('port', 6667))
-        self.channels = self.config.get('channels', [])
-        self.client = None
+    # TODO: Deprecate these fields when confmodel#5 is done.
+    network = ConfigText(
+        "*DEPRECATED* 'network' and 'port' fields may be used in place of the"
+        " 'twisted_endpoint' field.", static=True)
+    port = ConfigInt(
+        "*DEPRECATED* 'network' and 'port' fields may be used in place of the"
+        " 'twisted_endpoint' field.", static=True, default=6667)
+
+
+class IrcTransport(Transport):
+    """
+    IRC based transport.
+    """
+    CONFIG_CLASS = IrcConfig
+
+    factory = None
+    service = None
 
     def setup_transport(self):
-        factory = VumiBotFactory((self.nickname, self.channels,
-                                 self))
-        self.client = reactor.connectTCP(self.network, self.port, factory)
+        config = self.get_static_config()
+        self.factory = VumiBotFactory((config.nickname, config.channels,
+                                       self))
+        self.service = ReconnectingClientService(
+            config.twisted_endpoint, self.factory)
+        self.service.startService()
 
+    @inlineCallbacks
     def teardown_transport(self):
-        if self.client is not None:
-            self.client.factory.stopTrying()
-            self.client.disconnect()
+        if self.service is not None:
+            yield self.service.stopService()
 
     def handle_inbound_irc_message(self, irc_msg):
-        irc_server = "%s:%s" % (self.network, self.port)
+        irc_server = self.factory.irc_server
         irc_channel = irc_msg.channel()
         nickname = irc_msg.nickname
 
@@ -246,10 +272,9 @@ class IrcTransport(Transport):
 
     @inlineCallbacks
     def handle_outbound_message(self, msg):
-        vumibot = self.client.factory.vumibot
-        if vumibot is None or self.client.state != 'connected':
-            raise TemporaryFailure("IrcTransport not connected (state: %r)."
-                                   % (self.client.state,))
+        vumibot = self.factory.vumibot
+        if vumibot is None or not vumibot.connected:
+            raise TemporaryFailure("IrcTransport not connected.")
         irc_metadata = msg['helper_metadata'].get('irc', {})
         transport_metadata = msg['transport_metadata']
         irc_command = irc_metadata.get('irc_command', 'PRIVMSG')

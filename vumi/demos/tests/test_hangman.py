@@ -2,42 +2,48 @@
 
 """Tests for vumi.demos.hangman."""
 
-from twisted.trial import unittest
+import string
+
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet import reactor
 from twisted.web.server import Site
 from twisted.web.resource import Resource
 from twisted.web.static import Data
 
-from vumi.tests.utils import FakeRedis
-from vumi.application.tests.test_base import ApplicationTestCase
 from vumi.demos.hangman import HangmanGame, HangmanWorker
 from vumi.message import TransportUserMessage
+from vumi.application.tests.helpers import ApplicationHelper
+from vumi.tests.helpers import VumiTestCase
 
-import string
+
+def mkstate(word, guesses, msg):
+    return {'word': word, 'guesses': guesses, 'msg': msg}
 
 
-class TestHangmanGame(unittest.TestCase):
+class TestHangmanGame(VumiTestCase):
     def test_easy_game(self):
         game = HangmanGame(word='moo')
         game.event('m')
         game.event('o')
         self.assertTrue(game.won())
-        self.assertTrue(game.state().startswith("moo:mo:Flawless"))
+        self.assertEqual(
+            game.state(), mkstate('moo', 'mo', 'Flawless victory!'))
 
     def test_incorrect_guesses(self):
         game = HangmanGame(word='moo')
         game.event('f')
         game.event('g')
         self.assertFalse(game.won())
-        self.assertTrue(game.state().startswith("moo:fg:Word contains no"))
+        self.assertEqual(
+            game.state(), mkstate('moo', 'fg', "Word contains no 'g'. :("))
 
     def test_repeated_guesses(self):
         game = HangmanGame(word='moo')
         game.event('f')
         game.event('f')
         self.assertFalse(game.won())
-        self.assertTrue(game.state().startswith("moo:f:You've already"))
+        self.assertEqual(
+            game.state(), mkstate('moo', 'f', "You've already guessed 'f'."))
 
     def test_button_mashing(self):
         game = HangmanGame(word='moo')
@@ -45,25 +51,27 @@ class TestHangmanGame(unittest.TestCase):
             game.event(event)
         game.event('o')
         self.assertTrue(game.won())
-        self.assertEqual(game.state(),
-                         "moo:%s:Button mashing!" % string.lowercase)
+        self.assertEqual(
+            game.state(), mkstate('moo', string.lowercase, "Button mashing!"))
 
     def test_new_game(self):
         game = HangmanGame(word='moo')
         for event in ('m', 'o', '-'):
             game.event(event)
-        self.assertEqual(game.state(), 'moo:mo:Flawless victory!')
+        self.assertEqual(
+            game.state(), mkstate('moo', 'mo', 'Flawless victory!'))
         self.assertEqual(game.exit_code, game.DONE_WANTS_NEW)
 
     def test_from_state(self):
-        game = HangmanGame.from_state("bar:xyz:Eep?")
+        game = HangmanGame.from_state(mkstate("bar", "xyz", "Eep?"))
         self.assertEqual(game.word, "bar")
         self.assertEqual(game.guesses, set("xyz"))
         self.assertEqual(game.msg, "Eep?")
         self.assertEqual(game.exit_code, game.NOT_DONE)
 
     def test_from_state_non_ascii(self):
-        game = HangmanGame.from_state("b\xc3\xa4r:xyz:Eep?")
+        game = HangmanGame.from_state(
+            mkstate("b\xc3\xa4r".decode("utf-8"), "xyz", "Eep?"))
         self.assertEqual(game.word, u"b\u00e4r")
         self.assertEqual(game.guesses, set("xyz"))
         self.assertEqual(game.msg, "Eep?")
@@ -122,9 +130,7 @@ class TestHangmanGame(unittest.TestCase):
 
     def test_garbage_input(self):
         game = HangmanGame(word="zoo")
-        for garbage in [
-            ":", "!", "\x00", "+", "abc", "",
-            ]:
+        for garbage in [":", "!", "\x00", "+", "abc", ""]:
             game.event(garbage)
         self.assertEqual(game.guesses, set())
         game.event('z')
@@ -132,36 +138,36 @@ class TestHangmanGame(unittest.TestCase):
         self.assertTrue(game.won())
 
 
-class TestHangmanWorker(ApplicationTestCase):
-
-    application_class = HangmanWorker
+class TestHangmanWorker(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        super(TestHangmanWorker, self).setUp()
         root = Resource()
         # data is elephant with a UTF-8 encoded BOM
         # it is a sad elephant (as seen in the wild)
         root.putChild("word", Data('\xef\xbb\xbfelephant\r\n', 'text/html'))
         site_factory = Site(root)
-        self.webserver = yield reactor.listenTCP(0, site_factory)
+        self.webserver = yield reactor.listenTCP(
+            0, site_factory, interface='127.0.0.1')
+        self.add_cleanup(self.webserver.loseConnection)
         addr = self.webserver.getHost()
         random_word_url = "http://%s:%s/word" % (addr.host, addr.port)
 
-        self.worker = yield self.get_application({
-                'worker_name': 'test_hangman',
-                'random_word_url': random_word_url,
-                })
-        self.worker.r_server = FakeRedis()
+        self.app_helper = self.add_helper(ApplicationHelper(HangmanWorker))
 
-    @inlineCallbacks
+        self.worker = yield self.app_helper.get_application({
+            'worker_name': 'test_hangman',
+            'random_word_url': random_word_url,
+        })
+        yield self.worker.session_manager.redis._purge_all()  # just in case
+
     def send(self, content, session_event=None):
-        msg = self.mkmsg_in(content=content, session_event=session_event)
-        yield self.dispatch(msg)
+        return self.app_helper.make_dispatch_inbound(
+            content, session_event=session_event)
 
     @inlineCallbacks
     def recv(self, n=0):
-        msgs = yield self.wait_for_dispatched_messages(n)
+        msgs = yield self.app_helper.wait_for_dispatched_outbound(n)
 
         def reply_code(msg):
             if msg['session_event'] == TransportUserMessage.SESSION_CLOSE:
@@ -169,10 +175,6 @@ class TestHangmanWorker(ApplicationTestCase):
             return 'reply'
 
         returnValue([(reply_code(msg), msg['content']) for msg in msgs])
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield self.webserver.loseConnection()
 
     @inlineCallbacks
     def test_new_session(self):
@@ -190,7 +192,8 @@ class TestHangmanWorker(ApplicationTestCase):
 
     @inlineCallbacks
     def test_random_word(self):
-        word = yield self.worker.random_word()
+        word = yield self.worker.random_word(
+            self.worker.config['random_word_url'])
         self.assertEqual(word, 'elephant')
 
     @inlineCallbacks

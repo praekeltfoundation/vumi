@@ -2,39 +2,28 @@
 
 import json
 
-from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks, returnValue
 
+from vumi.tests.helpers import VumiTestCase
 from vumi.utils import http_request
-from vumi.transports.infobip.infobip import InfobipTransport
-from vumi.transports.failures import FailureMessage, PermanentFailure
+from vumi.transports.infobip.infobip import InfobipTransport, InfobipError
 from vumi.message import TransportUserMessage
-from vumi.tests.utils import get_stubbed_worker, FakeRedis, LogCatcher
+from vumi.tests.utils import LogCatcher
+from vumi.transports.tests.helpers import TransportHelper
 
 
-class TestInfobipUssdTransport(TestCase):
-
-    # set trial test timeout
-    timeout = 5
+class TestInfobipUssdTransport(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        config = {
-            'transport_name': 'test_infobip',
+        self.tx_helper = self.add_helper(TransportHelper(InfobipTransport))
+        self.transport = yield self.tx_helper.get_transport({
             'transport_type': 'ussd',
             'web_path': "/session/",
             'web_port': 0,
-            }
-        self.worker = get_stubbed_worker(InfobipTransport, config)
-        self.broker = self.worker._amqp_client.broker
-        yield self.worker.startWorker()
-        self.worker_url = self.worker.get_transport_url()
-        self.worker.r_server = FakeRedis()
-
-    @inlineCallbacks
-    def tearDown(self):
-        self.worker.r_server.teardown()
-        yield self.worker.stopWorker()
+        })
+        self.transport_url = self.transport.get_transport_url()
+        yield self.transport.session_manager.redis._purge_all()  # just in case
 
     DEFAULT_START_DATA = {
         "msisdn": "385955363443",
@@ -64,23 +53,23 @@ class TestInfobipUssdTransport(TestCase):
         method = self.SESSION_HTTP_METHOD.get(session_type, "POST")
         request_data = self.DEFAULT_SESSION_DATA[session_type].copy()
         request_data.update(kw)
-        deferred_req = http_request(self.worker_url + url_suffix,
+        deferred_req = http_request(self.transport_url + url_suffix,
                                     json.dumps(request_data), method=method)
         if not expect_msg:
             msg = None
         else:
-            [msg] = yield self.broker.wait_messages("vumi",
-                                                    "test_infobip.inbound",
-                                                    1)
-            self.broker.clear_messages("vumi", "test_infobip.inbound")
-            msg = TransportUserMessage(**msg.payload)
+            [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+            self.tx_helper.clear_all_dispatched()
             if reply is not None:
-                reply_msg = msg.reply(reply, continue_session=continue_session)
-                self.broker.publish_message("vumi", "test_infobip.outbound",
-                                         reply_msg)
+                yield self.tx_helper.make_dispatch_reply(
+                    msg, reply, continue_session=continue_session)
 
         if defer_response:
             response = deferred_req
+            # We need to make sure we wait for the response so we don't leave
+            # the reactor dirty if the test runner wins the race with the HTTP
+            # client.
+            self.add_cleanup(lambda: deferred_req)
         else:
             response = yield deferred_req
         returnValue((msg, response))
@@ -176,8 +165,8 @@ class TestInfobipUssdTransport(TestCase):
     def test_status_for_active_session(self):
         msg, response = yield self.make_request("start", 1, text="Hi",
                                                 reply="Boop")
-        response = yield http_request(self.worker_url + "session/1/status", "",
-                                      method="GET")
+        response = yield http_request(
+            self.transport_url + "session/1/status", "", method="GET")
         correct_response = {
             'responseExitCode': 200,
             'responseMessage': '',
@@ -187,8 +176,8 @@ class TestInfobipUssdTransport(TestCase):
 
     @inlineCallbacks
     def test_status_for_inactive_session(self):
-        response = yield http_request(self.worker_url + "session/1/status", "",
-                                      method="GET")
+        response = yield http_request(
+            self.transport_url + "session/1/status", "", method="GET")
         correct_response = {
             'responseExitCode': 200,
             'responseMessage': '',
@@ -198,7 +187,7 @@ class TestInfobipUssdTransport(TestCase):
 
     @inlineCallbacks
     def test_non_json_content(self):
-        response = yield http_request(self.worker_url + "session/1/start",
+        response = yield http_request(self.transport_url + "session/1/start",
                                       "not json at all", method="POST")
         correct_response = {
             'responseExitCode': 400,
@@ -235,7 +224,7 @@ class TestInfobipUssdTransport(TestCase):
         json_dict = {
             'text': 'Oops. No msisdn.',
             }
-        response = yield http_request(self.worker_url + "session/1/start",
+        response = yield http_request(self.transport_url + "session/1/start",
                                       json.dumps(json_dict), method='POST')
         correct_response = {
             'responseExitCode': 400,
@@ -246,46 +235,26 @@ class TestInfobipUssdTransport(TestCase):
 
     @inlineCallbacks
     def test_outbound_non_reply_logs_error(self):
-        msg = TransportUserMessage(to_addr="1234", from_addr="5678",
-                                   transport_name="test_infobip",
-                                   transport_type="ussd",
-                                   transport_metadata={})
-
         with LogCatcher() as logger:
-            self.broker.publish_message("vumi", "test_infobip.outbound", msg)
-            yield self.broker.kick_delivery()
-            [error, logged_failure] = logger.errors
+            msg = yield self.tx_helper.make_dispatch_outbound("hi")
+            [error] = logger.errors
 
         expected_error = ("Infobip transport cannot process outbound message"
-                          " that is not a reply.")
+                          " that is not a reply: %s" % (msg['message_id'],))
+        self.assertEqual(str(error['failure'].value), expected_error)
+        [f] = self.flushLoggedErrors(InfobipError)
+        self.assertEqual(f, error['failure'])
 
-        twisted_failure = logged_failure['failure']
-        self.assertEqual(self.flushLoggedErrors(PermanentFailure),
-                         [twisted_failure])
-        failure = twisted_failure.value
-        self.assertEqual(failure.failure_code, FailureMessage.FC_PERMANENT)
-        self.assertEqual(str(failure), expected_error)
-
-        [errmsg] = error['message']
-        expected_logged_error = "'" + expected_error.replace('.', ':')
-        self.assertTrue(errmsg.startswith(expected_logged_error))
-        [msg] = yield self.broker.wait_messages("vumi",
-                                                "test_infobip.failures",
-                                                1)
-        self.assertEqual(msg['failure_code'], "permanent")
-        last_line = msg['reason'].splitlines()[-1].strip()
-        self.assertTrue(last_line.endswith(expected_error))
+        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
+        self.assertEqual(nack['user_message_id'], msg['message_id'])
+        self.assertEqual(nack['nack_reason'], expected_error)
 
     @inlineCallbacks
     def test_ack(self):
-        msg, response = yield self.make_request("start", 1, text="Hi!",
-                                                reply="Moo")
-        [event] = yield self.broker.wait_messages("vumi",
-                                                  "test_infobip.event",
-                                                  1)
-        [reply] = yield self.broker.wait_messages("vumi",
-                                                  "test_infobip.outbound",
-                                                  1)
+        msg, response = yield self.make_request(
+            "start", 1, text="Hi!", reply="Moo")
+        [event] = yield self.tx_helper.wait_for_dispatched_events(1)
+        [reply] = yield self.tx_helper.wait_for_dispatched_outbound(1)
 
         self.assertEqual(event["event_type"], "ack")
         self.assertEqual(event["user_message_id"], reply["message_id"])
@@ -295,20 +264,18 @@ class TestInfobipUssdTransport(TestCase):
         msg, deferred_req = yield self.make_request("start", 1, text="Hi!",
                                                     defer_response=True)
         # finish message so reply will fail
-        self.worker.finish_request(msg['message_id'], "Done")
-        reply = msg.reply("Ping")
-        self.broker.publish_message("vumi", "test_infobip.outbound", reply)
+        self.transport.finish_request(msg['message_id'], "Done")
 
-        [msg] = yield self.broker.wait_messages("vumi",
-                                                "test_infobip.failures",
-                                                1)
-        self.assertEqual(msg['failure_code'], "permanent")
-        last_line = msg['reason'].splitlines()[-1].strip()
+        with LogCatcher() as logger:
+            reply = yield self.tx_helper.make_dispatch_reply(msg, "Ping")
+            [error] = logger.errors
+
         expected_error = ("Infobip transport could not find original request"
                           " when attempting to reply.")
-        self.assertTrue(last_line.endswith(expected_error))
+        self.assertEqual(str(error['failure'].value), expected_error)
+        [f] = self.flushLoggedErrors(InfobipError)
+        self.assertEqual(f, error['failure'])
 
-        [error] = self.flushLoggedErrors(PermanentFailure)
-        failure = error.value
-        self.assertEqual(failure.failure_code, FailureMessage.FC_PERMANENT)
-        self.assertEqual(str(failure), expected_error)
+        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
+        self.assertEqual(nack['user_message_id'], reply['message_id'])
+        self.assertEqual(nack['nack_reason'], expected_error)

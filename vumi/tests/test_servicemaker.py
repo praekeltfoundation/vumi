@@ -1,10 +1,10 @@
-from twisted.trial.unittest import TestCase
-
 from vumi.servicemaker import (
     VumiOptions, StartWorkerOptions, VumiWorkerServiceMaker)
+from vumi import servicemaker
+from vumi.tests.helpers import VumiTestCase
 
 
-class OptionsTestCase(TestCase):
+class OptionsTestCase(VumiTestCase):
     "Base class for handling options files"
 
     def mk_config_file(self, name, lines=None):
@@ -18,7 +18,7 @@ class OptionsTestCase(TestCase):
         self.config_file = {}
 
 
-class VumiOptionsTestCase(OptionsTestCase):
+class TestVumiOptions(OptionsTestCase):
     def test_defaults(self):
         options = VumiOptions()
         options.parseOptions([])
@@ -57,7 +57,23 @@ class VumiOptionsTestCase(OptionsTestCase):
                          options.vumi_options)
 
 
-class StartWorkerOptionsTestCase(OptionsTestCase):
+class OldConfigWorker(object):
+    """Dummy worker for testing --worker-help on old workers
+    without CONFIG_CLASS"""
+
+
+class DummyConfigClass(object):
+    """Extra bit of doc string for testing --worker-help."""
+
+
+class NewConfigWorker(object):
+    """Dummy worker for testing --worker-help on new workers
+    that support CONFIG_CLASS"""
+
+    CONFIG_CLASS = DummyConfigClass
+
+
+class TestStartWorkerOptions(OptionsTestCase):
     def test_override(self):
         options = StartWorkerOptions()
         options.parseOptions(['--worker-class', 'foo.FooWorker',
@@ -121,8 +137,34 @@ class StartWorkerOptionsTestCase(OptionsTestCase):
                          options.vumi_options)
         self.assertEqual({}, options.opts)
 
+    def check_worker_help(self, worker_class_name, expected_emits):
+        exits, emits = [], []
+        options = StartWorkerOptions()
+        options.exit = lambda: exits.append(None)  # stub out exit
+        options.emit = lambda text: emits.append(text)
+        options.parseOptions(['--worker-class', worker_class_name,
+                              '--worker-help',
+                              ])
+        self.assertEqual(len(exits), 1)
+        self.assertEqual(emits, expected_emits)
 
-class VumiWorkerServiceMakerTestCase(OptionsTestCase):
+    def test_old_style_config_worker_help(self):
+        self.check_worker_help('vumi.tests.test_servicemaker.OldConfigWorker',
+                               [OldConfigWorker.__doc__, ""])
+
+    def test_new_style_config_worker_help(self):
+        self.check_worker_help('vumi.tests.test_servicemaker.NewConfigWorker',
+                               [NewConfigWorker.__doc__,
+                                NewConfigWorker.CONFIG_CLASS.__doc__,
+                                ""])
+
+
+class DummyService(object):
+    name = "Dummy"
+
+
+class TestVumiWorkerServiceMaker(OptionsTestCase):
+
     def test_make_worker(self):
         self.mk_config_file('worker', ["transport_name: sphex"])
         options = StartWorkerOptions()
@@ -132,3 +174,27 @@ class VumiWorkerServiceMakerTestCase(OptionsTestCase):
         maker = VumiWorkerServiceMaker()
         worker = maker.makeService(options)
         self.assertEqual({'transport_name': 'sphex'}, worker.config)
+
+    def test_make_worker_with_sentry(self):
+        services = []
+        dummy_service = DummyService()
+
+        def service(*a, **kw):
+            services.append((a, kw))
+            return dummy_service
+
+        self.patch(servicemaker, 'SentryLoggerService', service)
+        self.mk_config_file('worker', ["transport_name: sphex"])
+        options = StartWorkerOptions()
+        options.parseOptions(['--worker-class', 'vumi.demos.words.EchoWorker',
+                              '--config', self.config_file['worker'],
+                              '--sentry', 'http://1:2@example.com/2/',
+                              ])
+        maker = VumiWorkerServiceMaker()
+        worker = maker.makeService(options)
+        self.assertEqual(services, [
+                (('http://1:2@example.com/2/',
+                  'echoworker',
+                  'global:echoworker'), {})
+        ])
+        self.assertTrue(dummy_service in worker.services)

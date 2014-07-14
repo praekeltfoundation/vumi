@@ -1,10 +1,10 @@
 # defaults for Exec
 Exec {
-    path => ["/bin", "/usr/bin", "/usr/local/bin"],
+    path => ["/bin", "/sbin", "/usr/bin", "/usr/sbin", "/usr/local/bin", "/usr/local/sbin"],
     user => 'vagrant',
 }
 
-# Make sure packge index is updated
+# Make sure package index is updated (when referenced by require)
 exec { "apt-get update":
     command => "apt-get update",
     user => "root",
@@ -14,23 +14,30 @@ exec { "apt-get update":
 define apt::package($ensure='latest') {
     package { $name:
         ensure => $ensure,
-        subscribe => Exec['apt-get update'];
+        require => Exec['apt-get update'];
     }
 }
 
 # Install these packages
-package { "build-essential": ensure => "11.4build1" }
-package { "python": ensure => "2.6.5-0ubuntu1" }
-package { "python-dev": ensure => "2.6.5-0ubuntu1" }
-package { "python-setuptools": ensure => "0.6.10-4ubuntu1" }
-package { "python-pip": ensure => "0.3.1-1ubuntu2" }
-package { "python-virtualenv": ensure => "1.4.5-1ubuntu1" }
-package { "rabbitmq-server": ensure => "1.7.2-1ubuntu1" }
-package { "git-core": ensure => "1:1.7.0.4-1ubuntu0.2" }
-package { "openjdk-6-jre-headless": ensure => "6b20-1.9.10-0ubuntu1~10.04.3" }
-package { "libcurl3": ensure => "7.19.7-1ubuntu1.1" }
-package { "libcurl4-openssl-dev": ensure => "7.19.7-1ubuntu1.1" }
-package { "redis-server": ensure => "2:1.2.0-1" }
+apt::package { "build-essential": ensure => latest }
+apt::package { "python": ensure => latest }
+apt::package { "python-dev": ensure => latest }
+apt::package { "python-setuptools": ensure => latest }
+apt::package { "python-software-properties": ensure => latest }
+apt::package { "python-pip": ensure => latest }
+apt::package { "python-virtualenv": ensure => latest }
+apt::package { "rabbitmq-server": ensure => latest }
+apt::package { "git-core": ensure => latest }
+apt::package { "openjdk-6-jre-headless": ensure => latest }
+apt::package { "libcurl3": ensure => latest }
+apt::package { "libcurl4-openssl-dev": ensure => latest }
+apt::package { "redis-server": ensure => latest }
+apt::package { "protobuf-compiler": ensure => latest }
+# NOTE:     Vumi doesn't need the following two packages but Vumi-Go does so
+#           leaving them here to allow this puppet file to work with Vagrant
+#           for both.
+apt::package { "libpq-dev": ensure => latest }
+apt::package { "riak": ensure => latest }
 
 file {
     "/var/praekelt":
@@ -46,4 +53,37 @@ exec { "Clone git repository":
         Package['git-core'],
         File['/var/praekelt']
     ],
+}
+exec { "Vumi setup":
+    command => "python setup.py develop",
+    cwd => "/var/praekelt/vumi/",
+    user => "root",
+    subscribe => [
+        Exec['Clone git repository']
+    ],
+    refreshonly => true
+}
+
+exec { "RabbitMQ setup":
+    command => "/var/praekelt/vumi/utils/rabbitmq.setup.sh",
+    user => "root",
+    subscribe => [
+        Exec['Vumi setup']
+    ],
+    refreshonly => true,
+    require => [
+        Package['rabbitmq-server'],
+        Exec['Clone git repository']
+    ]
+}
+
+file {'/etc/riak/app.config':
+    ensure    => 'present',
+    source    => 'puppet:///modules/vumi/riak-app.config'
+
+}
+
+service {'riak':
+    ensure    => 'running',
+    subscribe => File['/etc/riak/app.config']
 }

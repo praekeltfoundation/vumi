@@ -1,0 +1,20 @@
+<html xmlns:t="http://twistedmatrix.com/ns/twisted.web.template/0.1">
+    <head>
+        <meta name="mxit" content="clearscreen"/>
+    </head>
+    <body>
+        <div>
+            <p t:render="render_header"/>
+        </div>
+        <div t:render="render_body">
+            <ul>
+                <li t:render="render_item">
+                    <a><t:attr name="href">?input=<t:slot name="index" /></t:attr>
+                        <t:slot name="index"/>. <t:slot name="text" />
+                    </a>
+                </li>
+            </ul>
+        </div>
+    </body>
+</html>
+

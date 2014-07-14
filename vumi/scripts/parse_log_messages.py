@@ -1,6 +1,7 @@
 # -*- test-case-name: vumi.scripts.tests.test_parse_log_messages -*-
 import sys
 import re
+import warnings
 from twisted.python import usage
 from twisted.internet import reactor
 from twisted.internet.defer import maybeDeferred
@@ -15,9 +16,12 @@ LOG_PATTERN = {
     'vumi': re.compile(
         r'(?P<date>[\d\-\:\s]+)\+0000 .* '
         r'Inbound: <Message payload="(?P<message>.*)">'),
-    'smpp': re.compile(
+    'smpp_inbound': re.compile(
         r'(?P<date>[\d\-\:\s]+)\+0000 .* '
         r'PUBLISHING INBOUND: (?P<message>.*)'),
+    'smpp_outbound': re.compile(
+        r'(?P<date>[\d\-\:\s]+)\+0000 .* '
+        r'Consumed outgoing message <Message payload="(?P<message>.*)">'),
     }
 
 
@@ -68,6 +72,12 @@ class LogParser(object):
 
     def __init__(self, options, date_pattern=None, log_pattern=None):
         self.date_pattern = date_pattern or DATE_PATTERN
+        if options['format'] == 'smpp':
+            warnings.warn(
+                'smpp format is deprecated, use smpp_inbound instead',
+                category=DeprecationWarning)
+            options['format'] = 'smpp_inbound'
+
         self.log_pattern = log_pattern or LOG_PATTERN.get(options['format'])
         self.start = options['from']
         if self.start:
@@ -115,9 +125,9 @@ if __name__ == '__main__':
         f.printTraceback()
 
     def _main():
-        maybeDeferred(LogParser, options
-                      ).addErrback(_eb
-                      ).addCallback(lambda _: reactor.stop())
+        d = maybeDeferred(LogParser, options)
+        d.addErrback(_eb)
+        d.addCallback(lambda _: reactor.stop())
 
     reactor.callLater(0, _main)
     reactor.run()

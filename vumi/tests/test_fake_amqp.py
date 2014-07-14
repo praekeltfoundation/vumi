@@ -1,16 +1,16 @@
-from twisted.trial.unittest import TestCase
-from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.defer import inlineCallbacks, returnValue, DeferredQueue
 
 from vumi.service import get_spec, Worker
 from vumi.utils import vumi_resource_path
 from vumi.tests import fake_amqp
+from vumi.tests.helpers import VumiTestCase
 
 
 def mkmsg(body):
     return fake_amqp.Thing("Message", body=body)
 
 
-class TestWorker(Worker):
+class ToyWorker(Worker):
     @inlineCallbacks
     def startWorker(self):
         paused = self.config.get('paused', False)
@@ -24,11 +24,19 @@ class TestWorker(Worker):
         self.msgs.append(msg)
 
 
-class FakeAMQPTestCase(TestCase):
-    timeout = 5
+class ToyAMQClient(object):
+    """
+    A fake fake client object for building fake channel objects.
+    """
+    def __init__(self, broker, delegate):
+        self.broker = broker
+        self.delegate = delegate
 
+
+class TestFakeAMQP(VumiTestCase):
     def setUp(self):
         self.broker = fake_amqp.FakeAMQPBroker()
+        self.add_cleanup(self.broker.wait_delivery)
 
     def make_exchange(self, exchange, exchange_type):
         self.broker.exchange_declare(exchange, exchange_type)
@@ -39,7 +47,8 @@ class FakeAMQPTestCase(TestCase):
         return self.broker.queues[queue]
 
     def make_channel(self, channel_id, delegate=None):
-        channel = fake_amqp.FakeAMQPChannel(channel_id, self.broker, delegate)
+        channel = fake_amqp.FakeAMQPChannel(
+            channel_id, ToyAMQClient(self.broker, delegate))
         channel.channel_open()
         return channel
 
@@ -57,7 +66,7 @@ class FakeAMQPTestCase(TestCase):
         spec = get_spec(vumi_resource_path("amqp-spec-0-8.xml"))
         amq_client = fake_amqp.FakeAMQClient(spec, {}, self.broker)
 
-        worker = TestWorker({}, config)
+        worker = ToyWorker({}, config)
         worker._amqp_client = amq_client
         yield worker.startWorker()
         returnValue(worker)
@@ -69,7 +78,7 @@ class FakeAMQPTestCase(TestCase):
         self.assertRaises(AttributeError, lambda: msg.bar)
 
     def test_channel_open(self):
-        channel = fake_amqp.FakeAMQPChannel(0, self.broker, None)
+        channel = fake_amqp.FakeAMQPChannel(0, ToyAMQClient(self.broker, None))
         self.assertEqual([], self.broker.channels)
         channel.channel_open()
         self.assertEqual([channel], self.broker.channels)
@@ -191,6 +200,94 @@ class FakeAMQPTestCase(TestCase):
         self.chan1.basic_cancel('tag2')
         self.assertEqual(set(['tag1']), self.q1.consumers)
 
+    def test_basic_qos_global_unsupported(self):
+        """
+        basic_qos() is unsupported with global=True.
+        """
+        channel = self.make_channel(0)
+        self.assertRaises(NotImplementedError, channel.basic_qos, 0, 1, True)
+
+    def test_basic_qos_per_consumer(self):
+        """
+        basic_qos() only applies to consumers started after the call.
+        """
+        channel = self.make_channel(0)
+        channel.queue_declare('q1')
+        channel.queue_declare('q2')
+        self.assertEqual(channel.qos_prefetch_count, 0)
+
+        channel.basic_consume('q1', 'tag1')
+        self.assertEqual(channel._get_consumer_prefetch('tag1'), 0)
+
+        channel.basic_qos(0, 1, False)
+        channel.basic_consume('q2', 'tag2')
+        self.assertEqual(channel._get_consumer_prefetch('tag1'), 0)
+        self.assertEqual(channel._get_consumer_prefetch('tag2'), 1)
+
+    @inlineCallbacks
+    def test_basic_ack(self):
+        """
+        basic_ack() should acknowledge a message.
+        """
+        class ToyDelegate(object):
+            def __init__(self):
+                self.queue = DeferredQueue()
+
+            def basic_deliver(self, channel, msg):
+                self.queue.put(msg)
+
+        delegate = ToyDelegate()
+        channel = self.make_channel(0, delegate)
+        channel.exchange_declare('e1', 'direct')
+        channel.queue_declare('q1')
+        channel.queue_bind('q1', 'e1', 'rkey')
+        channel.basic_consume('q1', 'tag1')
+
+        self.assertEqual(len(channel.unacked), 0)
+        channel.basic_publish('e1', 'rkey', fake_amqp.mkContent('foo'))
+        msg = yield delegate.queue.get()
+        dtag = msg.delivery_tag
+        self.assertEqual(len(channel.unacked), 1)
+        channel.basic_ack(dtag, False)
+        self.assertEqual(len(channel.unacked), 0)
+
+        # Clean up.
+        channel.message_processed()
+        yield channel.broker.wait_delivery()
+
+    @inlineCallbacks
+    def test_basic_ack_consumer_canceled(self):
+        """
+        basic_ack() should fail if the consumer has been canceled.
+        """
+        class ToyDelegate(object):
+            def __init__(self):
+                self.queue = DeferredQueue()
+
+            def basic_deliver(self, channel, msg):
+                self.queue.put(msg)
+
+        delegate = ToyDelegate()
+        channel = self.make_channel(0, delegate)
+        channel.exchange_declare('e1', 'direct')
+        channel.queue_declare('q1')
+        channel.queue_bind('q1', 'e1', 'rkey')
+        channel.basic_consume('q1', 'tag1')
+
+        self.assertEqual(len(channel.unacked), 0)
+        channel.basic_publish('e1', 'rkey', fake_amqp.mkContent('foo'))
+        msg = yield delegate.queue.get()
+        dtag = msg.delivery_tag
+        self.assertEqual(len(channel.unacked), 1)
+
+        channel.basic_cancel('tag1')
+        self.assertRaises(Exception, channel.basic_ack, dtag, False)
+        self.assertEqual(len(channel.unacked), 0)
+
+        # Clean up.
+        channel.message_processed()
+        yield channel.broker.wait_delivery()
+
     @inlineCallbacks
     def test_fake_amqclient(self):
         worker = yield self.get_worker()
@@ -234,7 +331,6 @@ class FakeAMQPTestCase(TestCase):
         yield worker.con.pause()
         yield self.broker.wait_delivery()
         yield worker.conpub.publish_json({'message': 'bar'})
-        yield self.broker.wait_delivery()
         self.assertEqual([], worker.msgs)
 
         yield worker.con.unpause()
@@ -266,7 +362,7 @@ class FakeAMQPTestCase(TestCase):
     #     wc = WorkerCreator(options)
     #     d = Deferred()
 
-    #     class TestWorker(Worker):
+    #     class ToyWorker(Worker):
     #         @inlineCallbacks
     #         def startWorker(self):
     #             self.pub = yield self.publish_to('test.pub')
@@ -280,7 +376,7 @@ class FakeAMQPTestCase(TestCase):
     #             print "CONSUMED!", msg
     #             return True
 
-    #     worker = wc.create_worker_by_class(TestWorker, {})
+    #     worker = wc.create_worker_by_class(ToyWorker, {})
     #     worker.startService()
     #     yield d
     #     print "foo"

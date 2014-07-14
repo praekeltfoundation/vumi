@@ -1,183 +1,19 @@
-from datetime import datetime
-
-from twisted.trial.unittest import TestCase
 from twisted.internet.defer import inlineCallbacks, returnValue
 
-from vumi.message import TransportUserMessage, TransportEvent
-from vumi.dispatchers.base import (BaseDispatchWorker, ToAddrRouter,
-                                   FromAddrMultiplexRouter)
-from vumi.tests.utils import get_stubbed_worker, FakeRedis
-from vumi.tests.fake_amqp import FakeAMQPBroker
+from vumi.dispatchers.base import (
+    BaseDispatchWorker, ToAddrRouter, FromAddrMultiplexRouter)
+from vumi.dispatchers.tests.helpers import DispatcherHelper, DummyDispatcher
+from vumi.errors import DispatcherError
+from vumi.tests.utils import LogCatcher
+from vumi.tests.helpers import VumiTestCase, MessageHelper
 
 
-class DispatcherTestCase(TestCase):
-
-    """
-    This is a base class for testing dispatcher workers.
-
-    """
-
-    # base timeout of 5s for all dispatcher tests
-    timeout = 5
-
-    dispatcher_name = "sphex_dispatcher"
-    dispatcher_class = None
-
+class TestBaseDispatchWorker(VumiTestCase):
     def setUp(self):
-        self._workers = []
-        self._amqp = FakeAMQPBroker()
+        self.disp_helper = self.add_helper(
+            DispatcherHelper(BaseDispatchWorker))
 
-    def tearDown(self):
-        for worker in self._workers:
-            worker.stopWorker()
-
-    @inlineCallbacks
-    def get_dispatcher(self, config, cls=None, start=True):
-        """
-        Get an instance of a dispatcher class.
-
-        :param config: Config dict.
-        :param cls: The Dispatcher class to instantiate.
-                    Defaults to :attr:`dispatcher_class`
-        :param start: True to start the displatcher (default), False otherwise.
-
-        Some default config values are helpfully provided in the
-        interests of reducing boilerplate:
-
-        * ``dispatcher_name`` defaults to :attr:`self.dispatcher_name`
-        """
-
-        if cls is None:
-            cls = self.dispatcher_class
-        config.setdefault('dispatcher_name', self.dispatcher_name)
-        worker = get_stubbed_worker(cls, config, self._amqp)
-        self._workers.append(worker)
-        if start:
-            yield worker.startWorker()
-        returnValue(worker)
-
-    def mkmsg_in(self, content='hello world', message_id='abc',
-                 to_addr='9292', from_addr='+41791234567',
-                 session_event=None, transport_type=None,
-                 helper_metadata=None, transport_metadata=None,
-                 transport_name=None):
-        if helper_metadata is None:
-            helper_metadata = {}
-        if transport_metadata is None:
-            transport_metadata = {}
-        return TransportUserMessage(
-            from_addr=from_addr,
-            to_addr=to_addr,
-            message_id=message_id,
-            transport_name=transport_name,
-            transport_type=transport_type,
-            transport_metadata=transport_metadata,
-            helper_metadata=helper_metadata,
-            content=content,
-            session_event=session_event,
-            timestamp=datetime.now(),
-            )
-
-    def mkmsg_out(self, content='hello world', message_id='1',
-                  to_addr='+41791234567', from_addr='9292',
-                  session_event=None, in_reply_to=None,
-                  transport_type=None, transport_metadata=None,
-                  transport_name=None):
-        if transport_metadata is None:
-            transport_metadata = {}
-        params = dict(
-            to_addr=to_addr,
-            from_addr=from_addr,
-            message_id=message_id,
-            transport_name=transport_name,
-            transport_type=transport_type,
-            transport_metadata=transport_metadata,
-            content=content,
-            session_event=session_event,
-            in_reply_to=in_reply_to,
-            )
-        return TransportUserMessage(**params)
-
-    def mkmsg_ack(self, event_type='ack', user_message_id='1',
-                  send_message_id='abc', transport_name=None,
-                  transport_metadata=None):
-        if transport_metadata is None:
-            transport_metadata = {}
-        params = dict(
-            event_type=event_type,
-            user_message_id=user_message_id,
-            sent_message_id=send_message_id,
-            transport_name=transport_name,
-            transport_metadata=transport_metadata,
-            )
-        return TransportEvent(**params)
-
-    def get_dispatched_messages(self, transport_name, direction='outbound'):
-        return self._amqp.get_messages('vumi', '%s.%s' % (
-            transport_name, direction))
-
-    def wait_for_dispatched_messages(self, transport_name, amount,
-                                        direction='outbound'):
-        return self._amqp.wait_messages('vumi', '%s.%s' % (
-            transport_name, direction), amount)
-
-    def dispatch(self, message, transport_name, direction='inbound',
-                    exchange='vumi'):
-        rkey = '%s.%s' % (transport_name, direction)
-        self._amqp.publish_message(exchange, rkey, message)
-        return self._amqp.kick_delivery()
-
-
-class MessageMakerMixIn(object):
-    """TestCase mixin for creating transport messages."""
-
-    def mkmsg_ack(self, transport_name, **kw):
-        event_kw = dict(
-            event_type='ack',
-            user_message_id='1',
-            sent_message_id='abc',
-            transport_name=transport_name,
-            transport_metadata={},
-            )
-        event_kw.update(kw)
-        return TransportEvent(**event_kw)
-
-    def mkmsg_in(self, transport_name, content='foo', **kw):
-        msg_kw = dict(
-            from_addr='+41791234567',
-            to_addr='9292',
-            transport_name=transport_name,
-            transport_type='sms',
-            transport_metadata={},
-            content=content,
-            )
-        msg_kw.update(kw)
-        return TransportUserMessage(**msg_kw)
-
-    def mkmsg_out(self, transport_name, content='hello world', **kw):
-        msg_kw = dict(
-            to_addr='+41791234567',
-            from_addr='9292',
-            transport_name=transport_name,
-            transport_type='sms',
-            transport_metadata={},
-            content=content,
-            )
-        msg_kw.update(kw)
-        return TransportUserMessage(**msg_kw)
-
-
-class TestBaseDispatchWorker(TestCase, MessageMakerMixIn):
-    timeout = 3
-
-    @inlineCallbacks
-    def setUp(self):
-        yield self.get_worker()
-
-    @inlineCallbacks
-    def get_worker(self, **config_extras):
-        if getattr(self, 'worker', None) is not None:
-            yield self.worker.stopWorker()
+    def get_dispatcher(self, **config_extras):
         config = {
             "transport_names": [
                 "transport1",
@@ -195,151 +31,214 @@ class TestBaseDispatchWorker(TestCase, MessageMakerMixIn):
                 "transport2": ["app2"],
                 "transport3": ["app1", "app3"]
                 },
+            "middleware": [
+                {"mw1": "vumi.middleware.tests.utils.RecordingMiddleware"},
+                {"mw2": "vumi.middleware.tests.utils.RecordingMiddleware"},
+                ],
             }
         config.update(config_extras)
-        self.worker = get_stubbed_worker(BaseDispatchWorker, config)
-        self._amqp = self.worker._amqp_client.broker
-        yield self.worker.startWorker()
+        return self.disp_helper.get_dispatcher(config)
 
-    @inlineCallbacks
-    def tearDown(self):
-        yield self.worker.stopWorker()
+    def ch(self, connector_name):
+        return self.disp_helper.get_connector_helper(connector_name)
 
-    def dispatch(self, message, rkey=None, exchange='vumi'):
-        if rkey is None:
-            rkey = self.rkey('outbound')
-        self._amqp.publish_message(exchange, rkey, message)
-        return self._amqp.kick_delivery()
+    def mk_middleware_records(self, rkey_in, rkey_out):
+        records = []
+        for rkey, direction in [(rkey_in, False), (rkey_out, True)]:
+            endpoint, method = rkey.split('.', 1)
+            mw = [[name, method, endpoint] for name in ("mw1", "mw2")]
+            if direction:
+                mw.reverse()
+            records.extend(mw)
+        return records
 
-    def assert_messages(self, rkey, msgs):
-        self.assertEqual(msgs, self._amqp.get_messages('vumi', rkey))
+    def assert_inbound(self, dst_conn, src_conn, msg):
+        [dst_msg] = self.disp_helper.get_dispatched_inbound(dst_conn)
+        middleware_records = self.mk_middleware_records(
+            src_conn + '.inbound', dst_conn + '.inbound')
+        self.assertEqual(dst_msg.payload.pop('record'), middleware_records)
+        self.assertEqual(msg, dst_msg)
 
-    def assert_no_messages(self, *rkeys):
-        for rkey in rkeys:
-            self.assertEqual([], self._amqp.get_messages('vumi', rkey))
+    def assert_event(self, dst_conn, src_conn, msg):
+        [dst_msg] = self.disp_helper.get_dispatched_events(dst_conn)
+        middleware_records = self.mk_middleware_records(
+            src_conn + '.event', dst_conn + '.event')
+        self.assertEqual(dst_msg.payload.pop('record'), middleware_records)
+        self.assertEqual(msg, dst_msg)
 
-    def clear_dispatched(self):
-        self._amqp.dispatched = {}
+    def assert_outbound(self, dst_conn, src_conn_msg_pairs):
+        dst_msgs = self.disp_helper.get_dispatched_outbound(dst_conn)
+        for src_conn, msg in src_conn_msg_pairs:
+            dst_msg = dst_msgs.pop(0)
+            middleware_records = self.mk_middleware_records(
+                src_conn + '.outbound', dst_conn + '.outbound')
+            self.assertEqual(dst_msg.payload.pop('record'), middleware_records)
+            self.assertEqual(msg, dst_msg)
+        self.assertEqual([], dst_msgs)
+
+    def assert_no_inbound(self, *conns):
+        for conn in conns:
+            self.assertEqual([], self.disp_helper.get_dispatched_inbound(conn))
+
+    def assert_no_outbound(self, *conns):
+        for conn in conns:
+            self.assertEqual(
+                [], self.disp_helper.get_dispatched_outbound(conn))
+
+    def assert_no_events(self, *conns):
+        for conn in conns:
+            self.assertEqual([], self.disp_helper.get_dispatched_events(conn))
 
     @inlineCallbacks
     def test_inbound_message_routing(self):
-        msg = self.mkmsg_in('transport1')
-        yield self.dispatch(msg, 'transport1.inbound')
-        self.assert_messages('app1.inbound', [msg])
-        self.assert_no_messages('app1.event', 'app2.inbound', 'app2.event',
-                                'app3.inbound', 'app3.event')
+        yield self.get_dispatcher()
+        msg = yield self.ch('transport1').make_dispatch_inbound(
+            "foo", transport_name='transport1')
+        self.assert_inbound('app1', 'transport1', msg)
+        self.assert_no_inbound('app2', 'app3')
+        self.assert_no_events('app1', 'app2', 'app3')
 
-        self.clear_dispatched()
-        msg = self.mkmsg_in('transport2')
-        yield self.dispatch(msg, 'transport2.inbound')
-        self.assert_messages('app2.inbound', [msg])
-        self.assert_no_messages('app1.inbound', 'app1.event', 'app2.event',
-                                'app3.inbound', 'app3.event')
+        self.disp_helper.clear_all_dispatched()
+        msg = yield self.ch('transport2').make_dispatch_inbound(
+            "foo", transport_name='transport2')
+        self.assert_inbound('app2', 'transport2', msg)
+        self.assert_no_inbound('app1', 'app3')
+        self.assert_no_events('app1', 'app2', 'app3')
 
-        self.clear_dispatched()
-        msg = self.mkmsg_in('transport3')
-        yield self.dispatch(msg, 'transport3.inbound')
-        self.assert_messages('app1.inbound', [msg])
-        self.assert_messages('app3.inbound', [msg])
-        self.assert_no_messages('app1.event', 'app2.inbound', 'app2.event',
-                                'app3.event')
+        self.disp_helper.clear_all_dispatched()
+        msg = yield self.ch('transport3').make_dispatch_inbound(
+            "foo", transport_name='transport3')
+        self.assert_inbound('app1', 'transport3', msg)
+        self.assert_inbound('app3', 'transport3', msg)
+        self.assert_no_inbound('app2')
+        self.assert_no_events('app1', 'app2', 'app3')
 
     @inlineCallbacks
-    def test_inbound_event_routing(self):
-        msg = self.mkmsg_ack('transport1')
-        yield self.dispatch(msg, 'transport1.event')
-        self.assert_messages('app1.event', [msg])
-        self.assert_no_messages('app1.inbound', 'app2.event', 'app2.inbound',
-                                'app3.event', 'app3.inbound')
+    def test_inbound_ack_routing(self):
+        yield self.get_dispatcher()
+        msg = yield self.ch('transport1').make_dispatch_ack(
+            transport_name='transport1')
+        self.assert_event('app1', 'transport1', msg)
+        self.assert_no_inbound('app1', 'app2', 'app3')
+        self.assert_no_events('app2', 'app3')
 
-        self.clear_dispatched()
-        msg = self.mkmsg_ack('transport2')
-        yield self.dispatch(msg, 'transport2.event')
-        self.assert_messages('app2.event', [msg])
-        self.assert_no_messages('app1.event', 'app1.inbound', 'app2.inbound',
-                                'app3.event', 'app3.inbound')
+        self.disp_helper.clear_all_dispatched()
+        msg = yield self.ch('transport2').make_dispatch_ack(
+            transport_name='transport2')
+        self.assert_event('app2', 'transport2', msg)
+        self.assert_no_inbound('app1', 'app2', 'app3')
+        self.assert_no_events('app1', 'app3')
 
-        self.clear_dispatched()
-        msg = self.mkmsg_ack('transport3')
-        yield self.dispatch(msg, 'transport3.event')
-        self.assert_messages('app1.event', [msg])
-        self.assert_messages('app3.event', [msg])
-        self.assert_no_messages('app1.inbound', 'app2.event', 'app2.inbound',
-                                'app3.inbound')
+        self.disp_helper.clear_all_dispatched()
+        msg = yield self.ch('transport3').make_dispatch_ack(
+            transport_name='transport3')
+        self.assert_event('app1', 'transport3', msg)
+        self.assert_event('app3', 'transport3', msg)
+        self.assert_no_inbound('app1', 'app2', 'app3')
+        self.assert_no_events('app2')
 
     @inlineCallbacks
     def test_outbound_message_routing(self):
-        msgs = [self.mkmsg_out('transport1') for _ in range(3)]
-        yield self.dispatch(msgs[0], 'app1.outbound')
-        yield self.dispatch(msgs[1], 'app2.outbound')
-        yield self.dispatch(msgs[2], 'app3.outbound')
-        self.assert_messages('transport1.outbound', msgs)
-        self.assert_no_messages('transport2.outbound', 'transport3.outbound')
+        yield self.get_dispatcher()
 
-        self.clear_dispatched()
-        msgs = [self.mkmsg_out('transport2') for _ in range(3)]
-        yield self.dispatch(msgs[0], 'app1.outbound')
-        yield self.dispatch(msgs[1], 'app2.outbound')
-        yield self.dispatch(msgs[2], 'app3.outbound')
-        self.assert_messages('transport2.outbound', msgs)
-        self.assert_no_messages('transport1.outbound', 'transport3.outbound')
+        @inlineCallbacks
+        def dispatch_for_transport(transport):
+            app_msg_pairs = []
+            for app in ['app1', 'app2', 'app3']:
+                msg = yield self.ch(app).make_dispatch_outbound(
+                    app, transport_name=transport)
+                app_msg_pairs.append((app, msg))
+            returnValue(app_msg_pairs)
 
-        self.clear_dispatched()
-        msgs = [self.mkmsg_out('transport3') for _ in range(3)]
-        yield self.dispatch(msgs[0], 'app1.outbound')
-        yield self.dispatch(msgs[1], 'app2.outbound')
-        yield self.dispatch(msgs[2], 'app3.outbound')
-        self.assert_messages('transport3.outbound', msgs)
-        self.assert_no_messages('transport1.outbound', 'transport2.outbound')
+        app_msg_pairs = yield dispatch_for_transport('transport1')
+        self.assert_outbound('transport1', app_msg_pairs)
+        self.assert_no_outbound('transport2', 'transport3')
+
+        self.disp_helper.clear_all_dispatched()
+        app_msg_pairs = yield dispatch_for_transport('transport2')
+        self.assert_outbound('transport2', app_msg_pairs)
+        self.assert_no_outbound('transport1', 'transport3')
+
+        self.disp_helper.clear_all_dispatched()
+        app_msg_pairs = yield dispatch_for_transport('transport3')
+        self.assert_outbound('transport3', app_msg_pairs)
+        self.assert_no_outbound('transport1', 'transport2')
+
+    @inlineCallbacks
+    def test_unroutable_outbound_error(self):
+        dispatcher = yield self.get_dispatcher()
+        router = dispatcher._router
+        msg = self.disp_helper.make_outbound("out", transport_name='foo')
+        with LogCatcher() as log:
+            yield router.dispatch_outbound_message(msg)
+            [error] = log.errors
+            self.assertTrue(('Unknown transport_name: foo' in
+                                str(error['failure'].value)))
+        [f] = self.flushLoggedErrors(DispatcherError)
+        self.assertEqual(f, error['failure'])
 
     @inlineCallbacks
     def test_outbound_message_routing_transport_mapping(self):
         """
         Test that transport mappings are applied for outbound messages.
         """
-        yield self.get_worker(transport_mappings={'upstream1': 'transport1'})
+        yield self.get_dispatcher(
+            transport_mappings={'upstream1': 'transport1'},
+            transport_names=[
+                'transport1',
+                'transport2',
+                'transport3',
+                'upstream1',
+            ])
 
-        msgs = [self.mkmsg_out('upstream1') for _ in range(3)]
-        yield self.dispatch(msgs[0], 'app1.outbound')
-        yield self.dispatch(msgs[1], 'app2.outbound')
-        yield self.dispatch(msgs[2], 'app3.outbound')
-        self.assert_messages('transport1.outbound', msgs)
-        self.assert_no_messages('transport2.outbound', 'transport3.outbound',
-                                'upstream1.outbound')
+        @inlineCallbacks
+        def dispatch_for_transport(transport):
+            app_msg_pairs = []
+            for app in ['app1', 'app2', 'app3']:
+                msg = yield self.ch(app).make_dispatch_outbound(
+                    app, transport_name=transport)
+                app_msg_pairs.append((app, msg))
+            returnValue(app_msg_pairs)
 
-        self.clear_dispatched()
-        msgs = [self.mkmsg_out('transport2') for _ in range(3)]
-        yield self.dispatch(msgs[0], 'app1.outbound')
-        yield self.dispatch(msgs[1], 'app2.outbound')
-        yield self.dispatch(msgs[2], 'app3.outbound')
-        self.assert_messages('transport2.outbound', msgs)
-        self.assert_no_messages('transport1.outbound', 'transport3.outbound')
+        app_msg_pairs = yield dispatch_for_transport('upstream1')
+        self.assert_outbound('transport1', app_msg_pairs)
+        self.assert_no_outbound('transport2', 'transport3', 'upstream1')
+
+        self.disp_helper.clear_all_dispatched()
+        app_msg_pairs = yield dispatch_for_transport('transport2')
+        self.assert_outbound('transport2', app_msg_pairs)
+        self.assert_no_outbound('transport1', 'transport3', 'upstream1')
+
+    def get_dispatcher_consumers(self, dispatcher):
+        return (dispatcher.transport_consumer.values() +
+                dispatcher.transport_event_consumer.values() +
+                dispatcher.exposed_consumer.values())
+
+    @inlineCallbacks
+    def test_consumer_prefetch_count_default(self):
+        dp = yield self.get_dispatcher()
+        consumers = self.get_dispatcher_consumers(dp)
+        for consumer in consumers:
+            self.assertEqual(consumer.channel.qos_prefetch_count, 20)
+
+    @inlineCallbacks
+    def test_consumer_prefetch_count_custom(self):
+        dp = yield self.get_dispatcher(amqp_prefetch_count=10)
+        consumers = self.get_dispatcher_consumers(dp)
+        for consumer in consumers:
+            self.assertEqual(consumer.channel.qos_prefetch_count, 10)
+
+    @inlineCallbacks
+    def test_consumer_prefetch_count_none(self):
+        dp = yield self.get_dispatcher(amqp_prefetch_count=None)
+        consumers = self.get_dispatcher_consumers(dp)
+        for consumer in consumers:
+            self.assertFalse(consumer.channel.qos_prefetch_count)
 
 
-class DummyDispatcher(object):
+class TestToAddrRouter(VumiTestCase):
 
-    class DummyPublisher(object):
-        def __init__(self):
-            self.msgs = []
-
-        def publish_message(self, msg):
-            self.msgs.append(msg)
-
-        def clear(self):
-            self.msgs[:] = []
-
-    def __init__(self, config):
-        self.transport_publisher = {}
-        for transport in config['transport_names']:
-            self.transport_publisher[transport] = self.DummyPublisher()
-        self.exposed_publisher = {}
-        self.exposed_event_publisher = {}
-        for exposed in config['exposed_names']:
-            self.exposed_publisher[exposed] = self.DummyPublisher()
-            self.exposed_event_publisher[exposed] = self.DummyPublisher()
-
-
-class TestToAddrRouter(TestCase, MessageMakerMixIn):
+    @inlineCallbacks
     def setUp(self):
         self.config = {
             'transport_names': ['transport1'],
@@ -351,16 +250,19 @@ class TestToAddrRouter(TestCase, MessageMakerMixIn):
             }
         self.dispatcher = DummyDispatcher(self.config)
         self.router = ToAddrRouter(self.dispatcher, self.config)
+        yield self.router.setup_routing()
+        self.msg_helper = self.add_helper(MessageHelper())
 
     def test_dispatch_inbound_message(self):
-        msg = self.mkmsg_in(to_addr='to:foo:1', transport_name='transport1')
+        msg = self.msg_helper.make_inbound(
+            "1", to_addr='to:foo:1', transport_name='transport1')
         self.router.dispatch_inbound_message(msg)
         publishers = self.dispatcher.exposed_publisher
         self.assertEqual(publishers['app1'].msgs, [msg])
         self.assertEqual(publishers['app2'].msgs, [])
 
     def test_dispatch_outbound_message(self):
-        msg = self.mkmsg_out(transport_name='transport1')
+        msg = self.msg_helper.make_outbound("out", transport_name='transport1')
         self.router.dispatch_outbound_message(msg)
         publishers = self.dispatcher.transport_publisher
         self.assertEqual(publishers['transport1'].msgs, [msg])
@@ -370,60 +272,45 @@ class TestToAddrRouter(TestCase, MessageMakerMixIn):
             'upstream1': 'transport1',
             }
 
-        msg = self.mkmsg_out(transport_name='upstream1')
+        msg = self.msg_helper.make_outbound("out", transport_name='upstream1')
         self.router.dispatch_outbound_message(msg)
         publishers = self.dispatcher.transport_publisher
         self.assertEqual(publishers['transport1'].msgs, [msg])
 
 
-class TestTransportToTransportRouter(TestCase, MessageMakerMixIn):
+class TestTransportToTransportRouter(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        config = {
+        self.disp_helper = self.add_helper(
+            DispatcherHelper(BaseDispatchWorker))
+        self.worker = yield self.disp_helper.get_worker(BaseDispatchWorker, {
             "transport_names": [
                 "transport1",
                 "transport2",
-                ],
+            ],
             "exposed_names": [],
             "router_class": "vumi.dispatchers.base.TransportToTransportRouter",
             "route_mappings": {
                 "transport1": ["transport2"],
-                },
-            }
-        self.worker = get_stubbed_worker(BaseDispatchWorker, config)
-        self._amqp = self.worker._amqp_client.broker
-        yield self.worker.startWorker()
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield self.worker.stopWorker()
-
-    def dispatch(self, message, rkey=None, exchange='vumi'):
-        if rkey is None:
-            rkey = self.rkey('outbound')
-        self._amqp.publish_message(exchange, rkey, message)
-        return self._amqp.kick_delivery()
-
-    def assert_messages(self, rkey, msgs):
-        self.assertEqual(msgs, self._amqp.get_messages('vumi', rkey))
-
-    def assert_no_messages(self, *rkeys):
-        for rkey in rkeys:
-            self.assertEqual([], self._amqp.get_messages('vumi', rkey))
-
-    def clear_dispatched(self):
-        self._amqp.dispatched = {}
+            },
+        })
 
     @inlineCallbacks
     def test_inbound_message_routing(self):
-        msg = self.mkmsg_in('transport1')
-        yield self.dispatch(msg, 'transport1.inbound')
-        self.assert_messages('transport2.outbound', [msg])
-        self.assert_no_messages('transport2.inbound', 'transport1.outbound')
+        tx1_helper = self.disp_helper.get_connector_helper('transport1')
+        tx2_helper = self.disp_helper.get_connector_helper('transport2')
+        msg = yield tx1_helper.make_dispatch_inbound(
+            "foo", transport_name='transport1')
+        self.assertEqual([msg], tx1_helper.get_dispatched_inbound())
+        self.assertEqual([msg], tx2_helper.get_dispatched_outbound())
+        self.assertEqual([], tx1_helper.get_dispatched_outbound())
+        self.assertEqual([], tx2_helper.get_dispatched_inbound())
 
 
-class TestFromAddrMultiplexRouter(TestCase, MessageMakerMixIn):
+class TestFromAddrMultiplexRouter(VumiTestCase):
+
+    @inlineCallbacks
     def setUp(self):
         config = {
             "transport_names": [
@@ -441,58 +328,59 @@ class TestFromAddrMultiplexRouter(TestCase, MessageMakerMixIn):
             }
         self.dispatcher = DummyDispatcher(config)
         self.router = FromAddrMultiplexRouter(self.dispatcher, config)
+        self.add_cleanup(self.router.teardown_routing)
+        yield self.router.setup_routing()
+        self.msg_helper = self.add_helper(MessageHelper())
 
-    def mkmsg_in_mux(self, content, from_addr, transport_name):
-        return self.mkmsg_in(
-            transport_name, content=content, from_addr=from_addr)
+    def make_inbound_mux(self, content, from_addr, transport_name):
+        return self.msg_helper.make_inbound(
+            content, transport_name=transport_name, from_addr=from_addr)
 
-    def mkmsg_ack_mux(self, from_addr, transport_name):
-        return self.mkmsg_ack(
-            transport_name, from_addr=from_addr)
+    def make_ack_mux(self, from_addr, transport_name):
+        return self.msg_helper.make_ack(
+            transport_name=transport_name, from_addr=from_addr)
 
-    def mkmsg_out_mux(self, content, from_addr):
-        return self.mkmsg_out(
-            'muxed', content=content, from_addr=from_addr)
+    def make_outbound_mux(self, content, from_addr):
+        return self.msg_helper.make_outbound(
+            content, transport_name='muxed', from_addr=from_addr)
 
     def test_inbound_message_routing(self):
-        msg1 = self.mkmsg_in_mux('mux 1', 'thing1@muxme', 'transport_1')
+        msg1 = self.make_inbound_mux('mux 1', 'thing1@muxme', 'transport_1')
         self.router.dispatch_inbound_message(msg1)
-        msg2 = self.mkmsg_in_mux('mux 2', 'thing2@muxme', 'transport_2')
+        msg2 = self.make_inbound_mux('mux 2', 'thing2@muxme', 'transport_2')
         self.router.dispatch_inbound_message(msg2)
         publishers = self.dispatcher.exposed_publisher
         self.assertEqual(publishers['muxed'].msgs, [msg1, msg2])
 
     def test_inbound_event_routing(self):
-        msg1 = self.mkmsg_ack_mux('thing1@muxme', 'transport_1')
+        msg1 = self.make_ack_mux('thing1@muxme', 'transport_1')
         self.router.dispatch_inbound_event(msg1)
-        msg2 = self.mkmsg_ack_mux('thing2@muxme', 'transport_2')
+        msg2 = self.make_ack_mux('thing2@muxme', 'transport_2')
         self.router.dispatch_inbound_event(msg2)
         publishers = self.dispatcher.exposed_event_publisher
         self.assertEqual(publishers['muxed'].msgs, [msg1, msg2])
 
     def test_outbound_message_routing(self):
-        msg1 = self.mkmsg_out_mux('mux 1', 'thing1@muxme')
+        msg1 = self.make_outbound_mux('mux 1', 'thing1@muxme')
         self.router.dispatch_outbound_message(msg1)
-        msg2 = self.mkmsg_out_mux('mux 2', 'thing2@muxme')
+        msg2 = self.make_outbound_mux('mux 2', 'thing2@muxme')
         self.router.dispatch_outbound_message(msg2)
         publishers = self.dispatcher.transport_publisher
         self.assertEqual(publishers['transport_1'].msgs, [msg1])
         self.assertEqual(publishers['transport_2'].msgs, [msg2])
 
 
-class UserGroupingRouterTestCase(DispatcherTestCase):
-
-    dispatcher_class = BaseDispatchWorker
-    transport_name = 'test_transport'
+class TestUserGroupingRouter(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        yield super(UserGroupingRouterTestCase, self).setUp()
-        self.config = {
+        self.disp_helper = self.add_helper(
+            DispatcherHelper(BaseDispatchWorker))
+        self.dispatcher = yield self.disp_helper.get_dispatcher({
             'dispatcher_name': 'user_group_dispatcher',
             'router_class': 'vumi.dispatchers.base.UserGroupingRouter',
             'transport_names': [
-                self.transport_name,
+                'transport1',
             ],
             'exposed_names': [
                 'app1',
@@ -501,31 +389,32 @@ class UserGroupingRouterTestCase(DispatcherTestCase):
             'group_mappings': {
                 'group1': 'app1',
                 'group2': 'app2',
-                },
+            },
             'transport_mappings': {
-                'upstream1': self.transport_name,
-                }
-            }
-
-        self.fake_redis = FakeRedis()
-        self.dispatcher = yield self.get_dispatcher(self.config)
+                'upstream1': 'transport1',
+            },
+        })
         self.router = self.dispatcher._router
-        self.router.r_server = self.fake_redis
-        self.router.setup_routing()
+        yield self.router._redis_d
+        self.redis = self.router.redis
+        yield self.redis._purge_all()  # just in case
 
+    @inlineCallbacks
     def test_group_assignment(self):
-        msg = self.mkmsg_in(transport_name=self.transport_name)
-        selected_group = self.router.get_group_for_user(msg.user())
+        msg = self.disp_helper.make_inbound("foo")
+        selected_group = yield self.router.get_group_for_user(msg.user())
         self.assertTrue(selected_group)
         for i in range(0, 10):
-            group = self.router.get_group_for_user(msg.user())
+            group = yield self.router.get_group_for_user(msg.user())
             self.assertEqual(group, selected_group)
 
+    @inlineCallbacks
     def test_round_robin_group_assignment(self):
-        messages = [self.mkmsg_in(transport_name=self.transport_name,
-                        from_addr='from_%s' % (i,)) for i in range(0, 4)]
-        groups = [self.router.get_group_for_user(message.user())
-                    for message in messages]
+        messages = [
+            self.disp_helper.make_inbound(str(i), from_addr='from_%s' % (i,))
+            for i in range(0, 4)]
+        groups = [(yield self.router.get_group_for_user(message.user()))
+                  for message in messages]
         self.assertEqual(groups, [
             'group1',
             'group2',
@@ -533,59 +422,50 @@ class UserGroupingRouterTestCase(DispatcherTestCase):
             'group2',
         ])
 
+    def make_inbound_from(self, from_addr):
+        return self.disp_helper.make_inbound("foo", from_addr=from_addr)
+
     @inlineCallbacks
     def test_routing_to_application(self):
         # generate 4 messages, 2 from each user
-        msg1 = self.mkmsg_in(transport_name=self.transport_name,
-                                from_addr='from_1')
-        msg2 = self.mkmsg_in(transport_name=self.transport_name,
-                                from_addr='from_2')
-        msg3 = self.mkmsg_in(transport_name=self.transport_name,
-                                from_addr='from_1')
-        msg4 = self.mkmsg_in(transport_name=self.transport_name,
-                                from_addr='from_2')
+        msg1 = self.make_inbound_from('from_1')
+        msg2 = self.make_inbound_from('from_2')
+        msg3 = self.make_inbound_from('from_3')
+        msg4 = self.make_inbound_from('from_4')
         # send them through to the dispatcher
         messages = [msg1, msg2, msg3, msg4]
         for message in messages:
-            yield self.dispatch(message, transport_name=self.transport_name)
+            yield self.disp_helper.dispatch_inbound(message, 'transport1')
 
-        app1_messages = self.get_dispatched_messages('app1',
-                                                        direction='inbound')
-        app2_messages = self.get_dispatched_messages('app2',
-                                                        direction='inbound')
-        self.assertEqual(app1_messages, [msg1, msg3])
-        self.assertEqual(app2_messages, [msg2, msg4])
+        app1_msgs = self.disp_helper.get_dispatched_inbound('app1')
+        app2_msgs = self.disp_helper.get_dispatched_inbound('app2')
+        self.assertEqual(app1_msgs, [msg1, msg3])
+        self.assertEqual(app2_msgs, [msg2, msg4])
 
     @inlineCallbacks
     def test_routing_to_transport(self):
-        app_msg = self.mkmsg_in(transport_name=self.transport_name,
-                                from_addr='from_1')
-        yield self.dispatch(app_msg, transport_name='app1',
-                                direction='outbound')
-        [transport_msg] = self.get_dispatched_messages(self.transport_name,
-                                                direction='outbound')
-        self.assertEqual(app_msg, transport_msg)
+        app_msg = self.disp_helper.make_outbound(
+            'foo', transport_name='transport1')
+        yield self.disp_helper.dispatch_outbound(app_msg, 'app1')
+        [tx_msg] = self.disp_helper.get_dispatched_outbound('transport1')
+        self.assertEqual(app_msg, tx_msg)
 
     @inlineCallbacks
     def test_routing_to_transport_mapped(self):
-        app_msg = self.mkmsg_in(transport_name='upstream1',
-                                from_addr='from_1')
-        yield self.dispatch(app_msg, transport_name='app1',
-                                direction='outbound')
-        [transport_msg] = self.get_dispatched_messages(self.transport_name,
-                                                direction='outbound')
-        self.assertEqual(app_msg, transport_msg)
+        app_msg = self.disp_helper.make_outbound(
+            'foo', transport_name='upstream1')
+        yield self.disp_helper.dispatch_outbound(app_msg, 'app1')
+        [tx_msg] = self.disp_helper.get_dispatched_outbound('transport1')
+        self.assertEqual(app_msg, tx_msg)
 
 
-class TestContentKeywordRouter(DispatcherTestCase):
-
-    dispatcher_class = BaseDispatchWorker
-    transport_name = 'test_transport'
+class TestContentKeywordRouter(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        yield super(TestContentKeywordRouter, self).setUp()
-        self.config = {
+        self.disp_helper = self.add_helper(
+            DispatcherHelper(BaseDispatchWorker))
+        self.dispatcher = yield self.disp_helper.get_dispatcher({
             'dispatcher_name': 'keyword_dispatcher',
             'router_class': 'vumi.dispatchers.base.ContentKeywordRouter',
             'transport_names': ['transport1', 'transport2'],
@@ -608,148 +488,227 @@ class TestContentKeywordRouter(DispatcherTestCase):
                 },
             'fallback_application': 'fallback_app',
             'expire_routing_memory': '3',
-            }
-        self.fake_redis = FakeRedis()
-        self.dispatcher = yield self.get_dispatcher(self.config)
+        })
         self.router = self.dispatcher._router
-        self.router.r_server = self.fake_redis
+        yield self.router._redis_d
+        self.add_cleanup(self.router.session_manager.stop)
+        self.redis = self.router.redis
+        yield self.redis._purge_all()  # just in case
 
-    def tearDown(self):
-        self.fake_redis.teardown()
-        super(TestContentKeywordRouter, self).tearDown()
+    def ch(self, connector_name):
+        return self.disp_helper.get_connector_helper(connector_name)
+
+    def send_inbound(self, content, **kw):
+        return self.ch('transport1').make_dispatch_inbound(content, **kw)
+
+    def assert_dispatched(self, connector_name, msgs):
+        self.assertEqual(
+            msgs, self.disp_helper.get_dispatched_inbound(connector_name))
 
     @inlineCallbacks
     def test_inbound_message_routing(self):
-        msg = self.mkmsg_in(content='KEYWORD1 rest of a msg',
-                            to_addr='8181',
-                            from_addr='+256788601462')
+        msg1 = yield self.send_inbound(
+            'KEYWORD1 rest of msg', to_addr='8181', from_addr='+256788601462')
+        msg2 = yield self.send_inbound(
+            'KEYWORD2 rest of msg', to_addr='8181', from_addr='+256788601462')
+        msg3 = yield self.send_inbound(
+            'KEYWORD3 rest of msg', to_addr='8181', from_addr='+256788601462')
 
-        yield self.dispatch(msg,
-                            transport_name='transport1',
-                            direction='inbound')
-
-        msg2 = self.mkmsg_in(content='KEYWORD2 rest of a msg',
-                            to_addr='8181',
-                            from_addr='+256788601462')
-
-        yield self.dispatch(msg2,
-                            transport_name='transport1',
-                            direction='inbound')
-
-        msg3 = self.mkmsg_in(content='KEYWORD3 rest of a msg',
-                            to_addr='8181',
-                            from_addr='+256788601462')
-
-        yield self.dispatch(msg3,
-                            transport_name='transport1',
-                            direction='inbound')
-
-        app1_inbound_msg = self.get_dispatched_messages('app1',
-                                                        direction='inbound')
-        self.assertEqual(app1_inbound_msg, [msg])
-        app2_inbound_msg = self.get_dispatched_messages('app2',
-                                                        direction='inbound')
-        self.assertEqual(app2_inbound_msg, [msg2, msg3])
-        app3_inbound_msg = self.get_dispatched_messages('app3',
-                                                        direction='inbound')
-        self.assertEqual(app3_inbound_msg, [msg])
+        self.assert_dispatched('app1', [msg1])
+        self.assert_dispatched('app2', [msg2, msg3])
+        self.assert_dispatched('app3', [msg1])
 
     @inlineCallbacks
     def test_inbound_message_routing_empty_message_content(self):
-        msg = self.mkmsg_in(content=None)
-
-        yield self.dispatch(msg,
-                            transport_name='transport1',
-                            direction='inbound')
-
-        app1_inbound_msg = self.get_dispatched_messages('app1',
-                                                        direction='inbound')
-        self.assertEqual(app1_inbound_msg, [])
-        app2_inbound_msg = self.get_dispatched_messages('app2',
-                                                        direction='inbound')
-        self.assertEqual(app2_inbound_msg, [])
-        fallback_msgs = self.get_dispatched_messages('fallback_app',
-                                                     direction='inbound')
-        self.assertEqual(fallback_msgs, [msg])
+        msg = yield self.send_inbound(None)
+        self.assert_dispatched('app1', [])
+        self.assert_dispatched('app2', [])
+        self.assert_dispatched('fallback_app', [msg])
 
     @inlineCallbacks
     def test_inbound_message_routing_not_casesensitive(self):
-        msg = self.mkmsg_in(content='keyword1 rest of a msg',
-                            to_addr='8181',
-                            from_addr='+256788601462')
-
-        yield self.dispatch(msg,
-                            transport_name='transport1',
-                            direction='inbound')
-
-        app1_inbound_msg = self.get_dispatched_messages('app1',
-                                                        direction='inbound')
-        self.assertEqual(app1_inbound_msg, [msg])
+        msg = yield self.send_inbound(
+            'keyword1 rest of msg', to_addr='8181', from_addr='+256788601462')
+        self.assert_dispatched('app1', [msg])
 
     @inlineCallbacks
     def test_inbound_event_routing_ok(self):
-        msg = self.mkmsg_ack(user_message_id='1',
-                             transport_name='transport1')
-        self.router.r_server.set('keyword_dispatcher:message:1',
-                                 'app2')
+        yield self.router.session_manager.create_session(
+            'message:1', name='app2')
+        ack = yield self.ch('transport1').make_dispatch_ack(
+            self.disp_helper.make_outbound("foo", message_id='1'),
+            transport_name='transport1')
 
-        yield self.dispatch(msg,
-                            transport_name='transport1',
-                            direction='event')
-
-        app2_event_msg = self.get_dispatched_messages('app2',
-                                                      direction='event')
-        self.assertEqual(app2_event_msg, [msg])
-        app1_event_msg = self.get_dispatched_messages('app1',
-                                                      direction='event')
-        self.assertEqual(app1_event_msg, [])
-
-    @inlineCallbacks
-    def test_inbound_event_routing_failing_publisher_not_defined(self):
-        msg = self.mkmsg_ack(transport_name='transport1')
-
-        yield self.dispatch(msg,
-                            transport_name='transport1',
-                            direction='event')
-
-        app1_routed_msg = self.get_dispatched_messages('app1',
-                                                       direction='event')
-        self.assertEqual(app1_routed_msg, [])
-        app2_routed_msg = self.get_dispatched_messages('app2',
-                                                       direction='event')
-        self.assertEqual(app2_routed_msg, [])
+        self.assertEqual([], self.disp_helper.get_dispatched_events('app1'))
+        self.assertEqual([ack], self.disp_helper.get_dispatched_events('app2'))
 
     @inlineCallbacks
     def test_inbound_event_routing_failing_no_routing_back_in_redis(self):
-        msg = self.mkmsg_ack(transport_name='transport1')
+        ack = yield self.ch('transport1').make_dispatch_ack(
+            transport_name='transport1')
 
-        yield self.dispatch(msg,
-                            transport_name='transport1',
-                            direction='event')
+        self.assertEqual([], self.disp_helper.get_dispatched_events('app1'))
+        self.assertEqual([], self.disp_helper.get_dispatched_events('app2'))
 
-        app1_routed_msg = self.get_dispatched_messages('app1',
-                                                       direction='event')
-        self.assertEqual(app1_routed_msg, [])
-        app2_routed_msg = self.get_dispatched_messages('app2',
-                                                       direction='event')
-        self.assertEqual(app2_routed_msg, [])
+        [redis_lookup_fail, no_route_fail] = self.flushLoggedErrors(
+            DispatcherError)
+        self.assertEqual(str(redis_lookup_fail.value), (
+            'No transport_name for return route found in Redis while'
+            ' dispatching transport event for message %s'
+            % ack['user_message_id']))
+        self.assertEqual(str(no_route_fail.value),
+                         'No publishing route for None')
 
     @inlineCallbacks
     def test_outbound_message_routing(self):
-        msg = self.mkmsg_out(content="KEYWORD1 rest of msg",
-                             from_addr='shortcode1',
-                             transport_name='app2')
+        msg = yield self.ch('app2').make_dispatch_outbound(
+            "KEYWORD1 rest of msg", from_addr='shortcode1',
+            transport_name='app2', message_id='1')
 
-        yield self.dispatch(msg,
-                            transport_name='app2',
-                            direction='outbound')
+        self.assertEqual(
+            [msg], self.disp_helper.get_dispatched_outbound('transport1'))
+        self.assertEqual(
+            [], self.disp_helper.get_dispatched_outbound('transport2'))
 
-        transport1_msgs = self.get_dispatched_messages('transport1',
-                                                       direction='outbound')
-        self.assertEqual(transport1_msgs, [msg])
-        transport2_msgs = self.get_dispatched_messages('transport2',
-                                                       direction='outbound')
-        self.assertEqual(transport2_msgs, [])
+        session = yield self.router.session_manager.load_session('message:1')
+        self.assertEqual(session['name'], 'app2')
 
-        app2_route = self.fake_redis.get('keyword_dispatcher:message:1')
-        self.assertEqual(app2_route, 'app2')
+
+class TestRedirectOutboundRouterForSMPP(VumiTestCase):
+    """
+    This is a test to cover our use case when using SMPP 3.4 with
+    split Tx and Rx binds. The outbound traffic needs to go to the Tx, while
+    the Rx just should go through. Upstream everything should be seen
+    as arriving from the dispatcher and so the `transport_name` should be
+    overwritten.
+    """
+
+    @inlineCallbacks
+    def setUp(self):
+        self.disp_helper = self.add_helper(
+            DispatcherHelper(BaseDispatchWorker))
+        self.dispatcher = yield self.disp_helper.get_dispatcher({
+            'dispatcher_name': 'redirect_outbound_dispatcher',
+            'router_class': 'vumi.dispatchers.base.RedirectOutboundRouter',
+            'transport_names': ['smpp_rx_transport', 'smpp_tx_transport'],
+            'exposed_names': ['upstream'],
+            'redirect_outbound': {
+                'upstream': 'smpp_tx_transport',
+            },
+            'redirect_inbound': {
+                'smpp_tx_transport': 'upstream',
+                'smpp_rx_transport': 'upstream',
+            },
+        })
+        self.router = self.dispatcher._router
+
+    def ch(self, connector_name):
+        return self.disp_helper.get_connector_helper(connector_name)
+
+    @inlineCallbacks
+    def test_outbound_message_via_tx(self):
+        msg = yield self.ch('upstream').make_dispatch_outbound(
+            "foo", transport_name='upstream')
+        [out] = self.disp_helper.get_dispatched_outbound('smpp_tx_transport')
+        self.assertEqual(out['message_id'], msg['message_id'])
+
+    @inlineCallbacks
+    def test_inbound_event_tx(self):
+        ack = yield self.ch('smpp_tx_transport').make_dispatch_ack(
+            transport_name='smpp_tx_transport')
+        [event] = self.disp_helper.get_dispatched_events('upstream')
+        self.assertEqual(event['transport_name'], 'upstream')
+        self.assertEqual(event['event_id'], ack['event_id'])
+
+    @inlineCallbacks
+    def test_inbound_event_rx(self):
+        ack = yield self.ch('smpp_rx_transport').make_dispatch_ack(
+            transport_name='smpp_rx_transport')
+        [event] = self.disp_helper.get_dispatched_events('upstream')
+        self.assertEqual(event['transport_name'], 'upstream')
+        self.assertEqual(event['event_id'], ack['event_id'])
+
+    @inlineCallbacks
+    def test_inbound_message_via_rx(self):
+        msg = yield self.ch('smpp_rx_transport').make_dispatch_inbound(
+            "foo", transport_name='smpp_rx_transport')
+        [app_msg] = self.disp_helper.get_dispatched_inbound('upstream')
+        self.assertEqual(app_msg['transport_name'], 'upstream')
+        self.assertEqual(app_msg['message_id'], msg['message_id'])
+
+    @inlineCallbacks
+    def test_error_logging_for_bad_app(self):
+        msgt1 = self.disp_helper.make_outbound(
+            "foo", transport_name='foo')  # Does not exist
+        with LogCatcher() as log:
+            yield self.disp_helper.dispatch_outbound(msgt1, 'upstream')
+            [err] = log.errors
+            self.assertTrue('No redirect_outbound specified for foo' in
+                                str(err['failure'].value))
+        [f] = self.flushLoggedErrors(DispatcherError)
+        self.assertEqual(f, err['failure'])
+
+
+class TestRedirectOutboundRouter(VumiTestCase):
+
+    @inlineCallbacks
+    def setUp(self):
+        self.disp_helper = self.add_helper(
+            DispatcherHelper(BaseDispatchWorker))
+        self.dispatcher = yield self.disp_helper.get_dispatcher({
+            'dispatcher_name': 'redirect_outbound_dispatcher',
+            'router_class': 'vumi.dispatchers.base.RedirectOutboundRouter',
+            'transport_names': ['transport1', 'transport2'],
+            'exposed_names': ['app1', 'app2'],
+            'redirect_outbound': {
+                'app1': 'transport1',
+                'app2': 'transport2',
+            },
+            'redirect_inbound': {
+                'transport1': 'app1',
+                'transport2': 'app2',
+            }
+        })
+        self.router = self.dispatcher._router
+
+    def ch(self, connector_name):
+        return self.disp_helper.get_connector_helper(connector_name)
+
+    @inlineCallbacks
+    def test_outbound_redirect(self):
+        msgt1 = yield self.ch('app1').make_dispatch_outbound(
+            "t1", transport_name='app1')
+        msgt2 = yield self.ch('app2').make_dispatch_outbound(
+            "t2", transport_name='app2')
+        self.assertEqual(
+            [msgt1], self.disp_helper.get_dispatched_outbound('transport1'))
+        self.assertEqual(
+            [msgt2], self.disp_helper.get_dispatched_outbound('transport2'))
+
+    @inlineCallbacks
+    def test_inbound_event(self):
+        ack = yield self.ch('transport1').make_dispatch_ack(
+            transport_name='transport1')
+        [event] = self.disp_helper.get_dispatched_events('app1')
+        self.assertEqual(event['transport_name'], 'app1')
+        self.assertEqual(event['event_id'], ack['event_id'])
+
+    @inlineCallbacks
+    def test_inbound_message(self):
+        msg = yield self.ch('transport1').make_dispatch_inbound(
+            "foo", transport_name='transport1')
+        [app_msg] = self.disp_helper.get_dispatched_inbound('app1')
+        self.assertEqual(app_msg['transport_name'], 'app1')
+        self.assertEqual(app_msg['message_id'], msg['message_id'])
+
+    @inlineCallbacks
+    def test_error_logging_for_bad_app(self):
+        msgt1 = self.disp_helper.make_outbound(
+            "foo", transport_name='app3')  # Does not exist
+        with LogCatcher() as log:
+            yield self.disp_helper.dispatch_outbound(msgt1, 'app2')
+            [err] = log.errors
+            self.assertTrue('No redirect_outbound specified for app3' in
+                                str(err['failure'].value))
+        [f] = self.flushLoggedErrors(DispatcherError)
+        self.assertEqual(f, err['failure'])

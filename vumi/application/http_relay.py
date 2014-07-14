@@ -1,19 +1,40 @@
 # -*- test-case-name: vumi.application.tests.test_http_relay -*-
+
+from base64 import b64encode
+
 from twisted.python import log
 from twisted.web import http
 from twisted.internet.defer import inlineCallbacks
+
 from vumi.application.base import ApplicationWorker
 from vumi.utils import http_request_full
 from vumi.errors import VumiError
-from urllib2 import urlparse
-from base64 import b64encode
+from vumi.config import ConfigText, ConfigUrl
 
 
 class HTTPRelayError(VumiError):
     pass
 
 
+class HTTPRelayConfig(ApplicationWorker.CONFIG_CLASS):
+
+    # TODO: Make these less static?
+    url = ConfigUrl(
+        "URL to submit incoming message to.", required=True, static=True)
+    event_url = ConfigUrl(
+        "URL to submit incoming events to. (Defaults to the same as 'url').",
+        static=True)
+    http_method = ConfigText(
+        "HTTP method for submitting messages.", default='POST', static=True)
+    auth_method = ConfigText(
+        "HTTP authentication method.", default='basic', static=True)
+
+    username = ConfigText("Username for HTTP authentication.", default='')
+    password = ConfigText("Password for HTTP authentication.", default='')
+
+
 class HTTPRelayApplication(ApplicationWorker):
+    CONFIG_CLASS = HTTPRelayConfig
 
     reply_header = 'X-Vumi-HTTPRelay-Reply'
 
@@ -21,15 +42,14 @@ class HTTPRelayApplication(ApplicationWorker):
         self.supported_auth_methods = {
             'basic': self.generate_basic_auth_headers,
         }
-        self.url = urlparse.urlparse(self.config['url'])
-        self.username = self.config.get('username', '')
-        self.password = self.config.get('password', '')
-        self.http_method = self.config.get('http_method', 'POST')
-        self.auth_method = self.config.get('auth_method', 'basic')
-        if self.auth_method not in self.supported_auth_methods:
+        # XXX: Is this the best way to do this?
+        if 'event_url' not in self.config:
+            self.config['event_url'] = self.config['url']
+        config = self.get_static_config()
+        if config.auth_method not in self.supported_auth_methods:
             raise HTTPRelayError(
                     'HTTP Authentication method %s not supported' % (
-                    repr(self.auth_method,)))
+                    repr(config.auth_method,)))
 
     def generate_basic_auth_headers(self, username, password):
         credentials = ':'.join([username, password])
@@ -38,16 +58,18 @@ class HTTPRelayApplication(ApplicationWorker):
             'Authorization': ['Basic %s' % (auth_string,)]
         }
 
+    def get_auth_headers(self, config):
+        if config.username:
+            handler = self.supported_auth_methods.get(config.auth_method)
+            return handler(config.username, config.password)
+        return {}
+
     @inlineCallbacks
     def consume_user_message(self, message):
-        if self.username:
-            handler = self.supported_auth_methods.get(self.auth_method)
-            headers = handler(self.username, self.password)
-        else:
-            headers = {}
-
-        response = yield http_request_full(self.url.geturl(),
-                            message.to_json(), headers, self.http_method)
+        config = yield self.get_config(message)
+        headers = self.get_auth_headers(config)
+        response = yield http_request_full(config.url.geturl(),
+                            message.to_json(), headers, config.http_method)
         headers = response.headers
         if response.code == http.OK:
             if headers.hasHeader(self.reply_header):
@@ -56,5 +78,20 @@ class HTTPRelayApplication(ApplicationWorker):
                 if (raw_headers[0].lower() == 'true') and content:
                     self.reply_to(message, content)
         else:
-            log.err('%s responded with %s' % (self.url.geturl(),
+            log.err('%s responded with %s' % (config.url.geturl(),
                                                 response.code))
+
+    @inlineCallbacks
+    def relay_event(self, event):
+        config = yield self.get_config(event)
+        headers = self.get_auth_headers(config)
+        yield http_request_full(config.event_url.geturl(),
+            event.to_json(), headers, config.http_method)
+
+    @inlineCallbacks
+    def consume_ack(self, event):
+        yield self.relay_event(event)
+
+    @inlineCallbacks
+    def consume_delivery_report(self, event):
+        yield self.relay_event(event)

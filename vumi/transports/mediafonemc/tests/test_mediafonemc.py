@@ -4,38 +4,35 @@ import json
 from urllib import urlencode
 
 from twisted.internet.defer import inlineCallbacks, DeferredQueue
+from twisted.web import http
 
 from vumi.utils import http_request, http_request_full
 from vumi.tests.utils import MockHttpServer
-from vumi.transports.tests.test_base import TransportTestCase
+from vumi.tests.helpers import VumiTestCase
 from vumi.transports.mediafonemc import MediafoneTransport
+from vumi.transports.tests.helpers import TransportHelper
 
 
-class TestMediafoneTransport(TransportTestCase):
-
-    timeout = 5
-
-    transport_name = 'test_mediafone_transport'
-    transport_class = MediafoneTransport
+class TestMediafoneTransport(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        super(TestMediafoneTransport, self).setUp()
-
         self.mediafone_calls = DeferredQueue()
         self.mock_mediafone = MockHttpServer(self.handle_request)
         yield self.mock_mediafone.start()
 
         self.config = {
-            'transport_name': self.transport_name,
             'web_path': "foo",
             'web_port': 0,
             'username': 'user',
             'password': 'pass',
             'outbound_url': self.mock_mediafone.url,
         }
-        self.transport = yield self.get_transport(self.config)
+        self.tx_helper = self.add_helper(TransportHelper(MediafoneTransport))
+        self.transport = yield self.tx_helper.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url()
+        self.mediafonemc_response = ''
+        self.mediafonemc_response_code = http.OK
 
     @inlineCallbacks
     def tearDown(self):
@@ -44,7 +41,8 @@ class TestMediafoneTransport(TransportTestCase):
 
     def handle_request(self, request):
         self.mediafone_calls.put(request)
-        return ''
+        request.setResponseCode(self.mediafonemc_response_code)
+        return self.mediafonemc_response
 
     def mkurl(self, content, from_addr="2371234567", **kw):
         params = {
@@ -72,8 +70,8 @@ class TestMediafoneTransport(TransportTestCase):
     def test_inbound(self):
         url = self.mkurl('hello')
         response = yield http_request(url, '', method='GET')
-        [msg] = self.get_dispatched_messages()
-        self.assertEqual(msg['transport_name'], self.transport_name)
+        [msg] = self.tx_helper.get_dispatched_inbound()
+        self.assertEqual(msg['transport_name'], self.tx_helper.transport_name)
         self.assertEqual(msg['to_addr'], "12345")
         self.assertEqual(msg['from_addr'], "2371234567")
         self.assertEqual(msg['content'], "hello")
@@ -82,7 +80,8 @@ class TestMediafoneTransport(TransportTestCase):
 
     @inlineCallbacks
     def test_outbound(self):
-        yield self.dispatch(self.mkmsg_out(to_addr="2371234567"))
+        yield self.tx_helper.make_dispatch_outbound(
+            "hello world", to_addr="2371234567")
         req = yield self.mediafone_calls.get()
         self.assertEqual(req.path, '/')
         self.assertEqual(req.method, 'GET')
@@ -94,11 +93,26 @@ class TestMediafoneTransport(TransportTestCase):
                 }, req.args)
 
     @inlineCallbacks
+    def test_nack(self):
+        self.mediafonemc_response_code = http.NOT_FOUND
+        self.mediafonemc_response = 'Not Found'
+
+        msg = yield self.tx_helper.make_dispatch_outbound(
+            "outbound", to_addr="2371234567")
+
+        yield self.mediafone_calls.get()
+        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
+        self.assertEqual(nack['user_message_id'], msg['message_id'])
+        self.assertEqual(nack['sent_message_id'], msg['message_id'])
+        self.assertEqual(nack['nack_reason'],
+            'Unexpected response code: 404')
+
+    @inlineCallbacks
     def test_handle_non_ascii_input(self):
         url = self.mkurl(u"öæł".encode("utf-8"))
         response = yield http_request(url, '', method='GET')
-        [msg] = self.get_dispatched_messages()
-        self.assertEqual(msg['transport_name'], self.transport_name)
+        [msg] = self.tx_helper.get_dispatched_inbound()
+        self.assertEqual(msg['transport_name'], self.tx_helper.transport_name)
         self.assertEqual(msg['to_addr'], "12345")
         self.assertEqual(msg['from_addr'], "2371234567")
         self.assertEqual(msg['content'], u"öæł")

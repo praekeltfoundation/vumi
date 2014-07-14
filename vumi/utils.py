@@ -4,16 +4,29 @@ import os.path
 import re
 import sys
 import base64
-
 import pkg_resources
+import warnings
+from functools import wraps
+
 from zope.interface import implements
 from twisted.internet import defer
 from twisted.internet import reactor, protocol
 from twisted.internet.defer import succeed
-from twisted.web.client import Agent, ResponseDone
+from twisted.python.failure import Failure
+from twisted.web.client import Agent, ResponseDone, WebClientContextFactory
+from twisted.web.server import Site
 from twisted.web.http_headers import Headers
 from twisted.web.iweb import IBodyProducer
 from twisted.web.http import PotentialDataLoss
+from twisted.web.resource import Resource
+
+from vumi.errors import VumiError
+
+
+# Stop Agent from logging two useless lines for every request.
+# This is hacky, but there's no better way to do it for now.
+from twisted.web import client
+client._HTTP11ClientFactory.noisy = False
 
 
 def import_module(name):
@@ -28,20 +41,69 @@ def import_module(name):
     return sys.modules[name]
 
 
+def to_kwargs(kwargs):
+    """
+    Convert top-level keys from unicode to string for older Python versions.
+
+    See http://bugs.python.org/issue2646 for details.
+    """
+    return dict((k.encode('utf8'), v) for k, v in kwargs.iteritems())
+
+
+class HttpError(VumiError):
+    """Base class for errors raised by http_request_full."""
+
+
+class HttpDataLimitError(VumiError):
+    """Returned by http_request_full if too much data is returned."""
+
+
+class HttpTimeoutError(VumiError):
+    """Returned by http_request_full if the request times out."""
+
+
 class SimplishReceiver(protocol.Protocol):
-    def __init__(self, response):
-        self.deferred = defer.Deferred()
+    def __init__(self, response, data_limit=None):
+        self.deferred = defer.Deferred(canceller=self.cancel_on_timeout)
         self.response = response
+        self.data_limit = data_limit
+        self.data_recvd_len = 0
         self.response.delivered_body = ''
         if response.code == 204:
             self.deferred.callback(self.response)
         else:
             response.deliverBody(self)
 
+    def cancel_on_timeout(self, d):
+        self.cancel_receiving(
+            HttpTimeoutError("Timeout while receiving data")
+        )
+
+    def cancel_on_data_limit(self):
+        self.cancel_receiving(
+            HttpDataLimitError("More than %d bytes received"
+                               % (self.data_limit,))
+        )
+
+    def cancel_receiving(self, err):
+        self.transport.stopProducing()
+        self.deferred.errback(err)
+
+    def data_limit_exceeded(self):
+        return (self.data_limit is not None and
+                self.data_recvd_len > self.data_limit)
+
     def dataReceived(self, data):
+        self.data_recvd_len += len(data)
+        if self.data_limit_exceeded():
+            self.cancel_on_data_limit()
         self.response.delivered_body += data
 
     def connectionLost(self, reason):
+        if self.deferred.called:
+            # this happens when the deferred is cancelled and this
+            # triggers connection closing
+            return
         if reason.check(ResponseDone):
             self.deferred.callback(self.response)
         elif reason.check(PotentialDataLoss):
@@ -57,17 +119,42 @@ class SimplishReceiver(protocol.Protocol):
             self.deferred.errback(reason)
 
 
-def http_request_full(url, data=None, headers={}, method='POST'):
-    agent = Agent(reactor)
+def http_request_full(url, data=None, headers={}, method='POST',
+                      timeout=None, data_limit=None, context_factory=None,
+                      agent_class=Agent):
+    context_factory = context_factory or WebClientContextFactory()
+    agent = agent_class(reactor, contextFactory=context_factory)
     d = agent.request(method,
                       url,
                       mkheaders(headers),
                       StringProducer(data) if data else None)
 
     def handle_response(response):
-        return SimplishReceiver(response).deferred
+        return SimplishReceiver(response, data_limit).deferred
 
     d.addCallback(handle_response)
+
+    if timeout is not None:
+        cancelling_on_timeout = [False]
+
+        def raise_timeout(reason):
+            if not cancelling_on_timeout[0]:
+                return reason
+            return Failure(HttpTimeoutError("Timeout while connecting"))
+
+        def cancel_on_timeout():
+            cancelling_on_timeout[0] = True
+            d.cancel()
+
+        def cancel_timeout(r, delayed_call):
+            if delayed_call.active():
+                delayed_call.cancel()
+            return r
+
+        d.addErrback(raise_timeout)
+        delayed_call = reactor.callLater(timeout, cancel_on_timeout)
+        d.addCallback(cancel_timeout, delayed_call)
+
     return d
 
 
@@ -105,7 +192,7 @@ def normalize_msisdn(raw, country_code=''):
     if len(raw) <= 5:
         return raw
 
-    raw = ''.join([c for c in str(raw) if c.isdigit() or c == '+'])
+    raw = ''.join([c for c in raw if c.isdigit() or c == '+'])
     if raw.startswith('00'):
         return '+' + raw[2:]
     if raw.startswith('0'):
@@ -140,16 +227,76 @@ class StringProducer(object):
         pass
 
 
-def vumi_resource_path(path):
-    """
-    Return an absolute path to a Vumi package resource.
+def build_web_site(resources, site_class=None):
+    """Build a Twisted web Site instance for a specified dictionary of
+    resources.
 
-    Vumi package resources are found in the vumi.resources package.
-    If the path is already absolute, it is returned unmodified.
+    :param dict resources:
+        Dictionary of path -> resource class mappings to create the site from.
+    :type site_class: Sub-class of Twisted's Site
+    :param site_class:
+        Site class to create. Defaults to :class:`LogFilterSite`.
     """
-    if os.path.isabs(path):
-        return path
-    return pkg_resources.resource_filename("vumi.resources", path)
+    if site_class is None:
+        site_class = LogFilterSite
+
+    root = Resource()
+    # sort by ascending path length to make sure we create
+    # resources lower down in the path earlier
+    resources = resources.items()
+    resources = sorted(resources, key=lambda r: len(r[0]))
+
+    def create_node(node, path):
+        if path in node.children:
+            return node.children.get(path)
+        else:
+            new_node = Resource()
+            node.putChild(path, new_node)
+            return new_node
+
+    for path, resource in resources:
+        request_path = filter(None, path.split('/'))
+        nodes, leaf = request_path[0:-1], request_path[-1]
+        parent = reduce(create_node, nodes, root)
+        parent.putChild(leaf, resource)
+
+    site_factory = site_class(root)
+    return site_factory
+
+
+class LogFilterSite(Site):
+    def log(self, request):
+        if getattr(request, 'do_not_log', None):
+            return
+        return Site.log(self, request)
+
+
+class PkgResources(object):
+    """
+    A helper for accessing a packages data files.
+
+    :param str modname:
+        The full dotted name of the module. E.g.
+        ``vumi.resources``.
+    """
+    def __init__(self, modname):
+        self.modname = modname
+
+    def path(self, path):
+        """
+        Return the absolute path to a package resource.
+
+        If path is already absolute, it is returned unmodified.
+
+        :param str path:
+            The relative or absolute path to the resource.
+        """
+        if os.path.isabs(path):
+            return path
+        return pkg_resources.resource_filename(self.modname, path)
+
+
+vumi_resource_path = PkgResources("vumi.resources").path
 
 
 def load_class(module_name, class_name):
@@ -180,6 +327,54 @@ def load_class_by_string(class_path):
     module_name = '.'.join(parts[:-1])
     class_name = parts[-1]
     return load_class(module_name, class_name)
+
+
+def redis_from_config(redis_config):
+    """
+    Return a redis client instance from a config.
+
+    If redis_config:
+
+    * equals 'FAKE_REDIS', a new instance of :class:`FakeRedis` is returned.
+    * is an instance of :class:`FakeRedis` that instance is returned
+
+    Otherwise a new real redis client is returned.
+    """
+    warnings.warn("Use of redis directly is deprecated. Use vumi.persist "
+                  "instead.", category=DeprecationWarning)
+
+    import redis
+    from vumi.persist import fake_redis
+    if redis_config == "FAKE_REDIS":
+        return fake_redis.FakeRedis()
+    if isinstance(redis_config, fake_redis.FakeRedis):
+        return redis_config
+    return redis.Redis(**redis_config)
+
+
+def flatten_generator(generator_func):
+    """
+    This is a synchronous version of @inlineCallbacks.
+
+    NOTE: It doesn't correctly handle returnValue() being called in a
+    non-decorated function called from the function we're decorating. We could
+    copy the Twisted code to do that, but it's messy.
+    """
+    @wraps(generator_func)
+    def wrapped(*args, **kw):
+        gen = generator_func(*args, **kw)
+        result = None
+        while True:
+            try:
+                result = gen.send(result)
+            except StopIteration:
+                # Fell off the end, or "return" statement.
+                return None
+            except defer._DefGen_Return, e:
+                # returnValue() called.
+                return e.value
+
+    return wrapped
 
 
 def filter_options_on_prefix(options, prefix, delimiter='-'):
@@ -252,56 +447,5 @@ def safe_routing_key(routing_key):
                     [('*', 's'), ('#', 'h')], routing_key)
 
 
-### SAMPLE CONFIG PARAMETERS - REPLACE 'x's IN OPERATOR_NUMBER
-
-"""
-COUNTRY_CODE: "27"
-
-OPERATOR_NUMBER:
-    VODACOM: "2782xxxxxxxxxxx"
-    MTN: "2783xxxxxxxxxxx"
-    CELLC: "2784xxxxxxxxxxx"
-    VIRGIN: ""
-    8TA: ""
-    UNKNOWN: ""
-
-OPERATOR_PREFIX:
-    2771:
-        27710: MTN
-        27711: VODACOM
-        27712: VODACOM
-        27713: VODACOM
-        27714: VODACOM
-        27715: VODACOM
-        27716: VODACOM
-        27717: MTN
-        27719: MTN
-
-    2772: VODACOM
-    2773: MTN
-    2774:
-        27740: CELLC
-        27741: VIRGIN
-        27742: CELLC
-        27743: CELLC
-        27744: CELLC
-        27745: CELLC
-        27746: CELLC
-        27747: CELLC
-        27748: CELLC
-        27749: CELLC
-
-    2776: VODACOM
-    2778: MTN
-    2779: VODACOM
-    2781:
-        27811: 8TA
-        27812: 8TA
-        27813: 8TA
-        27814: 8TA
-
-    2782: VODACOM
-    2783: MTN
-    2784: CELLC
-
-"""
+def generate_worker_id(system_id, worker_id):
+    return "%s:%s" % (system_id, worker_id,)

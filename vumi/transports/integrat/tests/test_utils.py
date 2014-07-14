@@ -1,12 +1,13 @@
 import re
-from  xml.etree import ElementTree
+from xml.etree import ElementTree
 
 from twisted.python import log
-from twisted.trial.unittest import TestCase
+
 from vumi.transports.integrat.utils import HigateXMLParser
+from vumi.tests.helpers import VumiTestCase
 
 
-class HigateXMLTestCases(TestCase):
+class TestHigateXML(VumiTestCase):
     '''
     Tests for the Sample XML found at:
     http://www.integrat.co.za/wiki/index.php/Sample_xml
@@ -15,9 +16,6 @@ class HigateXMLTestCases(TestCase):
     def setUp(self):
         self.dolog = True
         self.hxp = HigateXMLParser()
-
-    def tearDown(self):
-        del self.hxp
 
     def testParseOnResult(self):
         OnResult_xml = '''

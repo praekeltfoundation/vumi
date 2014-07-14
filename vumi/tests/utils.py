@@ -1,38 +1,27 @@
 # -*- test-case-name: vumi.tests.test_testutils -*-
 
 import re
-import json
-import fnmatch
 from datetime import datetime, timedelta
-from collections import namedtuple
-from contextlib import contextmanager
+import warnings
+from functools import wraps
 
 import pytz
-from twisted.internet import defer, reactor
+from twisted.internet import reactor
+from twisted.internet.error import ConnectionRefusedError
 from twisted.web.resource import Resource
-from twisted.web.server import Site
-from twisted.internet.defer import DeferredQueue, inlineCallbacks
+from twisted.internet.defer import DeferredQueue, inlineCallbacks, returnValue
 from twisted.python import log
+from twisted.python.monkey import MonkeyPatcher
 
-from vumi.utils import vumi_resource_path, import_module
-from vumi.service import get_spec, Worker, WorkerCreator
-from vumi.tests.fake_amqp import FakeAMQClient
+from vumi.utils import vumi_resource_path, flatten_generator, LogFilterSite
+from vumi.service import get_spec, WorkerCreator
+from vumi.message import TransportUserMessage, TransportEvent
+from vumi.tests.fake_amqp import FakeAMQPBroker, FakeAMQClient
+from vumi.tests.helpers import VumiTestCase
 
-
-def setup_django_test_database():
-    from django.test.simple import DjangoTestSuiteRunner
-    from django.test.utils import setup_test_environment
-    from south.management.commands import patch_for_test_db_setup
-    runner = DjangoTestSuiteRunner(verbosity=0, failfast=False)
-    patch_for_test_db_setup()
-    setup_test_environment()
-    return runner, runner.setup_databases()
-
-
-def teardown_django_test_database(runner, config):
-    from django.test.utils import teardown_test_environment
-    runner.teardown_databases(config)
-    teardown_test_environment()
+# For backcompat:
+from vumi.tests.helpers import import_filter, import_skip
+import_filter, import_skip  # To keep pyflakes happy.
 
 
 class UTCNearNow(object):
@@ -56,145 +45,14 @@ class RegexMatcher(object):
         return self.regex.match(other)
 
 
-class Mocking(object):
-
-    class HistoryItem(object):
-        def __init__(self, args, kwargs):
-            self.args = args
-            self.kwargs = kwargs
-
-    def __init__(self, function):
-        """Mock a function"""
-        self.function = function
-        self.called = 0
-        self.history = []
-        self.return_value = None
-
-    def __enter__(self):
-        """Overwrite whatever module the function is part of"""
-        self.mod = import_module(self.function.__module__)
-        setattr(self.mod, self.function.__name__, self)
-        return self
-
-    def __exit__(self, *exc_info):
-        """Reset to whatever the function was originally when done"""
-        setattr(self.mod, self.function.__name__, self.function)
-
-    def __call__(self, *args, **kwargs):
-        """Return the return value when called, store the args & kwargs
-        for testing later, called is a counter and evaluates to True
-        if ever called."""
-        self.args = args
-        self.kwargs = kwargs
-        self.called += 1
-        self.history.append(self.HistoryItem(args, kwargs))
-        return self.return_value
-
-    def to_return(self, *args):
-        """Specify the return value"""
-        self.return_value = args if len(args) > 1 else list(args).pop()
-        return self
-
-
-def mocking(fn):
-    return Mocking(fn)
-
-
-class TestPublisher(object):
-    """
-    A test publisher that caches outbound messages in an internal queue
-    for testing, instead of publishing over AMQP.
-
-    Useful for testing consumers
-    """
-    def __init__(self):
-        self.queue = []
-
-    @contextmanager
-    def transaction(self):
-        yield
-
-    def publish_message(self, message, **kwargs):
-        self.queue.append((message, kwargs))
-
-
-def fake_amq_message(dictionary, delivery_tag='delivery_tag'):
-    Content = namedtuple('Content', ['body'])
-    Message = namedtuple('Message', ['content', 'delivery_tag'])
-    return Message(delivery_tag=delivery_tag,
-                   content=Content(body=json.dumps(dictionary)))
-
-
-class TestQueue(object):
-    """
-    A test queue that mimicks txAMQP's queue behaviour (DEPRECATED)
-    """
-    def __init__(self, queue, fake_broker=None):
-        self.queue = queue
-        self.fake_broker = fake_broker
-        # TODO: Hook this up.
-
-    def push(self, item):
-        self.queue.append(item)
-
-    def get(self):
-        d = defer.Deferred()
-        if self.queue:
-            d.callback(self.queue.pop())
-        return d
-
-
-class TestChannel(object):
-    "(DEPRECATED)"
-
-    def __init__(self, channel_id=None, fake_broker=None):
-        self.channel_id = channel_id
-        self.fake_broker = fake_broker
-        self.ack_log = []
-        self.publish_log = []
-        self.publish_message_log = self.publish_log  # TODO: Nuke
-
-    def basic_ack(self, tag, multiple=False):
-        self.ack_log.append((tag, multiple))
-
-    def channel_close(self, *args, **kwargs):
-        return defer.succeed(None)
-
-    def channel_open(self, *args, **kwargs):
-        return defer.succeed(None)
-
-    def basic_publish(self, *args, **kwargs):
-        self.publish_log.append(kwargs)
-        if self.fake_broker:
-            self.fake_broker.publish(**kwargs)
-
-    def basic_qos(self, *args, **kwargs):
-        return defer.succeed(None)
-
-    def exchange_declare(self, *args, **kwargs):
-        if self.fake_broker:
-            self.fake_broker.exchange_declare(*args, **kwargs)
-
-    def queue_declare(self, *args, **kwargs):
-        if self.fake_broker:
-            self.fake_broker.queue_declare(*args, **kwargs)
-
-    def queue_bind(self, *args, **kwargs):
-        if self.fake_broker:
-            self.fake_broker.queue_bind(*args, **kwargs)
-
-    def basic_consume(self, queue, **kwargs):
-        return namedtuple('Reply', ['consumer_tag'])(consumer_tag=queue)
-
-    def close(self, *args, **kwargs):
-        return True
+def get_fake_amq_client(broker=None):
+    spec = get_spec(vumi_resource_path("amqp-spec-0-8.xml"))
+    return FakeAMQClient(spec, {}, broker)
 
 
 def get_stubbed_worker(worker_class, config=None, broker=None):
-    spec = get_spec(vumi_resource_path("amqp-spec-0-8.xml"))
-    amq_client = FakeAMQClient(spec, {}, broker)
     worker = worker_class({}, config)
-    worker._amqp_client = amq_client
+    worker._amqp_client = get_fake_amq_client(broker)
     return worker
 
 
@@ -202,8 +60,7 @@ class StubbedWorkerCreator(WorkerCreator):
     broker = None
 
     def _connect(self, worker, timeout, bindAddress):
-        spec = get_spec(vumi_resource_path("amqp-spec-0-8.xml"))
-        amq_client = FakeAMQClient(spec, self.options, self.broker)
+        amq_client = get_fake_amq_client(self.broker)
         self.broker = amq_client.broker  # So we use the same broker for all.
         reactor.callLater(0, worker._amqp_connected, amq_client)
 
@@ -214,253 +71,64 @@ def get_stubbed_channel(broker=None, id=0):
     return amq_client.channel(id)
 
 
-class TestResourceWorker(Worker):
-    port = 9999
-    _resources = ()
-
-    def set_resources(self, resources):
-        self._resources = resources
-
-    def startWorker(self):
-        resources = [(cls(*args), path) for path, cls, args in self._resources]
-        self.resources = self.start_web_resources(resources, self.port)
-        return defer.succeed(None)
-
-    def stopWorker(self):
-        if self.resources:
-            self.resources.stopListening()
-
-
-class FakeRedis(object):
-    """In process and memory implementation of redis-like data store.
-
-    It's intended to match the Python redis module API closely so that
-    it can be used in place of the redis module when testing.
-
-    Known limitations:
-
-    * Exceptions raised are not guaranteed to match the exception
-      types raised by the real Python redis module.
-    """
-
-    def __init__(self):
-        self._data = {}
-        self._expiries = {}
-
-    def teardown(self):
-        self._clean_up_expires()
-
-    def _clean_up_expires(self):
-        for key in self._expiries.keys():
-            delayed = self._expiries.pop(key)
-            if not delayed.cancelled:
-                delayed.cancel()
-
-    # Global operations
-
-    def exists(self, key):
-        return key in self._data
-
-    def keys(self, pattern='*'):
-        return fnmatch.filter(self._data.keys(), pattern)
-
-    def flushdb(self):
-        self._data = {}
-
-    # String operations
-
-    def get(self, key):
-        return self._data.get(key)
-
-    def set(self, key, value):
-        value = str(value)  # set() sets string value
-        self._data[key] = value
-
-    def delete(self, key):
-        existed = self.exists(key)
-        self._data.pop(key, None)
-        return existed
-
-    # Integer operations
-
-    # The python redis lib combines incr & incrby into incr(key, increment=1)
-    def incr(self, key, increment=1):
-        old_value = self._data.get(key)
-        if old_value is None:
-            old_value = 0
-        new_value = int(old_value) + increment
-        self.set(key, new_value)
-        return new_value
-
-    # Hash operations
-
-    def hset(self, key, field, value):
-        mapping = self._data.setdefault(key, {})
-        new_field = field not in mapping
-        mapping[field] = unicode(value)
-        return int(new_field)
-
-    def hget(self, key, field):
-        return self._data.get(key, {}).get(field)
-
-    def hdel(self, key, *fields):
-        mapping = self._data.get(key)
-        if mapping is None:
-            return 0
-        deleted = 0
-        for field in fields:
-            if field in mapping:
-                del mapping[field]
-                deleted += 1
-        return deleted
-
-    def hmset(self, key, mapping):
-        hval = self._data.setdefault(key, {})
-        hval.update(dict([(key, unicode(value))
-            for key, value in mapping.items()]))
-
-    def hgetall(self, key):
-        return self._data.get(key, {}).copy()
-
-    def hlen(self, key):
-        return len(self._data.get(key, {}))
-
-    def hvals(self, key):
-        return self._data.get(key, {}).values()
-
-    def hincrby(self, key, field, amount=1):
-        value = self._data.get(key, {}).get(field, "0")
-        # the int(str(..)) coerces amount to an int but rejects floats
-        value = int(value) + int(str(amount))
-        self._data.setdefault(key, {})[field] = str(value)
-        return value
-
-    # Set operations
-
-    def sadd(self, key, *values):
-        sval = self._data.setdefault(key, set())
-        sval.update(map(unicode, values))
-
-    def smembers(self, key):
-        return self._data.get(key, set())
-
-    def spop(self, key):
-        sval = self._data.get(key, set())
-        if not sval:
-            return None
-        return sval.pop()
-
-    def srem(self, key, value):
-        sval = self._data.get(key, set())
-        if value in sval:
-            sval.remove(value)
-            return 1
-        return 0
-
-    def scard(self, key):
-        return len(self._data.get(key, set()))
-
-    def smove(self, src, dst, value):
-        result = self.srem(src, value)
-        if result:
-            self.sadd(dst, value)
-        return result
-
-    def sunion(self, key, *args):
-        union = set()
-        for rkey in (key,) + args:
-            union.update(self._data.get(rkey, set()))
-        return union
-
-    def sismember(self, key, value):
-        sval = self._data.get(key, set())
-        return value in sval
-
-    # Sorted set operations
-
-    def zadd(self, key, **valscores):
-        zval = self._data.setdefault(key, [])
-        new_zval = [val for val in zval if val[1] not in valscores]
-        for value, score in valscores.items():
-            new_zval.append((score, value))
-        new_zval.sort()
-        self._data[key] = new_zval
-
-    def zrem(self, key, value):
-        zval = self._data.setdefault(key, [])
-        new_zval = [val for val in zval if val[1] != value]
-        self._data[key] = new_zval
-
-    def zcard(self, key):
-        return len(self._data.get(key, []))
-
-    def zrange(self, key, start, stop, desc=False, withscores=False,
-                score_cast_func=float):
-        zval = self._data.get(key, [])
-        stop += 1  # redis start/stop are element indexes
-        if stop == 0:
-            stop = None
-        results = sorted(zval[start:stop],
-                    key=lambda (score, _): score_cast_func(score))
-        if desc:
-            results.reverse()
-        if withscores:
-            return results
-        else:
-            return [v for k, v in results]
-
-    # List operations
-    def llen(self, key):
-        return len(self._data.get(key, []))
-
-    def lpop(self, key):
-        if self.llen(key):
-            return self._data[key].pop(0)
-
-    def lpush(self, key, obj):
-        self._data.setdefault(key, []).insert(0, obj)
-
-    def rpush(self, key, obj):
-        self._data.setdefault(key, []).append(obj)
-        return self.llen(key) - 1
-
-    def lrange(self, key, start, end):
-        lval = self._data.get(key, [])
-        if end >= 0 or end < -1:
-            end += 1
-        else:
-            end = None
-        return lval[start:end]
-
-    def lrem(self, key, value):
-        lval = self._data.get(key, [])
-        self._data[key] = [v for v in lval if v is not value]
-
-    # Expiry operations
-
-    def expire(self, key, seconds):
-        self.persist(key)
-        delayed = reactor.callLater(seconds, self.delete, key)
-        self._expiries[key] = delayed
-
-    def persist(self, key):
-        delayed = self._expiries.get(key)
-        if delayed is not None and not delayed.cancelled:
-            delayed.cancel()
+def FakeRedis():
+    warnings.warn("Use of FakeRedis is deprecated. "
+                  "Use persist.tests.fake_redis instead.",
+                  category=DeprecationWarning)
+    from vumi.persist import fake_redis
+    return fake_redis.FakeRedis()
 
 
 class LogCatcher(object):
-    """Gather logs."""
+    """Context manager for gathering logs in tests.
 
-    def __init__(self):
+    :param str system:
+        Only log events whose 'system' value contains the given
+        regular expression pattern will be gathered. Default: None
+        (i.e. keep all log events).
+
+    :param str message:
+        Only log events whose message contains the given regular
+        expression pattern will be gathered. The message is
+        constructed by joining the elements in the 'message' value
+        with a space (the same way Twisted does). Default: None
+        (i.e. keep all log events).
+
+    :param int log_level:
+        Only log events whose logLevel is equal to the given level
+        will be gathered. Default: None (i.e. keep all log events).
+    """
+
+    def __init__(self, system=None, message=None, log_level=None):
         self.logs = []
+        self.system = re.compile(system) if system is not None else None
+        self.message = re.compile(message) if message is not None else None
+        self.log_level = log_level
 
     @property
     def errors(self):
         return [ev for ev in self.logs if ev["isError"]]
 
+    def messages(self):
+        return [" ".join(msg['message']) for msg in self.logs
+                if not msg["isError"]]
+
+    def _keep_log(self, event_dict):
+        if self.system is not None:
+            if not self.system.search(event_dict.get('system', '-')):
+                return False
+        if self.message is not None:
+            log_message = " ".join(event_dict.get('message', []))
+            if not self.message.search(log_message):
+                return False
+        if self.log_level is not None:
+            if event_dict.get('logLevel', None) != self.log_level:
+                return False
+        return True
+
     def _gather_logs(self, event_dict):
-        self.logs.append(event_dict)
+        if self._keep_log(event_dict):
+            self.logs.append(event_dict)
 
     def __enter__(self):
         log.theLogPublisher.addObserver(self._gather_logs)
@@ -483,6 +151,9 @@ class MockResource(Resource):
     def render_POST(self, request):
         return self.handler(request)
 
+    def render_PUT(self, request):
+        return self.handler(request)
+
 
 class MockHttpServer(object):
 
@@ -499,11 +170,506 @@ class MockHttpServer(object):
     @inlineCallbacks
     def start(self):
         root = MockResource(self._handler)
-        site_factory = Site(root)
-        self._webserver = yield reactor.listenTCP(0, site_factory)
+        site_factory = LogFilterSite(root)
+        self._webserver = yield reactor.listenTCP(
+            0, site_factory, interface='127.0.0.1')
         self.addr = self._webserver.getHost()
         self.url = "http://%s:%s/" % (self.addr.host, self.addr.port)
 
     @inlineCallbacks
     def stop(self):
+        yield self._webserver.stopListening()
         yield self._webserver.loseConnection()
+
+
+def maybe_async(sync_attr):
+    """Decorate a method that may be sync or async.
+
+    This redecorates with the either @inlineCallbacks or @flatten_generator,
+    depending on the `sync_attr`.
+    """
+    if callable(sync_attr):
+        # If we don't get a sync attribute name, default to 'is_sync'.
+        return maybe_async('is_sync')(sync_attr)
+
+    def redecorate(func):
+        @wraps(func)
+        def wrapper(self, *args, **kw):
+            if getattr(self, sync_attr):
+                return flatten_generator(func)(self, *args, **kw)
+            return inlineCallbacks(func)(self, *args, **kw)
+        return wrapper
+
+    return redecorate
+
+
+class RiakDisabledForTest(object):
+    """Placeholder object for a disabled riak config.
+
+    This class exists to throw a meaningful error when trying to use Riak in
+    a test that disallows it. We can't do this from inside the Riak setup
+    infrastructure, because that would be very invasive for something that
+    only really matters for tests.
+    """
+    def __getattr__(self, name):
+        raise RuntimeError(
+            "Use of Riak has been disabled for this test. Please set "
+            "'use_riak = True' on the test class to enable it.")
+
+
+class PersistenceMixin(object):
+    sync_persistence = False
+    use_riak = False
+
+    sync_or_async = staticmethod(maybe_async('sync_persistence'))
+
+    def _persist_setUp(self):
+        warnings.warn("PersistenceMixin is deprecated. "
+                      "Use PersistenceHelper from vumi.tests.helpers instead.",
+                      category=DeprecationWarning)
+        self._persist_patches = []
+        self._persist_riak_managers = []
+        self._persist_redis_managers = []
+        self._persist_config = {
+            'redis_manager': {
+                'FAKE_REDIS': 'yes',
+                'key_prefix': type(self).__module__,
+                },
+            'riak_manager': {
+                'bucket_prefix': type(self).__module__,
+                },
+            }
+        if not self.use_riak:
+            self._persist_config['riak_manager'] = RiakDisabledForTest()
+        self._persist_patch_riak()
+        self._persist_patch_txriak()
+        self._persist_patch_redis()
+        self._persist_patch_txredis()
+
+    def mk_config(self, config):
+        return dict(self._persist_config, **config)
+
+    @maybe_async('sync_persistence')
+    def _persist_tearDown(self):
+        for purge, manager in self._persist_get_teardown_riak_managers():
+            if purge:
+                try:
+                    yield self._persist_purge_riak(manager)
+                except ConnectionRefusedError:
+                    pass
+
+        # Hackily close all connections left open by the non-tx riak client.
+        # There's no other way to explicitly close these connections and not
+        # doing it means we can hit server-side connection limits in the middle
+        # of large test runs.
+        for manager in self._persist_riak_managers:
+            if hasattr(manager.client, '_cm'):
+                while manager.client._cm.conns:
+                    manager.client._cm.conns.pop().close()
+
+        for purge, manager in self._persist_get_teardown_redis_managers():
+            if purge:
+                yield self._persist_purge_redis(manager)
+            yield manager.close_manager()
+
+        for patch in reversed(self._persist_patches):
+            patch.restore()
+
+    def _persist_get_teardown_riak_managers(self):
+        """Get a list of Riak managers and whether they should be purged.
+
+        The return value is a list of (`bool`, `Manager`) tuples. If the first
+        item is `True`, the manager should be purged. It's safe to purge
+        managers even if the first item is `False`, but it adds extra cleanup
+        time.
+        """
+        # NOTE: Assumes we're only ever connecting to one Riak cluster.
+        seen_bucket_prefixes = set()
+        managers = []
+        for manager in self._persist_riak_managers:
+            if manager.bucket_prefix in seen_bucket_prefixes:
+                managers.append((False, manager))
+            else:
+                seen_bucket_prefixes.add(manager.bucket_prefix)
+                managers.append((True, manager))
+        # Return in reverse order in case something overrides teardown and
+        # cares about ordering.
+        return reversed(managers)
+
+    def _persist_get_teardown_redis_managers(self):
+        """Get a list of Redis managers and whether they should be purged.
+
+        The return value is a list of (`bool`, `Manager`) tuples. If the first
+        item is `True`, the manager should be purged. It's safe to purge
+        managers even if the first item is `False`, but it adds extra cleanup
+        time.
+        """
+        # NOTE: Assumes we're only ever connecting to one Redis db.
+        seen_key_prefixes = set()
+        managers = []
+        for manager in self._persist_redis_managers:
+            if manager._key_prefix in seen_key_prefixes:
+                managers.append((False, manager))
+            else:
+                seen_key_prefixes.add(manager._key_prefix)
+                managers.append((True, manager))
+        # Return in reverse order in case something overrides teardown and
+        # cares about ordering.
+        return reversed(managers)
+
+    def _persist_patch(self, obj, attribute, value):
+        monkey_patch = MonkeyPatcher((obj, attribute, value))
+        self._persist_patches.append(monkey_patch)
+        monkey_patch.patch()
+        return monkey_patch
+
+    def _persist_patch_riak(self):
+        try:
+            from vumi.persist.riak_manager import RiakManager
+        except ImportError, e:
+            import_filter(e, 'riak')
+            return
+
+        orig_init = RiakManager.__init__
+
+        def wrapper(obj, *args, **kw):
+            orig_init(obj, *args, **kw)
+            self._persist_riak_managers.append(obj)
+
+        self._persist_patch(RiakManager, '__init__', wrapper)
+
+    def _persist_patch_txriak(self):
+        try:
+            from vumi.persist.txriak_manager import TxRiakManager
+        except ImportError, e:
+            import_filter(e, 'riakasaurus', 'riakasaurus.riak')
+            return
+
+        orig_init = TxRiakManager.__init__
+
+        def wrapper(obj, *args, **kw):
+            orig_init(obj, *args, **kw)
+            self._persist_riak_managers.append(obj)
+
+        self._persist_patch(TxRiakManager, '__init__', wrapper)
+
+    def _persist_patch_redis(self):
+        try:
+            from vumi.persist.redis_manager import RedisManager
+        except ImportError, e:
+            import_filter(e, 'redis')
+            return
+
+        orig_init = RedisManager.__init__
+
+        def wrapper(obj, *args, **kw):
+            orig_init(obj, *args, **kw)
+            self._persist_redis_managers.append(obj)
+
+        self._persist_patch(RedisManager, '__init__', wrapper)
+
+    def _persist_patch_txredis(self):
+        from vumi.persist.txredis_manager import TxRedisManager
+
+        orig_init = TxRedisManager.__init__
+
+        def wrapper(obj, *args, **kw):
+            orig_init(obj, *args, **kw)
+            self._persist_redis_managers.append(obj)
+
+        self._persist_patch(TxRedisManager, '__init__', wrapper)
+
+    def _persist_purge_riak(self, manager):
+        "This is a separate method to allow easy overriding."
+        return manager.purge_all()
+
+    @maybe_async('sync_persistence')
+    def _persist_purge_redis(self, manager):
+        "This is a separate method to allow easy overriding."
+        try:
+            yield manager._purge_all()
+        except RuntimeError, e:
+            # Ignore managers that are already closed.
+            if e.args[0] != 'Not connected':
+                raise
+        yield manager.close_manager()
+
+    def get_riak_manager(self, config=None):
+        if config is None:
+            config = self._persist_config['riak_manager'].copy()
+
+        if self.sync_persistence:
+            return self._get_sync_riak_manager(config)
+        return self._get_async_riak_manager(config)
+
+    def _get_async_riak_manager(self, config):
+        try:
+            from vumi.persist.txriak_manager import TxRiakManager
+        except ImportError, e:
+            import_skip(e, 'riakasaurus', 'riakasaurus.riak')
+
+        return TxRiakManager.from_config(config)
+
+    def _get_sync_riak_manager(self, config):
+        try:
+            from vumi.persist.riak_manager import RiakManager
+        except ImportError, e:
+            import_skip(e, 'riak')
+
+        return RiakManager.from_config(config)
+
+    def get_redis_manager(self, config=None):
+        if config is None:
+            config = self._persist_config['redis_manager'].copy()
+
+        if self.sync_persistence:
+            return self._get_sync_redis_manager(config)
+        return self._get_async_redis_manager(config)
+
+    def _get_async_redis_manager(self, config):
+        from vumi.persist.txredis_manager import TxRedisManager
+
+        return TxRedisManager.from_config(config)
+
+    def _get_sync_redis_manager(self, config):
+        try:
+            from vumi.persist.redis_manager import RedisManager
+        except ImportError, e:
+            import_skip(e, 'redis')
+
+        return RedisManager.from_config(config)
+
+
+class VumiWorkerTestCase(VumiTestCase):
+    """Base test class for vumi workers.
+
+    This (or a subclass of this) should be the starting point for any test
+    cases that involve vumi workers.
+    """
+
+    transport_name = "sphex"
+    transport_type = None
+
+    MSG_ID_MATCHER = RegexMatcher(r'^[0-9a-fA-F]{32}$')
+
+    def setUp(self):
+        warnings.warn("VumiWorkerTestCase and its subclasses are deprecated. "
+                      "Use VumiTestCase and other tools from "
+                      "vumi.tests.helpers instead.",
+                      category=DeprecationWarning)
+        self._workers = []
+        self._amqp = FakeAMQPBroker()
+
+    @inlineCallbacks
+    def tearDown(self):
+        yield super(VumiWorkerTestCase, self).tearDown()
+        # Wait for any pending message deliveries to avoid a race with a dirty
+        # reactor.
+        yield self._amqp.wait_delivery()
+        # Now stop all the workers.
+        for worker in self._workers:
+            yield worker.stopWorker()
+
+    def rkey(self, name):
+        return "%s.%s" % (self.transport_name, name)
+
+    def _rkey(self, name, connector_name=None):
+        if connector_name is None:
+            return self.rkey(name)
+        return "%s.%s" % (connector_name, name)
+
+    @inlineCallbacks
+    def get_worker(self, config, cls, start=True):
+        """Create and return an instance of a vumi worker.
+
+        :param config: Config dict.
+        :param cls: The worker class to instantiate.
+        :param start: True to start the worker (default), False otherwise.
+        """
+
+        # When possible, always try and enable heartbeat setup in tests.
+        # so make sure worker_name is set
+        if (config is not None) and ('worker_name' not in config):
+            config['worker_name'] = "unnamed"
+
+        worker = get_stubbed_worker(cls, config, self._amqp)
+        self._workers.append(worker)
+        if start:
+            yield worker.startWorker()
+        returnValue(worker)
+
+    def mkmsg_ack(self, user_message_id='1', sent_message_id='abc',
+                  transport_metadata=None, transport_name=None):
+        if transport_metadata is None:
+            transport_metadata = {}
+        if transport_name is None:
+            transport_name = self.transport_name
+        return TransportEvent(
+            event_type='ack',
+            user_message_id=user_message_id,
+            sent_message_id=sent_message_id,
+            transport_name=transport_name,
+            transport_metadata=transport_metadata,
+            )
+
+    def mkmsg_nack(self, user_message_id='1', transport_metadata=None,
+                    transport_name=None, nack_reason='unknown'):
+        if transport_metadata is None:
+            transport_metadata = {}
+        if transport_name is None:
+            transport_name = self.transport_name
+        return TransportEvent(
+            event_type='nack',
+            nack_reason=nack_reason,
+            user_message_id=user_message_id,
+            transport_name=transport_name,
+            transport_metadata=transport_metadata,
+            )
+
+    def mkmsg_delivery(self, status='delivered', user_message_id='abc',
+                       transport_metadata=None, transport_name=None):
+        if transport_metadata is None:
+            transport_metadata = {}
+        if transport_name is None:
+            transport_name = self.transport_name
+        return TransportEvent(
+            event_type='delivery_report',
+            transport_name=transport_name,
+            user_message_id=user_message_id,
+            delivery_status=status,
+            to_addr='+41791234567',
+            transport_metadata=transport_metadata,
+            )
+
+    def mkmsg_in(self, content='hello world', message_id='abc',
+                 to_addr='9292', from_addr='+41791234567', group=None,
+                 session_event=None, transport_type=None,
+                 helper_metadata=None, transport_metadata=None,
+                 transport_name=None):
+        if transport_type is None:
+            transport_type = self.transport_type
+        if helper_metadata is None:
+            helper_metadata = {}
+        if transport_metadata is None:
+            transport_metadata = {}
+        if transport_name is None:
+            transport_name = self.transport_name
+        return TransportUserMessage(
+            from_addr=from_addr,
+            to_addr=to_addr,
+            group=group,
+            message_id=message_id,
+            transport_name=transport_name,
+            transport_type=transport_type,
+            transport_metadata=transport_metadata,
+            helper_metadata=helper_metadata,
+            content=content,
+            session_event=session_event,
+            timestamp=datetime.now(),
+            )
+
+    def mkmsg_out(self, content='hello world', message_id='1',
+                  to_addr='+41791234567', from_addr='9292', group=None,
+                  session_event=None, in_reply_to=None,
+                  transport_type=None, transport_metadata=None,
+                  transport_name=None, helper_metadata=None,
+                  ):
+        if transport_type is None:
+            transport_type = self.transport_type
+        if transport_metadata is None:
+            transport_metadata = {}
+        if transport_name is None:
+            transport_name = self.transport_name
+        if helper_metadata is None:
+            helper_metadata = {}
+        params = dict(
+            to_addr=to_addr,
+            from_addr=from_addr,
+            group=group,
+            message_id=message_id,
+            transport_name=transport_name,
+            transport_type=transport_type,
+            transport_metadata=transport_metadata,
+            content=content,
+            session_event=session_event,
+            in_reply_to=in_reply_to,
+            helper_metadata=helper_metadata,
+            )
+        return TransportUserMessage(**params)
+
+    def _make_matcher(self, msg, *id_fields):
+        msg['timestamp'] = UTCNearNow()
+        for field in id_fields:
+            msg[field] = self.MSG_ID_MATCHER
+        return msg
+
+    def _get_dispatched(self, name, connector_name=None):
+        rkey = self._rkey(name, connector_name)
+        return self._amqp.get_messages('vumi', rkey)
+
+    def _wait_for_dispatched(self, name, amount, connector_name=None):
+        rkey = self._rkey(name, connector_name)
+        return self._amqp.wait_messages('vumi', rkey, amount)
+
+    def clear_all_dispatched(self):
+        self._amqp.clear_messages('vumi')
+
+    def _clear_dispatched(self, name, connector_name=None):
+        rkey = self._rkey(name, connector_name)
+        return self._amqp.clear_messages('vumi', rkey)
+
+    def get_dispatched_events(self, connector_name=None):
+        return self._get_dispatched('event', connector_name)
+
+    def get_dispatched_inbound(self, connector_name=None):
+        return self._get_dispatched('inbound', connector_name)
+
+    def get_dispatched_outbound(self, connector_name=None):
+        return self._get_dispatched('outbound', connector_name)
+
+    def get_dispatched_failures(self, connector_name=None):
+        return self._get_dispatched('failures', connector_name)
+
+    def wait_for_dispatched_events(self, amount, connector_name=None):
+        return self._wait_for_dispatched('event', amount, connector_name)
+
+    def wait_for_dispatched_inbound(self, amount, connector_name=None):
+        return self._wait_for_dispatched('inbound', amount, connector_name)
+
+    def wait_for_dispatched_outbound(self, amount, connector_name=None):
+        return self._wait_for_dispatched('outbound', amount, connector_name)
+
+    def wait_for_dispatched_failures(self, amount, connector_name=None):
+        return self._wait_for_dispatched('failures', amount, connector_name)
+
+    def clear_dispatched_events(self, connector_name=None):
+        return self._clear_dispatched('event', connector_name)
+
+    def clear_dispatched_inbound(self, connector_name=None):
+        return self._clear_dispatched('inbound', connector_name)
+
+    def clear_dispatched_outbound(self, connector_name=None):
+        return self._clear_dispatched('outbound', connector_name)
+
+    def clear_dispatched_failures(self, connector_name=None):
+        return self._clear_dispatched('failures', connector_name)
+
+    def _dispatch(self, message, rkey, exchange='vumi'):
+        self._amqp.publish_message(exchange, rkey, message)
+        return self._amqp.kick_delivery()
+
+    def dispatch_inbound(self, message, connector_name=None):
+        rkey = self._rkey('inbound', connector_name)
+        return self._dispatch(message, rkey)
+
+    def dispatch_outbound(self, message, connector_name=None):
+        rkey = self._rkey('outbound', connector_name)
+        return self._dispatch(message, rkey)
+
+    def dispatch_event(self, message, connector_name=None):
+        rkey = self._rkey('event', connector_name)
+        return self._dispatch(message, rkey)
+
+    def dispatch_failure(self, message, connector_name=None):
+        rkey = self._rkey('failure', connector_name)
+        return self._dispatch(message, rkey)

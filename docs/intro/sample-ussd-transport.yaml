@@ -1,0 +1,10 @@
+transport_name: ussd_transport
+account_key: <your account key>
+access_token: <your acccess token>
+conversation_key: <your conversation key>
+
+middleware:
+    - logging_mw: vumi.middleware.logging.LoggingMiddleware
+
+logging_mw:
+    log_level: debug

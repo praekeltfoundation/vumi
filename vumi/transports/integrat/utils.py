@@ -1,13 +1,13 @@
 # -*- test-case-name: vumi.transports.integrat.tests.test_utils -*-
 
-from  xml.etree import ElementTree
+from xml.etree import ElementTree
 
 
 def safetext(element):
     return element.text or ''
 
 
-class HigateXMLParser():
+class HigateXMLParser(object):
 
     def parse(self, xmlstring):
         element = ElementTree.fromstring(xmlstring)
@@ -54,7 +54,7 @@ class HigateXMLParser():
             contextlist = element.find("Response").find("OnUSSEvent").find(
                 "USSContext").items()
             if element.find("Response").find("OnUSSEvent").find(
-                "USSText") != None:
+                    "USSText") is not None:
                 USSText = safetext(element.find("Response").find(
                         "OnUSSEvent").find("USSText"))
 
@@ -75,6 +75,23 @@ class HigateXMLParser():
             messagedict['USSText'] = USSText
 
         #############################################################
+
+        return messagedict
+
+    def parse_response(self, xmlstring):
+        element = ElementTree.fromstring(xmlstring)
+        status_code = int(element.get('status_code'))
+        if not status_code:
+            return {}
+
+        data = element.find('Data')
+        error_elements = element.findall('Data/field')
+        messagedict = {
+            'status_code': status_code,
+            'error': data.get('name'),
+            'error_fields': [{f.get('name'): f.get('value')}
+                                for f in error_elements],
+        }
 
         return messagedict
 

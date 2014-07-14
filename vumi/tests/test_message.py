@@ -1,11 +1,10 @@
-from twisted.trial.unittest import TestCase
-
 from vumi.tests.utils import RegexMatcher, UTCNearNow
 from vumi.message import (Message, TransportMessage, TransportEvent,
                           TransportUserMessage)
+from vumi.tests.helpers import VumiTestCase
 
 
-class MessageTest(TestCase):
+class MessageTest(VumiTestCase):
 
     def test_message_equality(self):
         self.assertEqual(Message(a=5), Message(a=5))
@@ -17,13 +16,75 @@ class MessageTest(TestCase):
         self.assertTrue('a' in Message(a=5))
         self.assertFalse('a' in Message(b=5))
 
+
+class TransportMessageTestMixin(object):
+    def make_message(self, **fields):
+        raise NotImplementedError()
+
+    def test_transport_message_fields(self):
+        msg = self.make_message()
+        self.assertEqual('20110921', msg['message_version'])
+        self.assertEqual(UTCNearNow(), msg['timestamp'])
+
+    def test_helper_metadata(self):
+        self.assertEqual({}, self.make_message()['helper_metadata'])
+        msg = self.make_message(helper_metadata={'foo': 'bar'})
+        self.assertEqual({'foo': 'bar'}, msg['helper_metadata'])
+
+    def test_routing_metadata(self):
+        self.assertEqual({}, self.make_message().routing_metadata)
+        msg = self.make_message(routing_metadata={'foo': 'bar'})
+        self.assertEqual({'foo': 'bar'}, msg.routing_metadata)
+
+    def test_check_routing_endpoint(self):
+        msgcls = type(self.make_message())
+        self.assertEqual('default', msgcls.check_routing_endpoint(None))
+        self.assertEqual('foo', msgcls.check_routing_endpoint('foo'))
+
+    def test_get_routing_endpoint(self):
+        msg = self.make_message()
+        self.assertEqual({}, msg.routing_metadata)
+        self.assertEqual('default', msg.get_routing_endpoint())
+        msg.routing_metadata['endpoint_name'] = None
+        self.assertEqual('default', msg.get_routing_endpoint())
+        msg.routing_metadata['endpoint_name'] = 'foo'
+        self.assertEqual('foo', msg.get_routing_endpoint())
+
+    def test_set_routing_endpoint(self):
+        msg = self.make_message()
+        self.assertEqual({}, msg.routing_metadata)
+        msg.set_routing_endpoint(None)
+        self.assertEqual('default', msg.routing_metadata['endpoint_name'])
+        msg.set_routing_endpoint('foo')
+        self.assertEqual('foo', msg.routing_metadata['endpoint_name'])
+
+
+class TransportMessageTest(TransportMessageTestMixin, VumiTestCase):
+    def make_message(self, **extra_fields):
+        fields = dict(message_type='foo')
+        fields.update(extra_fields)
+        return TransportMessage(**fields)
+
     def test_transport_message(self):
         msg = TransportMessage(
             message_type='foo',
             )
         self.assertEqual('foo', msg['message_type'])
-        self.assertEqual('20110921', msg['message_version'])
-        self.assertEqual(UTCNearNow(), msg['timestamp'])
+
+
+class TransportUserMessageTest(TransportMessageTestMixin, VumiTestCase):
+    def make_message(self, **extra_fields):
+        fields = dict(
+            # message_id='abc',
+            to_addr='+27831234567',
+            from_addr='12345',
+            # content='heya',
+            transport_name='sphex',
+            transport_type='sms',
+            # transport_metadata={},
+            )
+        fields.update(extra_fields)
+        return TransportUserMessage(**fields)
 
     def test_transport_user_message_basic(self):
         msg = TransportUserMessage(
@@ -206,12 +267,23 @@ class MessageTest(TestCase):
         self.assertEqual(msg['transport_metadata'], {})
         self.assertEqual(msg['helper_metadata'], {})
 
+
+class TransportEventTest(TransportMessageTestMixin, VumiTestCase):
+    def make_message(self, **extra_fields):
+        fields = dict(
+            event_id='def',
+            event_type='ack',
+            user_message_id='abc',
+            sent_message_id='ghi',
+            )
+        fields.update(extra_fields)
+        return TransportEvent(**fields)
+
     def test_transport_event_ack(self):
         msg = TransportEvent(
             event_id='def',
             event_type='ack',
             user_message_id='abc',
-            # transport_name='sphex',
             sent_message_id='ghi',
             )
         self.assertEqual('event', msg['message_type'])
@@ -219,8 +291,23 @@ class MessageTest(TestCase):
         self.assertEqual('def', msg['event_id'])
         self.assertEqual('abc', msg['user_message_id'])
         self.assertEqual('20110921', msg['message_version'])
-        # self.assertEqual('sphex', msg['transport_name'])
         self.assertEqual('ghi', msg['sent_message_id'])
+        self.assertEqual({}, msg['helper_metadata'])
+
+    def test_transport_event_nack(self):
+        msg = TransportEvent(
+            event_id='def',
+            event_type='nack',
+            user_message_id='abc',
+            nack_reason='unknown',
+            )
+        self.assertEqual('event', msg['message_type'])
+        self.assertEqual('nack', msg['event_type'])
+        self.assertEqual('unknown', msg['nack_reason'])
+        self.assertEqual('def', msg['event_id'])
+        self.assertEqual('abc', msg['user_message_id'])
+        self.assertEqual('20110921', msg['message_version'])
+        self.assertEqual({}, msg['helper_metadata'])
 
     def test_transport_event_delivery_report(self):
         msg = TransportEvent(
@@ -239,3 +326,4 @@ class MessageTest(TestCase):
         self.assertEqual('20110921', msg['message_version'])
         # self.assertEqual('sphex', msg['transport_name'])
         self.assertEqual('delivered', msg['delivery_status'])
+        self.assertEqual({}, msg['helper_metadata'])

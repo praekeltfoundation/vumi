@@ -1,10 +1,11 @@
 # Source distribution files.
 include .coveragerc
+include AUTHORS
 include LICENSE
 include README.rst
 include Vagrantfile
 include logs/README tmp/pids/README
-include requirements.pip requirements-dev.pip requirements-webapp.pip
+include requirements.pip requirements-dev.pip
 include setup.py
 include tox.ini
 
@@ -14,6 +15,7 @@ prune docs/_build
 recursive-include etc *
 recursive-include puppet *
 recursive-include utils *.sh
+recursive-include vumi *.js
 
 # Python package data files.
 include twisted/plugins/*.py

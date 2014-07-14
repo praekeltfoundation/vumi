@@ -1,10 +1,16 @@
 # -*- test-case-name: vumi.transports.cellulant.tests.test_cellulant -*-
 
-import redis
+from twisted.internet.defer import inlineCallbacks
 
+from vumi.components.session import SessionManager
+from vumi.errors import VumiError
 from vumi.transports.httprpc import HttpRpcTransport
 from vumi.message import TransportUserMessage
 from vumi import log
+
+
+class CellulantError(VumiError):
+    """Used to log errors specific to the Cellulant transport."""
 
 
 def pack_ussd_message(message):
@@ -28,7 +34,9 @@ def pack_ussd_message(message):
 
 
 class CellulantTransport(HttpRpcTransport):
+    """Cellulant USSD (via HTTP) transport."""
 
+    ENCODING = 'utf-8'
     EVENT_MAP = {
         'BEG': TransportUserMessage.SESSION_NEW,
         'ABO': TransportUserMessage.SESSION_CLOSE,
@@ -38,47 +46,47 @@ class CellulantTransport(HttpRpcTransport):
         super(CellulantTransport, self).validate_config()
         self.transport_type = self.config.get('transport_type', 'ussd')
 
+    @inlineCallbacks
     def setup_transport(self):
         super(CellulantTransport, self).setup_transport()
-        self.redis_config = self.config.get('redis', {})
-        self.r_prefix = "vumi.transports.cellulant:%s" % self.transport_name
-        self.r_session_timeout = int(self.config.get("ussd_session_timeout",
-                                                                        600))
-        self.connect_to_redis()
+        r_config = self.config.get('redis_manager', {})
+        r_prefix = "vumi.transports.cellulant:%s" % self.transport_name
+        session_timeout = int(self.config.get("ussd_session_timeout", 600))
+        self.session_manager = yield SessionManager.from_redis_config(
+            r_config, r_prefix, session_timeout)
 
-    # the connection to redis is a seperate method to allow overriding in tests
-    def connect_to_redis(self):
-        self.r_server = redis.Redis(**self.redis_config)
-
-    def r_key(self, msisdn, session):
-        return "%s:%s:%s" % (self.r_prefix, msisdn, session)
+    @inlineCallbacks
+    def teardown_transport(self):
+        yield self.session_manager.stop()
+        yield super(CellulantTransport, self).teardown_transport()
 
     def set_ussd_for_msisdn_session(self, msisdn, session, ussd):
-        self.r_server.set(self.r_key(msisdn, session), ussd)
-        self.r_server.expire(self.r_key(msisdn, session),
-                self.r_session_timeout)
+        return self.session_manager.create_session(
+            "%s:%s" % (msisdn, session), ussd=ussd)
 
     def get_ussd_for_msisdn_session(self, msisdn, session):
-        return self.r_server.get(self.r_key(msisdn, session))
+        d = self.session_manager.load_session("%s:%s" % (msisdn, session))
+        return d.addCallback(lambda s: s.get('ussd', None))
 
+    @inlineCallbacks
     def handle_raw_inbound_message(self, message_id, request):
         op_code = request.args.get('opCode')[0]
         to_addr = None
         if op_code == "BEG":
             to_addr = request.args.get('INPUT')[0]
-            self.set_ussd_for_msisdn_session(
-                    request.args.get('MSISDN')[0],
-                    request.args.get('sessionID')[0],
-                    to_addr,
-                    )
+            content = None
+            yield self.set_ussd_for_msisdn_session(
+                request.args.get('MSISDN')[0],
+                request.args.get('sessionID')[0],
+                to_addr)
         else:
-            to_addr = self.get_ussd_for_msisdn_session(
-                    request.args.get('MSISDN')[0],
-                    request.args.get('sessionID')[0],
-                    )
+            to_addr = yield self.get_ussd_for_msisdn_session(
+                request.args.get('MSISDN')[0],
+                request.args.get('sessionID')[0])
+            content = request.args.get('INPUT')[0]
 
         if ((request.args.get('ABORT')[0] not in ('0', 'null'))
-            or (op_code == 'ABO')):
+                or (op_code == 'ABO')):
             # respond to phones aborting a session
             self.finish_request(message_id, '')
             event = TransportUserMessage.SESSION_CLOSE
@@ -89,14 +97,15 @@ class CellulantTransport(HttpRpcTransport):
         if to_addr is None:
             # we can't continue so finish request and log error
             self.finish_request(message_id, '')
-            log.error("Failed redis USSD to_addr lookup for %s" % request.args)
+            log.error(CellulantError(
+                "Failed redis USSD to_addr lookup for %s" % request.args))
         else:
             transport_metadata = {
                 'session_id': request.args.get('sessionID')[0],
             }
             self.publish_message(
                 message_id=message_id,
-                content=request.args.get('INPUT')[0],
+                content=content,
                 to_addr=to_addr,
                 from_addr=request.args.get('MSISDN')[0],
                 session_event=event,
@@ -106,6 +115,12 @@ class CellulantTransport(HttpRpcTransport):
             )
 
     def handle_outbound_message(self, message):
-        if message.payload.get('in_reply_to') and 'content' in message.payload:
-            self.finish_request(message['in_reply_to'],
-                                pack_ussd_message(message).encode('utf-8'))
+        missing_fields = self.ensure_message_values(message,
+                                ['in_reply_to', 'content'])
+        if missing_fields:
+            return self.reject_message(message, missing_fields)
+
+        self.finish_request(message['in_reply_to'],
+                            pack_ussd_message(message).encode(self.ENCODING))
+        return self.publish_ack(user_message_id=message['message_id'],
+            sent_message_id=message['message_id'])

@@ -133,23 +133,22 @@ workers:
 A shell script to start-up such a setup might be::
 
   #!/bin/bash
-  BUCKET_OPTS="--worker_class=vumi.workers.blinkenlights.metrics.\
-  MetricTimeBucket --set-option=buckets:3 --set-option=bucket_size:5"
+  BUCKET_OPTS="--worker_class=vumi.blinkenlights.MetricTimeBucket \
+  --set-option=buckets:3 --set-option=bucket_size:5"
 
-  AGGREGATOR_OPTS="--worker_class=vumi.workers.blinkenlights.metrics.\
-  MetricAggregator --set-option=bucket_size:5"
+  AGGREGATOR_OPTS="--worker_class=vumi.blinkenlights.MetricAggregator \
+  --set-option=bucket_size:5"
 
-  GRAPHITE_OPTS="--worker_class=vumi.workers.blinkenlights.metrics.\
-  GraphiteMetricsCollector"
+  GRAPHITE_OPTS="--worker_class=vumi.blinkenlights.GraphiteMetricsCollector"
 
-  twistd -n start_worker $BUCKET_OPTS &
-  twistd -n start_worker $BUCKET_OPTS &
+  twistd -n vumi_worker $BUCKET_OPTS &
+  twistd -n vumi_worker $BUCKET_OPTS &
 
-  twistd -n start_worker $AGGREGATOR_OPTS --set-option=bucket:0 &
-  twistd -n start_worker $AGGREGATOR_OPTS --set-option=bucket:1 &
-  twistd -n start_worker $AGGREGATOR_OPTS --set-option=bucket:2 &
+  twistd -n vumi_worker $AGGREGATOR_OPTS --set-option=bucket:0 &
+  twistd -n vumi_worker $AGGREGATOR_OPTS --set-option=bucket:1 &
+  twistd -n vumi_worker $AGGREGATOR_OPTS --set-option=bucket:2 &
 
-  twistd -n start_worker $GRAPHITE_OPTS &
+  twistd -n vumi_worker $GRAPHITE_OPTS &
 
 
 Publishing to Graphite
@@ -160,7 +159,7 @@ The :class:`GraphiteMetricsCollector` collects aggregate metrics
 (Graphite's metric collection package) over AMQP.
 
 You can read about installing a configuring Graphite at
-`<graphite.wikidot.com>`_ but at the very least you will have to enable
+`<http://graphite.wikidot.com>`_ but at the very least you will have to enable
 AMQP support by setting::
 
   [cache]

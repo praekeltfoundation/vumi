@@ -1,0 +1,13 @@
+{
+    "message_id": "message2",
+    "in_reply_to": "message1",
+    "to_addr": "27761234567",
+    "from_addr": "1234",
+    "content": "Thanks! We've received your SMS!",
+    "transport_name": "smpp_transport",
+    "transport_type": "sms",
+    "helper_metadata": {
+        // this is a dictionary containing
+        // application specific data
+    }
+}

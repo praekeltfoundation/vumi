@@ -1,17 +1,21 @@
-# -*- coding: utf-8 -*-
 # -*- test-case-name: vumi.transports.infobip.tests.test_infobip -*-
+# -*- coding: utf-8 -*-
 
 """Infobip USSD transport."""
 
 import json
 
-import redis
-from twisted.python import log
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, returnValue
 
+from vumi import log
+from vumi.errors import VumiError
 from vumi.message import TransportUserMessage
 from vumi.transports.httprpc import HttpRpcTransport
-from vumi.transports.failures import PermanentFailure
+from vumi.components.session import SessionManager
+
+
+class InfobipError(VumiError):
+    """Used to log errors specific to the Infobip transport."""
 
 
 class InfobipTransport(HttpRpcTransport):
@@ -97,35 +101,30 @@ class InfobipTransport(HttpRpcTransport):
         }
 
     def validate_config(self):
-        self.r_config = self.config.get('redis', {})
+        super(InfobipTransport, self).validate_config()
+        self.r_config = self.config.get('redis_manager', {})
 
     @inlineCallbacks
     def setup_transport(self):
         yield super(InfobipTransport, self).setup_transport()
-        self.r_server = redis.Redis(**self.r_config)
-        log.msg("Connected to Redis")
-        self.r_prefix = "infobip:%s" % (self.transport_name,)
-        log.msg("r_prefix = %s" % self.r_prefix)
-        self.r_session_timeout = int(self.config.get("ussd_session_timeout",
-                                                     600))
+        r_prefix = "infobip:%s" % (self.transport_name,)
+        session_timeout = int(self.config.get("ussd_session_timeout", 600))
+        self.session_manager = yield SessionManager.from_redis_config(
+            self.r_config, r_prefix, session_timeout)
 
-    def r_key(self, session_id):
-        return ":".join([self.r_prefix, str(session_id)])
+    @inlineCallbacks
+    def teardown_transport(self):
+        yield self.session_manager.stop()
+        yield super(InfobipTransport, self).teardown_transport()
 
     def save_ussd_params(self, session_id, params):
-        skey = self.r_key(session_id)
-        self.r_server.delete(skey)
-        for s_key, s_value in params.items():
-            self.r_server.hset(skey, s_key, s_value)
-        self.r_server.expire(skey, self.r_session_timeout)
+        return self.session_manager.create_session(session_id, **params)
 
     def get_ussd_params(self, session_id):
-        skey = self.r_key(session_id)
-        return self.r_server.hgetall(skey)
+        return self.session_manager.load_session(session_id)
 
     def clear_ussd_params(self, session_id):
-        skey = self.r_key(session_id)
-        self.r_server.delete(skey)
+        return self.session_manager.clear_session(session_id)
 
     def send_error(self, msgid, reason, code=400):
         response_data = {
@@ -134,28 +133,29 @@ class InfobipTransport(HttpRpcTransport):
             }
         self.finish_request(msgid, json.dumps(response_data))
 
+    @inlineCallbacks
     def handle_infobip_status(self, msgid, session_id, eq_data):
-        params = self.get_ussd_params(session_id)
+        params = yield self.get_ussd_params(session_id)
         response_data = {
             "sessionActive": bool(params),
             "responseExitCode": 200,
             "responseMessage": "",
             }
-        self.finish_request(msgid, json.dumps(response_data))
-        return None
+        yield self.finish_request(msgid, json.dumps(response_data))
 
+    @inlineCallbacks
     def handle_infobip_start(self, msgid, session_id, req_data):
-        message_dict = self.get_ussd_params(session_id)
+        message_dict = yield self.get_ussd_params(session_id)
         if message_dict:
-            self.send_error(msgid,
-                            "USSD session %r already started" % (session_id,))
-            return None
+            self.send_error(
+                msgid, "USSD session %r already started" % (session_id,))
+            return
         try:
             from_addr = req_data["msisdn"]
             content = req_data["text"]
         except KeyError, e:
             self.send_error(msgid, "Missing required JSON field: %r" % (e,))
-            return None
+            return
 
         message_dict = {
             "from_addr": from_addr,
@@ -166,39 +166,41 @@ class InfobipTransport(HttpRpcTransport):
             # contains values like "live2".
             "provider": req_data.get("ussdGwId", ""),
             }
-        self.save_ussd_params(session_id, message_dict)
+        yield self.save_ussd_params(session_id, message_dict)
         message_dict["content"] = content
-        return message_dict
+        returnValue(message_dict)
 
+    @inlineCallbacks
     def handle_infobip_response(self, msgid, session_id, req_data):
-        message_dict = self.get_ussd_params(session_id)
+        message_dict = yield self.get_ussd_params(session_id)
         if not message_dict:
             self.send_error(msgid, "Invalid USSD session %r" % (session_id,))
-            return None
+            return
         try:
             content = req_data["text"]
         except KeyError, e:
             self.send_error(msgid, "Missing required JSON field: %r" % (e,))
-            return None
+            return
         message_dict["content"] = content
-        return message_dict
+        returnValue(message_dict)
 
+    @inlineCallbacks
     def handle_infobip_end(self, msgid, session_id, req_data):
-        message_dict = self.get_ussd_params(session_id)
+        message_dict = yield self.get_ussd_params(session_id)
         if not message_dict:
             self.send_error(msgid, "Invalid USSD session %r" % (session_id,))
-            return None
+            return
 
-        self.clear_ussd_params(session_id)
+        yield self.clear_ussd_params(session_id)
         response_data = {"responseExitCode": 200, "responseMessage": ""}
         self.finish_request(msgid, json.dumps(response_data))
         message_dict["content"] = None
-        return message_dict
+        returnValue(message_dict)
 
     def handle_infobip_error(self, msgid, session_id, req_data):
         self.send_error(msgid, req_data.get("error", "Invalid request"))
-        return None
 
+    @inlineCallbacks
     def handle_raw_inbound_message(self, msgid, request):
         parts = request.path.split('/')
         session_id = parts[-2]
@@ -220,7 +222,7 @@ class InfobipTransport(HttpRpcTransport):
         else:
             req_data = {}
 
-        message_dict = session_handler(msgid, session_id, req_data)
+        message_dict = yield session_handler(msgid, session_id, req_data)
         if message_dict is not None:
             transport_metadata = {'session_id': session_id}
             message_dict.setdefault("message_id", msgid)
@@ -245,14 +247,17 @@ class InfobipTransport(HttpRpcTransport):
             response_id = self.finish_request(message['in_reply_to'],
                                               json.dumps(response_data))
             if response_id is None:
-                raise PermanentFailure("Infobip transport could not find"
-                                       " original request when attempting"
-                                       " to reply.")
+                err_msg = ("Infobip transport could not find original request"
+                            " when attempting to reply.")
+                log.error(InfobipError(err_msg))
+                return self.publish_nack(user_message_id=message['message_id'],
+                    reason=err_msg)
             else:
-                self.publish_ack(message['message_id'],
+                return self.publish_ack(message['message_id'],
                                  sent_message_id=response_id)
         else:
-            log.err("Infobip transport cannot process outbound message that"
-                    " is not a reply: %r" % message)
-            raise PermanentFailure("Infobip transport cannot process outbound"
-                                   " message that is not a reply.""")
+            err_msg = ("Infobip transport cannot process outbound message that"
+                        " is not a reply: %s" % (message['message_id'],))
+            log.error(InfobipError(err_msg))
+            return self.publish_nack(user_message_id=message['message_id'],
+                reason=err_msg)

@@ -8,12 +8,15 @@ from twisted.internet.defer import (maybeDeferred, DeferredQueue,
 from vumi.message import TransportUserMessage
 from vumi.service import Worker, WorkerCreator
 from vumi.servicemaker import VumiOptions
+from vumi.utils import to_kwargs
 
 
 class InjectorOptions(VumiOptions):
     optParameters = [
         ["transport-name", None, None,
             "Name of the transport to inject messages from"],
+        ["direction", None, "inbound",
+            "Direction messages are to be sent to."],
         ["verbose", "v", False, "Output the JSON being injected"],
     ]
 
@@ -31,9 +34,9 @@ class MessageInjector(Worker):
     @inlineCallbacks
     def startWorker(self):
         self.transport_name = self.config['transport-name']
-        self.publisher = yield self.publish_to('%s.inbound' %
-                                                self.transport_name)
-        self.publisher.require_bind = False
+        self.direction = self.config['direction']
+        self.publisher = yield self.publish_to(
+            '%s.%s' % (self.transport_name, self.direction))
         self.WORKER_QUEUE.put(self)
 
     def process_file(self, in_file, out_file=None):
@@ -57,7 +60,7 @@ class MessageInjector(Worker):
         }
         data.update(json.loads(line))
         self.publisher.publish_message(
-            TransportUserMessage(**data))
+            TransportUserMessage(**to_kwargs(data)))
 
 
 @inlineCallbacks

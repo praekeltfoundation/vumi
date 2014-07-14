@@ -2,13 +2,12 @@
 
 import re
 
-from twisted.trial.unittest import TestCase
-
 from vumi.middleware.tagger import TaggingMiddleware
 from vumi.message import TransportUserMessage
+from vumi.tests.helpers import VumiTestCase
 
 
-class TaggingMiddlewareTestCase(TestCase):
+class TestTaggingMiddleware(VumiTestCase):
 
     DEFAULT_CONFIG = {
         'incoming': {
@@ -33,7 +32,7 @@ class TaggingMiddlewareTestCase(TestCase):
 
     def mk_msg(self, to_addr, tag=None, from_addr="12345"):
         msg = TransportUserMessage(to_addr=to_addr, from_addr=from_addr,
-                                   transport_name="dummy_endpoint",
+                                   transport_name="dummy_connector",
                                    transport_type="dummy_transport_type")
         if tag is not None:
             TaggingMiddleware.add_tag_to_msg(msg, tag)
@@ -41,12 +40,12 @@ class TaggingMiddlewareTestCase(TestCase):
 
     def get_tag(self, to_addr):
         msg = self.mk_msg(to_addr)
-        msg = self.mw.handle_inbound(msg, "dummy_endpoint")
+        msg = self.mw.handle_inbound(msg, "dummy_connector")
         return TaggingMiddleware.map_msg_to_tag(msg)
 
     def get_from_addr(self, to_addr, tag):
         msg = self.mk_msg(to_addr, tag, from_addr=None)
-        msg = self.mw.handle_outbound(msg, "dummy_endpoint")
+        msg = self.mw.handle_outbound(msg, "dummy_connector")
         return msg['from_addr']
 
     def test_inbound_matching_to_addr(self):
@@ -63,7 +62,7 @@ class TaggingMiddlewareTestCase(TestCase):
         tag = ("dont", "modify")
         orig_msg = self.mk_msg("a1234", tag=tag)
         msg = orig_msg.from_json(orig_msg.to_json())
-        msg = self.mw.handle_inbound(msg, "dummy_endpoint")
+        msg = self.mw.handle_inbound(msg, "dummy_connector")
         self.assertEqual(msg, orig_msg)
 
     def test_inbound_none_to_addr(self):
@@ -86,7 +85,7 @@ class TaggingMiddlewareTestCase(TestCase):
         self.mk_tagger()
         orig_msg = self.mk_msg("a1234", tag=("pool1", "othertag-456"))
         msg = orig_msg.from_json(orig_msg.to_json())
-        msg = self.mw.handle_outbound(msg, "dummy_endpoint")
+        msg = self.mw.handle_outbound(msg, "dummy_connector")
         for key in msg.payload.keys():
             self.assertEqual(msg[key], orig_msg[key], "Key %r not equal" % key)
         self.assertEqual(msg, orig_msg)
@@ -123,4 +122,15 @@ class TaggingMiddlewareTestCase(TestCase):
         TaggingMiddleware.add_tag_to_msg(msg, ('pool', 'mytag'))
         self.assertEqual(msg['helper_metadata']['tag'], {
             'tag': ['pool', 'mytag'],
+            })
+
+    def test_add_tag_to_payload(self):
+        payload = {}
+        TaggingMiddleware.add_tag_to_payload(payload, ('pool', 'mytag'))
+        self.assertEqual(payload, {
+            'helper_metadata': {
+                'tag': {
+                    'tag': ['pool', 'mytag'],
+                    },
+                },
             })

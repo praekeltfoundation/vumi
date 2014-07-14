@@ -10,8 +10,10 @@ from twisted.application.service import IServiceMaker
 from twisted.plugin import IPlugin
 
 from vumi.service import WorkerCreator
-from vumi.utils import load_class_by_string
+from vumi.utils import (load_class_by_string,
+                        generate_worker_id)
 from vumi.errors import VumiError
+from vumi.sentry import SentryLoggerService
 
 
 def overlay_configs(*configs):
@@ -49,9 +51,12 @@ class VumiOptions(usage.Options):
         ["password", None, None, "AMQP password (*)"],
         ["vhost", None, None, "AMQP virtual host (*)"],
         ["specfile", None, None, "AMQP spec file (*)"],
+        ["sentry", None, None, "Sentry DSN (*)"],
         ["vumi-config", None, None,
          "YAML config file for setting core vumi options (any command-line"
          " parameter marked with an asterisk)"],
+        ["system-id", None, None,
+         "An identifier for a collection of Vumi workers"],
     ]
 
     default_vumi_options = {
@@ -61,6 +66,7 @@ class VumiOptions(usage.Options):
         "password": "vumi",
         "vhost": "/develop",
         "specfile": "amqp-spec-0-8.xml",
+        "sentry": None,
         }
 
     def get_vumi_options(self):
@@ -115,10 +121,18 @@ class StartWorkerOptions(VumiOptions):
         # So we can stub it out in tests.
         sys.exit(0)
 
+    def emit(self, text):
+        # So we can stub it out in tests.
+        print text
+
     def do_worker_help(self):
         """Print out a usage message for the worker-class and exit"""
         worker_class = load_class_by_string(self.worker_class)
-        print worker_class.__doc__
+        self.emit(worker_class.__doc__)
+        config_class = getattr(worker_class, 'CONFIG_CLASS', None)
+        if config_class is not None:
+            self.emit(config_class.__doc__)
+        self.emit("")
         self.exit()
 
     def get_worker_class(self):
@@ -168,9 +182,22 @@ class VumiWorkerServiceMaker(object):
     options = StartWorkerOptions
 
     def makeService(self, options):
+        sentry_dsn = options.vumi_options.pop('sentry', None)
+        class_name = options.worker_class.rpartition('.')[2].lower()
+        logger_name = options.worker_config.get('worker_name', class_name)
+        system_id = options.vumi_options.get('system-id', 'global')
+        worker_id = generate_worker_id(system_id, logger_name)
+
         worker_creator = WorkerCreator(options.vumi_options)
         worker = worker_creator.create_worker(options.worker_class,
                                               options.worker_config)
+
+        if sentry_dsn is not None:
+            sentry_service = SentryLoggerService(sentry_dsn,
+                                                 logger_name,
+                                                 worker_id)
+            worker.addService(sentry_service)
+
         return worker
 
 

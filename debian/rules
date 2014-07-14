@@ -1,0 +1,7 @@
+#!/usr/bin/make -f
+
+%:
+		dh "$@" --with quilt,python2
+override_dh_clean:
+		dh_clean
+		rm -rf *.egg-info

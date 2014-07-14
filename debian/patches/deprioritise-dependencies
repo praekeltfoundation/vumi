@@ -1,0 +1,19 @@
+Index: vumi/requirements.pip
+===================================================================
+--- vumi.orig/requirements.pip	2012-07-27 10:01:35.988005432 +0000
++++ vumi/requirements.pip	2012-07-27 10:03:45.160000471 +0000
+@@ -4,14 +4,9 @@
+ txAMQP>=0.5
+ PyYAML
+ iso8601
+-supervisor
+ pyOpenSSL
+ python-ssmi
+ wokkel
+-redis
+ txredis
+ python-smpp
+ pytz
+-riakasaurus
+-riak
+-https://github.com/dustin/twitty-twister/tarball/master#egg=twittytwister-0.1.1

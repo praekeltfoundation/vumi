@@ -2,51 +2,56 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet.task import Clock
 from twisted.words.xish import domish
 
-from vumi.transports.tests.test_base import TransportTestCase
-from vumi.message import TransportUserMessage, from_json
+from vumi.tests.helpers import VumiTestCase
 from vumi.transports.xmpp.xmpp import XMPPTransport
 from vumi.transports.xmpp.tests import test_xmpp_stubs
+from vumi.transports.tests.helpers import TransportHelper
 
 
-class XMPPTransportTestCase(TransportTestCase):
-
-    transport_name = 'test_xmpp'
+class TestXMPPTransport(VumiTestCase):
 
     @inlineCallbacks
     def mk_transport(self):
-        transport = yield self.get_transport({
+        self.tx_helper = self.add_helper(TransportHelper(XMPPTransport))
+        transport = yield self.tx_helper.get_transport({
             'username': 'user@xmpp.domain.com',
             'password': 'testing password',
-            'status': 'XMPP status',
+            'status': 'chat',
+            'status_message': 'XMPP Transport',
             'host': 'xmpp.domain.com',
             'port': 5222,
-            'transport_name': 'test_xmpp',
             'transport_type': 'xmpp',
-        }, XMPPTransport, start=False)
+        }, start=False)
 
         transport._xmpp_protocol = test_xmpp_stubs.TestXMPPTransportProtocol
         transport._xmpp_client = test_xmpp_stubs.TestXMPPClient
         transport.ping_call.clock = Clock()
+        transport.presence_call.clock = Clock()
         yield transport.startWorker()
         yield transport.xmpp_protocol.connectionMade()
         self.jid = transport.jid
         returnValue(transport)
 
+    def assert_ack(self, ack, reply):
+        self.assertEqual(ack.payload['event_type'], 'ack')
+        self.assertEqual(ack.payload['user_message_id'], reply['message_id'])
+        self.assertEqual(ack.payload['sent_message_id'], reply['message_id'])
+
     @inlineCallbacks
     def test_outbound_message(self):
         transport = yield self.mk_transport()
-        yield self.dispatch(TransportUserMessage(
-            to_addr='user@xmpp.domain.com', from_addr='test@case.com',
-            content='hello world', transport_name='test_xmpp',
-            transport_type='xmpp', transport_metadata={}),
-            rkey='test_xmpp.outbound')
+        msg = yield self.tx_helper.make_dispatch_outbound(
+            "hi", to_addr='user@xmpp.domain.com', from_addr='test@case.com')
 
         xmlstream = transport.xmpp_protocol.xmlstream
         self.assertEqual(len(xmlstream.outbox), 1)
         message = xmlstream.outbox[0]
         self.assertEqual(message['to'], 'user@xmpp.domain.com')
         self.assertTrue(message['id'])
-        self.assertEqual(str(message.children[0]), 'hello world')
+        self.assertEqual(str(message.children[0]), 'hi')
+
+        [ack] = yield self.tx_helper.wait_for_dispatched_events(1)
+        self.assert_ack(ack, msg)
 
     @inlineCallbacks
     def test_inbound_message(self):
@@ -59,13 +64,10 @@ class XMPPTransportTestCase(TransportTestCase):
         message.addElement((None, 'body'), content='hello world')
         protocol = transport.xmpp_protocol
         protocol.onMessage(message)
-        dispatched_messages = self._amqp.get_dispatched('vumi',
-            'test_xmpp.inbound')
-        self.assertEqual(1, len(dispatched_messages))
-        msg = from_json(dispatched_messages[0].body)
+        [msg] = self.tx_helper.get_dispatched_inbound()
         self.assertEqual(msg['to_addr'], self.jid.userhost())
         self.assertEqual(msg['from_addr'], 'test@case.com')
-        self.assertEqual(msg['transport_name'], 'test_xmpp')
+        self.assertEqual(msg['transport_name'], self.tx_helper.transport_name)
         self.assertNotEqual(msg['message_id'], message['id'])
         self.assertEqual(msg['transport_metadata']['xmpp_id'], message['id'])
         self.assertEqual(msg['content'], 'hello world')
@@ -83,7 +85,7 @@ class XMPPTransportTestCase(TransportTestCase):
         protocol = transport.xmpp_protocol
         protocol.onMessage(message)
 
-        [msg] = self.get_dispatched_messages()
+        [msg] = self.tx_helper.get_dispatched_inbound()
         self.assertTrue(msg['message_id'])
         self.assertEqual(msg['transport_metadata']['xmpp_id'], None)
 
@@ -117,3 +119,49 @@ class XMPPTransportTestCase(TransportTestCase):
         self.assertEqual(message['type'], u'get')
         [child] = message.children
         self.assertEqual(child.toXml(), u"<ping xmlns='urn:xmpp:ping'/>")
+
+    @inlineCallbacks
+    def test_presence(self):
+        """
+        The transport's presence should be announced regularly.
+        """
+        transport = yield self.mk_transport()
+        self.assertEqual(transport.presence_interval, 60)
+        # The LoopingCall should be configured and started.
+        self.assertFalse(transport.presence_call.running)
+
+        # Stub output stream
+        xmlstream = test_xmpp_stubs.TestXMLStream()
+        transport.xmpp_client.xmlstream = xmlstream
+        transport.xmpp_client._initialized = True
+        transport.presence.xmlstream = xmlstream
+
+        self.assertEqual(xmlstream.outbox, [])
+        transport.presence.connectionInitialized()
+        transport.presence_call.clock.advance(1)
+        self.assertEqual(len(xmlstream.outbox), 1, repr(xmlstream.outbox))
+
+        self.assertEqual(transport.presence_call.f, transport.send_presence)
+        self.assertEqual(transport.presence_call.a, ())
+        self.assertEqual(transport.presence_call.kw, {})
+        self.assertEqual(transport.presence_call.interval, 60)
+        self.assertTrue(transport.presence_call.running)
+
+        [presence] = xmlstream.outbox
+        self.assertEqual(presence.toXml(),
+            u"<presence><status>chat</status></presence>")
+
+    @inlineCallbacks
+    def test_normalizing_from_addr(self):
+        transport = yield self.mk_transport()
+
+        message = domish.Element((None, "message"))
+        message['to'] = self.jid.userhost()
+        message['from'] = 'test@case.com/some_xmpp_id'
+        message.addUniqueId()
+        message.addElement((None, 'body'), content='hello world')
+        protocol = transport.xmpp_protocol
+        protocol.onMessage(message)
+        [msg] = self.tx_helper.get_dispatched_inbound()
+        self.assertEqual(msg['from_addr'], 'test@case.com')
+        self.assertEqual(msg['transport_metadata']['xmpp_id'], message['id'])

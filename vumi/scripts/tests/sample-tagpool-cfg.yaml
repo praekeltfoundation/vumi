@@ -1,0 +1,18 @@
+redis_manager:
+  FAKE_REDIS: yay
+  key_prefix: vumi.scripts.tests.test_vumi_tagpools
+tagpool_prefix: vumi
+pools:
+  shortcode:
+    tags: '["%d" % i for i in range(10001, 10001 + 1000)]'
+    metadata:
+      transport_type: sms
+  longcode:
+    tags: '["%d" % i for i in range(10001, 10001 + 1000)]'
+    metadata:
+      transport_type: sms
+  xmpp:
+    tags:
+      - 'me@example.com'
+    metadata:
+      transport_type: xmpp

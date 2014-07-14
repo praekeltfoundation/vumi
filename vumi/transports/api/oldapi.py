@@ -14,8 +14,8 @@ class OldSimpleHttpTransport(HttpRpcTransport):
     Maintains the API used by the old Django based
     method of loading SMS's into VUMI over HTTP
 
-    Configuration Values
-    --------------------
+    Configuration options:
+
     web_path : str
         The path relative to the host where this listens
     web_port : int
@@ -29,6 +29,7 @@ class OldSimpleHttpTransport(HttpRpcTransport):
     """
 
     def validate_config(self):
+        super(OldSimpleHttpTransport, self).validate_config()
         self.identities = self.config.get('identities', {})
 
     def get_health_response(self):
@@ -49,6 +50,8 @@ class OldSimpleHttpTransport(HttpRpcTransport):
 
     def handle_outbound_message(self, message):
         log.msg("OldSimpleHttpTransport consuming %s" % (message))
+        return self.publish_ack(user_message_id=message['message_id'],
+            sent_message_id=message['message_id'])
 
     def check_authorization(self, request):
         username, password = self.get_credentials(request)

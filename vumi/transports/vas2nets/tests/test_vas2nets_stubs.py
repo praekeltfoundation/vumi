@@ -7,17 +7,16 @@ from twisted.web.resource import Resource
 from twisted.web.server import NOT_DONE_YET
 from twisted.web.client import Agent
 from twisted.web.http_headers import Headers
-from twisted.trial import unittest
 from twisted.python import log
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, Deferred
 from twisted.web.test.test_web import DummyRequest
 
-from vumi.tests.utils import get_stubbed_worker
 from vumi.service import Worker
 from vumi.transports.vas2nets.transport_stubs import (
     FakeVas2NetsHandler, FakeVas2NetsWorker)
 from vumi.utils import StringProducer
+from vumi.tests.helpers import VumiTestCase, WorkerHelper
 
 
 def create_request(params={}, path='/', method='POST'):
@@ -68,26 +67,26 @@ class TestWorker(Worker):
             self.resource.stopListening()
 
 
-class TestFakeVas2NetsWorker(FakeVas2NetsWorker):
+class StubbedFakeVas2NetsWorker(FakeVas2NetsWorker):
     delay_choices = (0,)
 
 
-class FakeVas2NetsWorkerTestCase(unittest.TestCase):
+class TestFakeVas2NetsWorker(VumiTestCase):
 
+    @inlineCallbacks
     def setUp(self):
+        self.worker_helper = self.add_helper(WorkerHelper())
         self.config = {
             'web_port': 9999,
             'web_receive_path': '/t/receive',
             'web_receipt_path': '/t/receipt',
-            'url': 'http://localhost:9998/t/send',
+            'url': 'http://127.0.0.1:9998/t/send',
         }
-        self.worker = get_stubbed_worker(TestFakeVas2NetsWorker, self.config)
-        self.test_worker = get_stubbed_worker(TestWorker, self.config)
+        self.worker = yield self.worker_helper.get_worker(
+            StubbedFakeVas2NetsWorker, self.config, start=False)
+        self.test_worker = yield self.worker_helper.get_worker(
+            TestWorker, self.config, start=False)
         self.today = datetime.utcnow().date()
-
-    def tearDown(self):
-        self.worker.stopWorker()
-        self.test_worker.stopWorker()
 
     def render_request(self, resource, request):
         d = request.notifyFinish()
@@ -99,7 +98,7 @@ class FakeVas2NetsWorkerTestCase(unittest.TestCase):
 
     @inlineCallbacks
     def test_receive_sent_sms(self):
-        resource = FakeVas2NetsHandler('http://localhost:9999/t/receipt', (0,))
+        resource = FakeVas2NetsHandler('http://127.0.0.1:9999/t/receipt', (0,))
         resource.schedule_delivery = lambda *a: None
 
         request = create_request({
@@ -122,7 +121,7 @@ class FakeVas2NetsWorkerTestCase(unittest.TestCase):
 
     @inlineCallbacks
     def test_deliver_receipt(self):
-        resource = FakeVas2NetsHandler('http://localhost:9999/t/receipt', (0,))
+        resource = FakeVas2NetsHandler('http://127.0.0.1:9999/t/receipt', (0,))
         yield self.test_worker.startWorker()
 
         yield resource.deliver_receipt('smsid', 'msgid', 'provider', 'sender')

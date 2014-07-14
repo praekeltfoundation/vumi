@@ -3,11 +3,13 @@
 import time
 import random
 import hashlib
+from datetime import datetime
 
 from twisted.python import log
 from twisted.internet.defer import inlineCallbacks, Deferred
 from twisted.internet import reactor
 from twisted.internet.task import LoopingCall
+from twisted.internet.protocol import DatagramProtocol
 
 from vumi.service import Consumer, Publisher, Worker
 from vumi.blinkenlights.metrics import (MetricsConsumer, MetricManager, Count,
@@ -30,8 +32,9 @@ class AggregatedMetricConsumer(Consumer):
     durable = True
     routing_key = "vumi.metrics.aggregates"
 
-    def __init__(self, callback):
+    def __init__(self, channel, callback):
         self.queue_name = self.routing_key
+        super(AggregatedMetricConsumer, self).__init__(channel)
         self.callback = callback
 
     def consume_message(self, vumi_message):
@@ -73,9 +76,10 @@ class TimeBucketConsumer(Consumer):
     durable = True
     ROUTING_KEY_TEMPLATE = "bucket.%d"
 
-    def __init__(self, bucket, callback):
+    def __init__(self, channel, bucket, callback):
         self.queue_name = self.ROUTING_KEY_TEMPLATE % bucket
         self.routing_key = self.queue_name
+        super(TimeBucketConsumer, self).__init__(channel)
         self.callback = callback
 
     def consume_message(self, vumi_message):
@@ -221,10 +225,11 @@ class MetricAggregator(Worker):
                 ts = ts_key * self.bucket_size
                 items = self.buckets[ts_key].iteritems()
                 for metric_name, (agg_set, values) in items:
+                    values = [v for t, v in sorted(values)]
                     for agg_name in agg_set:
                         agg_metric = "%s.%s" % (metric_name, agg_name)
                         agg_func = Aggregator.from_name(agg_name)
-                        agg_value = agg_func([v[1] for v in values])
+                        agg_value = agg_func(values)
                         aggregates.append((agg_metric, agg_value))
 
                 for agg_metric, agg_value in aggregates:
@@ -252,6 +257,29 @@ class MetricAggregator(Worker):
         self.check_buckets()
 
 
+class MetricsCollectorWorker(Worker):
+    @inlineCallbacks
+    def startWorker(self):
+        log.msg("Starting %s with config: %s" % (
+                type(self).__name__, self.config))
+        yield self.setup_worker()
+        self.consumer = yield self.start_consumer(
+            AggregatedMetricConsumer, self.consume_metrics)
+
+    def stopWorker(self):
+        log.msg("Stopping %s" % (type(self).__name__,))
+        return self.teardown_worker()
+
+    def setup_worker(self):
+        pass
+
+    def teardown_worker(self):
+        pass
+
+    def consume_metrics(self, metric_name, values):
+        raise NotImplementedError()
+
+
 class GraphitePublisher(Publisher):
     """Publisher for sending messages to Graphite."""
 
@@ -260,30 +288,67 @@ class GraphitePublisher(Publisher):
     durable = True
     auto_delete = False
     delivery_mode = 2
-    require_bind = False  # Graphite uses a topic exchange
 
     def publish_metric(self, metric, value, timestamp):
         self.publish_raw("%f %d" % (value, timestamp), routing_key=metric)
 
 
-class GraphiteMetricsCollector(Worker):
+class GraphiteMetricsCollector(MetricsCollectorWorker):
     """Worker that collects Vumi metrics and publishes them to Graphite."""
 
     @inlineCallbacks
-    def startWorker(self):
-        log.msg("Starting the GraphiteMetricsCollector with"
-                " config: %s" % self.config)
+    def setup_worker(self):
         self.graphite_publisher = yield self.start_publisher(GraphitePublisher)
-        self.consumer = yield self.start_consumer(AggregatedMetricConsumer,
-                                                  self.consume_metrics)
 
     def consume_metrics(self, metric_name, values):
         for timestamp, value in values:
-            self.graphite_publisher.publish_metric(metric_name, value,
-                                                   timestamp)
+            self.graphite_publisher.publish_metric(
+                metric_name, value, timestamp)
 
-    def stopWorker(self):
-        log.msg("Stopping the GraphiteMetricsCollector")
+
+class UDPMetricsProtocol(DatagramProtocol):
+    def __init__(self, ip, port):
+        # NOTE: `host` must be an IP, not a hostname.
+        self._ip = ip
+        self._port = port
+
+    def startProtocol(self):
+        self.transport.connect(self._ip, self._port)
+
+    def send_metric(self, metric_string):
+        return self.transport.write(metric_string)
+
+
+class UDPMetricsCollector(MetricsCollectorWorker):
+    """Worker that collects Vumi metrics and publishes them over UDP."""
+
+    DEFAULT_FORMAT_STRING = '%(timestamp)s %(metric_name)s %(value)s\n'
+    DEFAULT_TIMESTAMP_FORMAT = '%Y-%m-%d %H:%M:%S%z'
+
+    @inlineCallbacks
+    def setup_worker(self):
+        self.format_string = self.config.get(
+            'format_string', self.DEFAULT_FORMAT_STRING)
+        self.timestamp_format = self.config.get(
+            'timestamp_format', self.DEFAULT_TIMESTAMP_FORMAT)
+        self.metrics_ip = yield reactor.resolve(self.config['metrics_host'])
+        self.metrics_port = int(self.config['metrics_port'])
+        self.metrics_protocol = UDPMetricsProtocol(
+            self.metrics_ip, self.metrics_port)
+        self.listener = yield reactor.listenUDP(0, self.metrics_protocol)
+
+    def teardown_worker(self):
+        return self.listener.stopListening()
+
+    def consume_metrics(self, metric_name, values):
+        for timestamp, value in values:
+            timestamp = datetime.utcfromtimestamp(timestamp)
+            metric_string = self.format_string % {
+                'timestamp': timestamp.strftime(self.timestamp_format),
+                'metric_name': metric_name,
+                'value': value,
+                }
+            self.metrics_protocol.send_metric(metric_string)
 
 
 class RandomMetricsGenerator(Worker):
@@ -328,7 +393,7 @@ class RandomMetricsGenerator(Worker):
         if random.choice([True, False]):
             self.counter.inc()
         self.value.set(random.normalvariate(2.0, 0.1))
-        with self.timer:
+        with self.timer.timeit():
             d = Deferred()
             wait = random.uniform(0.0, 0.1)
             reactor.callLater(wait, lambda: d.callback(None))

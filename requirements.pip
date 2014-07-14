@@ -1,15 +1,2 @@
-zope.interface
-Twisted
-# txAMQP prior to 0.5 does not support modern rabbitMQ versions.
-txAMQP>=0.5
-PyYAML
-iso8601
-supervisor
-# Newer pyOpenSSL fails to build on MacOS X 10.6.
-pyOpenSSL==0.11
-python-ssmi
-wokkel
-redis
-python-smpp
-pytz
-https://github.com/dustin/twitty-twister/tarball/master#egg=twittytwister-0.1.1
+# Our dependencies are all specified in setup.py.
+-e .

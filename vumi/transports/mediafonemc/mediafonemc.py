@@ -4,6 +4,7 @@ import json
 from urllib import urlencode
 
 from twisted.python import log
+from twisted.web import http
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.utils import http_request_full
@@ -31,6 +32,7 @@ class MediafoneTransport(HttpRpcTransport):
 
     transport_type = 'sms'
 
+    ENCODING = 'utf-8'
     EXPECTED_FIELDS = set(['to', 'from', 'sms'])
 
     def setup_transport(self):
@@ -52,23 +54,17 @@ class MediafoneTransport(HttpRpcTransport):
         log.msg("Making HTTP request: %s" % (url,))
         response = yield http_request_full(url, '', method='GET')
         log.msg("Response: (%s) %r" % (response.code, response.delivered_body))
-
-    def get_field_values(self, request):
-        values = {}
-        errors = {}
-        for field in request.args:
-            if field not in self.EXPECTED_FIELDS:
-                errors.setdefault('unexpected_parameter', []).append(field)
-            else:
-                values[field] = str(request.args.get(field)[0])
-        for field in self.EXPECTED_FIELDS:
-            if field not in values:
-                errors.setdefault('missing_parameter', []).append(field)
-        return values, errors
+        if response.code == http.OK:
+            yield self.publish_ack(user_message_id=message['message_id'],
+                sent_message_id=message['message_id'])
+        else:
+            yield self.publish_nack(user_message_id=message['message_id'],
+                sent_message_id=message['message_id'],
+                reason='Unexpected response code: %s' % (response.code,))
 
     @inlineCallbacks
     def handle_raw_inbound_message(self, message_id, request):
-        values, errors = self.get_field_values(request)
+        values, errors = self.get_field_values(request, self.EXPECTED_FIELDS)
         if errors:
             log.msg('Unhappy incoming message: %s' % (errors,))
             yield self.finish_request(message_id, json.dumps(errors), code=400)

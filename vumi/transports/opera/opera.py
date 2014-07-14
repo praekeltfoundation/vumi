@@ -3,7 +3,6 @@
 
 from datetime import datetime, timedelta
 from urlparse import parse_qs
-import redis
 
 from twisted.python import log
 from twisted.web import xmlrpc, http
@@ -14,12 +13,21 @@ from vumi.utils import normalize_msisdn
 from vumi.transports import Transport
 from vumi.transports.failures import TemporaryFailure, PermanentFailure
 from vumi.transports.opera import utils
+from vumi.components.session import SessionManager
+
+
+class BadRequestError(Exception):
+    """
+    An exception we can throw while parsing a request to return a 400 response.
+    """
 
 
 def get_receipts_xml(content):
     if content.startswith('<'):
         return content
     decoded = parse_qs(content)
+    if 'XmlMsg' not in decoded:
+        raise BadRequestError("XmlMsg missing.")
     return decoded['XmlMsg'][0]
 
 
@@ -28,6 +36,7 @@ class OperaHealthResource(Resource):
 
     def render_GET(self, request):
         request.setResponseCode(http.OK)
+        request.do_not_log = True
         return "OK"
 
 
@@ -54,8 +63,17 @@ class OperaReceiveResource(Resource):
         Resource.__init__(self)
 
     def render_POST(self, request):
-        content = get_receipts_xml(request.content.read())
-        sms = utils.parse_post_event_xml(content)
+        try:
+            content = get_receipts_xml(request.content.read())
+            sms = utils.parse_post_event_xml(content)
+            for field in [
+                    'Local', 'Remote', 'Text', 'MessageID', 'MobileNetwork']:
+                if field not in sms:
+                    raise BadRequestError("Missing field: %s" % (field,))
+        except BadRequestError as err:
+            request.setResponseCode(http.BAD_REQUEST)
+            request.setHeader('Content-Type', 'text/plain; charset=utf8')
+            return err.args[0]
         self.callback(
             to_addr=normalize_msisdn(sms['Local'], country_code='27'),
             from_addr=normalize_msisdn(sms['Remote'], country_code='27'),
@@ -133,7 +151,7 @@ class OperaTransport(Transport):
         self.opera_password = self.config['password']
         self.opera_service = self.config['service']
         self.max_segments = self.config.get('max_segments', 9)
-        self.r_config = self.config.get('redis', {})
+        self.r_config = self.config.get('redis_manager', {})
         self.transport_name = self.config['transport_name']
 
     def set_message_id_for_identifier(self, identifier, message_id):
@@ -148,9 +166,8 @@ class OperaTransport(Transport):
         :param message_id:
             The internal message id that was used when the message was sent.
         """
-        rkey = '%s#%s' % (self.r_prefix, identifier)
-        self.r_server.set(rkey, message_id)
-        self.r_server.expire(rkey, self.message_id_lifetime)
+        return self.session_manager.create_session(
+            identifier, message_id=message_id)
 
     def get_message_id_for_identifier(self, identifier):
         """
@@ -162,9 +179,10 @@ class OperaTransport(Transport):
             was accepted for delivery.
 
         """
-        rkey = '%s#%s' % (self.r_prefix, identifier)
-        return self.r_server.get(rkey)
+        d = self.session_manager.load_session(identifier)
+        return d.addCallback(lambda s: s.get('message_id', None))
 
+    @inlineCallbacks
     def handle_raw_incoming_receipt(self, receipt):
         # convert delivery receipt status values, anything not in
         # this status map defaults to `failed`
@@ -180,16 +198,17 @@ class OperaTransport(Transport):
         }
 
         internal_status = status_map.get(receipt.status, 'failed')
-        internal_message_id = self.get_message_id_for_identifier(
+        message_id = yield self.get_message_id_for_identifier(
             receipt.reference)
-        self.publish_delivery_report(internal_message_id, internal_status)
+        yield self.publish_delivery_report(message_id, internal_status)
 
     @inlineCallbacks
     def setup_transport(self):
         log.msg('Starting the OperaInboundTransport config: %s' %
             self.transport_name)
-        self.r_server = redis.Redis(**self.r_config)
-        self.r_prefix = "%(transport_name)s@%(url)s" % self.config
+        r_prefix = "%(transport_name)s@%(url)s" % self.config
+        self.session_manager = yield SessionManager.from_redis_config(
+            self.r_config, r_prefix, self.message_id_lifetime)
 
         self.proxy = xmlrpc.Proxy(self.opera_url)
         self.default_values = {
@@ -209,6 +228,17 @@ class OperaTransport(Transport):
             ],
             self.web_port
         )
+
+    def get_transport_url(self, suffix=''):
+        """
+        Get the URL for the HTTP resource. Requires the worker to be started.
+
+        This is mostly useful in tests, and probably shouldn't be used
+        in non-test code, because the API might live behind a load
+        balancer or proxy.
+        """
+        addr = self.web_resource.getHost()
+        return "http://%s:%s/%s" % (addr.host, addr.port, suffix.lstrip('/'))
 
     @inlineCallbacks
     def handle_outbound_message(self, message):
@@ -237,21 +267,22 @@ class OperaTransport(Transport):
 
         d = self.proxy.callRemote('EAPIGateway.SendSMS',
             xmlrpc_payload)
-        d.addErrback(self.handle_outbound_message_failure)
+        d.addErrback(self.handle_outbound_message_failure, message)
 
         proxy_response = yield d
 
         log.msg("Proxy response: %s" % proxy_response)
         transport_message_id = proxy_response['Identifier']
 
-        self.set_message_id_for_identifier(transport_message_id,
-            message['message_id'])
+        yield self.set_message_id_for_identifier(
+            transport_message_id, message['message_id'])
 
         yield self.publish_ack(
                 user_message_id=message['message_id'],
                 sent_message_id=transport_message_id)
 
-    def handle_outbound_message_failure(self, failure):
+    @inlineCallbacks
+    def handle_outbound_message_failure(self, failure, message):
         """
         Decide what to do on certain failure cases.
         """
@@ -260,9 +291,11 @@ class OperaTransport(Transport):
             raise TemporaryFailure(failure)
         elif failure.check(ValueError):
             # If the HTTP protocol returns something other than 200
+            yield self.publish_nack(message['message_id'], str(failure.value))
             raise PermanentFailure(failure)
         else:
             # Unspecified
+            yield self.publish_nack(message['message_id'], str(failure.value))
             raise failure
 
     @inlineCallbacks
@@ -270,3 +303,4 @@ class OperaTransport(Transport):
         log.msg("Stopping the OperaOutboundTransport: %s" %
             self.transport_name)
         yield self.web_resource.loseConnection()
+        yield self.session_manager.stop()

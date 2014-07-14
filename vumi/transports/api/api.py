@@ -5,6 +5,19 @@ from twisted.python import log
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.transports.httprpc import HttpRpcTransport
+from vumi.config import ConfigBool, ConfigList, ConfigDict
+
+
+class HttpApiConfig(HttpRpcTransport.CONFIG_CLASS):
+    "HTTP API configuration."
+    reply_expected = ConfigBool(
+        "True if a reply message is expected.", default=False, static=True)
+    allowed_fields = ConfigList(
+        "The list of fields a request is allowed to contain. Defaults to the"
+        " DEFAULT_ALLOWED_FIELDS class attribute.", static=True)
+    field_defaults = ConfigDict(
+        "Default values for fields not sent by the client.",
+        default={}, static=True)
 
 
 class HttpApiTransport(HttpRpcTransport):
@@ -13,22 +26,6 @@ class HttpApiTransport(HttpRpcTransport):
 
     NOTE: This has no security. Put it behind a firewall or something.
 
-    Configuration Values
-    --------------------
-    web_path : str
-        The path relative to the host where this listens
-    web_port : int
-        The port this listens on
-    transport_name : str
-        The name this transport instance will use to create its queues
-    reply_expected : boolean (default False)
-        True if a reply message is expected
-    allowed_fields : list (default DEFAULT_ALLOWED_FIELDS class attribute)
-        The list of fields a request is allowed to contain
-        DEFAULT_ALLOWED_FIELDS = [content, to_addr, from_addr]
-    field_defaults : dict (default {})
-        Default values for fields not sent by the client
-
     If reply_expected is True, the transport will wait for a reply message
     and will return the reply's content as the HTTP response body. If False,
     the message_id of the dispatched incoming message will be returned.
@@ -36,6 +33,8 @@ class HttpApiTransport(HttpRpcTransport):
 
     transport_type = 'http_api'
 
+    ENCODING = 'utf-8'
+    CONFIG_CLASS = HttpApiConfig
     DEFAULT_ALLOWED_FIELDS = (
         'content',
         'to_addr',
@@ -45,10 +44,13 @@ class HttpApiTransport(HttpRpcTransport):
         )
 
     def setup_transport(self):
-        self.reply_expected = self.config.get('reply_expected', False)
-        self.allowed_fields = set(self.config.get('allowed_fields',
-                                                  self.DEFAULT_ALLOWED_FIELDS))
-        self.field_defaults = self.config.get('field_defaults', {})
+        config = self.get_static_config()
+        self.reply_expected = config.reply_expected
+        allowed_fields = config.allowed_fields
+        if allowed_fields is None:
+            allowed_fields = self.DEFAULT_ALLOWED_FIELDS
+        self.allowed_fields = set(allowed_fields)
+        self.field_defaults = config.field_defaults
         return super(HttpApiTransport, self).setup_transport()
 
     def handle_outbound_message(self, message):
@@ -57,14 +59,15 @@ class HttpApiTransport(HttpRpcTransport):
                 message)
         log.msg("HttpApiTransport dropping outbound message: %s" % (message))
 
-    def get_field_values(self, request, required_fields):
+    def get_api_field_values(self, request, required_fields):
         values = self.field_defaults.copy()
         errors = {}
         for field in request.args:
             if field not in self.allowed_fields:
                 errors.setdefault('unexpected_parameter', []).append(field)
             else:
-                values[field] = str(request.args.get(field)[0])
+                values[field] = (
+                    request.args.get(field)[0].decode(self.ENCODING))
         for field in required_fields:
             if field not in values and field in self.allowed_fields:
                 errors.setdefault('missing_parameter', []).append(field)
@@ -72,8 +75,8 @@ class HttpApiTransport(HttpRpcTransport):
 
     @inlineCallbacks
     def handle_raw_inbound_message(self, message_id, request):
-        values, errors = self.get_field_values(request, ['content', 'to_addr',
-                                                         'from_addr'])
+        values, errors = self.get_api_field_values(request, ['content',
+                                                    'to_addr', 'from_addr'])
         if errors:
             yield self.finish_request(message_id, json.dumps(errors), code=400)
             return

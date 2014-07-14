@@ -1,15 +1,16 @@
 # -*- encoding: utf-8 -*-
 
-from twisted.trial.unittest import TestCase
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, DeferredQueue
 from twisted.web.server import Site
 
 from vumi.utils import http_request
-from vumi.tests.utils import get_stubbed_worker, MockHttpServer
+from vumi.tests.utils import MockHttpServer
 from vumi.message import TransportUserMessage
 from vumi.transports.integrat.integrat import (IntegratHttpResource,
                                                IntegratTransport)
+from vumi.transports.tests.helpers import TransportHelper
+from vumi.tests.helpers import VumiTestCase
 
 
 XML_TEMPLATE = '''
@@ -33,7 +34,7 @@ XML_TEMPLATE = '''
 '''
 
 
-class TestIntegratHttpResource(TestCase):
+class TestIntegratHttpResource(VumiTestCase):
 
     DEFAULT_MSG = {
         'from_addr': '+2799053421',
@@ -48,13 +49,11 @@ class TestIntegratHttpResource(TestCase):
         self.msgs = []
         site_factory = Site(IntegratHttpResource("testgrat", "ussd",
             self._publish))
-        self.server = yield reactor.listenTCP(0, site_factory)
+        self.server = yield reactor.listenTCP(
+            0, site_factory, interface='127.0.0.1')
+        self.add_cleanup(self.server.loseConnection)
         addr = self.server.getHost()
         self._server_url = "http://%s:%s/" % (addr.host, addr.port)
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield self.server.loseConnection()
 
     def _publish(self, **kws):
         self.msgs.append(kws)
@@ -131,60 +130,69 @@ class TestIntegratHttpResource(TestCase):
         yield self.check_response(xml, [])
 
 
-class TestIntegratTransport(TestCase):
-
-    timeout = 5
+class TestIntegratTransport(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
         self.integrat_calls = DeferredQueue()
         self.mock_integrat = MockHttpServer(self.handle_request)
+        self.add_cleanup(self.mock_integrat.stop)
         yield self.mock_integrat.start()
         config = {
-            'transport_name': 'testgrat',
             'web_path': "foo",
             'web_port': "0",
             'url': self.mock_integrat.url,
             'username': 'testuser',
             'password': 'testpass',
             }
-        self.worker = get_stubbed_worker(IntegratTransport, config)
-        self.broker = self.worker._amqp_client.broker
-        yield self.worker.startWorker()
-        addr = self.worker.web_resource.getHost()
-        self.worker_url = "http://%s:%s/" % (addr.host, addr.port)
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield self.worker.stopWorker()
-        yield self.mock_integrat.stop()
+        self.tx_helper = self.add_helper(TransportHelper(IntegratTransport))
+        self.transport = yield self.tx_helper.get_transport(config)
+        addr = self.transport.web_resource.getHost()
+        self.transport_url = "http://%s:%s/" % (addr.host, addr.port)
+        self.higate_response = '<Response status_code="0"/>'
 
     def handle_request(self, request):
+        # The content attr will have been set to None by the time we read this.
+        request.content_body = request.content.getvalue()
         self.integrat_calls.put(request)
-        return ''
+        return self.higate_response
 
     @inlineCallbacks
     def test_health(self):
-        result = yield http_request(self.worker_url + "health", "",
+        result = yield http_request(self.transport_url + "health", "",
                                     method='GET')
         self.assertEqual(result, "OK")
 
     @inlineCallbacks
     def test_outbound(self):
-        msg = TransportUserMessage(to_addr="12345", from_addr="56789",
-                                   transport_name="testgrat",
-                                   transport_type="ussd",
-                                   transport_metadata={
-                                       'session_id': "sess123",
-                                       },
-                                   )
-        self.broker.publish_message("vumi", "testgrat.outbound", msg)
+        yield self.tx_helper.make_dispatch_outbound("hi", transport_metadata={
+            'session_id': "sess123",
+        })
         req = yield self.integrat_calls.get()
         self.assertEqual(req.path, '/')
         self.assertEqual(req.method, 'POST')
         self.assertEqual(req.getHeader('content-type'),
                          'text/xml; charset=utf-8')
-        self.assertEqual(req.content.getvalue(),
+        self.assertEqual(req.content_body,
+                         '<Message><Version Version="1.0" />'
+                         '<Request Flags="0" SessionID="sess123"'
+                           ' Type="USSReply">'
+                         '<UserID Orientation="TR">testuser</UserID>'
+                         '<Password>testpass</Password>'
+                         '<USSText Type="TEXT">hi</USSText>'
+                         '</Request></Message>')
+
+    @inlineCallbacks
+    def test_outbound_no_content(self):
+        yield self.tx_helper.make_dispatch_outbound(None, transport_metadata={
+            'session_id': "sess123",
+        })
+        req = yield self.integrat_calls.get()
+        self.assertEqual(req.path, '/')
+        self.assertEqual(req.method, 'POST')
+        self.assertEqual(req.getHeader('content-type'),
+                         'text/xml; charset=utf-8')
+        self.assertEqual(req.content_body,
                          '<Message><Version Version="1.0" />'
                          '<Request Flags="0" SessionID="sess123"'
                            ' Type="USSReply">'
@@ -203,18 +211,17 @@ class TestIntegratTransport(TestCase):
             'connstr': '*120*99#',
             'text': 'foobar',
             }
-        yield http_request(self.worker_url + "foo", xml, method='GET')
-        msg, = yield self.broker.wait_messages("vumi", "testgrat.inbound", 1)
-        payload = msg.payload
-        self.assertEqual(payload['transport_name'], "testgrat")
-        self.assertEqual(payload['transport_type'], "ussd")
-        self.assertEqual(payload['transport_metadata'],
+        yield http_request(self.transport_url + "foo", xml, method='GET')
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        self.assertEqual(msg['transport_name'], self.tx_helper.transport_name)
+        self.assertEqual(msg['transport_type'], "ussd")
+        self.assertEqual(msg['transport_metadata'],
                          {"session_id": "sess1234"})
-        self.assertEqual(payload['session_event'],
+        self.assertEqual(msg['session_event'],
                          TransportUserMessage.SESSION_RESUME)
-        self.assertEqual(payload['from_addr'], '27345')
-        self.assertEqual(payload['to_addr'], '*120*99#')
-        self.assertEqual(payload['content'], 'foobar')
+        self.assertEqual(msg['from_addr'], '27345')
+        self.assertEqual(msg['to_addr'], '*120*99#')
+        self.assertEqual(msg['content'], 'foobar')
 
     @inlineCallbacks
     def test_inbound_non_ascii(self):
@@ -226,7 +233,25 @@ class TestIntegratTransport(TestCase):
             'connstr': '*120*99#',
             'text': u'öæł',
             }).encode("utf-8")
-        yield http_request(self.worker_url + "foo", xml, method='GET')
-        msg, = yield self.broker.wait_messages("vumi", "testgrat.inbound", 1)
-        payload = msg.payload
-        self.assertEqual(payload['content'], u'öæł')
+        yield http_request(self.transport_url + "foo", xml, method='GET')
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        self.assertEqual(msg['content'], u'öæł')
+
+    @inlineCallbacks
+    def test_nack(self):
+        self.higate_response = """
+            <Response status_code="-1">
+                <Data name="method_error">
+                    <field name="error_code" value="-1"/>
+                    <field name="reason" value="Expecting POST, not GET"/>
+                </Data>
+            </Response>""".strip()
+
+        msg = yield self.tx_helper.make_dispatch_outbound(
+            "hi", transport_metadata={'session_id': "sess123"})
+        yield self.integrat_calls.get()
+        [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
+        self.assertEqual(nack['user_message_id'], msg['message_id'])
+        self.assertEqual(nack['sent_message_id'], msg['message_id'])
+        self.assertEqual(nack['nack_reason'],
+            'error_code: -1, reason: Expecting POST, not GET')

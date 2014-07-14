@@ -6,17 +6,27 @@ Common infrastructure for transport workers.
 This is likely to get used heavily fast, so try get your changes in early.
 """
 
-from twisted.internet.defer import inlineCallbacks
-from twisted.python import log
+from twisted.internet.defer import maybeDeferred
 
-from vumi.errors import ConfigError
+from vumi import log
+from vumi.config import ConfigText
 from vumi.message import TransportUserMessage, TransportEvent
-from vumi.service import Worker
+from vumi.worker import BaseWorker, then_call
 from vumi.transports.failures import FailureMessage
-from vumi.middleware import MiddlewareStack, setup_middlewares_from_config
 
 
-class Transport(Worker):
+class TransportConfig(BaseWorker.CONFIG_CLASS):
+    """Base config definition for transports.
+
+    You should subclass this and add transport-specific fields.
+    """
+
+    transport_name = ConfigText(
+        "The name this transport instance will use to create its queues.",
+        required=True, static=True)
+
+
+class Transport(BaseWorker):
     """
     Base class for transport workers.
 
@@ -28,65 +38,42 @@ class Transport(Worker):
     """
 
     SUPPRESS_FAILURE_EXCEPTIONS = True
+    CONFIG_CLASS = TransportConfig
 
     transport_name = None
     start_message_consumer = True
 
-    @inlineCallbacks
-    def startWorker(self):
+    def _validate_config(self):
+        config = self.get_static_config()
+        self.transport_name = config.transport_name
+        self.validate_config()
+
+    def setup_connectors(self):
+        d = self.setup_ro_connector(self.transport_name)
+
+        def cb(connector):
+            self.add_outbound_handler(
+                self.handle_outbound_message, connector=connector)
+            return connector
+
+        return d.addCallback(cb)
+
+    def setup_worker(self):
         """
         Set up basic transport worker stuff.
 
         You shouldn't have to override this in subclasses.
         """
-        self._consumers = []
-
-        self._validate_config()
-        if 'TRANSPORT_NAME' in self.config:
-            log.msg("NOTE: 'TRANSPORT_NAME' in config is deprecated. "
-                    "Use 'transport_name' instead.")
-            self.config.setdefault('transport_name',
-                                   self.config['TRANSPORT_NAME'])
-        self.transport_name = self.config['transport_name']
-        self.concurrent_sends = self.config.get('concurrent_sends')
-
-        yield self._setup_failure_publisher()
-        yield self._setup_message_publisher()
-        yield self._setup_event_publisher()
-
-        yield self.setup_middleware()
-
-        yield self.setup_transport()
-
-        self.message_consumer = None
+        d = self.setup_failure_publisher()
+        then_call(d, self.setup_transport)
         if self.start_message_consumer:
-            yield self._setup_message_consumer()
+            then_call(d, self.unpause_connectors)
+        return d
 
-    @inlineCallbacks
-    def stopWorker(self):
-        while self._consumers:
-            consumer = self._consumers.pop()
-            yield consumer.stop()
-        yield self.teardown_transport()
-
-    def get_rkey(self, mtype):
-        return '%s.%s' % (self.transport_name, mtype)
-
-    def publish_rkey(self, name):
-        return self.publish_to(self.get_rkey(name))
-
-    def _validate_config(self):
-        if 'transport_name' not in self.config:
-            raise ConfigError("Missing 'transport_name' field in config.")
-        return self.validate_config()
-
-    def validate_config(self):
-        """
-        Transport-specific config validation happens in here.
-
-        Subclasses may override this method to perform extra config validation.
-        """
-        pass
+    def teardown_worker(self):
+        d = self.pause_connectors()
+        d.addCallback(lambda r: self.teardown_transport())
+        return d
 
     def setup_transport(self):
         """
@@ -102,53 +89,13 @@ class Transport(Worker):
         """
         pass
 
-    @inlineCallbacks
-    def setup_middleware(self):
-        """
-        Middleware setup happens here.
+    def setup_failure_publisher(self):
+        d = self.publish_to('%s.failures' % (self.transport_name,))
 
-        Subclasses should not override this unless they need to do nonstandard
-        middleware setup.
-        """
-        middlewares = yield setup_middlewares_from_config(self, self.config)
-        self._middlewares = MiddlewareStack(middlewares)
+        def cb(publisher):
+            self.failure_publisher = publisher
 
-    @inlineCallbacks
-    def _setup_message_publisher(self):
-        self.message_publisher = yield self.publish_rkey('inbound')
-
-    @inlineCallbacks
-    def _setup_message_consumer(self):
-        if self.message_consumer is not None:
-            log.msg("Consumer already exists, not restarting.")
-            return
-
-        self.message_consumer = yield self.consume(
-            self.get_rkey('outbound'), self._process_message,
-            message_class=TransportUserMessage)
-        self._consumers.append(self.message_consumer)
-
-        # Apply concurrency throttling if we need to.
-        if self.concurrent_sends is not None:
-            yield self.message_consumer.channel.basic_qos(
-                0, int(self.concurrent_sends), False)
-
-    def _teardown_message_consumer(self):
-        if self.message_consumer is None:
-            log.msg("Consumer does not exist, not stopping.")
-            return
-        if self.message_consumer in self._consumers:
-            self._consumers.remove(self.message_consumer)
-        consumer, self.message_consumer = self.message_consumer, None
-        return consumer.stop()
-
-    @inlineCallbacks
-    def _setup_event_publisher(self):
-        self.event_publisher = yield self.publish_rkey('event')
-
-    @inlineCallbacks
-    def _setup_failure_publisher(self):
-        self.failure_publisher = yield self.publish_rkey('failures')
+        return d.addCallback(cb)
 
     def send_failure(self, message, exception, traceback):
         """Send a failure report."""
@@ -156,10 +103,11 @@ class Transport(Worker):
             failure_code = getattr(exception, "failure_code",
                                    FailureMessage.FC_UNSPECIFIED)
             failure_msg = FailureMessage(
-                    message=message.payload, failure_code=failure_code,
-                    reason=traceback)
-            d = self._middlewares.apply_publish("failure", failure_msg,
-                                                self.transport_name)
+                message=message.payload, failure_code=failure_code,
+                reason=traceback)
+            connector = self.connectors[self.transport_name]
+            d = connector._middlewares.apply_publish(
+                "failure", failure_msg, self.transport_name)
             d.addCallback(self.failure_publisher.publish_message)
             d.addCallback(lambda _f: self.failure_published())
         except:
@@ -181,10 +129,7 @@ class Transport(Worker):
         kw.setdefault('transport_name', self.transport_name)
         kw.setdefault('transport_metadata', {})
         msg = TransportUserMessage(**kw)
-        d = self._middlewares.apply_publish("inbound", msg,
-                                            self.transport_name)
-        d.addCallback(self.message_publisher.publish_message)
-        return d
+        return self.connectors[self.transport_name].publish_inbound(msg)
 
     def publish_event(self, **kw):
         """
@@ -196,10 +141,7 @@ class Transport(Worker):
         kw.setdefault('transport_name', self.transport_name)
         kw.setdefault('transport_metadata', {})
         event = TransportEvent(**kw)
-        d = self._middlewares.apply_publish("event", event,
-                                            self.transport_name)
-        d.addCallback(self.event_publisher.publish_message)
-        return d
+        return self.connectors[self.transport_name].publish_event(event)
 
     def publish_ack(self, user_message_id, sent_message_id, **kw):
         """
@@ -209,6 +151,13 @@ class Transport(Worker):
                                   sent_message_id=sent_message_id,
                                   event_type='ack', **kw)
 
+    def publish_nack(self, user_message_id, reason, **kw):
+        """
+        Helper method for publishing a ``nack`` event.
+        """
+        return self.publish_event(user_message_id=user_message_id,
+                                  nack_reason=reason, event_type='nack', **kw)
+
     def publish_delivery_report(self, user_message_id, delivery_status, **kw):
         """
         Helper method for publishing a ``delivery_report`` event.
@@ -217,19 +166,28 @@ class Transport(Worker):
                                   delivery_status=delivery_status,
                                   event_type='delivery_report', **kw)
 
-    def _process_message(self, message):
-        def _send_failure(f):
-            self.send_failure(message, f.value, f.getTraceback())
-            log.err(f)
-            if self.SUPPRESS_FAILURE_EXCEPTIONS:
-                return None
-            return f
+    def _send_failure_eb(self, f, message):
+        self.send_failure(message, f.value, f.getTraceback())
+        log.err(f)
+        if self.SUPPRESS_FAILURE_EXCEPTIONS:
+            return None
+        return f
 
-        d = self._middlewares.apply_consume("outbound", message,
-                                            self.transport_name)
-        d.addCallback(self.handle_outbound_message)
-        d.addErrback(_send_failure)
-        return d
+    def _make_message_processor(self, handler):
+        def processor(message):
+            d = maybeDeferred(handler, message)
+            d.addErrback(self._send_failure_eb, message)
+            return d
+
+        return processor
+
+    def add_outbound_handler(self, handler, endpoint_name=None,
+                             connector=None):
+        if connector is None:
+            connector = self.connectors[self.transport_name]
+
+        processor = self._make_message_processor(handler)
+        connector.set_outbound_handler(processor, endpoint_name=endpoint_name)
 
     def handle_outbound_message(self, message):
         """
@@ -243,5 +201,4 @@ class Transport(Worker):
         """
         Generate a message id.
         """
-
         return TransportUserMessage.generate_id()

@@ -1,0 +1,37 @@
+Source: vumi
+Maintainer: Jeremy Thurgood <jeremy@praekelt.com>
+Section: net
+Priority: optional
+Standards-Version: 3.9.3
+Build-Depends: debhelper (>= 7.0.50~), python, python-central, python-setuptools, quilt
+
+Package: vumi
+Architecture: all
+Depends:
+ python-iso8601,
+ python-openssl,
+ python-pkg-resources,
+ python-txredis,
+ python-smpp,
+ python-ssmi,
+ python-twisted (>= 10.0.0-2ubuntu2~),
+ python-txamqp,
+ python-tz,
+ python-wokkel,
+ python-yaml,
+ python-zope.interface,
+ rabbitmq-server,
+ redis-server (>= 2:2.2),
+ ${misc:Depends},
+ ${python:Depends}
+Recommends:
+ python-riakasaurus
+Suggests:
+ python-riak,
+ python-redis,
+ python-twittytwister,
+ supervisor
+Description: Super-scalable mobile messaging engine
+ Messaging engine for the delivery of SMS, Star Menu and chat messages to
+ diverse audiences in emerging markets and beyond.
+

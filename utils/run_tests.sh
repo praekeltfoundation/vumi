@@ -7,7 +7,7 @@ find vumi/ -name '*.pyc' -delete
 echo "=== Erasing previous coverage data..."
 coverage erase
 echo "=== Running trial tests..."
-coverage run `which trial` --reporter=subunit vumi | tee results.txt | subunit2pyunit
+coverage run `which trial` --reporter=subunit vumi | subunit-1to2 | tee results.txt | subunit2pyunit
 subunit2junitxml <results.txt >test_results.xml
 rm results.txt
 echo "=== Processing coverage data..."

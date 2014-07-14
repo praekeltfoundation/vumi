@@ -1,0 +1,13 @@
+Index: vumi/setup.py
+===================================================================
+--- vumi.orig/setup.py	2012-07-27 09:55:59.752015897 +0000
++++ vumi/setup.py	2012-07-27 09:57:02.964013995 +0000
+@@ -42,7 +42,7 @@
+     packages=find_packages() + [
+         # NOTE:2012-01-18: This is commented out for now, pending a fix for
+         # https://github.com/pypa/pip/issues/355
+-        #'twisted.plugins',
++        'twisted.plugins',
+     ],
+     package_data={'twisted.plugins': ['twisted/plugins/*.py']},
+     include_package_data=True,
