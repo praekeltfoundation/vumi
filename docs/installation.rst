@@ -31,3 +31,17 @@ VirtualBox_ and Vagrant_:
 .. _Vagrant: http://www.vagrantup.com
 .. _VirtualBox: http://www.virtualbox.org
 .. _OS specific instructions: http://vagrantup.com/v1/docs/getting-started/index.html
+
+Installation on a Debian/Ubuntu system
+======================================
+
+If you don't have/want Vagrant for some reason (or perhaps are doing a production deployment), you
+can follow the instructions below:
+
+    1. Install `protobuf-compiler python-dev build-essential python-pip libffi-dev`. You can do this
+       with `apt-get` or `aptitude`.
+    2. If you're installing vumi as an unprivileged user, run the command `pip install --user vumi`.
+       Alternatively run `pip install vumi` to do a system/virtualenv install (as is appropriate
+       in your environment).
+
+These instructions were tested on an Ubuntu 12.04 instance as well as a Debian 7 instance.
