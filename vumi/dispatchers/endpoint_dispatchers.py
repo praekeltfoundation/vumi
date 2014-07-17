@@ -54,8 +54,7 @@ class Dispatcher(BaseWorker):
         return self.get_static_config().receive_outbound_connectors
 
     def default_errback(self, f, msg, connector_name):
-        log.error("Error routing message for %s" % (connector_name,))
-        log.error(f)
+        log.error(f, "Error routing message for %s" % (connector_name,))
 
     def process_inbound(self, config, msg, connector_name):
         raise NotImplementedError()

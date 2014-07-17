@@ -35,11 +35,11 @@ class TestDispatcher(VumiTestCase):
         f = Failure(DummyError("worse"))
         with LogCatcher() as lc:
             yield disp.default_errback(f, msg, "app1")
-            [err1, err2] = lc.errors
+            [err1] = lc.errors
         self.assertEqual(
-            err1['message'], ("'Error routing message for app1'",))
+            err1['why'], "Error routing message for app1")
         self.assertEqual(
-            err2['failure'], f)
+            err1['failure'], f)
         self.flushLoggedErrors(DummyError)
 
     @inlineCallbacks

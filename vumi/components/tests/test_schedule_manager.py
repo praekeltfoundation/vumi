@@ -17,7 +17,10 @@ class TestScheduleManager(VumiTestCase):
         with LogCatcher() as logger:
             self.assertEqual(None, sm.get_next(None))
             [err] = logger.errors
-            self.assertEqual(errmsg, err['why'].args[0])
+            self.assertEqual(err['why'], 'Error processing schedule.')
+            self.assertEqual(err['failure'].value.args[0], errmsg)
+        [f] = self.flushLoggedErrors(ValueError)
+        self.assertEqual(f, err['failure'])
 
     def test_invalid_recurring(self):
         self.assert_config_error(

@@ -79,6 +79,9 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
         default="34", static=True)
     service_type = ConfigText(
         'The SMPP service type.', default="", static=True)
+    address_range = ConfigText(
+        "Address range to receive. (SMSC-specific format, default empty.)",
+        default="", static=True)
     dest_addr_ton = ConfigInt(
         'Destination TON (type of number).', default=0, static=True)
     dest_addr_npi = ConfigInt(
