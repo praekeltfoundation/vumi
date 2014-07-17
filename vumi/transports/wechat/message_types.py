@@ -7,8 +7,6 @@ from xml.etree.ElementTree import Element, SubElement, tostring, fromstring
 from vumi.transports.wechat.errors import (
     WeChatParserException, WeChatException)
 
-from vumi.message import vumi_decode_datetime
-
 
 def get_child_value(node, name):
     [child] = node.findall(name)
@@ -65,7 +63,7 @@ class TextMessage(WeChatMessage):
         md = message['transport_metadata'].get('wechat', {})
         from_addr = md.get('ToUserName', message['from_addr'])
         return cls(message['to_addr'], from_addr,
-                   vumi_decode_datetime(message['timestamp']).strftime('%s'),
+                   message.timestamp.strftime('%s'),
                    message['content'])
 
     def to_xml(self):
@@ -114,7 +112,7 @@ class NewsMessage(WeChatMessage):
         return cls(
             vumi_message['to_addr'],
             from_addr,
-            vumi_decode_datetime(vumi_message['timestamp']).strftime('%s'),
+            vumi_message.timestamp.strftime('%s'),
             [{
                 'title': '%(before)s' % url_data,
                 'url': '%(url)s' % url_data,
