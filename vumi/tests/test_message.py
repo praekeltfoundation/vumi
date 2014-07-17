@@ -24,7 +24,7 @@ class TransportMessageTestMixin(object):
     def test_transport_message_fields(self):
         msg = self.make_message()
         self.assertEqual('20110921', msg['message_version'])
-        self.assertEqual(UTCNearNow(), msg['timestamp'])
+        self.assertEqual(UTCNearNow(), msg.timestamp)
 
     def test_helper_metadata(self):
         self.assertEqual({}, self.make_message()['helper_metadata'])
@@ -103,7 +103,7 @@ class TransportUserMessageTest(TransportMessageTestMixin, VumiTestCase):
         self.assertEqual('heya', msg['content'])
         self.assertEqual('sphex', msg['transport_name'])
         self.assertEqual({}, msg['transport_metadata'])
-        self.assertEqual(UTCNearNow(), msg['timestamp'])
+        self.assertEqual(UTCNearNow(), msg.timestamp)
         self.assertEqual('+27831234567', msg['to_addr'])
         self.assertEqual('12345', msg['from_addr'])
 
@@ -122,7 +122,7 @@ class TransportUserMessageTest(TransportMessageTestMixin, VumiTestCase):
         self.assertEqual(None, msg['content'])
         self.assertEqual('sphex', msg['transport_name'])
         self.assertEqual({}, msg['transport_metadata'])
-        self.assertEqual(UTCNearNow(), msg['timestamp'])
+        self.assertEqual(UTCNearNow(), msg.timestamp)
         self.assertEqual('+27831234567', msg['to_addr'])
         self.assertEqual('12345', msg['from_addr'])
 

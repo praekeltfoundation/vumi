@@ -1,5 +1,6 @@
 # -*- test-case-name: vumi.transports.tests.test_failures -*-
 
+import json
 import time
 from datetime import datetime
 from uuid import uuid4
@@ -8,7 +9,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet.task import LoopingCall
 
 from vumi.service import Worker
-from vumi.message import TransportMessage, to_json
+from vumi.message import TransportMessage
 from vumi.persist.txredis_manager import TxRedisManager
 
 
@@ -137,7 +138,7 @@ class FailureWorker(Worker):
         message_json = message
         if not isinstance(message, basestring):
             # This isn't already JSON-encoded.
-            message_json = to_json(message)
+            message_json = json.dumps(message)
         key = self.failure_key()
         if not retry_delay:
             retry_delay = 0

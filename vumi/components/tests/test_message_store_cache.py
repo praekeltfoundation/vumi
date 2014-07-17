@@ -41,7 +41,7 @@ class MessageStoreCacheTestCase(VumiTestCase):
                 "inbound",
                 from_addr='from-%s' % (i,),
                 to_addr='to-%s' % (i,))
-            msg['timestamp'] = now - timedelta(seconds=i)
+            msg.timestamp = now - timedelta(seconds=i)
             yield callback(batch_id, msg)
             messages.append(msg)
         returnValue(messages)
@@ -267,7 +267,7 @@ class TestMessageStoreCache(MessageStoreCacheTestCase):
         now = datetime.now()
         for i in range(10):
             msg_in = self.msg_helper.make_inbound("inbound")
-            msg_in['timestamp'] = now - timedelta(seconds=i * 10)
+            msg_in.timestamp = now - timedelta(seconds=i * 10)
             yield self.cache.add_inbound_message(self.batch_id, msg_in)
 
         self.assertEqual(
@@ -288,7 +288,7 @@ class TestMessageStoreCache(MessageStoreCacheTestCase):
         now = datetime.now()
         for i in range(10):
             msg_out = self.msg_helper.make_outbound("outbound")
-            msg_out['timestamp'] = now - timedelta(seconds=i * 10)
+            msg_out.timestamp = now - timedelta(seconds=i * 10)
             yield self.cache.add_outbound_message(self.batch_id, msg_out)
 
         self.assertEqual(
@@ -323,7 +323,7 @@ class TestMessageStoreCache(MessageStoreCacheTestCase):
         #       when we pull out the search results.
         for i in range(10):
             msg_in = self.msg_helper.make_inbound('hello-%s' % (i,))
-            msg_in['timestamp'] = now + timedelta(seconds=i * 10)
+            msg_in.timestamp = now + timedelta(seconds=i * 10)
             yield self.cache.add_inbound_message(self.batch_id, msg_in)
             message_ids.append(msg_in['message_id'])
 

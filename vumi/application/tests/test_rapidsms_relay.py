@@ -8,7 +8,7 @@ from twisted.web import http
 from vumi.tests.utils import LogCatcher, MockHttpServer
 from vumi.application.rapidsms_relay import RapidSMSRelay, BadRequestError
 from vumi.utils import http_request_full, basic_auth_string, to_kwargs
-from vumi.message import TransportUserMessage, from_json
+from vumi.message import TransportUserMessage
 from vumi.application.tests.helpers import ApplicationHelper
 from vumi.tests.helpers import VumiTestCase
 
@@ -45,7 +45,7 @@ class TestRapidSMSRelay(VumiTestCase):
         return self.app_helper.get_application(app_config)
 
     def get_response_msgs(self, response):
-        payloads = from_json(response.delivered_body)
+        payloads = json.loads(response.delivered_body)
         return [TransportUserMessage(
                 _process_fields=False, **to_kwargs(payload))
                 for payload in payloads]

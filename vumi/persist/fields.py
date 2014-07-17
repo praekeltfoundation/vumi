@@ -274,21 +274,12 @@ class VumiMessageDescriptor(FieldDescriptor):
             if key.startswith(self.prefix):
                 del modelobj._riak_object._data[key]
 
-    def _timestamp_to_json(self, dt):
-        return dt.strftime(VUMI_DATE_FORMAT)
-
-    def _timestamp_from_json(self, value):
-        return datetime.strptime(value, VUMI_DATE_FORMAT)
-
     def set_value(self, modelobj, msg):
         """Set the value associated with this descriptor."""
         self._clear_keys(modelobj)
         if msg is None:
             return
         for key, value in msg.payload.iteritems():
-            # TODO: timestamp as datetime in payload must die.
-            if key == "timestamp":
-                value = self._timestamp_to_json(value)
             full_key = "%s%s" % (self.prefix, key)
             modelobj._riak_object._data[full_key] = value
 
@@ -298,9 +289,6 @@ class VumiMessageDescriptor(FieldDescriptor):
         for key, value in modelobj._riak_object._data.iteritems():
             if key.startswith(self.prefix):
                 key = key[len(self.prefix):]
-                # TODO: timestamp as datetime in payload must die.
-                if key == "timestamp":
-                    value = self._timestamp_from_json(value)
                 payload[key] = value
         if not payload:
             return None

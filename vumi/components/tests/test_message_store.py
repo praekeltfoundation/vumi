@@ -661,7 +661,7 @@ class TestMessageStoreCache(TestMessageStoreBase):
                                 batch_id, with_timestamp=True)))
         for msg in messages:
             found = results[msg['message_id']]
-            expected = time.mktime(msg['timestamp'].timetuple())
+            expected = time.mktime(msg.timestamp.timetuple())
             self.assertAlmostEqual(found, expected)
 
     @inlineCallbacks
@@ -681,5 +681,5 @@ class TestMessageStoreCache(TestMessageStoreBase):
                                 batch_id, with_timestamp=True)))
         for msg in messages:
             found = results[msg['message_id']]
-            expected = time.mktime(msg['timestamp'].timetuple())
+            expected = time.mktime(msg.timestamp.timetuple())
             self.assertAlmostEqual(found, expected)

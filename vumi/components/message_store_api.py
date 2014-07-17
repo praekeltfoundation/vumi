@@ -7,7 +7,6 @@ from twisted.web.server import NOT_DONE_YET
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.service import Worker
-from vumi.message import JSONMessageEncoder
 from vumi.transports.httprpc import httprpc
 from vumi.components.message_store import MessageStore
 from vumi.persist.txriak_manager import TxRiakManager
@@ -116,7 +115,7 @@ class MatchResource(resource.Resource):
 
             # sort the results in the order that the keys specified
             messages.sort(key=lambda msg: keys.index(msg['message_id']))
-            request.write(json.dumps(messages, cls=JSONMessageEncoder))
+            request.write(json.dumps(messages))
         request.finish()
 
     def render_GET(self, request):

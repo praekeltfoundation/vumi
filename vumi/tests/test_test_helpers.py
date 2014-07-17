@@ -5,7 +5,7 @@ from twisted.internet.defer import Deferred, succeed, inlineCallbacks
 from twisted.trial.unittest import SkipTest, TestCase, FailTest
 
 from vumi.blinkenlights.metrics import MetricMessage
-from vumi.message import TransportUserMessage, TransportEvent
+from vumi.message import TransportUserMessage, TransportEvent, encode_vumi_timestamp
 from vumi.tests.fake_amqp import FakeAMQPBroker, FakeAMQClient
 from vumi.tests.helpers import (
     VumiTestCase, proxyable, generate_proxies, IHelper, import_skip,
@@ -355,7 +355,7 @@ class TestMessageHelper(TestCase):
             'transport_metadata': {'foo': 'bar'},
             'helper_metadata': {'foo': {}},
             'in_reply_to': 'ccf9c2b9b1e94433be20d157e82786fe',
-            'timestamp': datetime.utcnow(),
+            'timestamp': encode_vumi_timestamp(datetime.utcnow()),
             'message_id': 'bbf9c2b9b1e94433be20d157e82786ed',
             'endpoint': 'foo_ep',
         }
@@ -440,7 +440,7 @@ class TestMessageHelper(TestCase):
             'transport_metadata': {'foo': 'bar'},
             'helper_metadata': {'foo': {}},
 
-            'timestamp': datetime.utcnow(),
+            'timestamp': encode_vumi_timestamp(datetime.utcnow()),
             'event_id': 'e6b7efecda8e42988b1e6905ad40fae1',
             'endpoint': 'foo_ep',
         }

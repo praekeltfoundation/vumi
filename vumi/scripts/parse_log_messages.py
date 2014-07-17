@@ -1,13 +1,14 @@
 # -*- test-case-name: vumi.scripts.tests.test_parse_log_messages -*-
 import sys
+import json
 import re
 import warnings
 from twisted.python import usage
 from twisted.internet import reactor
 from twisted.internet.defer import maybeDeferred
 import datetime
-from vumi.message import to_json
 
+from vumi.message import vumi_encode_all_datetimes
 
 DATE_PATTERN = re.compile(
     r'(?P<year>\d{4})-(?P<month>\d{2})-(?P<day>\d{2}) '
@@ -109,7 +110,9 @@ class LogParser(object):
                 return
             if self.stop and date > self.stop:
                 return
-            self.emit(to_json(eval(data['message'])))
+            encoded_msg = vumi_encode_all_datetimes(
+                eval(data['message']))
+            self.emit(json.dumps(encoded_msg))
 
 
 if __name__ == '__main__':

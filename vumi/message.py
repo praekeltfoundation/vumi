@@ -13,20 +13,24 @@ from vumi.utils import to_kwargs
 VUMI_DATE_FORMAT = "%Y-%m-%d %H:%M:%S.%f"
 
 
-def vumi_decode_datetime(dt_string):
+def decode_vumi_timestamp(dt_string):
     return datetime.strptime(dt_string, VUMI_DATE_FORMAT)
 
 
-def vumi_encode_datetime(dt):
+def encode_vumi_timestamp(dt):
     return dt.strftime(VUMI_DATE_FORMAT)
 
 
-def from_json(json_string):
-    return json.loads(json_string)
-
-
-def to_json(obj):
-    return json.dumps(obj)
+def vumi_encode_all_datetimes(data):
+    """
+    Apply :func:`encode_vumi_datetime` to all datetimes found as values
+    in the dictionary ``data``.
+    """
+    data = data.copy()
+    for k, v in data.iteritems():
+        if isinstance(v, datetime):
+            data[k] = encode_vumi_timestamp(v)
+    return data
 
 
 class Message(object):
@@ -67,11 +71,11 @@ class Message(object):
             raise InvalidMessageField(field)
 
     def to_json(self):
-        return to_json(self.payload)
+        return json.dumps(self.payload)
 
     @classmethod
     def from_json(cls, json_string):
-        return cls(_process_fields=False, **to_kwargs(from_json(json_string)))
+        return cls(_process_fields=False, **to_kwargs(json.loads(json_string)))
 
     def __str__(self):
         return u"<Message payload=\"%s\">" % repr(self.payload)
@@ -125,10 +129,8 @@ class TransportMessage(Message):
     def process_fields(self, fields):
         fields.setdefault('message_version', self.MESSAGE_VERSION)
         fields.setdefault('message_type', self.MESSAGE_TYPE)
-        fields.setdefault('timestamp', vumi_encode_datetime(datetime.utcnow()))
-        if isinstance(fields['timestamp'], datetime):
-            # convenience for initially setting datetimes
-            fields['timestamp'] = vumi_encode_datetime(fields['timestamp'])
+        fields.setdefault('timestamp',
+                          encode_vumi_timestamp(datetime.utcnow()))
         fields.setdefault('routing_metadata', {})
         fields.setdefault('helper_metadata', {})
         return fields
@@ -138,6 +140,9 @@ class TransportMessage(Message):
         # We might get older event messages without the `helper_metadata`
         # field.
         self.payload.setdefault('helper_metadata', {})
+        if isinstance(self.payload['timestamp'], datetime):
+            self.payload['timestamp'] = encode_vumi_timestamp(
+                self.payload['timestamp'])
         self.assert_field_present(
             'message_type',
             'helper_metadata',
@@ -149,6 +154,14 @@ class TransportMessage(Message):
     @property
     def routing_metadata(self):
         return self.payload.setdefault('routing_metadata', {})
+
+    @property
+    def timestamp(self):
+        return decode_vumi_timestamp(self.payload['timestamp'])
+
+    @timestamp.setter
+    def timestamp(self, dt):
+        self.payload['timestamp'] = encode_vumi_timestamp(dt)
 
     @classmethod
     def check_routing_endpoint(cls, endpoint_name):

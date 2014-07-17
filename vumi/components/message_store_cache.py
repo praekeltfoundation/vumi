@@ -225,7 +225,7 @@ class MessageStoreCache(object):
         """
         Add an outbound message to the cache for the given batch_id
         """
-        timestamp = self.get_timestamp(msg['timestamp'])
+        timestamp = self.get_timestamp(msg.timestamp)
         yield self.add_outbound_message_key(
             batch_id, msg['message_id'], timestamp)
         yield self.add_to_addr(batch_id, msg['to_addr'], timestamp)
@@ -289,7 +289,7 @@ class MessageStoreCache(object):
         """
         Add an inbound message to the cache for the given batch_id
         """
-        timestamp = self.get_timestamp(msg['timestamp'])
+        timestamp = self.get_timestamp(msg.timestamp)
         yield self.add_inbound_message_key(
             batch_id, msg['message_id'], timestamp)
         yield self.add_from_addr(batch_id, msg['from_addr'], timestamp)
