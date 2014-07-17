@@ -9,7 +9,6 @@ from urllib import urlencode
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet.task import Clock
 
-from vumi.message import vumi_encode_datetime
 from vumi.utils import http_request
 from vumi.tests.helpers import VumiTestCase
 from vumi.transports.smssync import SingleSmsSync, MultiSmsSync
@@ -107,7 +106,7 @@ class TestSingleSmsSync(VumiTestCase):
         self.assertEqual(msg['to_addr'], "555")
         self.assertEqual(msg['from_addr'], "123")
         self.assertEqual(msg['content'], u"hællo")
-        self.assertEqual(msg['timestamp'], vumi_encode_datetime(now))
+        self.assertEqual(msg.timestamp, now)
 
     @inlineCallbacks
     def test_inbound_millisecond_timestamp(self):
@@ -118,7 +117,7 @@ class TestSingleSmsSync(VumiTestCase):
         self.assertEqual(response, {"payload": {"success": "true",
                                                 "messages": []}})
         [msg] = self.tx_helper.get_dispatched_inbound()
-        self.assertEqual(msg['timestamp'], vumi_encode_datetime(now))
+        self.assertEqual(msg.timestamp, now)
 
     @inlineCallbacks
     def test_inbound_with_reply(self):
