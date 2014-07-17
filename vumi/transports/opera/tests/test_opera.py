@@ -6,6 +6,7 @@ from twisted.internet import defer
 from twisted.internet.defer import inlineCallbacks, maybeDeferred
 from twisted.web import xmlrpc
 
+from vumi.message import encode_vumi_timestamp
 from vumi.utils import http_request, http_request_full
 from vumi.transports.failures import PermanentFailure, TemporaryFailure
 from vumi.transports.opera import OperaTransport
@@ -315,13 +316,12 @@ class TestOperaTransport(VumiTestCase):
         Outbound message we send should hit the XML-RPC service with the
         correct parameters
         """
-
         fixed_date = datetime(2011, 1, 1, 0, 0, 0)
+        fixed_date_1h = fixed_date + timedelta(hours=1)
 
         def _cb(method_called, xmlrpc_payload):
             self.assertEqual(xmlrpc_payload['Delivery'], fixed_date)
-            self.assertEqual(xmlrpc_payload['Expiry'],
-                             fixed_date + timedelta(hours=1))
+            self.assertEqual(xmlrpc_payload['Expiry'], fixed_date_1h)
             self.assertEqual(xmlrpc_payload['Priority'], 'high')
             self.assertEqual(xmlrpc_payload['Receipt'], 'N')
             return {
@@ -331,8 +331,8 @@ class TestOperaTransport(VumiTestCase):
         self.transport.proxy = FakeXMLRPCService(_cb)
 
         yield self.tx_helper.make_dispatch_outbound("hi", transport_metadata={
-            'deliver_at': fixed_date,
-            'expire_at': fixed_date + timedelta(hours=1),
+            'deliver_at': encode_vumi_timestamp(fixed_date),
+            'expire_at': encode_vumi_timestamp(fixed_date_1h),
             'priority': 'high',
             'receipt': 'N',
         })

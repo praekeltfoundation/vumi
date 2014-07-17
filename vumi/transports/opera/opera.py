@@ -9,6 +9,7 @@ from twisted.web import xmlrpc, http
 from twisted.web.resource import Resource
 from twisted.internet.defer import inlineCallbacks
 
+from vumi.message import decode_vumi_timestamp
 from vumi.utils import normalize_msisdn
 from vumi.transports import Transport
 from vumi.transports.failures import TemporaryFailure, PermanentFailure
@@ -240,13 +241,20 @@ class OperaTransport(Transport):
         addr = self.web_resource.getHost()
         return "http://%s:%s/%s" % (addr.host, addr.port, suffix.lstrip('/'))
 
+    @staticmethod
+    def parse_ts(value, default):
+        if value is None:
+            return default
+        return decode_vumi_timestamp(value)
+
     @inlineCallbacks
     def handle_outbound_message(self, message):
         xmlrpc_payload = self.default_values.copy()
         metadata = message["transport_metadata"]
 
-        delivery = metadata.get('deliver_at', datetime.utcnow())
-        expiry = metadata.get('expire_at', (delivery + timedelta(days=1)))
+        delivery = self.parse_ts(metadata.get('deliver_at'), datetime.utcnow())
+        expiry = self.parse_ts(metadata.get('expire_at'),
+                               delivery + timedelta(days=1))
         priority = metadata.get('priority', 'standard')
         receipt = metadata.get('receipt', 'Y')
 
