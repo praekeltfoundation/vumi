@@ -10,8 +10,6 @@ import warnings
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet.task import LoopingCall
 
-from vumi import message
-
 
 warnings.warn("vumi.transport.scheduler is deprecated. A replacement is coming"
               " soon.", category=DeprecationWarning)
@@ -32,8 +30,8 @@ class Scheduler(object):
         self.delivery_period = delivery_period
         self._scheduled_timestamps_key = self.r_key("scheduled_timestamps")
         self.callback = callback
-        self.json_encoder = json_encoder or message.JSONMessageEncoder
-        self.json_decoder = json_decoder or message.date_time_decoder
+        self.json_encoder = json_encoder
+        self.json_decoder = json_decoder
         self.loop = LoopingCall(self.deliver_scheduled)
 
     @property
