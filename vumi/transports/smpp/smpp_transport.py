@@ -6,7 +6,7 @@ from uuid import uuid4
 from twisted.internet import reactor
 from twisted.internet.defer import (
     inlineCallbacks, maybeDeferred, returnValue, Deferred, succeed)
-from twisted.internet.task import LoopingCall
+from twisted.internet.task import LoopingCall, deferLater
 
 from vumi.reconnecting_client import ReconnectingClientService
 from vumi.transports.base import Transport
@@ -118,7 +118,8 @@ class SmppService(ReconnectingClientService):
 
     def clientConnected(self, protocol):
         ReconnectingClientService.clientConnected(self, protocol)
-        for deferred in self.wait_on_protocol_deferreds:
+        while self.wait_on_protocol_deferreds:
+            deferred = self.wait_on_protocol_deferreds.pop()
             deferred.callback(protocol)
 
     def get_protocol(self):
@@ -576,6 +577,29 @@ class SmppTransceiverTransport(Transport):
             user_message_id=message_id,
             delivery_status=delivery_status)
         returnValue(dr)
+
+
+class BorkySmppTransceiverTransport(SmppTransceiverTransport):
+
+    def start_service(self, factory):
+        print "STARTING SERVICE!!"
+        config = self.get_static_config()
+        service = self.service_class(config.twisted_endpoint, factory)
+        service.startService()
+
+        def disconnect(protocol):
+            print 'scheduling drop!'
+            return deferLater(reactor, 5,
+                              protocol.transport.loseConnection)
+
+        def done(foo):
+            print 'dropped connection!!', foo
+
+        d = service.get_protocol()
+        d.addCallback(disconnect)
+        d.addCallback(done)
+
+        return service
 
 
 class SmppReceiverClientFactory(EsmeTransceiverFactory):
