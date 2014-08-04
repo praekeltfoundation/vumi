@@ -17,7 +17,7 @@ from vumi.transports.smpp.smpp_transport import (
     SmppTransceiverTransport,
     SmppTransceiverTransportWithOldConfig,
     SmppTransmitterTransport, SmppReceiverTransport,
-    message_key, remote_message_key)
+    message_key, remote_message_key, SmppService)
 from vumi.transports.smpp.pdu_utils import (
     pdu_ok, short_message, command_id, seq_no, pdu_tlv)
 from vumi.transports.smpp.tests.test_protocol import (
@@ -39,7 +39,8 @@ class DummyService(Service):
 
     def startService(self):
         self.protocol = self.factory.buildProtocol(('120.0.0.1', 0))
-        for deferred in self.wait_on_protocol_deferreds:
+        while self.wait_on_protocol_deferreds:
+            deferred = self.wait_on_protocol_deferreds.pop()
             deferred.callback(self.protocol)
 
     def stopService(self):
@@ -155,6 +156,25 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         transport = yield self.get_transport()
         protocol = yield transport.service.get_protocol()
         self.assertTrue(protocol.is_bound())
+
+    @inlineCallbacks
+    def test_smpp_service(self):
+        """
+        Testing the real service because these tests use the
+        fake DummyService implementation
+        """
+
+        transport = yield self.get_transport()
+        protocol = yield transport.service.get_protocol()
+
+        service = SmppService(None, None)
+
+        d = service.get_protocol()
+        self.assertEqual(len(service.wait_on_protocol_deferreds), 1)
+        service.clientConnected(protocol)
+        received_protocol = yield d
+        self.assertEqual(received_protocol, protocol)
+        self.assertEqual(len(service.wait_on_protocol_deferreds), 0)
 
     @inlineCallbacks
     def test_setup_transport_host_port_fallback(self):
@@ -906,6 +926,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.assertTrue(connector._consumers['outbound'].paused)
         yield self.create_smpp_bind(transport)
         self.assertFalse(connector._consumers['outbound'].paused)
+        self.assertEqual(transport.service.wait_on_protocol_deferreds, [])
 
     @inlineCallbacks
     def test_bind_params(self):
