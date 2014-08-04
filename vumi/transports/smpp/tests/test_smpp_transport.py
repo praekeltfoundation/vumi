@@ -926,7 +926,6 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.assertTrue(connector._consumers['outbound'].paused)
         yield self.create_smpp_bind(transport)
         self.assertFalse(connector._consumers['outbound'].paused)
-        self.assertEqual(transport.service.wait_on_protocol_deferreds, [])
 
     @inlineCallbacks
     def test_bind_params(self):
