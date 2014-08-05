@@ -118,7 +118,8 @@ class SmppService(ReconnectingClientService):
 
     def clientConnected(self, protocol):
         ReconnectingClientService.clientConnected(self, protocol)
-        for deferred in self.wait_on_protocol_deferreds:
+        while self.wait_on_protocol_deferreds:
+            deferred = self.wait_on_protocol_deferreds.pop()
             deferred.callback(protocol)
 
     def get_protocol(self):
