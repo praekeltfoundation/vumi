@@ -45,7 +45,7 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
     codec_class = ConfigClassName(
         'Which class should be used to handle character encoding/decoding. '
         'MUST implement `ISMPPCodec`.',
-        default='vumi.transports.smpp.codecs.SMPPCodec',
+        default='vumi.transports.smpp.smpp_codecs.SmppCodec',
         static=True, implements=ISmppCodec)
     delivery_report_processor = ConfigClassName(
         'Which delivery report processor to use. '
