@@ -22,5 +22,15 @@ class TestSmppCodec(TestCase):
         self.assertRaises(
             SmppCodecException, self.codec.decode, u"Zoë", "utf-8")
 
+    def test_default_encoding(self):
+        self.assertEqual(self.codec.encode(u"a"), "a")
+        self.assertRaises(
+            UnicodeEncodeError, self.codec.encode, u"ë")
+
+    def test_default_decoding(self):
+        self.assertEqual(self.codec.decode("a"), u"a")
+        self.assertRaises(
+            UnicodeDecodeError, self.codec.decode, '\xc3\xab')  # e-umlaut
+
     def test_utf8(self):
         self.assertEqual(self.codec.encode(u"Zoë", "utf-8"), 'Zo\xc3\xab')
