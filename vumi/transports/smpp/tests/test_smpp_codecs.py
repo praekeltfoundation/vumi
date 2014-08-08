@@ -53,3 +53,13 @@ class TestSmppCodec(TestCase):
     def test_decode_ucs2(self):
         self.assertEqual(
             self.codec.decode('\x00Z\x00o\x00\xeb', "ucs2"), u"Zoë")
+
+    def test_encode_gsm0338(self):
+        self.assertEqual(
+            self.codec.encode(u"Hello World {}", "gsm0338"),
+            '64868d8d903a7390938d853a1b281b29')
+
+    def test_decode_gsm0338(self):
+        self.assertEqual(
+            self.codec.decode('64868d8d903a7390938d853a1b281b29', 'gsm0338'),
+            u"Hello World {}")

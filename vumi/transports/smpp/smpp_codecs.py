@@ -1,6 +1,7 @@
 # -*- test-case-name: vumi.transports.smpp.tests.test_smpp_codecs -*-
-import sys
+# -*- coding: utf-8 -*-
 import codecs
+import sys
 
 from vumi.transports.smpp.ismpp_codecs import ISmppCodec
 
@@ -9,6 +10,47 @@ from zope.interface import implements
 
 class SmppCodecException(Exception):
     pass
+
+
+class GSM7BitCodec(codecs.Codec):
+    """
+    This has largely been copied from:
+    http://stackoverflow.com/questions/13130935/decode-7-bit-gsm
+    """
+
+    gsm_basic_charset = (
+        u"@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞ\x1bÆæßÉ !\"#¤%&'()*+,-./0123456789:;"
+        u"<=>?¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ`¿abcdefghijklmnopqrstuvwxyzäö"
+        u"ñüà")
+    gsm_extension = (
+        u"````````````````````^```````````````````{}`````\\````````````[~]`"
+        u"|````````````````````````````````````€``````````````````````````")
+
+    def encode(self, unicode_string, errors='strict'):
+        result = []
+        for c in unicode_string:
+            idx = self.gsm_basic_charset.find(c)
+            if idx != -1:
+                result.append(chr(idx))
+                continue
+            idx = self.gsm_extension.find(c)
+            if idx != -1:
+                result.append(chr(27) + chr(idx))
+        obj = ''.join(result).encode('hex', errors)
+        return (obj, len(obj))
+
+    def decode(self, hex_byte_string, errors='strict'):
+        res = hex_byte_string.decode('hex')
+        res = iter(res)
+        result = []
+        for c in res:
+            if c == chr(27):
+                c = next(res)
+                result.append(self.gsm_extension[ord(c)])
+            else:
+                result.append(self.gsm_basic_charset[ord(c)])
+        obj = u''.join(result)
+        return (obj, len(obj))
 
 
 class UCS2Codec(codecs.Codec):
@@ -27,6 +69,7 @@ class SmppCodec(object):
     implements(ISmppCodec)
 
     custom_codecs = {
+        'gsm0338': GSM7BitCodec(),
         'ucs2': UCS2Codec()
     }
 
