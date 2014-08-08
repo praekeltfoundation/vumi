@@ -4,6 +4,7 @@ from vumi.config import (
 from vumi.transports.smpp.iprocessors import (
     IDeliveryReportProcessor, IDeliverShortMessageProcessor,
     ISubmitShortMessageProcessor)
+from vumi.transports.smpp.icodecs import ISmppCodec
 from vumi.transports.base import Transport
 
 
@@ -41,6 +42,11 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
         "the TX bind are handled by the RX bind and they need to share the "
         "same prefix for the lookup for message ids in delivery reports to "
         "work.", default='', static=True)
+    codec_class = ConfigClassName(
+        'Which class should be used to handle character encoding/decoding. '
+        'MUST implement `ISMPPCodec`.',
+        default='vumi.transports.smpp.codecs.SMPPCodec',
+        static=True, implements=ISmppCodec)
     delivery_report_processor = ConfigClassName(
         'Which delivery report processor to use. '
         'MUST implement `IDeliveryReportProcessor`.',
