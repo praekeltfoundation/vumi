@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
-from vumi.transports.smpp.icodecs import ISmppCodec
-from vumi.transports.smpp.codecs import SmppCodec, SmppCodecException
+from vumi.transports.smpp.ismpp_codecs import ISmppCodec
+from vumi.transports.smpp.smpp_codecs import SmppCodec, SmppCodecException
 
 from twisted.trial.unittest import TestCase
 
@@ -49,3 +49,7 @@ class TestSmppCodec(TestCase):
     def test_encode_ucs2(self):
         self.assertEqual(
             self.codec.encode(u"Zoë", "ucs2"), '\x00Z\x00o\x00\xeb')
+
+    def test_decode_ucs2(self):
+        self.assertEqual(
+            self.codec.decode('\x00Z\x00o\x00\xeb', "ucs2"), u"Zoë")

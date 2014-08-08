@@ -4,7 +4,7 @@ from vumi.config import (
 from vumi.transports.smpp.iprocessors import (
     IDeliveryReportProcessor, IDeliverShortMessageProcessor,
     ISubmitShortMessageProcessor)
-from vumi.transports.smpp.icodecs import ISmppCodec
+from vumi.transports.smpp.ismpp_codecs import ISmppCodec
 from vumi.transports.base import Transport
 
 
