@@ -16,11 +16,11 @@ class TestSmppCodec(TestCase):
 
     def test_unicode_encode_guard(self):
         self.assertRaises(
-            SmppCodecException, self.codec.encode, "byte string", "utf-8")
+            SmppCodecException, self.codec.encode, "byte string")
 
     def test_bytestring_decode_guard(self):
         self.assertRaises(
-            SmppCodecException, self.codec.decode, u"Zoë", "utf-8")
+            SmppCodecException, self.codec.decode, u"unicode")
 
     def test_default_encoding(self):
         self.assertEqual(self.codec.encode(u"a"), "a")
