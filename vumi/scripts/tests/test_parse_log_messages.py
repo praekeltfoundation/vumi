@@ -48,6 +48,44 @@ SAMPLE_SMPP_OUTBOUND_LINE = (
     "u'user_message'}\">"
 )
 
+LOGGING_MW_INBOUND_LINE = (
+    "2014-08-11 06:55:12+0000 Processed inbound message for jsbox_transport: "
+    "{\"transport_name\": \"aat_ussd_transport\", \"in_reply_to\": null, "
+    "\"group\": null, \"from_addr\": \"2783XXXXXXX\", \"timestamp\": "
+    "\"2014-08-11 06:25:08.616561\", \"to_addr\": \"*134*550#\", \"content\":"
+    " null, \"routing_metadata\": {}, \"message_version\": \"20110921\","
+    " \"transport_type\": \"ussd\", \"helper_metadata\": {}, "
+    "\"transport_metadata\": {\"aat_ussd\": "
+    "{\"provider\": \"MTN\", \"ussd_session_id\": \"XXXX\"}}, "
+    "\"session_event\": \"new\", \"message_id\": \"XXX\", "
+    "\"message_type\": \"user_message\"}"
+)
+
+LOGGING_MW_OUTBOUND_LINE = (
+    "2014-08-11 06:55:12+0000 Processed outbound message for jsbox_transport: "
+    "{\"transport_name\": \"aat_ussd_transport\", \"in_reply_to\": null, "
+    "\"group\": null, \"from_addr\": \"*134*550#\", \"timestamp\": "
+    "\"2014-08-11 06:25:08.616561\", \"to_addr\": \"2783XXXXXXX\", \"content\":"
+    " \"hello\", \"routing_metadata\": {}, \"message_version\": \"20110921\","
+    " \"transport_type\": \"ussd\", \"helper_metadata\": {}, "
+    "\"transport_metadata\": {\"aat_ussd\": "
+    "{\"provider\": \"MTN\", \"ussd_session_id\": \"XXXX\"}}, "
+    "\"session_event\": \"new\", \"message_id\": \"XXX\", "
+    "\"message_type\": \"user_message\"}"
+)
+
+LOGGING_MW_EVENT_LINE = (
+    "2014-08-11 06:55:12+0000 Processed event message for "
+    "billing_dispatcher_ro: {\"transport_name\": \"mtech_ng_smpp_transport\","
+    " \"event_type\": \"delivery_report\", \"event_id\":"
+    " \"XXX\", \"timestamp\":"
+    " \"2014-08-11 06:51:22.927352\", \"routing_metadata\": {},"
+    " \"message_version\": \"20110921\", \"helper_metadata\": {},"
+    " \"delivery_status\": \"delivered\", \"transport_metadata\": {},"
+    " \"user_message_id\": \"XXX\","
+    " \"message_type\": \"event\"}"
+)
+
 
 class TestParseSMPPLogMessages(VumiTestCase):
 
@@ -123,3 +161,54 @@ class TestParseSMPPLogMessages(VumiTestCase):
                          "CODE2")
         self.assertEqual(json.loads(parser.emit_log[1].strip())['content'],
                          "CODE3")
+
+    def test_parse_of_logging_mw_inbound(self):
+        parser = DummyLogParser({
+            'from': None,
+            'until': None,
+            'format': 'dispatcher_inbound_message'
+        })
+        parser.readline(LOGGING_MW_INBOUND_LINE)
+        parsed = json.loads(parser.emit_log[0])
+        expected = {
+            "content": None,
+            "transport_type": "ussd",
+            "to_addr": "*134*550#",
+            "message_id": "XXX",
+            "from_addr": "2783XXXXXXX"
+        }
+        for key in expected.keys():
+            self.assertEqual(parsed.get(key), expected.get(key))
+
+    def test_parse_of_logging_mw_outbound(self):
+        parser = DummyLogParser({
+            'from': None,
+            'until': None,
+            'format': 'dispatcher_outbound_message'
+        })
+        parser.readline(LOGGING_MW_OUTBOUND_LINE)
+        parsed = json.loads(parser.emit_log[0])
+        expected = {
+            "content": "hello",
+            "transport_type": "ussd",
+            "to_addr": "2783XXXXXXX",
+            "message_id": "XXX",
+            "from_addr": "*134*550#"
+        }
+        for key in expected.keys():
+            self.assertEqual(parsed.get(key), expected.get(key))
+
+    def test_parse_of_logging_mw_event(self):
+        parser = DummyLogParser({
+            'from': None,
+            'until': None,
+            'format': 'dispatcher_event'
+        })
+        parser.readline(LOGGING_MW_EVENT_LINE)
+        parsed = json.loads(parser.emit_log[0])
+        expected = {
+            "event_type": "delivery_report",
+            "event_id": "XXX",
+        }
+        for key in expected.keys():
+            self.assertEqual(parsed.get(key), expected.get(key))
