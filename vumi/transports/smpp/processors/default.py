@@ -191,7 +191,7 @@ class DeliverShortMessageProcessor(object):
             return obj
         elif obj is None:
             log.msg(
-                "WARNING: Node decoding `None` message with data_coding=%s" % (
+                "WARNING: Not decoding `None` message with data_coding=%s" % (
                     data_coding,))
             return obj
 
