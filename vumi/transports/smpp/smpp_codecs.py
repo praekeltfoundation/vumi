@@ -96,3 +96,5 @@ class SmppCodec(object):
             decoder = codecs.getdecoder(encoding)
         obj, length = decoder(byte_string, errors)
         return obj
+
+smpp_codecs = SmppCodec()

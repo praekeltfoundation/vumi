@@ -1,4 +1,5 @@
 from vumi import log
+from vumi.transports.smpp.smpp_codecs import smpp_codecs
 
 
 def unpacked_pdu_opts(unpacked_pdu):
@@ -79,7 +80,7 @@ def decode_message(message, data_coding, data_coding_overrides):
                 data_coding,))
     else:
         try:
-            return message.decode(codec)
+            return smpp_codecs.decode(message, codec)
         except Exception, e:
             log.msg("Error decoding message with data_coding=%s" % (
                 data_coding,))
