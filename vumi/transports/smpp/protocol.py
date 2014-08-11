@@ -19,7 +19,6 @@ from smpp.pdu_builder import (
 from vumi import log
 from vumi.transports.smpp.pdu_utils import (
     pdu_ok, seq_no, command_status, command_id, message_id, chop_pdu_stream)
-from vumi.transports.smpp.smpp_utils import decode_pdus
 
 GSM_MAX_SMS_BYTES = 140
 GSM_MAX_SMS_7BIT_CHARS = 160
@@ -323,8 +322,7 @@ class EsmeTransceiver(Protocol):
 
         # At this point we either have a DR in the message payload
         # or have a normal SMS that needs to be decoded and handled.
-        content_parts = decode_pdus(
-            [pdu], self.deliver_sm_processor.config.data_coding_overrides)
+        content_parts = self.deliver_sm_processor.decode_pdus([pdu])
         if not all([isinstance(part, unicode) for part in content_parts]):
             command_status = self.config.deliver_sm_decoding_error
             log.msg('Not all parts of the PDU were able to be decoded. '

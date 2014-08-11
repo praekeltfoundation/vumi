@@ -74,8 +74,8 @@ class DeliverShortMessageProcessor(default.DeliverShortMessageProcessor):
             'session_identifier': mica_session_identifier,
         }
 
-        decoded_msg = self.decode_message(content,
-                                          pdu_params['data_coding'])
+        decoded_msg = self.dcs_decode(content,
+                                      pdu_params['data_coding'])
 
         result = yield self.handle_short_message_content(
             source_addr=pdu_params['source_addr'],
