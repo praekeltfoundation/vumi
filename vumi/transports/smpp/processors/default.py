@@ -150,7 +150,8 @@ class DeliverShortMessageProcessor(object):
 
     def handle_short_message_pdu(self, pdu):
         pdu_params = pdu['body']['mandatory_parameters']
-        content_parts = self.decode_pdus([pdu])
+        content_parts = decode_pdus(
+            [pdu], self.config.data_coding_overrides)
         if content_parts is not None:
             content = u''.join(content_parts)
         else:
@@ -248,9 +249,6 @@ class DeliverShortMessageProcessor(object):
             message_type='ussd',
             session_event=session_event,
             session_info=session_info)
-
-    def decode_pdus(self, pdus):
-        return decode_pdus(pdus, self.config.data_coding_overrides)
 
     def decode_message(self, message, data_coding):
         return decode_message(
