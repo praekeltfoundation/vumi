@@ -201,6 +201,7 @@ class DeliverShortMessageProcessor(object):
             log.msg("Error decoding message with data_coding=%s" % (
                 data_coding,))
             log.err(e)
+        return obj
 
     def decode_pdus(self, pdus):
         content = []
