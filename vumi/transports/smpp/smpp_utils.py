@@ -1,7 +1,3 @@
-from vumi import log
-from vumi.codecs.vumi_codecs import smpp_codecs
-
-
 def unpacked_pdu_opts(unpacked_pdu):
     pdu_opts = {}
     for opt in unpacked_pdu['body'].get('optional_parameters', []):

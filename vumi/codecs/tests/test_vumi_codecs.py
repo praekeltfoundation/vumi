@@ -1,26 +1,26 @@
 # -*- coding: utf-8 -*-
-from vumi.codecs.ivumi_codecs import ISmppCodec
-from vumi.codecs.vumi_codecs import SmppCodec, SmppCodecException
+from vumi.codecs.ivumi_codecs import IVumiCodec
+from vumi.codecs.vumi_codecs import VumiCodec, VumiCodecException
 
 from twisted.trial.unittest import TestCase
 
 
-class TestSmppCodec(TestCase):
+class TestVumiCodec(TestCase):
 
     def setUp(self):
-        self.codec = SmppCodec()
+        self.codec = VumiCodec()
 
     def test_implements(self):
-        self.assertTrue(ISmppCodec.implementedBy(SmppCodec))
-        self.assertTrue(ISmppCodec.providedBy(self.codec))
+        self.assertTrue(IVumiCodec.implementedBy(VumiCodec))
+        self.assertTrue(IVumiCodec.providedBy(self.codec))
 
     def test_unicode_encode_guard(self):
         self.assertRaises(
-            SmppCodecException, self.codec.encode, "byte string")
+            VumiCodecException, self.codec.encode, "byte string")
 
     def test_bytestring_decode_guard(self):
         self.assertRaises(
-            SmppCodecException, self.codec.decode, u"unicode")
+            VumiCodecException, self.codec.decode, u"unicode")
 
     def test_default_encoding(self):
         self.assertEqual(self.codec.encode(u"a"), "a")

@@ -1,3 +1,3 @@
-from vumi.codecs.vumi_codecs import SmppCodec
+from vumi.codecs.vumi_codecs import VumiCodec
 
-__all__ = ['SmppCodec']
+__all__ = ['VumiCodec']

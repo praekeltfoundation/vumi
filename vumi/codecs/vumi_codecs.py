@@ -1,14 +1,14 @@
-# -*- test-case-name: vumi.codecs.tests.test_smpp_codecs -*-
+# -*- test-case-name: vumi.codecs.tests.test_vumi_codecs -*-
 # -*- coding: utf-8 -*-
 import codecs
 import sys
 
-from vumi.codecs.ivumi_codecs import ISmppCodec
+from vumi.codecs.ivumi_codecs import IVumiCodec
 
 from zope.interface import implements
 
 
-class SmppCodecException(Exception):
+class VumiCodecException(Exception):
     pass
 
 
@@ -65,8 +65,8 @@ class UCS2Codec(codecs.Codec):
         return codecs.utf_16_be_decode(input, errors)
 
 
-class SmppCodec(object):
-    implements(ISmppCodec)
+class VumiCodec(object):
+    implements(IVumiCodec)
 
     custom_codecs = {
         'gsm0338': GSM7BitCodec(),
@@ -75,7 +75,7 @@ class SmppCodec(object):
 
     def encode(self, unicode_string, encoding=None, errors='strict'):
         if not isinstance(unicode_string, unicode):
-            raise SmppCodecException(
+            raise VumiCodecException(
                 'Only Unicode strings accepted for encoding.')
         encoding = encoding or sys.getdefaultencoding()
         if encoding in self.custom_codecs:
@@ -87,7 +87,7 @@ class SmppCodec(object):
 
     def decode(self, byte_string, encoding=None, errors='strict'):
         if not isinstance(byte_string, str):
-            raise SmppCodecException(
+            raise VumiCodecException(
                 'Only bytestrings accepted for decoding.')
         encoding = encoding or sys.getdefaultencoding()
         if encoding in self.custom_codecs:
@@ -96,5 +96,3 @@ class SmppCodec(object):
             decoder = codecs.getdecoder(encoding)
         obj, length = decoder(byte_string, errors)
         return obj
-
-smpp_codecs = SmppCodec()
