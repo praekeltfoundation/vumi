@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
-from vumi.transports.smpp.ismpp_codecs import ISmppCodec
-from vumi.transports.smpp.smpp_codecs import SmppCodec, SmppCodecException
+from vumi.codecs.ivumi_codecs import ISmppCodec
+from vumi.codecs.vumi_codecs import SmppCodec, SmppCodecException
 
 from twisted.trial.unittest import TestCase
 

@@ -4,7 +4,7 @@ from vumi.config import (
 from vumi.transports.smpp.iprocessors import (
     IDeliveryReportProcessor, IDeliverShortMessageProcessor,
     ISubmitShortMessageProcessor)
-from vumi.transports.smpp.ismpp_codecs import ISmppCodec
+from vumi.codecs.ivumi_codecs import ISmppCodec
 from vumi.transports.base import Transport
 
 
@@ -45,7 +45,7 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
     codec_class = ConfigClassName(
         'Which class should be used to handle character encoding/decoding. '
         'MUST implement `ISMPPCodec`.',
-        default='vumi.transports.smpp.smpp_codecs.SmppCodec',
+        default='vumi.codecs.SmppCodec',
         static=True, implements=ISmppCodec)
     delivery_report_processor = ConfigClassName(
         'Which delivery report processor to use. '

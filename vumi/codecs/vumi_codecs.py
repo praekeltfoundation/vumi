@@ -1,9 +1,9 @@
-# -*- test-case-name: vumi.transports.smpp.tests.test_smpp_codecs -*-
+# -*- test-case-name: vumi.codecs.tests.test_smpp_codecs -*-
 # -*- coding: utf-8 -*-
 import codecs
 import sys
 
-from vumi.transports.smpp.ismpp_codecs import ISmppCodec
+from vumi.codecs.ivumi_codecs import ISmppCodec
 
 from zope.interface import implements
 

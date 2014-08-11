@@ -1,5 +1,5 @@
 from vumi import log
-from vumi.transports.smpp.smpp_codecs import smpp_codecs
+from vumi.codecs.vumi_codecs import smpp_codecs
 
 
 def unpacked_pdu_opts(unpacked_pdu):
