@@ -73,7 +73,7 @@ class TestVumiCodec(TestCase):
 
     def test_encode_gsm0338_strict(self):
         self.assertRaises(
-            UnicodeError, self.codec.encode, u'Zoë', 'gsm0338')
+            UnicodeEncodeError, self.codec.encode, u'Zoë', 'gsm0338')
 
     def test_encode_gsm0338_ignore(self):
         self.assertEqual(
@@ -85,7 +85,8 @@ class TestVumiCodec(TestCase):
 
     def test_decode_gsm0338_strict(self):
         self.assertRaises(
-            UnicodeError, self.codec.decode, u'Zoë'.encode('utf-8'), 'gsm0338')
+            UnicodeDecodeError, self.codec.decode,
+            u'Zoë'.encode('utf-8'), 'gsm0338')
 
     def test_decode_gsm0338_ignore(self):
         self.assertEqual(
