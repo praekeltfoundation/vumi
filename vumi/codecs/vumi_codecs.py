@@ -34,7 +34,7 @@ class GSM7BitCodec(codecs.Codec):
 
     def encode(self, unicode_string, errors='strict'):
         result = []
-        for c in unicode_string:
+        for position, c in enumerate(unicode_string):
             idx = self.gsm_basic_charset_map.get(c)
             if idx is not None:
                 result.append(chr(idx))
@@ -43,33 +43,35 @@ class GSM7BitCodec(codecs.Codec):
             if idx is not None:
                 result.append(chr(27) + chr(idx))
             else:
-                result.append(self.handle_codec_error(c, errors))
+                result.append(
+                    self.handle_encode_error(
+                        c, errors, position, unicode_string))
 
         obj = ''.join(result)
         return (obj, len(obj))
 
-    def handle_codec_error(self, char, handler_type):
+    def handle_encode_error(self, char, handler_type, position, obj):
         handler = getattr(
-            self, 'handle_%s_error' % (handler_type,), None)
+            self, 'handle_encode_%s_error' % (handler_type,), None)
         if handler is None:
             raise VumiCodecException(
                 'Invalid errors type %s for GSM7BitCodec', handler_type)
-        return handler(char)
+        return handler(char, position, obj)
 
-    def handle_strict_error(self, char):
-        raise UnicodeError(
-            'GSM7BitCodec does not support %r.' % (char,))
+    def handle_encode_strict_error(self, char, position, obj):
+        raise UnicodeEncodeError(
+            'gsm0338', char, position, position + 1, repr(obj))
 
-    def handle_ignore_error(self, char):
+    def handle_encode_ignore_error(self, char, position, obj):
         return ''
 
-    def handle_replace_error(self, char):
+    def handle_encode_replace_error(self, char, position, obj):
         return chr(self.gsm_basic_charset_map.get('?'))
 
-    def decode(self, hex_byte_string, errors='strict'):
-        res = iter(hex_byte_string)
+    def decode(self, byte_string, errors='strict'):
+        res = iter(byte_string)
         result = []
-        for c in res:
+        for position, c in enumerate(res):
             try:
                 if c == chr(27):
                     c = next(res)
@@ -77,10 +79,29 @@ class GSM7BitCodec(codecs.Codec):
                 else:
                     result.append(self.gsm_basic_charset[ord(c)])
             except IndexError:
-                result.append(unicode(self.handle_codec_error(c, errors)))
+                result.append(
+                    self.handle_decode_error(c, errors, position, byte_string))
 
         obj = u''.join(result)
         return (obj, len(obj))
+
+    def handle_decode_error(self, char, handler_type, position, obj):
+        handler = getattr(
+            self, 'handle_decode_%s_error' % (handler_type,), None)
+        if handler is None:
+            raise VumiCodecException(
+                'Invalid errors type %s for GSM7BitCodec', handler_type)
+        return handler(char, position, obj)
+
+    def handle_decode_strict_error(self, char, position, obj):
+        raise UnicodeDecodeError(
+            'gsm0338', char, position, position + 1, obj)
+
+    def handle_decode_ignore_error(self, char, position, obj):
+        return u''
+
+    def handle_decode_replace_error(self, char, position, obj):
+        return u'?'
 
 
 class UCS2Codec(codecs.Codec):
