@@ -23,7 +23,8 @@ class GSM7BitCodec(codecs.Codec):
         u"<=>?¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ`¿abcdefghijklmnopqrstuvwxyzäö"
         u"ñüà")
 
-    gsm_basic_charset_map = dict((l, i) for i, l in enumerate(gsm_basic_charset))
+    gsm_basic_charset_map = dict(
+        (l, i) for i, l in enumerate(gsm_basic_charset))
 
     gsm_extension = (
         u"````````````````````^```````````````````{}`````\\````````````[~]`"
@@ -75,7 +76,7 @@ class GSM7BitCodec(codecs.Codec):
                     result.append(self.gsm_extension[ord(c)])
                 else:
                     result.append(self.gsm_basic_charset[ord(c)])
-            except IndexError, e:
+            except IndexError:
                 result.append(unicode(self.handle_codec_error(c, errors)))
 
         obj = u''.join(result)
