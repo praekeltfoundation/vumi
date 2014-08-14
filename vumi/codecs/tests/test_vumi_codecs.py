@@ -56,10 +56,12 @@ class TestVumiCodec(TestCase):
 
     def test_encode_gsm0338(self):
         self.assertEqual(
-            self.codec.encode(u"Hello World {}", "gsm0338"),
-            '48656c6c6f20576f726c64201b281b29')
+            self.codec.encode(u"HÜLK", "gsm0338"),
+            ''.join([chr(code) for code in [72, 94, 76, 75]]))
 
     def test_decode_gsm0338(self):
         self.assertEqual(
-            self.codec.decode('48656c6c6f20576f726c64201b281b29', 'gsm0338'),
-            u"Hello World {}")
+            self.codec.decode(
+                ''.join([chr(code) for code in [72, 94, 76, 75]]),
+                'gsm0338'),
+            u"HÜLK")

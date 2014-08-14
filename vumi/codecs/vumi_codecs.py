@@ -22,33 +22,62 @@ class GSM7BitCodec(codecs.Codec):
         u"@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞ\x1bÆæßÉ !\"#¤%&'()*+,-./0123456789:;"
         u"<=>?¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ`¿abcdefghijklmnopqrstuvwxyzäö"
         u"ñüà")
+
+    gsm_basic_charset_map = dict((l, i) for i, l in enumerate(gsm_basic_charset))
+
     gsm_extension = (
         u"````````````````````^```````````````````{}`````\\````````````[~]`"
         u"|````````````````````````````````````€``````````````````````````")
 
+    gsm_extension_map = dict((l, i) for i, l in enumerate(gsm_extension))
+
     def encode(self, unicode_string, errors='strict'):
         result = []
         for c in unicode_string:
-            idx = self.gsm_basic_charset.find(c)
-            if idx != -1:
+            idx = self.gsm_basic_charset_map.get(c)
+            if idx is not None:
                 result.append(chr(idx))
                 continue
-            idx = self.gsm_extension.find(c)
-            if idx != -1:
+            idx = self.gsm_extension_map.get(c)
+            if idx is not None:
                 result.append(chr(27) + chr(idx))
-        obj = ''.join(result).encode('hex', errors)
+            else:
+                result.append(self.handle_encoding_error(c, errors))
+
+        obj = ''.join(result)
         return (obj, len(obj))
 
+    def handle_codec_error(self, char, handler_type):
+        handler = getattr(
+            self, 'handle_%s_error' % (handler_type,), None)
+        if handler is None:
+            raise VumiCodecException(
+                'Invalid errors type %s for GSM7BitCodec', handler_type)
+        return handler(char)
+
+    def handle_strict_error(self, char):
+        raise UnicodeError(
+            'GSM7BitCodec does not support %r.' % (char,))
+
+    def handle_ignore_error(self, char):
+        return ''
+
+    def handle_replace_error(self, char):
+        return '?'
+
     def decode(self, hex_byte_string, errors='strict'):
-        res = hex_byte_string.decode('hex')
-        res = iter(res)
+        res = iter(hex_byte_string)
         result = []
         for c in res:
-            if c == chr(27):
-                c = next(res)
-                result.append(self.gsm_extension[ord(c)])
-            else:
-                result.append(self.gsm_basic_charset[ord(c)])
+            try:
+                if c == chr(27):
+                    c = next(res)
+                    result.append(self.gsm_extension[ord(c)])
+                else:
+                    result.append(self.gsm_basic_charset[ord(c)])
+            except IndexError, e:
+                result.append(unicode(self.handle_codec_error(c, errors)))
+
         obj = u''.join(result)
         return (obj, len(obj))
 
