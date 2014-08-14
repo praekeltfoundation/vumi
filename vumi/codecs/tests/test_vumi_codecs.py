@@ -70,3 +70,29 @@ class TestVumiCodec(TestCase):
                 ''.join([chr(code) for code in [102, 111, 111, 32, 27, 101]]),
                 'gsm0338'),
             u"foo €")
+
+    def test_encode_gsm0338_strict(self):
+        self.assertRaises(
+            UnicodeError, self.codec.encode, u'Zoë', 'gsm0338')
+
+    def test_encode_gsm0338_ignore(self):
+        self.assertEqual(
+            self.codec.encode(u"Zoë", "gsm0338", 'ignore'), 'Zo')
+
+    def test_encode_gsm0338_replace(self):
+        self.assertEqual(
+            self.codec.encode(u"Zoë", "gsm0338", 'replace'), 'Zo?')
+
+    def test_decode_gsm0338_strict(self):
+        self.assertRaises(
+            UnicodeError, self.codec.decode, u'Zoë'.encode('utf-8'), 'gsm0338')
+
+    def test_decode_gsm0338_ignore(self):
+        self.assertEqual(
+            self.codec.decode(
+                u'Zoë'.encode('utf-8'), "gsm0338", 'ignore'), u'Zo')
+
+    def test_decode_gsm0338_replace(self):
+        self.assertEqual(
+            self.codec.decode(
+                u'Zoë'.encode('utf-8'), "gsm0338", 'replace'), u'Zo??')

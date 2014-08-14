@@ -43,7 +43,7 @@ class GSM7BitCodec(codecs.Codec):
             if idx is not None:
                 result.append(chr(27) + chr(idx))
             else:
-                result.append(self.handle_encoding_error(c, errors))
+                result.append(self.handle_codec_error(c, errors))
 
         obj = ''.join(result)
         return (obj, len(obj))
@@ -64,7 +64,7 @@ class GSM7BitCodec(codecs.Codec):
         return ''
 
     def handle_replace_error(self, char):
-        return '?'
+        return chr(self.gsm_basic_charset_map.get('?'))
 
     def decode(self, hex_byte_string, errors='strict'):
         res = iter(hex_byte_string)
