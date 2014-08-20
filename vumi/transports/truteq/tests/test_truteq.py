@@ -209,8 +209,6 @@ class TestTruteqTransport(VumiTestCase):
         yield self.start_ussd()
         self.incoming_ussd(ussd_type=c.USSD_TIMEOUT, message=u"foo, bar")
         yield self.check_msg(content=u"foo, bar", session_event=SESSION_CLOSE)
-    test_handle_inbound_ussd_with_comma_in_content.skip = (
-        "This needs a new version of txssmi.")
 
     @inlineCallbacks
     def _test_outbound_ussd(self, vumi_session_type, ssmi_session_type,
@@ -256,8 +254,6 @@ class TestTruteqTransport(VumiTestCase):
     def test_handle_outbound_ussd_with_comma_in_content(self):
         return self._test_content_wrangling(
             'hello world, universe', 'hello world, universe')
-    test_handle_outbound_ussd_with_comma_in_content.skip = (
-        "This needs a new version of txssmi.")
 
     def test_handle_outbound_ussd_with_crln_in_content(self):
         return self._test_content_wrangling(
