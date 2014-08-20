@@ -25,7 +25,7 @@ setup(
         'iso8601',
         'pyOpenSSL',
         'service_identity',
-        'txssmi',
+        'txssmi>=0.3.0',
         'wokkel',
         'redis',
         'txredis',
