@@ -111,14 +111,16 @@ class TestTruteqTransport(VumiTestCase):
 
     def incoming_ussd(self, msisdn="12345678", ussd_type=c.USSD_RESPONSE,
                       phase="ignored", message="Hello"):
-        return self.transport.handle_raw_inbound_message(
-            USSDMessage(msisdn=msisdn, type=ussd_type,
-                        phase=c.USSD_PHASE_UNKNOWN,
-                        message=message))
+        self.send(USSDMessage(
+            msisdn=msisdn, type=ussd_type, phase=c.USSD_PHASE_UNKNOWN,
+            message=message))
 
     @inlineCallbacks
     def start_ussd(self, message="*678#", **kw):
-        yield self.incoming_ussd(ussd_type=c.USSD_NEW, message=message, **kw)
+        kw.setdefault("msisdn", "12345678")
+        kw.setdefault("phase", c.USSD_PHASE_UNKNOWN)
+        yield self.transport.handle_raw_inbound_message(
+            USSDMessage(type=c.USSD_NEW, message=message, **kw))
         self.tx_helper.clear_dispatched_inbound()
 
     @inlineCallbacks
@@ -180,27 +182,35 @@ class TestTruteqTransport(VumiTestCase):
     @inlineCallbacks
     def test_handle_inbound_ussd_resume(self):
         yield self.start_ussd()
-        yield self.incoming_ussd(ussd_type=c.USSD_RESPONSE, message="Hello")
+        self.incoming_ussd(ussd_type=c.USSD_RESPONSE, message="Hello")
         yield self.check_msg(content="Hello", session_event=SESSION_RESUME)
 
     @inlineCallbacks
     def test_handle_inbound_ussd_close(self):
         yield self.start_ussd()
-        yield self.incoming_ussd(ussd_type=c.USSD_END, message="Done")
+        self.incoming_ussd(ussd_type=c.USSD_END, message="Done")
         yield self.check_msg(content="Done", session_event=SESSION_CLOSE)
 
     @inlineCallbacks
     def test_handle_inbound_ussd_timeout(self):
         yield self.start_ussd()
-        yield self.incoming_ussd(ussd_type=c.USSD_TIMEOUT, message="Timeout")
+        self.incoming_ussd(ussd_type=c.USSD_TIMEOUT, message="Timeout")
         yield self.check_msg(content="Timeout", session_event=SESSION_CLOSE)
 
     @inlineCallbacks
     def test_handle_inbound_ussd_non_ascii(self):
         yield self.start_ussd()
-        yield self.incoming_ussd(
+        self.incoming_ussd(
             ussd_type=c.USSD_TIMEOUT, message=u"föóbær".encode("iso-8859-1"))
         yield self.check_msg(content=u"föóbær", session_event=SESSION_CLOSE)
+
+    @inlineCallbacks
+    def test_handle_inbound_ussd_with_comma_in_content(self):
+        yield self.start_ussd()
+        self.incoming_ussd(ussd_type=c.USSD_TIMEOUT, message=u"foo, bar")
+        yield self.check_msg(content=u"foo, bar", session_event=SESSION_CLOSE)
+    test_handle_inbound_ussd_with_comma_in_content.skip = (
+        "This needs a new version of txssmi.")
 
     @inlineCallbacks
     def _test_outbound_ussd(self, vumi_session_type, ssmi_session_type,
@@ -243,6 +253,12 @@ class TestTruteqTransport(VumiTestCase):
 
         self.assertEqual(ussd_call, expected_msg)
 
+    def test_handle_outbound_ussd_with_comma_in_content(self):
+        return self._test_content_wrangling(
+            'hello world, universe', 'hello world, universe')
+    test_handle_outbound_ussd_with_comma_in_content.skip = (
+        "This needs a new version of txssmi.")
+
     def test_handle_outbound_ussd_with_crln_in_content(self):
         return self._test_content_wrangling(
             'hello\r\nwindows\r\nworld', 'hello\nwindows\nworld')
@@ -253,12 +269,12 @@ class TestTruteqTransport(VumiTestCase):
 
     @inlineCallbacks
     def test_ussd_addr_retains_asterisks_and_hashes(self):
-        yield self.incoming_ussd(ussd_type=c.USSD_NEW, message="*6*7*8#")
+        self.incoming_ussd(ussd_type=c.USSD_NEW, message="*6*7*8#")
         yield self.check_msg(to_addr="*6*7*8#", session_event=SESSION_NEW)
 
     @inlineCallbacks
     def test_ussd_addr_appends_hashes_if_missing(self):
-        yield self.incoming_ussd(ussd_type=c.USSD_NEW, message="*6*7*8")
+        self.incoming_ussd(ussd_type=c.USSD_NEW, message="*6*7*8")
         yield self.check_msg(to_addr="*6*7*8#", session_event=SESSION_NEW)
 
     @inlineCallbacks
