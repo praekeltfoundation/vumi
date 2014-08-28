@@ -132,46 +132,27 @@ class MessageStoreCache(object):
         yield self.truncate_outbound_message_keys(batch_id)
 
     @Manager.calls_manager
+    def _truncate_keys(self, redis_key, truncate_at):
+        # Indexes are zero based
+        truncate_at = (truncate_at or self.TRUNCATE_MESSAGE_KEY_COUNT_AT) + 1
+        # NOTE: Doing this because ZCARD is O(1) where ZREMRANGEBYRANK is
+        #       O(log(N)+M)
+        current_size = yield self.redis.zcard(redis_key)
+        if current_size <= truncate_at:
+            returnValue(0)
+
+        keys_removed = yield self.redis.zremrangebyrank(
+            redis_key, 0, truncate_at * -1)
+        returnValue(keys_removed)
+
     def truncate_inbound_message_keys(self, batch_id, truncate_at=None):
-        # indexes are zero based
-        truncate_at = (truncate_at or self.TRUNCATE_MESSAGE_KEY_COUNT_AT) + 1
-        current_size = yield self.inbound_message_keys_size(batch_id)
-        # NOTE: doing this because ZCARD is O(1) where ZREMRANGEBYRANK is
-        #       O(log(N)+M)
-        if current_size > truncate_at:
-            keys_removed = yield self.redis.zremrangebyrank(
-                self.inbound_key(batch_id), 0, truncate_at * -1)
-            returnValue(keys_removed)
+        return self._truncate_keys(self.inbound_key(batch_id), truncate_at)
 
-        returnValue(0)
-
-    @Manager.calls_manager
     def truncate_outbound_message_keys(self, batch_id, truncate_at=None):
-        # indexes are zero based
-        truncate_at = (truncate_at or self.TRUNCATE_MESSAGE_KEY_COUNT_AT) + 1
-        current_size = yield self.outbound_message_keys_size(batch_id)
-        # NOTE: doing this because ZCARD is O(1) where ZREMRANGEBYRANK is
-        #       O(log(N)+M)
-        if current_size > truncate_at:
-            keys_removed = yield self.redis.zremrangebyrank(
-                self.outbound_key(batch_id), 0, truncate_at * -1)
-            returnValue(keys_removed)
+        return self._truncate_keys(self.outbound_key(batch_id), truncate_at)
 
-        returnValue(0)
-
-    @Manager.calls_manager
     def truncate_event_keys(self, batch_id, truncate_at=None):
-        # indexes are zero based
-        truncate_at = (truncate_at or self.TRUNCATE_MESSAGE_KEY_COUNT_AT) + 1
-        current_size = yield self.redis.zcard(self.event_key(batch_id))
-        # NOTE: doing this because ZCARD is O(1) where ZREMRANGEBYRANK is
-        #       O(log(N)+M)
-        if current_size > truncate_at:
-            keys_removed = yield self.redis.zremrangebyrank(
-                self.event_key(batch_id), 0, truncate_at * -1)
-            returnValue(keys_removed)
-
-        returnValue(0)
+        return self._truncate_keys(self.event_key(batch_id), truncate_at)
 
     @Manager.calls_manager
     def batch_start(self, batch_id, use_counters=True):
