@@ -599,9 +599,8 @@ class TestMessageStoreCache(TestMessageStoreBase):
         # Default reconciliation delta should return True
         self.assertTrue((yield self.store.needs_reconciliation(batch_id)))
         yield self.store.reconcile_cache(batch_id)
-        # Default reconciliation delta should return True
+        # Reconciliation check should return False after recon.
         self.assertFalse((yield self.store.needs_reconciliation(batch_id)))
-        # Stricted possible reconciliation delta should return True
         self.assertFalse(
             (yield self.store.needs_reconciliation(batch_id, delta=0)))
         batch_status = yield self.store.batch_status(batch_id)
@@ -633,9 +632,8 @@ class TestMessageStoreCache(TestMessageStoreBase):
         # Default reconciliation delta should return True
         self.assertTrue((yield self.store.needs_reconciliation(batch_id)))
         yield self.store.reconcile_cache(batch_id)
-        # Default reconciliation delta should return True
+        # Reconciliation check should return False after recon.
         self.assertFalse((yield self.store.needs_reconciliation(batch_id)))
-        # Stricted possible reconciliation delta should return True
         self.assertFalse(
             (yield self.store.needs_reconciliation(batch_id, delta=0)))
         batch_status = yield self.store.batch_status(batch_id)
