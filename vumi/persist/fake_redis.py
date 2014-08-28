@@ -11,7 +11,7 @@ from twisted.internet.defer import Deferred, execute
 from twisted.internet.task import Clock
 
 
-FAKE_REDIS_WAIT = float(os.environ.get('VUMI_FAKE_REDIS_WAIT', '0.005'))
+FAKE_REDIS_WAIT = float(os.environ.get('VUMI_FAKE_REDIS_WAIT', '0.002'))
 
 
 def maybe_async(func):
