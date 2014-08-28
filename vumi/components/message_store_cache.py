@@ -237,6 +237,7 @@ class MessageStoreCache(object):
         yield self.redis.delete(self.outbound_key(batch_id))
         yield self.redis.delete(self.outbound_count_key(batch_id))
         yield self.redis.delete(self.event_key(batch_id))
+        yield self.redis.delete(self.event_count_key(batch_id))
         yield self.redis.delete(self.status_key(batch_id))
         yield self.redis.delete(self.to_addr_key(batch_id))
         yield self.redis.delete(self.from_addr_key(batch_id))
