@@ -29,6 +29,7 @@ class MessageStoreCache(object):
     TO_ADDR_KEY = 'to_addr'
     FROM_ADDR_KEY = 'from_addr'
     EVENT_KEY = 'event'
+    EVENT_COUNT_KEY = 'event_count'
     STATUS_KEY = 'status'
     SEARCH_TOKEN_KEY = 'search_token'
     SEARCH_RESULT_KEY = 'search_result'
@@ -72,6 +73,9 @@ class MessageStoreCache(object):
     def event_key(self, batch_id):
         return self.batch_key(self.EVENT_KEY, batch_id)
 
+    def event_count_key(self, batch_id):
+        return self.batch_key(self.EVENT_COUNT_KEY, batch_id)
+
     def search_token_key(self, batch_id):
         return self.batch_key(self.SEARCH_TOKEN_KEY, batch_id)
 
@@ -90,6 +94,17 @@ class MessageStoreCache(object):
         """
         return self.redis.exists(self.inbound_count_key(batch_id))
 
+    def uses_event_counters(self, batch_id):
+        """
+        Returns ``True`` if ``batch_id`` has moved to the new system of using
+        counters for events instead of assuming all keys are in Redis and doing
+        a `zcard` on that.
+
+        The test for this is to see if `inbound_count_key(batch_id)` exists. If
+        it is then we've moved to the new system and are using counters.
+        """
+        return self.redis.exists(self.event_count_key(batch_id))
+
     @Manager.calls_manager
     def switch_to_counters(self, batch_id):
         """
@@ -98,8 +113,6 @@ class MessageStoreCache(object):
         """
         uses_counters = yield self.uses_counters(batch_id)
         if uses_counters:
-            log.msg('Batch %r has already switched to counters.' % (
-                batch_id,))
             return
 
         # NOTE:     Under high load this may result in the counter being off
@@ -119,32 +132,27 @@ class MessageStoreCache(object):
         yield self.truncate_outbound_message_keys(batch_id)
 
     @Manager.calls_manager
+    def _truncate_keys(self, redis_key, truncate_at):
+        # Indexes are zero based
+        truncate_at = (truncate_at or self.TRUNCATE_MESSAGE_KEY_COUNT_AT) + 1
+        # NOTE: Doing this because ZCARD is O(1) where ZREMRANGEBYRANK is
+        #       O(log(N)+M)
+        current_size = yield self.redis.zcard(redis_key)
+        if current_size <= truncate_at:
+            returnValue(0)
+
+        keys_removed = yield self.redis.zremrangebyrank(
+            redis_key, 0, truncate_at * -1)
+        returnValue(keys_removed)
+
     def truncate_inbound_message_keys(self, batch_id, truncate_at=None):
-        # indexes are zero based
-        truncate_at = (truncate_at or self.TRUNCATE_MESSAGE_KEY_COUNT_AT) + 1
-        current_size = yield self.inbound_message_keys_size(batch_id)
-        # NOTE: doing this because ZCARD is O(1) where ZREMRANGEBYRANK is
-        #       O(log(N)+M)
-        if current_size > truncate_at:
-            keys_removed = yield self.redis.zremrangebyrank(
-                self.inbound_key(batch_id), 0, truncate_at * -1)
-            returnValue(keys_removed)
+        return self._truncate_keys(self.inbound_key(batch_id), truncate_at)
 
-        returnValue(0)
-
-    @Manager.calls_manager
     def truncate_outbound_message_keys(self, batch_id, truncate_at=None):
-        # indexes are zero based
-        truncate_at = (truncate_at or self.TRUNCATE_MESSAGE_KEY_COUNT_AT) + 1
-        current_size = yield self.outbound_message_keys_size(batch_id)
-        # NOTE: doing this because ZCARD is O(1) where ZREMRANGEBYRANK is
-        #       O(log(N)+M)
-        if current_size > truncate_at:
-            keys_removed = yield self.redis.zremrangebyrank(
-                self.outbound_key(batch_id), 0, truncate_at * -1)
-            returnValue(keys_removed)
+        return self._truncate_keys(self.outbound_key(batch_id), truncate_at)
 
-        returnValue(0)
+    def truncate_event_keys(self, batch_id, truncate_at=None):
+        return self._truncate_keys(self.event_key(batch_id), truncate_at)
 
     @Manager.calls_manager
     def batch_start(self, batch_id, use_counters=True):
@@ -168,6 +176,7 @@ class MessageStoreCache(object):
         if use_counters:
             yield self.redis.set(self.inbound_count_key(batch_id), 0)
             yield self.redis.set(self.outbound_count_key(batch_id), 0)
+            yield self.redis.set(self.event_count_key(batch_id), 0)
 
     @Manager.calls_manager
     def init_status(self, batch_id):
@@ -209,6 +218,7 @@ class MessageStoreCache(object):
         yield self.redis.delete(self.outbound_key(batch_id))
         yield self.redis.delete(self.outbound_count_key(batch_id))
         yield self.redis.delete(self.event_key(batch_id))
+        yield self.redis.delete(self.event_count_key(batch_id))
         yield self.redis.delete(self.status_key(batch_id))
         yield self.redis.delete(self.to_addr_key(batch_id))
         yield self.redis.delete(self.from_addr_key(batch_id))
@@ -251,9 +261,9 @@ class MessageStoreCache(object):
         """
         Add an event to the cache for the given batch_id
         """
-
         event_id = event['event_id']
-        new_entry = yield self.add_event_key(batch_id, event_id)
+        timestamp = self.get_timestamp(event['timestamp'])
+        new_entry = yield self.add_event_key(batch_id, event_id, timestamp)
         if new_entry:
             event_type = event['event_type']
             yield self.increment_event_status(batch_id, event_type)
@@ -261,12 +271,24 @@ class MessageStoreCache(object):
                 yield self.increment_event_status(
                     batch_id, '%s.%s' % (event_type, event['delivery_status']))
 
-    def add_event_key(self, batch_id, event_key):
+    @Manager.calls_manager
+    def add_event_key(self, batch_id, event_key, timestamp):
         """
         Add the event key to the set of known event keys.
         Returns 0 if the key already exists in the set, 1 if it doesn't.
         """
-        return self.redis.sadd(self.event_key(batch_id), event_key)
+        uses_event_counters = yield self.uses_event_counters(batch_id)
+        if not uses_event_counters:
+            # This uses a set, not a sorted set.
+            new_entry = yield self.redis.sadd(
+                self.event_key(batch_id), event_key)
+            returnValue(new_entry)
+
+        new_entry = yield self.redis.zadd(self.event_key(batch_id), **{
+            event_key.encode('utf-8'): timestamp,
+        })
+        yield self.truncate_event_keys(batch_id)
+        returnValue(new_entry)
 
     def increment_event_status(self, batch_id, event_type):
         """
@@ -408,6 +430,24 @@ class MessageStoreCache(object):
 
         count = yield self.outbound_message_count(batch_id)
         returnValue(count)
+
+    @Manager.calls_manager
+    def event_count(self, batch_id):
+        count = yield self.redis.get(self.event_count_key(batch_id))
+        returnValue(0 if count is None else int(count))
+
+    @Manager.calls_manager
+    def count_event_keys(self, batch_id):
+        """
+        Return the count of the unique event keys for this batch_id
+        """
+        uses_event_counters = yield self.uses_event_counters(batch_id)
+        if uses_event_counters:
+            count = yield self.event_count(batch_id)
+            returnValue(count)
+        else:
+            count = yield self.redis.scard(self.event_key(batch_id))
+            returnValue(count)
 
     @Manager.calls_manager
     def count_inbound_throughput(self, batch_id, sample_time=300):
