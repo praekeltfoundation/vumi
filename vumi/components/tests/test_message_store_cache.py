@@ -178,6 +178,8 @@ class TestMessageStoreCache(MessageStoreCacheTestCase):
         delivery = self.msg_helper.make_delivery_report(msg)
         yield self.cache.add_event(self.batch_id, ack)
         yield self.cache.add_event(self.batch_id, delivery)
+        event_count = yield self.cache.count_event_keys(self.batch_id)
+        self.assertEqual(event_count, 2)
         status = yield self.cache.get_event_status(self.batch_id)
         self.assertEqual(status, {
             'delivery_report': 1,
@@ -198,6 +200,8 @@ class TestMessageStoreCache(MessageStoreCacheTestCase):
             # send exact same event multiple times
             ack['event_id'] = 'identical'
             yield self.cache.add_event(self.batch_id, ack)
+        event_count = yield self.cache.count_event_keys(self.batch_id)
+        self.assertEqual(event_count, 1)
         status = yield self.cache.get_event_status(self.batch_id)
         self.assertEqual(status, {
             'delivery_report': 0,
@@ -215,6 +219,9 @@ class TestMessageStoreCache(MessageStoreCacheTestCase):
             msg = self.msg_helper.make_outbound("outbound")
             msg['message_id'] = 'the-same-thing'
             yield self.cache.add_outbound_message(self.batch_id, msg)
+        outbound_count = yield self.cache.count_outbound_message_keys(
+            self.batch_id)
+        self.assertEqual(outbound_count, 1)
         status = yield self.cache.get_event_status(self.batch_id)
         self.assertEqual(status['sent'], 1)
         self.assertEqual(
@@ -226,7 +233,10 @@ class TestMessageStoreCache(MessageStoreCacheTestCase):
         for i in range(10):
             msg = self.msg_helper.make_inbound("inbound")
             msg['message_id'] = 'the-same-thing'
-            self.cache.add_inbound_message(self.batch_id, msg)
+            yield self.cache.add_inbound_message(self.batch_id, msg)
+        inbound_count = yield self.cache.count_inbound_message_keys(
+            self.batch_id)
+        self.assertEqual(inbound_count, 1)
         self.assertEqual(
             (yield self.cache.get_inbound_message_keys(self.batch_id)),
             ['the-same-thing'])
