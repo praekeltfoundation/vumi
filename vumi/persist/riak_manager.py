@@ -10,6 +10,17 @@ from vumi.persist.model import Manager
 from vumi.utils import flatten_generator
 
 
+class VumiRiakBucket(object):
+    def __init__(self, riak_bucket):
+        self._riak_bucket = riak_bucket
+
+    def get_name(self):
+        return self._riak_bucket.name
+
+    def get_index(self, index_name, start_value, end_value=None):
+        return self._riak_bucket.get_index(index_name, start_value, end_value)
+
+
 class VumiRiakObject(object):
     def __init__(self, riak_obj):
         self._riak_obj = riak_obj
@@ -58,19 +69,18 @@ class VumiRiakObject(object):
         self._riak_obj.usermeta = usermeta
 
     def get_bucket(self):
-        # TODO: Does this also need to be wrapped?
-        return self._riak_obj.bucket
+        return VumiRiakBucket(self._riak_obj.bucket)
 
     # Methods that touch the network.
 
     def store(self):
-        self._riak_obj.store()
+        return type(self)(self._riak_obj.store())
 
     def reload(self):
-        self._riak_obj.reload()
+        type(self)(self._riak_obj.reload())
 
     def delete(self):
-        self._riak_obj.delete()
+        type(self)(self._riak_obj.delete())
 
 
 class RiakManager(Manager):
@@ -119,8 +129,14 @@ class RiakManager(Manager):
         return cls(client, bucket_prefix, load_bunch_size=load_bunch_size,
                    mapreduce_timeout=mapreduce_timeout)
 
+    def riak_bucket(self, bucket_name):
+        bucket = self.client.bucket(bucket_name)
+        if bucket is not None:
+            bucket = VumiRiakBucket(bucket)
+        return bucket
+
     def riak_object(self, modelcls, key, result=None):
-        bucket = self.bucket_for_modelcls(modelcls)
+        bucket = self.bucket_for_modelcls(modelcls)._riak_bucket
         riak_object = VumiRiakObject(RiakObject(self.client, bucket, key))
         if result:
             metadata = result['metadata']

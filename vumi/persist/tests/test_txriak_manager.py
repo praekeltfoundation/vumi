@@ -39,6 +39,17 @@ def get_link_key(link):
     return link[1]
 
 
+def unrepr_string(text):
+    if text.startswith("'"):
+        # Strip and unescape single quotes
+        return text[1:-1].replace("\\'", "'")
+    if text.startswith('"'):
+        # Strip and unescape double quotes
+        return text[1:-1].replace('\\"', '"')
+    # Nothing to strip.
+    return text
+
+
 class CommonRiakManagerTests(object):
     """Common tests for Riak managers.
 
@@ -96,14 +107,15 @@ class CommonRiakManagerTests(object):
         bucket1 = self.manager.bucket_for_modelcls(dummy_cls)
         bucket2 = self.manager.bucket_for_modelcls(dummy_cls)
         self.assertEqual(id(bucket1), id(bucket2))
-        self.assertEqual(bucket1.name, "test.dummy_model")
+        self.assertEqual(bucket1.get_name(), "test.dummy_model")
 
     def test_riak_object(self):
         dummy = DummyModel(self.manager, "foo")
         riak_object = self.manager.riak_object(dummy, "foo")
         self.assertEqual(riak_object.get_data(), {'$VERSION': None})
         self.assertEqual(riak_object.get_content_type(), "application/json")
-        self.assertEqual(riak_object.get_bucket().name, "test.dummy_model")
+        self.assertEqual(
+            riak_object.get_bucket().get_name(), "test.dummy_model")
         self.assertEqual(riak_object.key, "foo")
 
     @Manager.calls_manager
@@ -190,11 +202,11 @@ class CommonRiakManagerTests(object):
         try:
             yield self.manager.run_map_reduce(mr, lambda m, l: None)
         except Exception, err:
-            msg = str(err)
+            msg = unrepr_string(str(err))
             self.assertTrue(msg.startswith(
-                "'Error running MapReduce operation."))
+                "Error running MapReduce operation."))
             self.assertTrue(msg.endswith(
-                "Body: \\'{\"error\":\"timeout\"}\\''"))
+                "Body: '{\"error\":\"timeout\"}'"))
         else:
             self.fail("Map reduce operation did not timeout")
 

@@ -2,12 +2,24 @@
 
 """A manager implementation on top of txriak."""
 
-from riakasaurus.riak import RiakClient, RiakObject, RiakMapReduce
+from riakasaurus.riak import RiakClient, RiakObject, RiakMapReduce, RiakLink
+from riakasaurus.riak_index_entry import RiakIndexEntry
 from riakasaurus import transport
 from twisted.internet.defer import (
     inlineCallbacks, gatherResults, maybeDeferred, succeed)
 
 from vumi.persist.model import Manager
+
+
+class VumiTxRiakBucket(object):
+    def __init__(self, riak_bucket):
+        self._riak_bucket = riak_bucket
+
+    def get_name(self):
+        return self._riak_bucket.get_name()
+
+    def get_index(self, index_name, start_value, end_value=None):
+        return self._riak_bucket.get_index(index_name, start_value, end_value)
 
 
 class VumiTxRiakObject(object):
@@ -16,34 +28,38 @@ class VumiTxRiakObject(object):
 
     @property
     def key(self):
-        return self._riak_obj.key
+        return self._riak_obj.get_key()
 
     def get_content_type(self):
-        return self._riak_obj.content_type
+        return self._riak_obj.get_content_type()
 
     def set_content_type(self, content_type):
-        self._riak_obj.content_type = content_type
+        self._riak_obj.set_content_type(content_type)
 
     def get_data(self):
-        return self._riak_obj.data
+        return self._riak_obj.get_data()
 
     def set_data(self, data):
-        self._riak_obj.data = data
+        self._riak_obj.set_data(data)
 
     def set_encoded_data(self, encoded_data):
-        self._riak_obj.encoded_data = encoded_data
+        self._riak_obj.set_encoded_data(encoded_data)
 
     def set_data_field(self, key, value):
-        self._riak_obj.data[key] = value
+        self._riak_obj._data[key] = value
 
     def delete_data_field(self, key):
-        del self._riak_obj.data[key]
+        del self._riak_obj._data[key]
 
     def get_indexes(self):
-        return self._riak_obj.indexes
+        indexes = self._riak_obj.get_metadata().get('index', [])
+        return [(index.get_field(), index.get_value()) for index in indexes]
 
     def set_indexes(self, indexes):
-        self._riak_obj.indexes = indexes
+        usermeta = self._riak_obj.get_metadata()
+        usermeta['index'] = [RiakIndexEntry(field, value)
+                             for field, value in indexes]
+        self._riak_obj.set_metadata(usermeta)
 
     def add_index(self, index_name, index_value):
         self._riak_obj.add_index(index_name, index_value)
@@ -52,25 +68,31 @@ class VumiTxRiakObject(object):
         self._riak_obj.remove_index(index_name, index_value)
 
     def get_user_metadata(self):
-        return self._riak_obj.usermeta
+        # Indexes live in here, but we have separate accessors for those.
+        usermeta = self._riak_obj.get_metadata()
+        usermeta = (usermeta or {}).copy()
+        usermeta.pop('index')
+        return usermeta
 
     def set_user_metadata(self, usermeta):
-        self._riak_obj.usermeta = usermeta
+        # Indexes live in here, but we have separate accessors for those.
+        usermeta = (usermeta or {}).copy()
+        usermeta['index'] = self._riak_obj.get_metadata().get('index', [])
+        self._riak_obj.set_metadata(usermeta)
 
     def get_bucket(self):
-        # TODO: Does this also need to be wrapped?
-        return self._riak_obj.bucket
+        return VumiTxRiakBucket(self._riak_obj.get_bucket())
 
     # Methods that touch the network.
 
     def store(self):
-        self._riak_obj.store()
+        return self._riak_obj.store().addCallback(type(self))
 
     def reload(self):
-        self._riak_obj.reload()
+        return self._riak_obj.reload().addCallback(type(self))
 
     def delete(self):
-        self._riak_obj.delete()
+        return self._riak_obj.delete().addCallback(type(self))
 
 
 class TxRiakManager(Manager):
@@ -131,8 +153,14 @@ class TxRiakManager(Manager):
 
         return encoded
 
+    def riak_bucket(self, bucket_name):
+        bucket = self.client.bucket(bucket_name)
+        if bucket is not None:
+            bucket = VumiTxRiakBucket(bucket)
+        return bucket
+
     def riak_object(self, modelcls, key, result=None):
-        bucket = self.bucket_for_modelcls(modelcls)
+        bucket = self.bucket_for_modelcls(modelcls)._riak_bucket
         riak_object = VumiTxRiakObject(RiakObject(self.client, bucket, key))
         if result:
             metadata = result['metadata']
@@ -202,6 +230,9 @@ class TxRiakManager(Manager):
         def map_results(raw_results):
             deferreds = []
             for row in raw_results:
+                if isinstance(row, RiakLink):
+                    # Translate to new-style tuple link representation.
+                    row = (row.get_bucket(), row.get_key(), row.get_tag())
                 deferreds.append(maybeDeferred(mapper_func, self, row))
             return gatherResults(deferreds)
 

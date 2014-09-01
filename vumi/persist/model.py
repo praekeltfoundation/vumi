@@ -500,7 +500,7 @@ class VumiMapReduce(object):
             # Assume strings are keys.
             return obj
         else:
-            # If we haven't been given a string, we probably have a RiakLink.
+            # If we haven't been given a string, we probably have a riak link.
             _bucket, key, _tag = obj
             return key
 
@@ -542,7 +542,7 @@ class Manager(object):
         bucket = self._bucket_cache.get(modelcls_id)
         if bucket is None:
             bucket_name = self.bucket_name(modelcls)
-            bucket = self.client.bucket(bucket_name)
+            bucket = self.riak_bucket(bucket_name)
             self._bucket_cache[modelcls_id] = bucket
         return bucket
 
