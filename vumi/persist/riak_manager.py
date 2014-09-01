@@ -10,6 +10,69 @@ from vumi.persist.model import Manager
 from vumi.utils import flatten_generator
 
 
+class VumiRiakObject(object):
+    def __init__(self, riak_obj):
+        self._riak_obj = riak_obj
+
+    @property
+    def key(self):
+        return self._riak_obj.key
+
+    def get_content_type(self):
+        return self._riak_obj.content_type
+
+    def set_content_type(self, content_type):
+        self._riak_obj.content_type = content_type
+
+    def get_data(self):
+        return self._riak_obj.data
+
+    def set_data(self, data):
+        self._riak_obj.data = data
+
+    def set_encoded_data(self, encoded_data):
+        self._riak_obj.encoded_data = encoded_data
+
+    def set_data_field(self, key, value):
+        self._riak_obj.data[key] = value
+
+    def delete_data_field(self, key):
+        del self._riak_obj.data[key]
+
+    def get_indexes(self):
+        return self._riak_obj.indexes
+
+    def set_indexes(self, indexes):
+        self._riak_obj.indexes = indexes
+
+    def add_index(self, index_name, index_value):
+        self._riak_obj.add_index(index_name, index_value)
+
+    def remove_index(self, index_name, index_value=None):
+        self._riak_obj.remove_index(index_name, index_value)
+
+    def get_user_metadata(self):
+        return self._riak_obj.usermeta
+
+    def set_user_metadata(self, usermeta):
+        self._riak_obj.usermeta = usermeta
+
+    def get_bucket(self):
+        # TODO: Does this also need to be wrapped?
+        return self._riak_obj.bucket
+
+    # Methods that touch the network.
+
+    def store(self):
+        self._riak_obj.store()
+
+    def reload(self):
+        self._riak_obj.reload()
+
+    def delete(self):
+        self._riak_obj.delete()
+
+
 class RiakManager(Manager):
     """A persistence manager for the riak Python package."""
 
@@ -58,7 +121,7 @@ class RiakManager(Manager):
 
     def riak_object(self, modelcls, key, result=None):
         bucket = self.bucket_for_modelcls(modelcls)
-        riak_object = RiakObject(self.client, bucket, key)
+        riak_object = VumiRiakObject(RiakObject(self.client, bucket, key))
         if result:
             metadata = result['metadata']
             indexes = metadata['index']
@@ -69,12 +132,12 @@ class RiakManager(Manager):
                 #       there are indexes?) it comes back as a dict.
                 indexes = indexes.items()
             data = result['data']
-            riak_object.content_type = metadata['content-type']
-            riak_object.indexes = indexes
-            riak_object.encoded_data = data
+            riak_object.set_content_type(metadata['content-type'])
+            riak_object.set_indexes(indexes)
+            riak_object.set_encoded_data(data)
         else:
-            riak_object.data = {'$VERSION': modelcls.VERSION}
-            riak_object.content_type = "application/json"
+            riak_object.set_content_type("application/json")
+            riak_object.set_data({'$VERSION': modelcls.VERSION})
         return riak_object
 
     def store(self, modelobj):
@@ -91,8 +154,8 @@ class RiakManager(Manager):
         was_migrated = False
 
         # Run migrators until we have the correct version of the data.
-        while riak_object.data is not None:
-            data_version = riak_object.data.get('$VERSION', None)
+        while riak_object.get_data() is not None:
+            data_version = riak_object.get_data().get('$VERSION', None)
             if data_version == modelcls.VERSION:
                 obj = modelcls(self, key, _riak_object=riak_object)
                 obj.was_migrated = was_migrated

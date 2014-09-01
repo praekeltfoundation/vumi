@@ -199,7 +199,7 @@ class TestModelOnTxRiak(VumiTestCase):
 
     def get_model_indexes(self, model):
         indexes = {}
-        for name, value in model._riak_object.indexes:
+        for name, value in model._riak_object.get_indexes():
             indexes.setdefault(name, []).append(value)
         return indexes
 
@@ -702,7 +702,7 @@ class TestModelOnTxRiak(VumiTestCase):
         f1.simple.set(s1)
         yield s1.save()
         yield f1.save()
-        self.assertEqual(f1._riak_object.data['simple'], s1.key)
+        self.assertEqual(f1._riak_object.get_data()['simple'], s1.key)
 
         f2 = yield fk_model.load("bar")
         s2 = yield f2.simple.get()
@@ -734,7 +734,9 @@ class TestModelOnTxRiak(VumiTestCase):
         # Create index directly and remove data field to simulate old-style
         # index-only implementation
         f1._riak_object.add_index('simple_bin', s1.key)
-        f1._riak_object.data.pop('simple')
+        data = f1._riak_object.get_data()
+        data.pop('simple')
+        f1._riak_object.set_data(data)
         yield s1.save()
         yield f1.save()
 
@@ -793,7 +795,7 @@ class TestModelOnTxRiak(VumiTestCase):
         m1.simples.add(s1)
         yield s1.save()
         yield m1.save()
-        self.assertEqual(m1._riak_object.data['simples'], [s1.key])
+        self.assertEqual(m1._riak_object.get_data()['simples'], [s1.key])
 
         m2 = yield mm_model.load("bar")
         [s2] = yield self.load_all_bunches_flat(m2.simples)
@@ -844,7 +846,9 @@ class TestModelOnTxRiak(VumiTestCase):
         m1._riak_object.add_index('simples_bin', s1.key)
         # Manually remove the entry from the data dict to allow it to be
         # set from the index value in descriptor.clean()
-        m1._riak_object.data.pop('simples')
+        data = m1._riak_object.get_data()
+        data.pop('simples')
+        m1._riak_object.set_data(data)
 
         yield s1.save()
         yield m1.save()

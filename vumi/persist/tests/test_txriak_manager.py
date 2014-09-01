@@ -26,10 +26,10 @@ class DummyModel(object):
         self._riak_object = riak_object
 
     def get_data(self):
-        return self._riak_object.data
+        return self._riak_object.get_data()
 
     def set_data(self, data):
-        self._riak_object.data = data
+        self._riak_object.set_data(data)
 
     def add_index(self, index_name, key):
         self._riak_object.add_index(index_name, key)
@@ -101,9 +101,9 @@ class CommonRiakManagerTests(object):
     def test_riak_object(self):
         dummy = DummyModel(self.manager, "foo")
         riak_object = self.manager.riak_object(dummy, "foo")
-        self.assertEqual(riak_object.data, {'$VERSION': None})
-        self.assertEqual(riak_object.content_type, "application/json")
-        self.assertEqual(riak_object.bucket.name, "test.dummy_model")
+        self.assertEqual(riak_object.get_data(), {'$VERSION': None})
+        self.assertEqual(riak_object.get_content_type(), "application/json")
+        self.assertEqual(riak_object.get_bucket().name, "test.dummy_model")
         self.assertEqual(riak_object.key, "foo")
 
     @Manager.calls_manager

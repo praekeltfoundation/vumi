@@ -117,17 +117,17 @@ class ModelMigrator(object):
 class MigrationData(object):
     def __init__(self, riak_object):
         self.riak_object = riak_object
-        self.old_data = riak_object.data
+        self.old_data = riak_object.get_data()
         self.new_data = {}
         self.old_index = {}
         self.new_index = {}
-        for name, value in riak_object.indexes:
+        for name, value in riak_object.get_indexes():
             self.old_index.setdefault(name, []).append(value)
 
     def get_riak_object(self):
-        self.riak_object.data = self.new_data
-        metadata = self.riak_object.usermeta
-        self.riak_object.usermeta = metadata
+        self.riak_object.set_data(self.new_data)
+        # metadata = self.riak_object.get_user_metadata()
+        # self.riak_object.set_user_metadata(metadata)
         for field, values in self.new_index.iteritems():
             for value in values:
                 self.riak_object.add_index(field, value)
@@ -231,10 +231,10 @@ class Model(object):
         :returns:
             A dict of all values, including the key.
         """
-        data = self._riak_object.data
+        data = self._riak_object.get_data()
         data.update({
             'key': self.key,
-            })
+        })
         return data
 
     def save(self):

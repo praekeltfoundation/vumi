@@ -10,6 +10,69 @@ from twisted.internet.defer import (
 from vumi.persist.model import Manager
 
 
+class VumiTxRiakObject(object):
+    def __init__(self, riak_obj):
+        self._riak_obj = riak_obj
+
+    @property
+    def key(self):
+        return self._riak_obj.key
+
+    def get_content_type(self):
+        return self._riak_obj.content_type
+
+    def set_content_type(self, content_type):
+        self._riak_obj.content_type = content_type
+
+    def get_data(self):
+        return self._riak_obj.data
+
+    def set_data(self, data):
+        self._riak_obj.data = data
+
+    def set_encoded_data(self, encoded_data):
+        self._riak_obj.encoded_data = encoded_data
+
+    def set_data_field(self, key, value):
+        self._riak_obj.data[key] = value
+
+    def delete_data_field(self, key):
+        del self._riak_obj.data[key]
+
+    def get_indexes(self):
+        return self._riak_obj.indexes
+
+    def set_indexes(self, indexes):
+        self._riak_obj.indexes = indexes
+
+    def add_index(self, index_name, index_value):
+        self._riak_obj.add_index(index_name, index_value)
+
+    def remove_index(self, index_name, index_value=None):
+        self._riak_obj.remove_index(index_name, index_value)
+
+    def get_user_metadata(self):
+        return self._riak_obj.usermeta
+
+    def set_user_metadata(self, usermeta):
+        self._riak_obj.usermeta = usermeta
+
+    def get_bucket(self):
+        # TODO: Does this also need to be wrapped?
+        return self._riak_obj.bucket
+
+    # Methods that touch the network.
+
+    def store(self):
+        self._riak_obj.store()
+
+    def reload(self):
+        self._riak_obj.reload()
+
+    def delete(self):
+        self._riak_obj.delete()
+
+
 class TxRiakManager(Manager):
     """A persistence manager for txriak."""
 
@@ -37,7 +100,8 @@ class TxRiakManager(Manager):
         # NOTE: the current riakasaurus RiakClient doesn't accept
         #       transport_options or solr_transport_class like the sync
         #       RiakManager client.
-        client = RiakClient(host=host, port=port, prefix=prefix,
+        client = RiakClient(
+            host=host, port=port, prefix=prefix,
             mapred_prefix=mapred_prefix, client_id=client_id,
             transport=transport_class)
         return cls(client, bucket_prefix, load_bunch_size=load_bunch_size,
@@ -69,7 +133,7 @@ class TxRiakManager(Manager):
 
     def riak_object(self, modelcls, key, result=None):
         bucket = self.bucket_for_modelcls(modelcls)
-        riak_object = RiakObject(self.client, bucket, key)
+        riak_object = VumiTxRiakObject(RiakObject(self.client, bucket, key))
         if result:
             metadata = result['metadata']
             indexes = metadata['index']
