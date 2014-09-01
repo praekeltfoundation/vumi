@@ -4,9 +4,7 @@
 
 import json
 
-from riak import (
-    RiakClient, RiakObject, RiakMapReduce, RiakHttpTransport, RiakPbcTransport)
-from twisted.internet.defer import gatherResults
+from riak import RiakClient, RiakObject, RiakMapReduce
 
 from vumi.persist.model import Manager
 from vumi.utils import flatten_generator
@@ -26,25 +24,27 @@ class RiakManager(Manager):
         mapreduce_timeout = config.pop('mapreduce_timeout',
                                        cls.DEFAULT_MAPREDUCE_TIMEOUT)
         transport_type = config.pop('transport_type', 'http')
-        transport_class = {
-            'http': RiakHttpTransport,
-            'protocol_buffer': RiakPbcTransport,
-        }.get(transport_type, RiakHttpTransport)
 
         host = config.get('host', '127.0.0.1')
-        port = config.get('port', 8098)
+        port = config.get('port')
         prefix = config.get('prefix', 'riak')
         mapred_prefix = config.get('mapred_prefix', 'mapred')
         client_id = config.get('client_id')
         # NOTE: the current riak.RiakClient expects this parameter but
         #       internally doesn't do anything with it.
-        solr_transport_class = config.get('solr_transport_class', None)
         transport_options = config.get('transport_options', None)
+        if transport_options is None:
+            transport_options = {}
 
-        client = RiakClient(host=host, port=port, prefix=prefix,
-            mapred_prefix=mapred_prefix, transport_class=transport_class,
-            client_id=client_id, solr_transport_class=solr_transport_class,
+        client_args = dict(
+            host=host, prefix=prefix, mapred_prefix=mapred_prefix,
+            protocol=transport_type, client_id=client_id,
             transport_options=transport_options)
+
+        if port is not None:
+            client_args['port'] = port
+
+        client = RiakClient(**client_args)
         # Some versions of the riak client library use simplejson by
         # preference, which breaks some of our unicode assumptions. This makes
         # sure we're using stdlib json which doesn't sometimes return
@@ -69,12 +69,12 @@ class RiakManager(Manager):
                 #       there are indexes?) it comes back as a dict.
                 indexes = indexes.items()
             data = result['data']
-            riak_object.set_content_type(metadata['content-type'])
-            riak_object.set_indexes(indexes)
-            riak_object.set_encoded_data(data)
+            riak_object.content_type = metadata['content-type']
+            riak_object.indexes = indexes
+            riak_object.encoded_data = data
         else:
-            riak_object.set_data({'$VERSION': modelcls.VERSION})
-            riak_object.set_content_type("application/json")
+            riak_object.data = {'$VERSION': modelcls.VERSION}
+            riak_object.content_type = "application/json"
         return riak_object
 
     def store(self, modelobj):
@@ -91,8 +91,8 @@ class RiakManager(Manager):
         was_migrated = False
 
         # Run migrators until we have the correct version of the data.
-        while riak_object.get_data() is not None:
-            data_version = riak_object.get_data().get('$VERSION', None)
+        while riak_object.data is not None:
+            data_version = riak_object.data.get('$VERSION', None)
             if data_version == modelcls.VERSION:
                 obj = modelcls(self, key, _riak_object=riak_object)
                 obj.was_migrated = was_migrated
@@ -123,13 +123,13 @@ class RiakManager(Manager):
         return bucket.enable_search()
 
     def should_quote_index_values(self):
-        return not isinstance(self.client, RiakPbcTransport)
+        return False
+        # return not isinstance(self.client, RiakPbcTransport)
 
     def purge_all(self):
         buckets = self.client.get_buckets()
-        for bucket_name in buckets:
-            if bucket_name.startswith(self.bucket_prefix):
-                bucket = self.client.bucket(bucket_name)
+        for bucket in buckets:
+            if bucket.name.startswith(self.bucket_prefix):
                 for key in bucket.get_keys():
                     obj = bucket.get(key)
                     obj.delete()

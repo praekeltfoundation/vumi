@@ -56,14 +56,14 @@ class FieldDescriptor(object):
     def set_value(self, modelobj, value):
         """Set the value associated with this descriptor."""
         raw_value = self.field.to_riak(value)
-        modelobj._riak_object._data[self.key] = raw_value
+        modelobj._riak_object.data[self.key] = raw_value
         if self.index_name is not None:
             modelobj._riak_object.remove_index(self.index_name)
             self._add_index(modelobj, raw_value)
 
     def get_value(self, modelobj):
         """Get the value associated with this descriptor."""
-        raw_value = modelobj._riak_object._data.get(self.key)
+        raw_value = modelobj._riak_object.data.get(self.key)
         return self.field.from_riak(raw_value)
 
     def clean(self, modelobj):
@@ -270,9 +270,9 @@ class VumiMessageDescriptor(FieldDescriptor):
             self.prefix = self.field.prefix
 
     def _clear_keys(self, modelobj):
-        for key in modelobj._riak_object._data.keys():
+        for key in modelobj._riak_object.data.keys():
             if key.startswith(self.prefix):
-                del modelobj._riak_object._data[key]
+                del modelobj._riak_object.data[key]
 
     def _timestamp_to_json(self, dt):
         return dt.strftime(VUMI_DATE_FORMAT)
@@ -290,12 +290,12 @@ class VumiMessageDescriptor(FieldDescriptor):
             if key == "timestamp":
                 value = self._timestamp_to_json(value)
             full_key = "%s%s" % (self.prefix, key)
-            modelobj._riak_object._data[full_key] = value
+            modelobj._riak_object.data[full_key] = value
 
     def get_value(self, modelobj):
         """Get the value associated with this descriptor."""
         payload = {}
-        for key, value in modelobj._riak_object._data.iteritems():
+        for key, value in modelobj._riak_object.data.iteritems():
             if key.startswith(self.prefix):
                 key = key[len(self.prefix):]
                 # TODO: timestamp as datetime in payload must die.
@@ -386,14 +386,14 @@ class DynamicDescriptor(FieldDescriptor):
     def iterkeys(self, modelobj):
         prefix_len = len(self.prefix)
         return (key[prefix_len:]
-                for key in modelobj._riak_object._data.iterkeys()
+                for key in modelobj._riak_object.data.iterkeys()
                 if key.startswith(self.prefix))
 
     def iteritems(self, modelobj):
         prefix_len = len(self.prefix)
         from_riak = self.field.subfield_from_riak
         return ((key[prefix_len:], from_riak(value))
-                for key, value in modelobj._riak_object._data.iteritems()
+                for key, value in modelobj._riak_object.data.iteritems()
                 if key.startswith(self.prefix))
 
     def update(self, modelobj, otherdict):
@@ -403,25 +403,25 @@ class DynamicDescriptor(FieldDescriptor):
         items = [(self.prefix + key, self.field.subfield_to_riak(value))
                   for key, value in otherdict.iteritems()]
         for key, value in items:
-            modelobj._riak_object._data[key] = value
+            modelobj._riak_object.data[key] = value
 
     def get_dynamic_value(self, modelobj, dynamic_key):
         key = self.prefix + dynamic_key
         return self.field.subfield_from_riak(
-            modelobj._riak_object._data.get(key))
+            modelobj._riak_object.data.get(key))
 
     def set_dynamic_value(self, modelobj, dynamic_key, value):
         self.field.validate_subfield(value)
         key = self.prefix + dynamic_key
-        modelobj._riak_object._data[key] = self.field.subfield_to_riak(value)
+        modelobj._riak_object.data[key] = self.field.subfield_to_riak(value)
 
     def delete_dynamic_value(self, modelobj, dynamic_key):
         key = self.prefix + dynamic_key
-        del modelobj._riak_object._data[key]
+        del modelobj._riak_object.data[key]
 
     def has_dynamic_key(self, modelobj, dynamic_key):
         key = self.prefix + dynamic_key
-        return key in modelobj._riak_object._data
+        return key in modelobj._riak_object.data
 
 
 class DynamicProxy(object):
@@ -502,11 +502,11 @@ class ListOfDescriptor(FieldDescriptor):
         return ListProxy(self, modelobj)
 
     def _ensure_list(self, modelobj):
-        if self.key not in modelobj._riak_object._data:
-            modelobj._riak_object._data[self.key] = []
+        if self.key not in modelobj._riak_object.data:
+            modelobj._riak_object.data[self.key] = []
 
     def get_list_item(self, modelobj, list_idx):
-        raw_list = modelobj._riak_object._data.get(self.key, [])
+        raw_list = modelobj._riak_object.data.get(self.key, [])
         raw_item = raw_list[list_idx]
         return self.field.subfield_from_riak(raw_item)
 
@@ -514,26 +514,26 @@ class ListOfDescriptor(FieldDescriptor):
         self.field.validate_subfield(value)
         raw_value = self.field.subfield_to_riak(value)
         self._ensure_list(modelobj)
-        modelobj._riak_object._data[self.key][list_idx] = raw_value
+        modelobj._riak_object.data[self.key][list_idx] = raw_value
 
     def del_list_item(self, modelobj, list_idx):
-        raw_list = modelobj._riak_object._data.get(self.key, [])
+        raw_list = modelobj._riak_object.data.get(self.key, [])
         del raw_list[list_idx]
 
     def append_list_item(self, modelobj, value):
         self.field.validate_subfield(value)
         raw_value = self.field.subfield_to_riak(value)
         self._ensure_list(modelobj)
-        modelobj._riak_object._data[self.key].append(raw_value)
+        modelobj._riak_object.data[self.key].append(raw_value)
 
     def extend_list(self, modelobj, values):
         map(self.field.validate_subfield, values)
         raw_values = [self.field.subfield_to_riak(value) for value in values]
         self._ensure_list(modelobj)
-        modelobj._riak_object._data[self.key].extend(raw_values)
+        modelobj._riak_object.data[self.key].extend(raw_values)
 
     def iter_list(self, modelobj):
-        raw_list = modelobj._riak_object._data.get(self.key, [])
+        raw_list = modelobj._riak_object.data.get(self.key, [])
         for raw_value in raw_list:
             yield self.field.subfield_from_riak(raw_value)
 
@@ -592,8 +592,8 @@ class ForeignKeyDescriptor(FieldDescriptor):
             self.backlink_name = model_cls.__name__.lower() + "s"
         else:
             self.backlink_name = self.field.backlink
-        self.other_model.backlinks.declare_backlink(self.backlink_name,
-                                                 self.reverse_lookup_keys)
+        self.other_model.backlinks.declare_backlink(
+            self.backlink_name, self.reverse_lookup_keys)
 
     def reverse_lookup_keys(self, modelobj, manager=None):
         if manager is None:
@@ -602,19 +602,20 @@ class ForeignKeyDescriptor(FieldDescriptor):
             self.model_cls, self.index_name, modelobj.key)
 
     def clean(self, modelobj):
-        if self.key not in modelobj._riak_object._data:
+        if self.key not in modelobj._riak_object.data:
             # We might have an old-style index-only version of the data.
-            indexes = modelobj._riak_object.get_indexes(self.index_name)
-            modelobj._riak_object._data[self.key] = (indexes or [None])[0]
+            indexes = [value for name, value in modelobj._riak_object.indexes
+                       if name == self.index_name]
+            modelobj._riak_object.data[self.key] = (indexes or [None])[0]
 
     def get_value(self, modelobj):
         return ForeignKeyProxy(self, modelobj)
 
     def get_foreign_key(self, modelobj):
-        return modelobj._riak_object._data.get(self.key)
+        return modelobj._riak_object.data.get(self.key)
 
     def set_foreign_key(self, modelobj, foreign_key):
-        modelobj._riak_object._data[self.key] = foreign_key
+        modelobj._riak_object.data[self.key] = foreign_key
         modelobj._riak_object.remove_index(self.index_name)
         if foreign_key is not None:
             self._add_index(modelobj, foreign_key)
@@ -703,22 +704,23 @@ class ManyToManyDescriptor(ForeignKeyDescriptor):
                            " to.")
 
     def clean(self, modelobj):
-        if self.key not in modelobj._riak_object._data:
+        if self.key not in modelobj._riak_object.data:
             # We might have an old-style index-only version of the data.
-            indexes = modelobj._riak_object.get_indexes(self.index_name)
-            modelobj._riak_object._data[self.key] = indexes[:]
+            indexes = [value for name, value in modelobj._riak_object.indexes
+                       if name == self.index_name]
+            modelobj._riak_object.data[self.key] = indexes[:]
 
     def get_foreign_keys(self, modelobj):
-        return modelobj._riak_object._data[self.key][:]
+        return modelobj._riak_object.data[self.key][:]
 
     def add_foreign_key(self, modelobj, foreign_key):
         if foreign_key not in self.get_foreign_keys(modelobj):
-            modelobj._riak_object._data[self.key].append(foreign_key)
+            modelobj._riak_object.data[self.key].append(foreign_key)
         self._add_index(modelobj, foreign_key)
 
     def remove_foreign_key(self, modelobj, foreign_key):
         if foreign_key in self.get_foreign_keys(modelobj):
-            modelobj._riak_object._data[self.key].remove(foreign_key)
+            modelobj._riak_object.data[self.key].remove(foreign_key)
         modelobj._riak_object.remove_index(self.index_name, foreign_key)
 
     def load_foreign_objects(self, modelobj, manager=None):
@@ -736,7 +738,7 @@ class ManyToManyDescriptor(ForeignKeyDescriptor):
         self.remove_foreign_key(modelobj, otherobj.key)
 
     def clear_keys(self, modelobj):
-        modelobj._riak_object._data[self.key] = []
+        modelobj._riak_object.data[self.key] = []
         modelobj._riak_object.remove_index(self.index_name)
 
 

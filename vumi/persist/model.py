@@ -117,20 +117,17 @@ class ModelMigrator(object):
 class MigrationData(object):
     def __init__(self, riak_object):
         self.riak_object = riak_object
-        self.old_data = riak_object.get_data()
+        self.old_data = riak_object.data
         self.new_data = {}
         self.old_index = {}
         self.new_index = {}
-        for riak_index in riak_object.get_metadata()['index']:
-            field = riak_index.get_field()
-            self.old_index.setdefault(field, [])
-            self.old_index[field].append(riak_index.get_value())
+        for name, value in riak_object.indexes:
+            self.old_index.setdefault(name, []).append(value)
 
     def get_riak_object(self):
-        self.riak_object.set_data(self.new_data)
-        metadata = self.riak_object.get_metadata()
-        metadata['index'] = []
-        self.riak_object.set_metadata(metadata)
+        self.riak_object.data = self.new_data
+        metadata = self.riak_object.usermeta
+        self.riak_object.usermeta = metadata
         for field, values in self.new_index.iteritems():
             for value in values:
                 self.riak_object.add_index(field, value)
@@ -219,7 +216,7 @@ class Model(object):
 
     def __repr__(self):
         str_items = ["%s=%r" % item for item
-                        in sorted(self.get_data().items())]
+                     in sorted(self.get_data().items())]
         return "<%s %s>" % (self.__class__.__name__, " ".join(str_items))
 
     def clean(self):
@@ -234,7 +231,7 @@ class Model(object):
         :returns:
             A dict of all values, including the key.
         """
-        data = self._riak_object.get_data()
+        data = self._riak_object.data
         data.update({
             'key': self.key,
             })
@@ -396,7 +393,7 @@ class VumiMapReduce(object):
     @classmethod
     def from_index(cls, mgr, model, index_name, start_value, end_value=None):
         return cls(mgr, mgr.riak_map_reduce().index(
-                mgr.bucket_name(model), index_name, start_value, end_value))
+            mgr.bucket_name(model), index_name, start_value, end_value))
 
     @classmethod
     def from_search(cls, mgr, model, query):
@@ -405,14 +402,14 @@ class VumiMapReduce(object):
 
     @classmethod
     def from_field_match(cls, mgr, model, query, field_name, start_value,
-                            end_value=None):
+                         end_value=None):
         index_name, sv, ev = index_vals_for_field(
             model, field_name, start_value, end_value)
         return cls.from_index_match(mgr, model, query, index_name, sv, ev)
 
     @classmethod
     def from_index_match(cls, mgr, model, query, index_name, start_value,
-                            end_value=None):
+                         end_value=None):
         """
         Do a regex OR search across the keys found in a secondary index.
 
@@ -504,7 +501,8 @@ class VumiMapReduce(object):
             return obj
         else:
             # If we haven't been given a string, we probably have a RiakLink.
-            return obj.get_key()
+            _bucket, key, _tag = obj
+            return key
 
     def get_keys(self):
         self._assert_not_run()
@@ -693,12 +691,12 @@ class Manager(object):
     def mr_from_index_match(self, model, query, index_name, start_value,
                             end_value=None):
         return VumiMapReduce.from_index_match(self, model, query, index_name,
-                                                start_value, end_value)
+                                              start_value, end_value)
 
     def mr_from_field_match(self, model, query, field_name, start_value,
                             end_value=None):
         return VumiMapReduce.from_field_match(self, model, query, field_name,
-                                                start_value, end_value)
+                                              start_value, end_value)
 
     def mr_from_keys(self, model, keys):
         return VumiMapReduce.from_keys(self, model, keys)
@@ -745,7 +743,7 @@ class ModelProxy(object):
 
     def index_match(self, query, field_name, value):
         return self._modelcls.index_match(self._manager, query, field_name,
-                                            value)
+                                          value)
 
     def search(self, **kw):
         return self._modelcls.search(self._manager, **kw)
