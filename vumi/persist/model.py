@@ -126,8 +126,6 @@ class MigrationData(object):
 
     def get_riak_object(self):
         self.riak_object.set_data(self.new_data)
-        # metadata = self.riak_object.get_user_metadata()
-        # self.riak_object.set_user_metadata(metadata)
         for field, values in self.new_index.iteritems():
             for value in values:
                 self.riak_object.add_index(field, value)

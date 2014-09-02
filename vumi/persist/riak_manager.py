@@ -103,11 +103,7 @@ class RiakManager(Manager):
         prefix = config.get('prefix', 'riak')
         mapred_prefix = config.get('mapred_prefix', 'mapred')
         client_id = config.get('client_id')
-        # NOTE: the current riak.RiakClient expects this parameter but
-        #       internally doesn't do anything with it.
-        transport_options = config.get('transport_options', None)
-        if transport_options is None:
-            transport_options = {}
+        transport_options = config.get('transport_options', {})
 
         client_args = dict(
             host=host, prefix=prefix, mapred_prefix=mapred_prefix,
