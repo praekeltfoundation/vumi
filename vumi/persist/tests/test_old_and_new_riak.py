@@ -2,8 +2,6 @@
 
 """Tests for vumi.persist.model."""
 
-from datetime import datetime
-
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.persist.model import (
