@@ -17,6 +17,8 @@ class VumiRiakBucket(object):
     def get_name(self):
         return self._riak_bucket.name
 
+    # Methods that touch the network.
+
     def get_index(self, index_name, start_value, end_value=None):
         return self._riak_bucket.get_index(index_name, start_value, end_value)
 
@@ -77,10 +79,10 @@ class VumiRiakObject(object):
         return type(self)(self._riak_obj.store())
 
     def reload(self):
-        type(self)(self._riak_obj.reload())
+        return type(self)(self._riak_obj.reload())
 
     def delete(self):
-        type(self)(self._riak_obj.delete())
+        return type(self)(self._riak_obj.delete())
 
 
 class RiakManager(Manager):
@@ -199,7 +201,6 @@ class RiakManager(Manager):
 
     def should_quote_index_values(self):
         return False
-        # return not isinstance(self.client, RiakPbcTransport)
 
     def purge_all(self):
         buckets = self.client.get_buckets()

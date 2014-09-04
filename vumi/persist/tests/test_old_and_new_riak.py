@@ -178,7 +178,7 @@ class TestOldAndNew(VumiTestCase):
 
     def set_up_managers(self):
         from vumi.persist.riak_manager import RiakManager
-        from vumi.persist.txriak_manager import TxRiakManager
+        from vumi.persist.old_txriak_manager import TxRiakManager
         self.manager = TxRiakManager.from_config({'bucket_prefix': 'test.'})
         self.manager1 = self.manager
         self.manager2 = RiakManager.from_config({'bucket_prefix': 'test.'})
@@ -830,7 +830,7 @@ class TestNewAndOld(TestOldAndNew):
 
     def set_up_managers(self):
         from vumi.persist.riak_manager import RiakManager
-        from vumi.persist.txriak_manager import TxRiakManager
+        from vumi.persist.old_txriak_manager import TxRiakManager
         self.manager = TxRiakManager.from_config({'bucket_prefix': 'test.'})
         self.manager1 = RiakManager.from_config({'bucket_prefix': 'test.'})
         self.manager2 = self.manager

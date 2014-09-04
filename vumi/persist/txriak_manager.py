@@ -1,217 +1,95 @@
 # -*- test-case-name: vumi.persist.tests.test_txriak_manager -*-
 
-"""A manager implementation on top of txriak."""
+"""An async manager implementation on top of the riak Python package."""
 
-from riakasaurus.riak import RiakClient, RiakObject, RiakMapReduce, RiakLink
-from riakasaurus.riak_index_entry import RiakIndexEntry
-from riakasaurus import transport
+from twisted.internet.threads import deferToThread
 from twisted.internet.defer import (
-    inlineCallbacks, gatherResults, maybeDeferred, succeed)
+    inlineCallbacks, returnValue, gatherResults, maybeDeferred)
 
+from vumi.persist import riak_manager
 from vumi.persist.model import Manager
 
 
-class VumiTxRiakBucket(object):
-    def __init__(self, riak_bucket):
-        self._riak_bucket = riak_bucket
-
-    def get_name(self):
-        return self._riak_bucket.get_name()
+class VumiTxRiakBucket(riak_manager.VumiRiakBucket):
+    # Methods that touch the network.
 
     def get_index(self, index_name, start_value, end_value=None):
-        return self._riak_bucket.get_index(index_name, start_value, end_value)
+        return deferToThread(
+            self._riak_bucket.get_index, index_name, start_value, end_value)
 
 
-class VumiTxRiakObject(object):
-    def __init__(self, riak_obj):
-        self._riak_obj = riak_obj
-
-    @property
-    def key(self):
-        return self._riak_obj.get_key()
-
-    def get_content_type(self):
-        return self._riak_obj.get_content_type()
-
-    def set_content_type(self, content_type):
-        self._riak_obj.set_content_type(content_type)
-
-    def get_data(self):
-        return self._riak_obj.get_data()
-
-    def set_data(self, data):
-        self._riak_obj.set_data(data)
-
-    def set_encoded_data(self, encoded_data):
-        self._riak_obj.set_encoded_data(encoded_data)
-
-    def set_data_field(self, key, value):
-        self._riak_obj._data[key] = value
-
-    def delete_data_field(self, key):
-        del self._riak_obj._data[key]
-
-    def get_indexes(self):
-        indexes = self._riak_obj.get_metadata().get('index', [])
-        return [(index.get_field(), index.get_value()) for index in indexes]
-
-    def set_indexes(self, indexes):
-        usermeta = self._riak_obj.get_metadata()
-        usermeta['index'] = [RiakIndexEntry(field, value)
-                             for field, value in indexes]
-        self._riak_obj.set_metadata(usermeta)
-
-    def add_index(self, index_name, index_value):
-        self._riak_obj.add_index(index_name, index_value)
-
-    def remove_index(self, index_name, index_value=None):
-        self._riak_obj.remove_index(index_name, index_value)
-
-    def get_user_metadata(self):
-        # Indexes live in here, but we have separate accessors for those.
-        usermeta = self._riak_obj.get_metadata()
-        usermeta = (usermeta or {}).copy()
-        usermeta.pop('index')
-        return usermeta
-
-    def set_user_metadata(self, usermeta):
-        # Indexes live in here, but we have separate accessors for those.
-        usermeta = (usermeta or {}).copy()
-        usermeta['index'] = self._riak_obj.get_metadata().get('index', [])
-        self._riak_obj.set_metadata(usermeta)
-
+class VumiTxRiakObject(riak_manager.VumiRiakObject):
     def get_bucket(self):
-        return VumiTxRiakBucket(self._riak_obj.get_bucket())
+        return VumiTxRiakBucket(self._riak_obj.bucket)
 
     # Methods that touch the network.
 
     def store(self):
-        return self._riak_obj.store().addCallback(type(self))
+        d = deferToThread(self._riak_obj.store)
+        d.addCallback(type(self))
+        return d
 
     def reload(self):
-        return self._riak_obj.reload().addCallback(type(self))
+        d = deferToThread(self._riak_obj.reload)
+        d.addCallback(type(self))
+        return d
 
     def delete(self):
-        return self._riak_obj.delete().addCallback(type(self))
+        d = deferToThread(self._riak_obj.delete)
+        d.addCallback(type(self))
+        return d
 
 
 class TxRiakManager(Manager):
-    """A persistence manager for txriak."""
+    """An async persistence manager for the riak Python package."""
 
     call_decorator = staticmethod(inlineCallbacks)
 
     @classmethod
     def from_config(cls, config):
-        config = config.copy()
-        bucket_prefix = config.pop('bucket_prefix')
-        load_bunch_size = config.pop('load_bunch_size',
-                                     cls.DEFAULT_LOAD_BUNCH_SIZE)
-        mapreduce_timeout = config.pop('mapreduce_timeout',
-                                       cls.DEFAULT_MAPREDUCE_TIMEOUT)
-        transport_type = config.pop('transport_type', 'http')
-        transport_class = {
-            'http': transport.HTTPTransport,
-            'protocol_buffer': transport.PBCTransport,
-        }.get(transport_type, transport.HTTPTransport)
-
-        host = config.get('host', '127.0.0.1')
-        port = config.get('port', 8098)
-        prefix = config.get('prefix', 'riak')
-        mapred_prefix = config.get('mapred_prefix', 'mapred')
-        client_id = config.get('client_id')
-        # NOTE: the current riakasaurus RiakClient doesn't accept
-        #       transport_options or solr_transport_class like the sync
-        #       RiakManager client.
-        client = RiakClient(
-            host=host, port=port, prefix=prefix,
-            mapred_prefix=mapred_prefix, client_id=client_id,
-            transport=transport_class)
-        return cls(client, bucket_prefix, load_bunch_size=load_bunch_size,
-                   mapreduce_timeout=mapreduce_timeout)
-
-    def _encode_indexes(self, iterable, encoding='utf-8'):
-        """
-        From Basho's docs:
-
-            When using the HTTP interface, multi-valued indexes are specified
-            by separating the values with a comma (,). For that reason,
-            your application should avoid using a comma as part of an
-            index value.
-
-        The index values we get can either be a single string value or can
-        be a tuple of multiple values that need to be set. If we get a tuple
-        then convert it to a comma separated string.
-        """
-        encoded = []
-        for key, value in iterable:
-            if not isinstance(value, (list, tuple)):
-                value = [value]
-
-            value = ", ".join([v.encode(encoding) for v in value])
-            key = key.encode(encoding)
-            encoded.append((key, value))
-
-        return encoded
+        sync_manager = riak_manager.RiakManager.from_config(config)
+        return cls(
+            sync_manager, sync_manager.bucket_prefix,
+            load_bunch_size=sync_manager.load_bunch_size,
+            mapreduce_timeout=sync_manager.mapreduce_timeout)
 
     def riak_bucket(self, bucket_name):
-        bucket = self.client.bucket(bucket_name)
+        bucket = self.client.riak_bucket(bucket_name)
         if bucket is not None:
-            bucket = VumiTxRiakBucket(bucket)
+            bucket = VumiTxRiakBucket(bucket._riak_bucket)
         return bucket
 
     def riak_object(self, modelcls, key, result=None):
-        bucket = self.bucket_for_modelcls(modelcls)._riak_bucket
-        riak_object = VumiTxRiakObject(RiakObject(self.client, bucket, key))
-        if result:
-            metadata = result['metadata']
-            indexes = metadata['index']
-            if hasattr(indexes, 'items'):
-                # TODO: I think this is a Riak bug. In some cases
-                #       (maybe when there are no indexes?) the index
-                #       comes back as a list, in others (maybe when
-                #       there are indexes?) it comes back as a dict.
-                indexes = indexes.items()
+        riak_object = self.client.riak_object(modelcls, key, result)
+        return VumiTxRiakObject(riak_object._riak_obj)
 
-            content_type = metadata['content-type'].encode('utf-8')
-            indexes = self._encode_indexes(indexes, 'utf-8')
-            data = result['data'].encode('utf-8')
-
-            riak_object.set_content_type(content_type)
-            riak_object.set_indexes(indexes)
-            riak_object.set_encoded_data(data)
-        else:
-            riak_object.set_data({'$VERSION': modelcls.VERSION})
-            riak_object.set_content_type("application/json")
-        return riak_object
-
+    @inlineCallbacks
     def store(self, modelobj):
-        d = modelobj._riak_object.store()
-        d.addCallback(lambda result: modelobj)
-        return d
+        yield modelobj._riak_object.store()
+        returnValue(modelobj)
 
+    @inlineCallbacks
     def delete(self, modelobj):
-        return modelobj._riak_object.delete()
+        yield modelobj._riak_object.delete()
 
+    @inlineCallbacks
     def load(self, modelcls, key, result=None):
         riak_object = self.riak_object(modelcls, key, result)
-        d = succeed(riak_object) if result else riak_object.reload()
+        if not result:
+            yield riak_object.reload()
+        was_migrated = False
 
-        def build_model_object(riak_object, was_migrated):
-            if riak_object.get_data() is None:
-                return None
-
+        # Run migrators until we have the correct version of the data.
+        while riak_object.get_data() is not None:
             data_version = riak_object.get_data().get('$VERSION', None)
             if data_version == modelcls.VERSION:
                 obj = modelcls(self, key, _riak_object=riak_object)
                 obj.was_migrated = was_migrated
-                return obj
-
+                returnValue(obj)
             migrator = modelcls.MIGRATOR(modelcls, self, data_version)
-            md = maybeDeferred(migrator, riak_object)
-            md.addCallback(lambda mdata: mdata.get_riak_object())
-            return md.addCallback(build_model_object, was_migrated=True)
-
-        return d.addCallback(build_model_object, was_migrated=False)
+            riak_object = migrator(riak_object).get_riak_object()
+            was_migrated = True
+        returnValue(None)
 
     def _load_multiple(self, modelcls, keys):
         d = gatherResults([self.load(modelcls, key) for key in keys])
@@ -219,20 +97,20 @@ class TxRiakManager(Manager):
         return d
 
     def riak_map_reduce(self):
-        return RiakMapReduce(self.client)
-
-    def riak_enable_search(self, modelcls):
-        bucket_name = self.bucket_name(modelcls)
-        bucket = self.client.bucket(bucket_name)
-        return bucket.enable_search()
+        mapreduce = self.client.riak_map_reduce()
+        # Hack: We replace the two methods that hit the network with
+        #       deferToThread wrappers to prevent accidental sync calls in
+        #       other code.
+        run = mapreduce.run
+        stream = mapreduce.stream
+        mapreduce.run = lambda *a, **kw: deferToThread(run, *a, **kw)
+        mapreduce.stream = lambda *a, **kw: deferToThread(stream, *a, **kw)
+        return mapreduce
 
     def run_map_reduce(self, mapreduce, mapper_func=None, reducer_func=None):
         def map_results(raw_results):
             deferreds = []
             for row in raw_results:
-                if isinstance(row, RiakLink):
-                    # Translate to new-style tuple link representation.
-                    row = (row.get_bucket(), row.get_key(), row.get_tag())
                 deferreds.append(maybeDeferred(mapper_func, self, row))
             return gatherResults(deferreds)
 
@@ -243,15 +121,11 @@ class TxRiakManager(Manager):
             mapreduce_done.addCallback(lambda r: reducer_func(self, r))
         return mapreduce_done
 
-    def should_quote_index_values(self):
-        return not isinstance(self.client, transport.PBCTransport)
+    def riak_enable_search(self, modelcls):
+        return deferToThread(self.client.riak_enable_search, modelcls)
 
-    @inlineCallbacks
+    def should_quote_index_values(self):
+        return False
+
     def purge_all(self):
-        buckets = yield self.client.list_buckets()
-        deferreds = []
-        for bucket_name in buckets:
-            if bucket_name.startswith(self.bucket_prefix):
-                bucket = self.client.bucket(bucket_name)
-                deferreds.append(bucket.purge_keys())
-        yield gatherResults(deferreds)
+        return deferToThread(self.client.purge_all)
