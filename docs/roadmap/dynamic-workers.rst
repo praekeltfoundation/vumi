@@ -51,7 +51,7 @@ Starting and stopping workers will be done via Blinkenlights messages
 with a payload format similar to the following::
 
     {
-        "operation": "start_worker",
+        "operation": "vumi_worker",
         "worker_name": "SMPP Transport for account1",
         "worker_class": "vumi.workers.smpp.transport.SMPPTransport",
         "worker_config": {

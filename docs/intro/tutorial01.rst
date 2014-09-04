@@ -10,7 +10,7 @@ We'll assume you have a working knowledge of Python_, RabbitMQ_ and VirtualEnv_.
 
     If you're having trouble at any point feel free to drop by `#vumi`_ on irc.freenode.net to chat with other Vumi users who might be able to help.
 
-In this part of the tutorial we'll be creating and testing a simple working environment. 
+In this part of the tutorial we'll be creating and testing a simple working environment.
 
 Environment Setup
 =================
@@ -23,17 +23,17 @@ From the command line ``cd`` into a directory where you'd like to store your cod
 
 This will create a ``ve`` directory where any libraries you install will go, thus isolating your environment.
 Once the virtual environment has been created activate it by running ``source ve/bin/activate``.
-   
+
 .. note::
 
     For this to work VirtualEnv_ needs to be installed. You can tell it's installed by executing ``virtualenv`` from the command line. If that command runs successfully with no errors VirtualEnv_ is installed. If not you can install it by executing ``sudo pip install virtualenv`` from the command line.
 
 .. note::
-    
+
     From this point onwards your virtual environment should always be active. The virtualenv is activated by running ``source ve/bin/activate``.
 
 Now that you created and activated the virtual environment install Vumi with the following command::
-    
+
     $ pip install -e git+git://github.com/praekelt/vumi.git@develop#egg=vumi
 
 .. note::
@@ -41,7 +41,7 @@ Now that you created and activated the virtual environment install Vumi with the
     This will install the development version of Vumi containing the latest-and-greatest features. Although the development branch is kept stable it is not recommended for production environments.
 
 If this is your first Vumi application you need to take care of some initial RabbitMQ_ setup. Namely you need to add a ``vumi`` user and a ``develop`` virtual host and grant the required permissions. Vumi includes a script to do this for you which you can execute with the following command::
-    
+
     $ sudo ./ve/src/vumi/utils/rabbitmq.setup.sh
 
 .. note::
@@ -59,7 +59,7 @@ Let's verify this worked. As a test you can create a Telnet worker and an *echo*
 
 Start the Telnet *transport worker* by executing the following command::
 
-    $ twistd -n --pidfile=transportworker.pid start_worker --worker-class vumi.transports.telnet.TelnetServerTransport --set-option=transport_name:telnet --set-option=telnet_port:9010
+    $ twistd -n --pidfile=transportworker.pid vumi_worker --worker-class vumi.transports.telnet.TelnetServerTransport --set-option=transport_name:telnet --set-option=telnet_port:9010
 
 This utilizes Twisted_ to start a Telnet process listening on port 9010. Specifically it uses Vumi's builtin ``TelnetServerTransport`` to handle communication with Telnet clients. Note that we specify ``telnet`` as the transport name when providing ``--set-option=transport_name:telnet``. When starting the *application worker* as described next the same name should be used, thus connecting the *transport worker* with the *application worker*.
 
@@ -81,9 +81,9 @@ If you keep an eye on the *transport worker's* output you should see the followi
 
 In a new command line session start the echo *application worker* by executing the following command::
 
-    $ twistd -n --pidfile=applicationworker.pid start_worker --worker-class vumi.demos.words.EchoWorker --set-option=transport_name:telnet 
+    $ twistd -n --pidfile=applicationworker.pid vumi_worker --worker-class vumi.demos.words.EchoWorker --set-option=transport_name:telnet
 
-This utilizes Twisted_ to start a Vumi ``EchoWorker`` process connected to the previously created Telnet *transport worker*. 
+This utilizes Twisted_ to start a Vumi ``EchoWorker`` process connected to the previously created Telnet *transport worker*.
 
 .. admonition:: Philosophy
 
