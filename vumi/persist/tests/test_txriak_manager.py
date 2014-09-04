@@ -243,7 +243,7 @@ class TestTxRiakManager(CommonRiakManagerTests, VumiTestCase):
             'transport_type': 'pbc',
             'bucket_prefix': 'test.',
             })
-        self.assertEqual(manager.client.client.protocol, 'pbc')
+        self.assertEqual(manager.client.protocol, 'pbc')
 
     def test_transport_class_http(self):
         manager_class = type(self.manager)
@@ -251,11 +251,11 @@ class TestTxRiakManager(CommonRiakManagerTests, VumiTestCase):
             'transport_type': 'http',
             'bucket_prefix': 'test.',
             })
-        self.assertEqual(manager.client.client.protocol, 'http')
+        self.assertEqual(manager.client.protocol, 'http')
 
     def test_transport_class_default(self):
         manager_class = type(self.manager)
         manager = manager_class.from_config({
             'bucket_prefix': 'test.',
             })
-        self.assertEqual(manager.client.client.protocol, 'http')
+        self.assertEqual(manager.client.protocol, 'http')

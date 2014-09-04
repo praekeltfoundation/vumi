@@ -2,15 +2,23 @@
 
 """An async manager implementation on top of the riak Python package."""
 
+import json
+
+from riak import RiakClient, RiakObject, RiakMapReduce
 from twisted.internet.threads import deferToThread
 from twisted.internet.defer import (
     inlineCallbacks, returnValue, gatherResults, maybeDeferred)
 
-from vumi.persist import riak_manager
 from vumi.persist.model import Manager
 
 
-class VumiTxRiakBucket(riak_manager.VumiRiakBucket):
+class VumiTxRiakBucket(object):
+    def __init__(self, riak_bucket):
+        self._riak_bucket = riak_bucket
+
+    def get_name(self):
+        return self._riak_bucket.name
+
     # Methods that touch the network.
 
     def get_index(self, index_name, start_value, end_value=None):
@@ -18,7 +26,53 @@ class VumiTxRiakBucket(riak_manager.VumiRiakBucket):
             self._riak_bucket.get_index, index_name, start_value, end_value)
 
 
-class VumiTxRiakObject(riak_manager.VumiRiakObject):
+class VumiTxRiakObject(object):
+    def __init__(self, riak_obj):
+        self._riak_obj = riak_obj
+
+    @property
+    def key(self):
+        return self._riak_obj.key
+
+    def get_content_type(self):
+        return self._riak_obj.content_type
+
+    def set_content_type(self, content_type):
+        self._riak_obj.content_type = content_type
+
+    def get_data(self):
+        return self._riak_obj.data
+
+    def set_data(self, data):
+        self._riak_obj.data = data
+
+    def set_encoded_data(self, encoded_data):
+        self._riak_obj.encoded_data = encoded_data
+
+    def set_data_field(self, key, value):
+        self._riak_obj.data[key] = value
+
+    def delete_data_field(self, key):
+        del self._riak_obj.data[key]
+
+    def get_indexes(self):
+        return self._riak_obj.indexes
+
+    def set_indexes(self, indexes):
+        self._riak_obj.indexes = indexes
+
+    def add_index(self, index_name, index_value):
+        self._riak_obj.add_index(index_name, index_value)
+
+    def remove_index(self, index_name, index_value=None):
+        self._riak_obj.remove_index(index_name, index_value)
+
+    def get_user_metadata(self):
+        return self._riak_obj.usermeta
+
+    def set_user_metadata(self, usermeta):
+        self._riak_obj.usermeta = usermeta
+
     def get_bucket(self):
         return VumiTxRiakBucket(self._riak_obj.bucket)
 
@@ -47,30 +101,77 @@ class TxRiakManager(Manager):
 
     @classmethod
     def from_config(cls, config):
-        sync_manager = riak_manager.RiakManager.from_config(config)
-        return cls(
-            sync_manager, sync_manager.bucket_prefix,
-            load_bunch_size=sync_manager.load_bunch_size,
-            mapreduce_timeout=sync_manager.mapreduce_timeout)
+        config = config.copy()
+        bucket_prefix = config.pop('bucket_prefix')
+        load_bunch_size = config.pop('load_bunch_size',
+                                     cls.DEFAULT_LOAD_BUNCH_SIZE)
+        mapreduce_timeout = config.pop('mapreduce_timeout',
+                                       cls.DEFAULT_MAPREDUCE_TIMEOUT)
+        transport_type = config.pop('transport_type', 'http')
+
+        host = config.get('host', '127.0.0.1')
+        port = config.get('port')
+        prefix = config.get('prefix', 'riak')
+        mapred_prefix = config.get('mapred_prefix', 'mapred')
+        client_id = config.get('client_id')
+        transport_options = config.get('transport_options', {})
+
+        client_args = dict(
+            host=host, prefix=prefix, mapred_prefix=mapred_prefix,
+            protocol=transport_type, client_id=client_id,
+            transport_options=transport_options)
+
+        if port is not None:
+            client_args['port'] = port
+
+        client = RiakClient(**client_args)
+        # Some versions of the riak client library use simplejson by
+        # preference, which breaks some of our unicode assumptions. This makes
+        # sure we're using stdlib json which doesn't sometimes return
+        # bytestrings instead of unicode.
+        client.set_encoder('application/json', json.dumps)
+        client.set_encoder('text/json', json.dumps)
+        client.set_decoder('application/json', json.loads)
+        client.set_decoder('text/json', json.loads)
+        return cls(client, bucket_prefix, load_bunch_size=load_bunch_size,
+                   mapreduce_timeout=mapreduce_timeout)
 
     def riak_bucket(self, bucket_name):
-        bucket = self.client.riak_bucket(bucket_name)
+        bucket = self.client.bucket(bucket_name)
         if bucket is not None:
-            bucket = VumiTxRiakBucket(bucket._riak_bucket)
+            bucket = VumiTxRiakBucket(bucket)
         return bucket
 
     def riak_object(self, modelcls, key, result=None):
-        riak_object = self.client.riak_object(modelcls, key, result)
-        return VumiTxRiakObject(riak_object._riak_obj)
+        bucket = self.bucket_for_modelcls(modelcls)._riak_bucket
+        riak_object = VumiTxRiakObject(RiakObject(self.client, bucket, key))
+        if result:
+            metadata = result['metadata']
+            indexes = metadata['index']
+            if hasattr(indexes, 'items'):
+                # TODO: I think this is a Riak bug. In some cases
+                #       (maybe when there are no indexes?) the index
+                #       comes back as a list, in others (maybe when
+                #       there are indexes?) it comes back as a dict.
+                indexes = indexes.items()
+            data = result['data']
+            riak_object.set_content_type(metadata['content-type'])
+            riak_object.set_indexes(indexes)
+            riak_object.set_encoded_data(data)
+        else:
+            riak_object.set_content_type("application/json")
+            riak_object.set_data({'$VERSION': modelcls.VERSION})
+        return riak_object
 
-    @inlineCallbacks
     def store(self, modelobj):
-        yield modelobj._riak_object.store()
-        returnValue(modelobj)
+        d = modelobj._riak_object.store()
+        d.addCallback(lambda _: modelobj)
+        return d
 
-    @inlineCallbacks
     def delete(self, modelobj):
-        yield modelobj._riak_object.delete()
+        d = modelobj._riak_object.delete()
+        d.addCallback(lambda _: None)
+        return d
 
     @inlineCallbacks
     def load(self, modelcls, key, result=None):
@@ -97,7 +198,7 @@ class TxRiakManager(Manager):
         return d
 
     def riak_map_reduce(self):
-        mapreduce = self.client.riak_map_reduce()
+        mapreduce = RiakMapReduce(self.client)
         # Hack: We replace the two methods that hit the network with
         #       deferToThread wrappers to prevent accidental sync calls in
         #       other code.
@@ -122,10 +223,24 @@ class TxRiakManager(Manager):
         return mapreduce_done
 
     def riak_enable_search(self, modelcls):
-        return deferToThread(self.client.riak_enable_search, modelcls)
+        bucket_name = self.bucket_name(modelcls)
+        bucket = self.client.bucket(bucket_name)
+        return deferToThread(bucket.enable_search)
 
     def should_quote_index_values(self):
         return False
 
+    @inlineCallbacks
     def purge_all(self):
-        return deferToThread(self.client.purge_all)
+        def delete_obj(bucket, key):
+            # These are sync operations
+            obj = bucket.get(key)
+            obj.delete()
+
+        deletes = []
+        buckets = yield deferToThread(self.client.get_buckets)
+        for bucket in buckets:
+            if bucket.name.startswith(self.bucket_prefix):
+                for key in bucket.get_keys():
+                    deletes.append(deferToThread(delete_obj, bucket, key))
+        yield gatherResults(deletes)
