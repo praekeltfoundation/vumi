@@ -21,7 +21,7 @@ class TestMessageStoreAPI(VumiTestCase):
             from vumi.components.message_store_api import (
                 MatchResource, MessageStoreAPIWorker)
         except ImportError, e:
-            import_skip(e, 'riakasaurus', 'riakasaurus.riak')
+            import_skip(e, 'riakasaurus', 'riakasaurus.riak', 'riak')
 
         self.msg_helper = self.add_helper(MessageHelper())
         self.worker_helper = self.add_helper(WorkerHelper())

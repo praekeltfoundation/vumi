@@ -342,7 +342,7 @@ class PersistenceMixin(object):
         try:
             from vumi.persist.txriak_manager import TxRiakManager
         except ImportError, e:
-            import_filter(e, 'riakasaurus', 'riakasaurus.riak')
+            import_filter(e, 'riakasaurus', 'riakasaurus.riak', 'riak')
             return
 
         orig_init = TxRiakManager.__init__
@@ -406,7 +406,7 @@ class PersistenceMixin(object):
         try:
             from vumi.persist.txriak_manager import TxRiakManager
         except ImportError, e:
-            import_skip(e, 'riakasaurus', 'riakasaurus.riak')
+            import_skip(e, 'riakasaurus', 'riakasaurus.riak', 'riak')
 
         return TxRiakManager.from_config(config)
 

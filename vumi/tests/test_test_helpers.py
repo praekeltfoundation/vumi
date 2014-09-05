@@ -1578,7 +1578,7 @@ class TestPersistenceHelper(VumiTestCase):
         try:
             from vumi.persist.txriak_manager import TxRiakManager
         except ImportError, e:
-            import_skip(e, 'riakasaurus', 'riakasaurus.riak')
+            import_skip(e, 'riakasaurus', 'riakasaurus.riak', 'riak')
         return TxRiakManager
 
     @property

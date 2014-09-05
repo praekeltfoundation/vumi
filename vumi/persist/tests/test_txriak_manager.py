@@ -225,11 +225,8 @@ class TestTxRiakManager(CommonRiakManagerTests, VumiTestCase):
     def setUp(self):
         try:
             from vumi.persist.txriak_manager import TxRiakManager
-            from riakasaurus import transport
         except ImportError, e:
-            import_skip(e, 'riakasaurus', 'riakasaurus.riak')
-        self.pbc_transport = transport.PBCTransport
-        self.http_transport = transport.HTTPTransport
+            import_skip(e, 'riakasaurus', 'riakasaurus.riak', 'riak', 'riak')
         self.manager = TxRiakManager.from_config({'bucket_prefix': 'test.'})
         self.add_cleanup(self.manager.purge_all)
         yield self.manager.purge_all()
