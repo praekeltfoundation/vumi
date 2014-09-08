@@ -22,8 +22,10 @@ class VumiTxRiakBucket(object):
     # Methods that touch the network.
 
     def get_index(self, index_name, start_value, end_value=None):
-        return deferToThread(
+        d = deferToThread(
             self._riak_bucket.get_index, index_name, start_value, end_value)
+        d.addCallback(list)
+        return d
 
 
 class VumiTxRiakObject(object):

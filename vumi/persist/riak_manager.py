@@ -20,7 +20,8 @@ class VumiRiakBucket(object):
     # Methods that touch the network.
 
     def get_index(self, index_name, start_value, end_value=None):
-        return self._riak_bucket.get_index(index_name, start_value, end_value)
+        keys = self._riak_bucket.get_index(index_name, start_value, end_value)
+        return list(keys)
 
 
 class VumiRiakObject(object):

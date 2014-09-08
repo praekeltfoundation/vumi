@@ -493,6 +493,8 @@ class TestModelOnTxRiak(VumiTestCase):
 
         keys = yield indexed_model.index_keys('a', 1)
         self.assertEqual(keys, ["foo1"])
+        # We should get a list object, not an IndexPage wrapper.
+        self.assertTrue(isinstance(keys, list))
 
         keys = yield indexed_model.index_keys('b', u"one")
         self.assertEqual(sorted(keys), ["foo1", "foo2"])
