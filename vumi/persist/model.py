@@ -576,7 +576,7 @@ class Manager(object):
                                   " .from_config(...)")
 
     def close_manager(self):
-        """Close this client underlying this manager instance.
+        """Close the client underlying this manager instance.
         """
         raise NotImplementedError("Sub-classes of Manager should implement"
                                   " .close_manager(...)")
