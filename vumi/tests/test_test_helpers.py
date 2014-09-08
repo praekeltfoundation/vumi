@@ -1531,14 +1531,16 @@ class FakeRiakManagerForCleanup(object):
 
     def __init__(self, bucket_prefix, conns=None):
         self.bucket_prefix = bucket_prefix
-        if conns is not None:
-            self._cm = self
-            self.conns = conns
-        self.client = self
+        self.fake_conns = conns or []
 
     def purge_all(self):
         self.purged = True
         return 'maybe async'
+
+    def close_manager(self):
+        for conn in self.fake_conns:
+            conn.close()
+        self.fake_conns = []
 
 
 class FakeRiakClientConnection(object):
@@ -1847,17 +1849,17 @@ class TestPersistenceHelper(VumiTestCase):
         self.assertEqual(
             [True, False], [redis_purge.purged, redis_nopurge.purged])
 
-    def test_cleanup_closes_sync_riak_managers(self):
+    def test_cleanup_closes_riak_managers(self):
         """
-        .cleanup() should close sync Riak client connections.
+        .cleanup() should close Riak client connections.
         """
         persistence_helper = PersistenceHelper()
         conn1 = FakeRiakClientConnection()
         conn2 = FakeRiakClientConnection()
         manager = FakeRiakManagerForCleanup('bucket1', [conn1, conn2])
         persistence_helper._riak_managers.append(manager)
-        self.assertEqual(manager.conns, [conn1, conn2])
+        self.assertEqual(manager.fake_conns, [conn1, conn2])
         self.assertEqual([conn1.closed, conn2.closed], [False, False])
         success_result_of(persistence_helper.cleanup())
-        self.assertEqual(manager.conns, [])
+        self.assertEqual(manager.fake_conns, [])
         self.assertEqual([conn1.closed, conn2.closed], [True, True])
