@@ -128,6 +128,9 @@ class RiakManager(Manager):
         return cls(client, bucket_prefix, load_bunch_size=load_bunch_size,
                    mapreduce_timeout=mapreduce_timeout)
 
+    def close_manager(self):
+        self.client.close()
+
     def riak_bucket(self, bucket_name):
         bucket = self.client.bucket(bucket_name)
         if bucket is not None:
