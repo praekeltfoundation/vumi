@@ -1350,7 +1350,7 @@ class PersistenceHelper(object):
         try:
             from vumi.persist.txriak_manager import TxRiakManager
         except ImportError, e:
-            import_filter(e, 'riakasaurus', 'riakasaurus.riak')
+            import_filter(e, 'riak')
             return
 
         orig_init = TxRiakManager.__init__
@@ -1433,7 +1433,7 @@ class PersistenceHelper(object):
         try:
             from vumi.persist.txriak_manager import TxRiakManager
         except ImportError, e:
-            import_skip(e, 'riakasaurus', 'riakasaurus.riak')
+            import_skip(e, 'riak')
 
         return TxRiakManager.from_config(config)
 

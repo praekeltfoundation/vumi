@@ -22,7 +22,7 @@ class MessageStoreCacheTestCase(VumiTestCase):
         try:
             from vumi.components.message_store import MessageStore
         except ImportError, e:
-            import_skip(e, 'riakasaurus', 'riakasaurus.riak')
+            import_skip(e, 'riak')
         self.redis = yield self.persistence_helper.get_redis_manager()
         self.manager = yield self.persistence_helper.get_riak_manager()
         self.store = yield MessageStore(self.manager, self.redis)

@@ -35,6 +35,21 @@ class DummyModel(object):
         self._riak_object.add_index(index_name, key)
 
 
+def get_link_key(link):
+    return link[1]
+
+
+def unrepr_string(text):
+    if text.startswith("'"):
+        # Strip and unescape single quotes
+        return text[1:-1].replace("\\'", "'")
+    if text.startswith('"'):
+        # Strip and unescape double quotes
+        return text[1:-1].replace('\\"', '"')
+    # Nothing to strip.
+    return text
+
+
 class CommonRiakManagerTests(object):
     """Common tests for Riak managers.
 
@@ -99,9 +114,9 @@ class CommonRiakManagerTests(object):
         riak_object = self.manager.riak_object(dummy, "foo")
         self.assertEqual(riak_object.get_data(), {'$VERSION': None})
         self.assertEqual(riak_object.get_content_type(), "application/json")
-        self.assertEqual(riak_object.get_bucket().get_name(),
-                         "test.dummy_model")
-        self.assertEqual(riak_object.get_key(), "foo")
+        self.assertEqual(
+            riak_object.get_bucket().get_name(), "test.dummy_model")
+        self.assertEqual(riak_object.key, "foo")
 
     @Manager.calls_manager
     def test_store_and_load(self):
@@ -161,15 +176,15 @@ class CommonRiakManagerTests(object):
         def mapper(manager, link):
             self.assertEqual(manager, self.manager)
             mr_results.append(link)
-            dummy = self.mkdummy(link.get_key())
+            dummy = self.mkdummy(get_link_key(link))
             return manager.load(DummyModel, dummy.key)
 
         results = yield self.manager.run_map_reduce(mr, mapper)
         results.sort(key=lambda d: d.key)
         expected_keys = [str(i) for i in range(4)]
         self.assertEqual([d.key for d in results], expected_keys)
-        mr_results.sort(key=lambda l: l.get_key())
-        self.assertEqual([l.get_key() for l in mr_results], expected_keys)
+        mr_results.sort(key=get_link_key)
+        self.assertEqual([get_link_key(l) for l in mr_results], expected_keys)
 
     @Manager.calls_manager
     def test_run_riak_map_reduce_with_timeout(self):
@@ -187,10 +202,11 @@ class CommonRiakManagerTests(object):
         try:
             yield self.manager.run_map_reduce(mr, lambda m, l: None)
         except Exception, err:
-            msg = str(err)
-            self.assertTrue(msg.startswith("Error running MapReduce"
-                                           " operation."))
-            self.assertTrue(msg.endswith("Body: '{\"error\":\"timeout\"}'"))
+            msg = unrepr_string(str(err))
+            self.assertTrue(msg.startswith(
+                "Error running MapReduce operation."))
+            self.assertTrue(msg.endswith(
+                "Body: '{\"error\":\"timeout\"}'"))
         else:
             self.fail("Map reduce operation did not timeout")
 
@@ -209,11 +225,8 @@ class TestTxRiakManager(CommonRiakManagerTests, VumiTestCase):
     def setUp(self):
         try:
             from vumi.persist.txriak_manager import TxRiakManager
-            from riakasaurus import transport
         except ImportError, e:
-            import_skip(e, 'riakasaurus', 'riakasaurus.riak')
-        self.pbc_transport = transport.PBCTransport
-        self.http_transport = transport.HTTPTransport
+            import_skip(e, 'riak', 'riak')
         self.manager = TxRiakManager.from_config({'bucket_prefix': 'test.'})
         self.add_cleanup(self.manager.purge_all)
         yield self.manager.purge_all()
@@ -224,12 +237,10 @@ class TestTxRiakManager(CommonRiakManagerTests, VumiTestCase):
     def test_transport_class_protocol_buffer(self):
         manager_class = type(self.manager)
         manager = manager_class.from_config({
-            'transport_type': 'protocol_buffer',
+            'transport_type': 'pbc',
             'bucket_prefix': 'test.',
             })
-        self.assertEqual(type(manager.client.transport),
-                         self.pbc_transport)
-        return manager.client.transport.quit()
+        self.assertEqual(manager.client.protocol, 'pbc')
 
     def test_transport_class_http(self):
         manager_class = type(self.manager)
@@ -237,13 +248,11 @@ class TestTxRiakManager(CommonRiakManagerTests, VumiTestCase):
             'transport_type': 'http',
             'bucket_prefix': 'test.',
             })
-        self.assertEqual(type(manager.client.transport),
-                         self.http_transport)
+        self.assertEqual(manager.client.protocol, 'http')
 
     def test_transport_class_default(self):
         manager_class = type(self.manager)
         manager = manager_class.from_config({
             'bucket_prefix': 'test.',
             })
-        self.assertEqual(type(manager.client.transport),
-                         self.http_transport)
+        self.assertEqual(manager.client.protocol, 'http')

@@ -4,12 +4,85 @@
 
 import json
 
-from riak import (
-    RiakClient, RiakObject, RiakMapReduce, RiakHttpTransport, RiakPbcTransport)
-from twisted.internet.defer import gatherResults
+from riak import RiakClient, RiakObject, RiakMapReduce
 
 from vumi.persist.model import Manager
 from vumi.utils import flatten_generator
+
+
+class VumiRiakBucket(object):
+    def __init__(self, riak_bucket):
+        self._riak_bucket = riak_bucket
+
+    def get_name(self):
+        return self._riak_bucket.name
+
+    # Methods that touch the network.
+
+    def get_index(self, index_name, start_value, end_value=None):
+        return self._riak_bucket.get_index(index_name, start_value, end_value)
+
+
+class VumiRiakObject(object):
+    def __init__(self, riak_obj):
+        self._riak_obj = riak_obj
+
+    @property
+    def key(self):
+        return self._riak_obj.key
+
+    def get_content_type(self):
+        return self._riak_obj.content_type
+
+    def set_content_type(self, content_type):
+        self._riak_obj.content_type = content_type
+
+    def get_data(self):
+        return self._riak_obj.data
+
+    def set_data(self, data):
+        self._riak_obj.data = data
+
+    def set_encoded_data(self, encoded_data):
+        self._riak_obj.encoded_data = encoded_data
+
+    def set_data_field(self, key, value):
+        self._riak_obj.data[key] = value
+
+    def delete_data_field(self, key):
+        del self._riak_obj.data[key]
+
+    def get_indexes(self):
+        return self._riak_obj.indexes
+
+    def set_indexes(self, indexes):
+        self._riak_obj.indexes = indexes
+
+    def add_index(self, index_name, index_value):
+        self._riak_obj.add_index(index_name, index_value)
+
+    def remove_index(self, index_name, index_value=None):
+        self._riak_obj.remove_index(index_name, index_value)
+
+    def get_user_metadata(self):
+        return self._riak_obj.usermeta
+
+    def set_user_metadata(self, usermeta):
+        self._riak_obj.usermeta = usermeta
+
+    def get_bucket(self):
+        return VumiRiakBucket(self._riak_obj.bucket)
+
+    # Methods that touch the network.
+
+    def store(self):
+        return type(self)(self._riak_obj.store())
+
+    def reload(self):
+        return type(self)(self._riak_obj.reload())
+
+    def delete(self):
+        return type(self)(self._riak_obj.delete())
 
 
 class RiakManager(Manager):
@@ -26,25 +99,23 @@ class RiakManager(Manager):
         mapreduce_timeout = config.pop('mapreduce_timeout',
                                        cls.DEFAULT_MAPREDUCE_TIMEOUT)
         transport_type = config.pop('transport_type', 'http')
-        transport_class = {
-            'http': RiakHttpTransport,
-            'protocol_buffer': RiakPbcTransport,
-        }.get(transport_type, RiakHttpTransport)
 
         host = config.get('host', '127.0.0.1')
-        port = config.get('port', 8098)
+        port = config.get('port')
         prefix = config.get('prefix', 'riak')
         mapred_prefix = config.get('mapred_prefix', 'mapred')
         client_id = config.get('client_id')
-        # NOTE: the current riak.RiakClient expects this parameter but
-        #       internally doesn't do anything with it.
-        solr_transport_class = config.get('solr_transport_class', None)
-        transport_options = config.get('transport_options', None)
+        transport_options = config.get('transport_options', {})
 
-        client = RiakClient(host=host, port=port, prefix=prefix,
-            mapred_prefix=mapred_prefix, transport_class=transport_class,
-            client_id=client_id, solr_transport_class=solr_transport_class,
+        client_args = dict(
+            host=host, prefix=prefix, mapred_prefix=mapred_prefix,
+            protocol=transport_type, client_id=client_id,
             transport_options=transport_options)
+
+        if port is not None:
+            client_args['port'] = port
+
+        client = RiakClient(**client_args)
         # Some versions of the riak client library use simplejson by
         # preference, which breaks some of our unicode assumptions. This makes
         # sure we're using stdlib json which doesn't sometimes return
@@ -56,9 +127,15 @@ class RiakManager(Manager):
         return cls(client, bucket_prefix, load_bunch_size=load_bunch_size,
                    mapreduce_timeout=mapreduce_timeout)
 
+    def riak_bucket(self, bucket_name):
+        bucket = self.client.bucket(bucket_name)
+        if bucket is not None:
+            bucket = VumiRiakBucket(bucket)
+        return bucket
+
     def riak_object(self, modelcls, key, result=None):
-        bucket = self.bucket_for_modelcls(modelcls)
-        riak_object = RiakObject(self.client, bucket, key)
+        bucket = self.bucket_for_modelcls(modelcls)._riak_bucket
+        riak_object = VumiRiakObject(RiakObject(self.client, bucket, key))
         if result:
             metadata = result['metadata']
             indexes = metadata['index']
@@ -73,8 +150,8 @@ class RiakManager(Manager):
             riak_object.set_indexes(indexes)
             riak_object.set_encoded_data(data)
         else:
-            riak_object.set_data({'$VERSION': modelcls.VERSION})
             riak_object.set_content_type("application/json")
+            riak_object.set_data({'$VERSION': modelcls.VERSION})
         return riak_object
 
     def store(self, modelobj):
@@ -123,13 +200,12 @@ class RiakManager(Manager):
         return bucket.enable_search()
 
     def should_quote_index_values(self):
-        return not isinstance(self.client, RiakPbcTransport)
+        return False
 
     def purge_all(self):
         buckets = self.client.get_buckets()
-        for bucket_name in buckets:
-            if bucket_name.startswith(self.bucket_prefix):
-                bucket = self.client.bucket(bucket_name)
+        for bucket in buckets:
+            if bucket.name.startswith(self.bucket_prefix):
                 for key in bucket.get_keys():
                     obj = bucket.get(key)
                     obj.delete()
