@@ -183,7 +183,7 @@ class TestModelOnTxRiak(VumiTestCase):
         try:
             from vumi.persist.txriak_manager import TxRiakManager
         except ImportError, e:
-            import_skip(e, 'riakasaurus', 'riakasaurus.riak', 'riak')
+            import_skip(e, 'riak')
         self.manager = TxRiakManager.from_config({'bucket_prefix': 'test.'})
         self.add_cleanup(self.manager.purge_all)
         yield self.manager.purge_all()

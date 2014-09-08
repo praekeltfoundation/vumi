@@ -22,8 +22,7 @@ class TestMigratorBase(VumiTestCase):
         self.persistence_helper = self.add_helper(
             PersistenceHelper(use_riak=True))
         if riak_import_error is not None:
-            import_skip(
-                riak_import_error, 'riakasaurus', 'riakasaurus.riak', 'riak')
+            import_skip(riak_import_error, 'riak')
         self.manager = self.persistence_helper.get_riak_manager()
         self.msg_helper = self.add_helper(MessageHelper())
 
