@@ -36,6 +36,9 @@ class VumiTxRiakObject(object):
     def key(self):
         return self._riak_obj.key
 
+    def get_key(self):
+        return self.key
+
     def get_content_type(self):
         return self._riak_obj.content_type
 
