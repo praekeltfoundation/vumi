@@ -22,8 +22,10 @@ class VumiTxRiakBucket(object):
     # Methods that touch the network.
 
     def get_index(self, index_name, start_value, end_value=None):
-        return deferToThread(
+        d = deferToThread(
             self._riak_bucket.get_index, index_name, start_value, end_value)
+        d.addCallback(list)
+        return d
 
 
 class VumiTxRiakObject(object):
@@ -33,6 +35,9 @@ class VumiTxRiakObject(object):
     @property
     def key(self):
         return self._riak_obj.key
+
+    def get_key(self):
+        return self.key
 
     def get_content_type(self):
         return self._riak_obj.content_type
@@ -135,6 +140,9 @@ class TxRiakManager(Manager):
         client.set_decoder('text/json', json.loads)
         return cls(client, bucket_prefix, load_bunch_size=load_bunch_size,
                    mapreduce_timeout=mapreduce_timeout)
+
+    def close_manager(self):
+        return deferToThread(self.client.close)
 
     def riak_bucket(self, bucket_name):
         bucket = self.client.bucket(bucket_name)

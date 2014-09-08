@@ -575,6 +575,12 @@ class Manager(object):
         raise NotImplementedError("Sub-classes of Manager should implement"
                                   " .from_config(...)")
 
+    def close_manager(self):
+        """Close the client underlying this manager instance.
+        """
+        raise NotImplementedError("Sub-classes of Manager should implement"
+                                  " .close_manager(...)")
+
     def riak_object(self, cls, key):
         """Construct an empty RiakObject for the given model class and key."""
         raise NotImplementedError("Sub-classes of Manager should implement"
