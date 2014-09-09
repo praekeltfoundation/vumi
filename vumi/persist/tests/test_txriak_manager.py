@@ -218,6 +218,37 @@ class CommonRiakManagerTests(object):
         result = yield self.manager.load(DummyModel, dummy.key)
         self.assertEqual(result, None)
 
+    @Manager.calls_manager
+    def test_json_decoding(self):
+        # Some versions of the riak client library use simplejson by
+        # preference, which breaks some of our unicode assumptions. This test
+        # only fails when such a version is being used and our workaround
+        # fails. If we're using a good version of the client library, the test
+        # will pass even if the workaround fails.
+
+        dummy1 = self.mkdummy("foo", {"a": "b"})
+        result1 = yield self.manager.store(dummy1)
+        self.assertTrue(isinstance(result1.get_data()["a"], unicode))
+
+        dummy2 = yield self.manager.load(DummyModel, "foo")
+        self.assertEqual(dummy2.get_data(), {"a": "b"})
+        self.assertTrue(isinstance(dummy2.get_data()["a"], unicode))
+
+    @Manager.calls_manager
+    def test_json_decoding_index_keys(self):
+        # Some versions of the riak client library use simplejson by
+        # preference, which breaks some of our unicode assumptions. This test
+        # only fails when such a version is being used and our workaround
+        # fails. If we're using a good version of the client library, the test
+        # will pass even if the workaround fails.
+
+        dummy1 = self.mkdummy("foo", {"a": "b"})
+        yield self.manager.store(dummy1)
+        [key] = yield self.manager.index_keys(
+            DummyModel, '$bucket', self.manager.bucket_name(DummyModel), None)
+        self.assertEqual(key, u"foo")
+        self.assertTrue(isinstance(key, unicode))
+
 
 class TestTxRiakManager(CommonRiakManagerTests, VumiTestCase):
 

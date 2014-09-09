@@ -10,6 +10,12 @@ from vumi.persist.model import Manager
 from vumi.utils import flatten_generator
 
 
+def to_unicode(text, encoding='utf-8'):
+    if not isinstance(text, unicode):
+        text = text.decode(encoding)
+    return text
+
+
 class VumiRiakBucket(object):
     def __init__(self, riak_bucket):
         self._riak_bucket = riak_bucket
@@ -21,7 +27,7 @@ class VumiRiakBucket(object):
 
     def get_index(self, index_name, start_value, end_value=None):
         keys = self._riak_bucket.get_index(index_name, start_value, end_value)
-        return list(keys)
+        return [to_unicode(key) for key in keys]
 
 
 class VumiRiakObject(object):
