@@ -57,8 +57,8 @@ class CommonRiakManagerTests(object):
     manager.
     """
 
-    def mkdummy(self, key, data=None):
-        dummy = DummyModel(self.manager, key)
+    def mkdummy(self, key, data=None, dummy_class=DummyModel):
+        dummy = dummy_class(self.manager, key)
         dummy.set_riak(self.manager.riak_object(dummy, key))
         if data is not None:
             dummy.set_data(data)
@@ -242,10 +242,14 @@ class CommonRiakManagerTests(object):
         # fails. If we're using a good version of the client library, the test
         # will pass even if the workaround fails.
 
-        dummy1 = self.mkdummy("foo", {"a": "b"})
+        class MyDummy(DummyModel):
+            # Use a fresh bucket name here so we don't get leftover keys.
+            bucket_name = 'decoding_index_dummy'
+
+        dummy1 = self.mkdummy("foo", {"a": "b"}, dummy_class=MyDummy)
         yield self.manager.store(dummy1)
         [key] = yield self.manager.index_keys(
-            DummyModel, '$bucket', self.manager.bucket_name(DummyModel), None)
+            MyDummy, '$bucket', self.manager.bucket_name(MyDummy), None)
         self.assertEqual(key, u"foo")
         self.assertTrue(isinstance(key, unicode))
 
