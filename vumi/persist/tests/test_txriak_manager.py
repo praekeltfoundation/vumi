@@ -244,7 +244,7 @@ class CommonRiakManagerTests(object):
 
         class MyDummy(DummyModel):
             # Use a fresh bucket name here so we don't get leftover keys.
-            bucket_name = 'decoding_index_dummy'
+            bucket = 'decoding_index_dummy'
 
         dummy1 = self.mkdummy("foo", {"a": "b"}, dummy_class=MyDummy)
         yield self.manager.store(dummy1)
