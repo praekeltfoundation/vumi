@@ -10,6 +10,32 @@ from vumi.persist.model import Manager
 from vumi.utils import flatten_generator
 
 
+class VumiIndexPage(object):
+    def __init__(self, index_page):
+        self._index_page = index_page
+
+    def __iter__(self):
+        if self._index_page.stream:
+            raise NotImplementedError("Streaming is not currently supported.")
+        return iter(self._index_page)
+
+    def __eq__(self, other):
+        return self._index_page.__eq__(other)
+
+    def has_next_page(self):
+        return self._index_page.has_next_page()
+
+    @property
+    def continuation(self):
+        return self._index_page.continuation
+
+    # Methods that touch the network.
+
+    def next_page(self):
+        result = self._index_page.next_page()
+        return type(self)(result)
+
+
 class VumiRiakBucket(object):
     def __init__(self, riak_bucket):
         self._riak_bucket = riak_bucket
@@ -19,9 +45,18 @@ class VumiRiakBucket(object):
 
     # Methods that touch the network.
 
-    def get_index(self, index_name, start_value, end_value=None):
-        keys = self._riak_bucket.get_index(index_name, start_value, end_value)
+    def get_index(self, index_name, start_value, end_value=None,
+                  return_terms=None):
+        keys = self._riak_bucket.get_index(
+            index_name, start_value, end_value, return_terms=return_terms)
         return list(keys)
+
+    def get_index_page(self, index_name, start_value, end_value=None,
+                       return_terms=None, max_results=None, continuation=None):
+        result = self._riak_bucket.get_index(
+            index_name, start_value, end_value, return_terms=return_terms,
+            max_results=max_results, continuation=continuation)
+        return VumiIndexPage(result)
 
 
 class VumiRiakObject(object):
