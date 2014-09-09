@@ -12,6 +12,12 @@ from twisted.internet.defer import (
 from vumi.persist.model import Manager
 
 
+def to_unicode(text, encoding='utf-8'):
+    if not isinstance(text, unicode):
+        text = text.decode(encoding)
+    return text
+
+
 class VumiTxRiakBucket(object):
     def __init__(self, riak_bucket):
         self._riak_bucket = riak_bucket
@@ -24,7 +30,7 @@ class VumiTxRiakBucket(object):
     def get_index(self, index_name, start_value, end_value=None):
         d = deferToThread(
             self._riak_bucket.get_index, index_name, start_value, end_value)
-        d.addCallback(list)
+        d.addCallback(lambda keys: [to_unicode(key) for key in keys])
         return d
 
 
