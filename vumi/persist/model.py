@@ -289,6 +289,31 @@ class Model(object):
                    return_terms=None):
         """Find object keys by index.
 
+        :param manager:
+            A :class:`Manager` object.
+
+        :param str field_name:
+            The name of the field to get the index from. The index type
+            (integer or binary) is determined by the field and this may affect
+            the behaviour of range queries.
+
+        :param value:
+            The index value to look up. This is processed by the field in
+            question to get the actual value to send to Riak. If ``end_value``
+            is provided, ``value`` is used as the start of a range query,
+            otherwise an exact match is performed.
+
+        :param end_value:
+            The index value to use as the end of a range query. This is
+            processed by the field in question to get the actual value to send
+            to Riak. If provided, a range query is performed.
+
+        :param bool return_terms:
+            If ``True``, the raw index values will be returned along with the
+            object keys in a ``(term, key)`` tuple. These raw values are not
+            processed by the field and may therefore be different from the
+            expected field values.
+
         :returns:
             List of keys matching the index param. If ``return_terms`` is
             ``True``, a list of ``(term, key)`` tuples will be returned
@@ -305,10 +330,46 @@ class Model(object):
                         continuation=None):
         """Find object keys by index, using pagination.
 
+        :param manager:
+            A :class:`Manager` object.
+
+        :param str field_name:
+            The name of the field to get the index from. The index type
+            (integer or binary) is determined by the field and this may affect
+            the behaviour of range queries.
+
+        :param value:
+            The index value to look up. This is processed by the field in
+            question to get the actual value to send to Riak. If ``end_value``
+            is provided, ``value`` is used as the start of a range query,
+            otherwise an exact match is performed.
+
+        :param end_value:
+            The index value to use as the end of a range query. This is
+            processed by the field in question to get the actual value to send
+            to Riak. If provided, a range query is performed.
+
+        :param bool return_terms:
+            If ``True``, the raw index values will be returned along with the
+            object keys in a ``(term, key)`` tuple. These raw values are not
+            processed by the field and may therefore be different from the
+            expected field values.
+
+        :param int max_results:
+            The maximum number of results to return per page. If ``None``,
+            pagination will disables and a single page containing all results
+            will be returned.
+
+        :param continuation:
+            An opaque continuation token indicating which page of results to
+            fetch. The index page object returned from this method has a
+            ``continuation`` attribute that contains this value. If ``None``,
+            the first page of results will be returned.
+
         :returns:
-            Index page object containing keys matching the index param. If
-            ``return_terms`` is ``True``, the object returned will contain
-            ``(term, key)`` tuples instead.
+            :class:`VumiIndexPage` or :class:`VumiTxIndexPage` object
+            containing results. If ``return_terms`` is ``True``, the object
+            returned will contain ``(term, key)`` tuples instead of keys.
         """
         index_name, start_value, end_value = index_vals_for_field(
             cls, field_name, value, end_value)

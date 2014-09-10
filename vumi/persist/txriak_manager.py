@@ -21,6 +21,12 @@ def to_unicode(text, encoding='utf-8'):
 
 
 class VumiTxIndexPage(object):
+    """
+    Wrapper around a page of index query results.
+
+    Iterating over this object will return the results for the current page.
+    """
+
     def __init__(self, index_page):
         self._index_page = index_page
 
@@ -33,6 +39,13 @@ class VumiTxIndexPage(object):
         return self._index_page.__eq__(other)
 
     def has_next_page(self):
+        """
+        Indicate whether there are more results to follow.
+
+        :returns:
+            ``True`` if there are more results, ``False`` if this is the last
+            page.
+        """
         return self._index_page.has_next_page()
 
     @property
@@ -42,6 +55,13 @@ class VumiTxIndexPage(object):
     # Methods that touch the network.
 
     def next_page(self):
+        """
+        Fetch the next page of results.
+
+        :returns:
+            A new :class:`VumiTxIndexPage` object containing the next page of
+            results.
+        """
         d = deferToThread(self._index_page.next_page)
         d.addCallback(type(self))
         return d
