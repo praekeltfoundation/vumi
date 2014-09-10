@@ -35,7 +35,7 @@ class VumiIndexPage(object):
 
     @property
     def continuation(self):
-        return self._index_page.continuation
+        return to_unicode(self._index_page.continuation)
 
     # Methods that touch the network.
 

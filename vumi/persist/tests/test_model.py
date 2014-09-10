@@ -575,6 +575,7 @@ class TestModelOnTxRiak(VumiTestCase):
         keys1 = yield indexed_model.index_keys_page('a', 1, max_results=1)
         self.assertEqual(sorted(keys1), ["foo1"])
         self.assertEqual(keys1.has_next_page(), True)
+        self.assertTrue(isinstance(keys1.continuation, unicode))
 
         keys2 = yield indexed_model.index_keys_page(
             'a', 1, max_results=2, continuation=keys1.continuation)
