@@ -57,8 +57,8 @@ class CommonRiakManagerTests(object):
     manager.
     """
 
-    def mkdummy(self, key, data=None):
-        dummy = DummyModel(self.manager, key)
+    def mkdummy(self, key, data=None, dummy_class=DummyModel):
+        dummy = dummy_class(self.manager, key)
         dummy.set_riak(self.manager.riak_object(dummy, key))
         if data is not None:
             dummy.set_data(data)
@@ -217,6 +217,41 @@ class CommonRiakManagerTests(object):
         yield self.manager.purge_all()
         result = yield self.manager.load(DummyModel, dummy.key)
         self.assertEqual(result, None)
+
+    @Manager.calls_manager
+    def test_json_decoding(self):
+        # Some versions of the riak client library use simplejson by
+        # preference, which breaks some of our unicode assumptions. This test
+        # only fails when such a version is being used and our workaround
+        # fails. If we're using a good version of the client library, the test
+        # will pass even if the workaround fails.
+
+        dummy1 = self.mkdummy("foo", {"a": "b"})
+        result1 = yield self.manager.store(dummy1)
+        self.assertTrue(isinstance(result1.get_data()["a"], unicode))
+
+        dummy2 = yield self.manager.load(DummyModel, "foo")
+        self.assertEqual(dummy2.get_data(), {"a": "b"})
+        self.assertTrue(isinstance(dummy2.get_data()["a"], unicode))
+
+    @Manager.calls_manager
+    def test_json_decoding_index_keys(self):
+        # Some versions of the riak client library use simplejson by
+        # preference, which breaks some of our unicode assumptions. This test
+        # only fails when such a version is being used and our workaround
+        # fails. If we're using a good version of the client library, the test
+        # will pass even if the workaround fails.
+
+        class MyDummy(DummyModel):
+            # Use a fresh bucket name here so we don't get leftover keys.
+            bucket = 'decoding_index_dummy'
+
+        dummy1 = self.mkdummy("foo", {"a": "b"}, dummy_class=MyDummy)
+        yield self.manager.store(dummy1)
+        [key] = yield self.manager.index_keys(
+            MyDummy, '$bucket', self.manager.bucket_name(MyDummy), None)
+        self.assertEqual(key, u"foo")
+        self.assertTrue(isinstance(key, unicode))
 
 
 class TestTxRiakManager(CommonRiakManagerTests, VumiTestCase):

@@ -10,6 +10,14 @@ from vumi.persist.model import Manager
 from vumi.utils import flatten_generator
 
 
+def to_unicode(text, encoding='utf-8'):
+    if isinstance(text, tuple):
+        return tuple(to_unicode(item, encoding) for item in text)
+    if not isinstance(text, unicode):
+        return text.decode(encoding)
+    return text
+
+
 class VumiIndexPage(object):
     def __init__(self, index_page):
         self._index_page = index_page
@@ -17,7 +25,7 @@ class VumiIndexPage(object):
     def __iter__(self):
         if self._index_page.stream:
             raise NotImplementedError("Streaming is not currently supported.")
-        return iter(self._index_page)
+        return (to_unicode(item) for item in self._index_page)
 
     def __eq__(self, other):
         return self._index_page.__eq__(other)
@@ -47,7 +55,7 @@ class VumiRiakBucket(object):
 
     def get_index(self, index_name, start_value, end_value=None,
                   return_terms=None):
-        keys = self._riak_bucket.get_index(
+        keys = self.get_index_page(
             index_name, start_value, end_value, return_terms=return_terms)
         return list(keys)
 
