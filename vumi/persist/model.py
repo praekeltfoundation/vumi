@@ -287,9 +287,12 @@ class Model(object):
     @classmethod
     def index_keys(cls, manager, field_name, value, end_value=None,
                    return_terms=None):
-        """Find objects by index.
+        """Find object keys by index.
 
-        :returns: List of keys matching the index param.
+        :returns:
+            List of keys matching the index param. If ``return_terms`` is
+            ``True``, a list of ``(term, key)`` tuples will be returned
+            instead.
         """
         index_name, start_value, end_value = index_vals_for_field(
             cls, field_name, value, end_value)
@@ -300,9 +303,12 @@ class Model(object):
     def index_keys_page(cls, manager, field_name, value, end_value=None,
                         return_terms=None, max_results=None,
                         continuation=None):
-        """Find objects by index.
+        """Find object keys by index, using pagination.
 
-        :returns: Index page object containing keys matching the index param.
+        :returns:
+            Index page object containing keys matching the index param. If
+            ``return_terms`` is ``True``, the object returned will contain
+            ``(term, key)`` tuples instead.
         """
         index_name, start_value, end_value = index_vals_for_field(
             cls, field_name, value, end_value)
