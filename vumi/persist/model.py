@@ -281,18 +281,101 @@ class Model(object):
         :returns:
             List of keys from this model's bucket.
         """
-        return manager.index_keys(cls, '$bucket', manager.bucket_name(cls),
-                                  None)
+        return manager.index_keys(
+            cls, '$bucket', manager.bucket_name(cls), None)
 
     @classmethod
-    def index_keys(cls, manager, field_name, value):
-        """Find objects by index.
+    def index_keys(cls, manager, field_name, value, end_value=None,
+                   return_terms=None):
+        """Find object keys by index.
 
-        :returns: List of keys matching the index param.
+        :param manager:
+            A :class:`Manager` object.
+
+        :param str field_name:
+            The name of the field to get the index from. The index type
+            (integer or binary) is determined by the field and this may affect
+            the behaviour of range queries.
+
+        :param value:
+            The index value to look up. This is processed by the field in
+            question to get the actual value to send to Riak. If ``end_value``
+            is provided, ``value`` is used as the start of a range query,
+            otherwise an exact match is performed.
+
+        :param end_value:
+            The index value to use as the end of a range query. This is
+            processed by the field in question to get the actual value to send
+            to Riak. If provided, a range query is performed.
+
+        :param bool return_terms:
+            If ``True``, the raw index values will be returned along with the
+            object keys in a ``(term, key)`` tuple. These raw values are not
+            processed by the field and may therefore be different from the
+            expected field values.
+
+        :returns:
+            List of keys matching the index param. If ``return_terms`` is
+            ``True``, a list of ``(term, key)`` tuples will be returned
+            instead.
         """
         index_name, start_value, end_value = index_vals_for_field(
-            cls, field_name, value, None)
-        return manager.index_keys(cls, index_name, start_value, end_value)
+            cls, field_name, value, end_value)
+        return manager.index_keys(
+            cls, index_name, start_value, end_value, return_terms=return_terms)
+
+    @classmethod
+    def index_keys_page(cls, manager, field_name, value, end_value=None,
+                        return_terms=None, max_results=None,
+                        continuation=None):
+        """Find object keys by index, using pagination.
+
+        :param manager:
+            A :class:`Manager` object.
+
+        :param str field_name:
+            The name of the field to get the index from. The index type
+            (integer or binary) is determined by the field and this may affect
+            the behaviour of range queries.
+
+        :param value:
+            The index value to look up. This is processed by the field in
+            question to get the actual value to send to Riak. If ``end_value``
+            is provided, ``value`` is used as the start of a range query,
+            otherwise an exact match is performed.
+
+        :param end_value:
+            The index value to use as the end of a range query. This is
+            processed by the field in question to get the actual value to send
+            to Riak. If provided, a range query is performed.
+
+        :param bool return_terms:
+            If ``True``, the raw index values will be returned along with the
+            object keys in a ``(term, key)`` tuple. These raw values are not
+            processed by the field and may therefore be different from the
+            expected field values.
+
+        :param int max_results:
+            The maximum number of results to return per page. If ``None``,
+            pagination will disables and a single page containing all results
+            will be returned.
+
+        :param continuation:
+            An opaque continuation token indicating which page of results to
+            fetch. The index page object returned from this method has a
+            ``continuation`` attribute that contains this value. If ``None``,
+            the first page of results will be returned.
+
+        :returns:
+            :class:`VumiIndexPage` or :class:`VumiTxIndexPage` object
+            containing results. If ``return_terms`` is ``True``, the object
+            returned will contain ``(term, key)`` tuples instead of keys.
+        """
+        index_name, start_value, end_value = index_vals_for_field(
+            cls, field_name, value, end_value)
+        return manager.index_keys_page(
+            cls, index_name, start_value, end_value, return_terms=return_terms,
+            max_results=max_results, continuation=continuation)
 
     @classmethod
     def index_lookup(cls, manager, field_name, value):
@@ -672,14 +755,29 @@ class Manager(object):
         raise NotImplementedError("Sub-classes of Manager should implement"
                                   " .should_quote_index_values()")
 
-    def index_keys(self, model, index_name, start_value, end_value=None):
+    def index_keys(self, model, index_name, start_value, end_value=None,
+                   return_terms=None):
         bucket = self.bucket_for_modelcls(model)
         if self.should_quote_index_values():
             if start_value is not None:
                 start_value = urllib.quote(start_value)
             if end_value is not None:
                 end_value = urllib.quote(end_value)
-        return bucket.get_index(index_name, start_value, end_value)
+        return bucket.get_index(
+            index_name, start_value, end_value, return_terms=return_terms)
+
+    def index_keys_page(self, model, index_name, start_value, end_value=None,
+                        return_terms=None, max_results=None,
+                        continuation=None):
+        bucket = self.bucket_for_modelcls(model)
+        if self.should_quote_index_values():
+            if start_value is not None:
+                start_value = urllib.quote(start_value)
+            if end_value is not None:
+                end_value = urllib.quote(end_value)
+        return bucket.get_index_page(
+            index_name, start_value, end_value, return_terms=return_terms,
+            max_results=max_results, continuation=continuation)
 
     def mr_from_field(self, model, field_name, start_value, end_value=None):
         return VumiMapReduce.from_field(
@@ -738,9 +836,18 @@ class ModelProxy(object):
     def all_keys(self):
         return self._modelcls.all_keys(self._manager)
 
-    def index_keys(self, field_name, value):
+    def index_keys(self, field_name, value, end_value=None, return_terms=None):
         return self._modelcls.index_keys(
-            self._manager, field_name, value)
+            self._manager, field_name, value, end_value,
+            return_terms=return_terms)
+
+    def index_keys_page(self, field_name, value, end_value=None,
+                        return_terms=None, max_results=None,
+                        continuation=None):
+        return self._modelcls.index_keys_page(
+            self._manager, field_name, value, end_value,
+            return_terms=return_terms, max_results=max_results,
+            continuation=continuation)
 
     def index_lookup(self, field_name, value):
         return self._modelcls.index_lookup(self._manager, field_name, value)

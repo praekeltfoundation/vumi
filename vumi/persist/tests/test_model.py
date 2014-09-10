@@ -503,6 +503,90 @@ class TestModelOnTxRiak(VumiTestCase):
         self.assertEqual(keys, ["foo3"])
 
     @Manager.calls_manager
+    def test_index_keys_return_terms(self):
+        indexed_model = self.manager.proxy(IndexedModel)
+        yield indexed_model("foo1", a=1, b=u"one").save()
+        yield indexed_model("foo2", a=2, b=u"one").save()
+        yield indexed_model("foo3", a=2, b=None).save()
+
+        keys = yield indexed_model.index_keys('a', 1, return_terms=True)
+        self.assertEqual(keys, [("1", "foo1")])
+
+        keys = yield indexed_model.index_keys('b', u"one", return_terms=True)
+        self.assertEqual(sorted(keys), [(u"one", "foo1"), (u"one", "foo2")])
+
+        keys = yield indexed_model.index_keys('b', None)
+        self.assertEqual(list(keys), ["foo3"])
+
+    @Manager.calls_manager
+    def test_index_keys_range(self):
+        indexed_model = self.manager.proxy(IndexedModel)
+        yield indexed_model("foo1", a=1, b=u"one").save()
+        yield indexed_model("foo2", a=2, b=u"one").save()
+        yield indexed_model("foo3", a=3, b=None).save()
+
+        keys = yield indexed_model.index_keys('a', 1, 2)
+        self.assertEqual(sorted(keys), ["foo1", "foo2"])
+
+        keys = yield indexed_model.index_keys('a', 2, 3)
+        self.assertEqual(sorted(keys), ["foo2", "foo3"])
+
+    @Manager.calls_manager
+    def test_index_keys_range_return_terms(self):
+        indexed_model = self.manager.proxy(IndexedModel)
+        yield indexed_model("foo1", a=1, b=u"one").save()
+        yield indexed_model("foo2", a=2, b=u"one").save()
+        yield indexed_model("foo3", a=3, b=None).save()
+
+        keys = yield indexed_model.index_keys('a', 1, 2, return_terms=True)
+        self.assertEqual(sorted(keys), [("1", "foo1"), ("2", "foo2")])
+
+        keys = yield indexed_model.index_keys('a', 2, 3, return_terms=True)
+        self.assertEqual(sorted(keys), [("2", "foo2"), ("3", "foo3")])
+
+    @Manager.calls_manager
+    def test_index_keys_page(self):
+        indexed_model = self.manager.proxy(IndexedModel)
+        yield indexed_model("foo1", a=1, b=u"one").save()
+        yield indexed_model("foo2", a=1, b=u"one").save()
+        yield indexed_model("foo3", a=1, b=None).save()
+        yield indexed_model("foo4", a=1, b=None).save()
+
+        keys1 = yield indexed_model.index_keys_page('a', 1, max_results=2)
+        self.assertEqual(sorted(keys1), ["foo1", "foo2"])
+        self.assertEqual(keys1.has_next_page(), True)
+
+        keys2 = yield keys1.next_page()
+        self.assertEqual(sorted(keys2), ["foo3", "foo4"])
+        self.assertEqual(keys2.has_next_page(), True)
+
+        keys3 = yield keys2.next_page()
+        self.assertEqual(sorted(keys3), [])
+        self.assertEqual(keys3.has_next_page(), False)
+
+    @Manager.calls_manager
+    def test_index_keys_page_explicit_continuation(self):
+        indexed_model = self.manager.proxy(IndexedModel)
+        yield indexed_model("foo1", a=1, b=u"one").save()
+        yield indexed_model("foo2", a=1, b=u"one").save()
+        yield indexed_model("foo3", a=1, b=None).save()
+        yield indexed_model("foo4", a=1, b=None).save()
+
+        keys1 = yield indexed_model.index_keys_page('a', 1, max_results=1)
+        self.assertEqual(sorted(keys1), ["foo1"])
+        self.assertEqual(keys1.has_next_page(), True)
+        self.assertTrue(isinstance(keys1.continuation, unicode))
+
+        keys2 = yield indexed_model.index_keys_page(
+            'a', 1, max_results=2, continuation=keys1.continuation)
+        self.assertEqual(sorted(keys2), ["foo2", "foo3"])
+        self.assertEqual(keys2.has_next_page(), True)
+
+        keys3 = yield keys2.next_page()
+        self.assertEqual(sorted(keys3), ["foo4"])
+        self.assertEqual(keys3.has_next_page(), False)
+
+    @Manager.calls_manager
     def test_index_keys_quoting(self):
         indexed_model = self.manager.proxy(IndexedModel)
         yield indexed_model("foo1", a=1, b=u"+one").save()

@@ -11,9 +11,57 @@ from vumi.utils import flatten_generator
 
 
 def to_unicode(text, encoding='utf-8'):
+    if isinstance(text, tuple):
+        return tuple(to_unicode(item, encoding) for item in text)
     if not isinstance(text, unicode):
-        text = text.decode(encoding)
+        return text.decode(encoding)
     return text
+
+
+class VumiIndexPage(object):
+    """
+    Wrapper around a page of index query results.
+
+    Iterating over this object will return the results for the current page.
+    """
+
+    def __init__(self, index_page):
+        self._index_page = index_page
+
+    def __iter__(self):
+        if self._index_page.stream:
+            raise NotImplementedError("Streaming is not currently supported.")
+        return (to_unicode(item) for item in self._index_page)
+
+    def __eq__(self, other):
+        return self._index_page.__eq__(other)
+
+    def has_next_page(self):
+        """
+        Indicate whether there are more results to follow.
+
+        :returns:
+            ``True`` if there are more results, ``False`` if this is the last
+            page.
+        """
+        return self._index_page.has_next_page()
+
+    @property
+    def continuation(self):
+        return to_unicode(self._index_page.continuation)
+
+    # Methods that touch the network.
+
+    def next_page(self):
+        """
+        Fetch the next page of results.
+
+        :returns:
+            A new :class:`VumiIndexPage` object containing the next page of
+            results.
+        """
+        result = self._index_page.next_page()
+        return type(self)(result)
 
 
 class VumiRiakBucket(object):
@@ -25,9 +73,18 @@ class VumiRiakBucket(object):
 
     # Methods that touch the network.
 
-    def get_index(self, index_name, start_value, end_value=None):
-        keys = self._riak_bucket.get_index(index_name, start_value, end_value)
-        return [to_unicode(key) for key in keys]
+    def get_index(self, index_name, start_value, end_value=None,
+                  return_terms=None):
+        keys = self.get_index_page(
+            index_name, start_value, end_value, return_terms=return_terms)
+        return list(keys)
+
+    def get_index_page(self, index_name, start_value, end_value=None,
+                       return_terms=None, max_results=None, continuation=None):
+        result = self._riak_bucket.get_index(
+            index_name, start_value, end_value, return_terms=return_terms,
+            max_results=max_results, continuation=continuation)
+        return VumiIndexPage(result)
 
 
 class VumiRiakObject(object):
