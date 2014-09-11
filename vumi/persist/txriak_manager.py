@@ -300,6 +300,11 @@ class TxRiakManager(Manager):
         bucket = self.client.bucket(bucket_name)
         return deferToThread(bucket.enable_search)
 
+    def riak_search_enabled(self, modelcls):
+        bucket_name = self.bucket_name(modelcls)
+        bucket = self.client.bucket(bucket_name)
+        return deferToThread(bucket.search_enabled)
+
     def should_quote_index_values(self):
         return False
 
@@ -310,10 +315,17 @@ class TxRiakManager(Manager):
             obj = bucket.get(key)
             obj.delete()
 
-        deletes = []
+        def purge_bucket(bucket):
+            key_deletes = []
+            for key in bucket.get_keys():
+                key_deletes.append(deferToThread(delete_obj, bucket, key))
+            d = gatherResults(key_deletes)
+            d.addCallback(lambda _: deferToThread(bucket.clear_properties))
+            return d
+
+        bucket_deletes = []
         buckets = yield deferToThread(self.client.get_buckets)
         for bucket in buckets:
             if bucket.name.startswith(self.bucket_prefix):
-                for key in bucket.get_keys():
-                    deletes.append(deferToThread(delete_obj, bucket, key))
-        yield gatherResults(deletes)
+                bucket_deletes.append(purge_bucket(bucket))
+        yield gatherResults(bucket_deletes)

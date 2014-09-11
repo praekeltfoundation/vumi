@@ -269,6 +269,11 @@ class RiakManager(Manager):
         bucket = self.client.bucket(bucket_name)
         return bucket.enable_search()
 
+    def riak_search_enabled(self, modelcls):
+        bucket_name = self.bucket_name(modelcls)
+        bucket = self.client.bucket(bucket_name)
+        return bucket.search_enabled()
+
     def should_quote_index_values(self):
         return False
 
@@ -279,3 +284,4 @@ class RiakManager(Manager):
                 for key in bucket.get_keys():
                     obj = bucket.get(key)
                     obj.delete()
+                bucket.clear_properties()
