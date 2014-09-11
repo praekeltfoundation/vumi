@@ -22,7 +22,7 @@ class TestMessageStoreResource(VumiTestCase):
             from vumi.components.message_store_resource import (
                 MessageStoreResourceWorker)
         except ImportError, e:
-            import_skip(e, 'riakasaurus', 'riakasaurus.riak')
+            import_skip(e, 'riak')
 
         self.worker_helper = self.add_helper(WorkerHelper())
 

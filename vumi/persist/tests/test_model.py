@@ -183,7 +183,7 @@ class TestModelOnTxRiak(VumiTestCase):
         try:
             from vumi.persist.txriak_manager import TxRiakManager
         except ImportError, e:
-            import_skip(e, 'riakasaurus', 'riakasaurus.riak')
+            import_skip(e, 'riak')
         self.manager = TxRiakManager.from_config({'bucket_prefix': 'test.'})
         self.add_cleanup(self.manager.purge_all)
         yield self.manager.purge_all()
@@ -199,8 +199,8 @@ class TestModelOnTxRiak(VumiTestCase):
 
     def get_model_indexes(self, model):
         indexes = {}
-        for index in model._riak_object.get_indexes():
-            indexes.setdefault(index.get_field(), []).append(index.get_value())
+        for name, value in model._riak_object.get_indexes():
+            indexes.setdefault(name, []).append(value)
         return indexes
 
     def test_simple_class(self):
@@ -212,7 +212,8 @@ class TestModelOnTxRiak(VumiTestCase):
     def test_repr(self):
         simple_model = self.manager.proxy(SimpleModel)
         s = simple_model("foo", a=1, b=u"bar")
-        self.assertEqual(repr(s),
+        self.assertEqual(
+            repr(s),
             "<SimpleModel $VERSION=None a=1 b=u'bar' key='foo'>")
 
     def test_get_data(self):
@@ -492,12 +493,108 @@ class TestModelOnTxRiak(VumiTestCase):
 
         keys = yield indexed_model.index_keys('a', 1)
         self.assertEqual(keys, ["foo1"])
+        # We should get a list object, not an IndexPage wrapper.
+        self.assertTrue(isinstance(keys, list))
 
         keys = yield indexed_model.index_keys('b', u"one")
         self.assertEqual(sorted(keys), ["foo1", "foo2"])
 
         keys = yield indexed_model.index_keys('b', None)
         self.assertEqual(keys, ["foo3"])
+
+    @Manager.calls_manager
+    def test_index_keys_return_terms(self):
+        indexed_model = self.manager.proxy(IndexedModel)
+        yield indexed_model("foo1", a=1, b=u"one").save()
+        yield indexed_model("foo2", a=2, b=u"one").save()
+        yield indexed_model("foo3", a=2, b=None).save()
+
+        keys = yield indexed_model.index_keys('a', 1, return_terms=True)
+        self.assertEqual(keys, [("1", "foo1")])
+
+        keys = yield indexed_model.index_keys('b', u"one", return_terms=True)
+        self.assertEqual(sorted(keys), [(u"one", "foo1"), (u"one", "foo2")])
+
+        keys = yield indexed_model.index_keys('b', None)
+        self.assertEqual(list(keys), ["foo3"])
+
+    @Manager.calls_manager
+    def test_index_keys_range(self):
+        indexed_model = self.manager.proxy(IndexedModel)
+        yield indexed_model("foo1", a=1, b=u"one").save()
+        yield indexed_model("foo2", a=2, b=u"one").save()
+        yield indexed_model("foo3", a=3, b=None).save()
+
+        keys = yield indexed_model.index_keys('a', 1, 2)
+        self.assertEqual(sorted(keys), ["foo1", "foo2"])
+
+        keys = yield indexed_model.index_keys('a', 2, 3)
+        self.assertEqual(sorted(keys), ["foo2", "foo3"])
+
+    @Manager.calls_manager
+    def test_index_keys_range_return_terms(self):
+        indexed_model = self.manager.proxy(IndexedModel)
+        yield indexed_model("foo1", a=1, b=u"one").save()
+        yield indexed_model("foo2", a=2, b=u"one").save()
+        yield indexed_model("foo3", a=3, b=None).save()
+
+        keys = yield indexed_model.index_keys('a', 1, 2, return_terms=True)
+        self.assertEqual(sorted(keys), [("1", "foo1"), ("2", "foo2")])
+
+        keys = yield indexed_model.index_keys('a', 2, 3, return_terms=True)
+        self.assertEqual(sorted(keys), [("2", "foo2"), ("3", "foo3")])
+
+    @Manager.calls_manager
+    def test_index_keys_page(self):
+        indexed_model = self.manager.proxy(IndexedModel)
+        yield indexed_model("foo1", a=1, b=u"one").save()
+        yield indexed_model("foo2", a=1, b=u"one").save()
+        yield indexed_model("foo3", a=1, b=None).save()
+        yield indexed_model("foo4", a=1, b=None).save()
+
+        keys1 = yield indexed_model.index_keys_page('a', 1, max_results=2)
+        self.assertEqual(sorted(keys1), ["foo1", "foo2"])
+        self.assertEqual(keys1.has_next_page(), True)
+
+        keys2 = yield keys1.next_page()
+        self.assertEqual(sorted(keys2), ["foo3", "foo4"])
+        self.assertEqual(keys2.has_next_page(), True)
+
+        keys3 = yield keys2.next_page()
+        self.assertEqual(sorted(keys3), [])
+        self.assertEqual(keys3.has_next_page(), False)
+
+    @Manager.calls_manager
+    def test_index_keys_page_explicit_continuation(self):
+        indexed_model = self.manager.proxy(IndexedModel)
+        yield indexed_model("foo1", a=1, b=u"one").save()
+        yield indexed_model("foo2", a=1, b=u"one").save()
+        yield indexed_model("foo3", a=1, b=None).save()
+        yield indexed_model("foo4", a=1, b=None).save()
+
+        keys1 = yield indexed_model.index_keys_page('a', 1, max_results=1)
+        self.assertEqual(sorted(keys1), ["foo1"])
+        self.assertEqual(keys1.has_next_page(), True)
+        self.assertTrue(isinstance(keys1.continuation, unicode))
+
+        keys2 = yield indexed_model.index_keys_page(
+            'a', 1, max_results=2, continuation=keys1.continuation)
+        self.assertEqual(sorted(keys2), ["foo2", "foo3"])
+        self.assertEqual(keys2.has_next_page(), True)
+
+        keys3 = yield keys2.next_page()
+        self.assertEqual(sorted(keys3), ["foo4"])
+        self.assertEqual(keys3.has_next_page(), False)
+        
+    @Manager.calls_manager
+    def test_index_keys_page_none_continuation(self):
+        indexed_model = self.manager.proxy(IndexedModel)
+        yield indexed_model("foo1", a=1, b=u'one').save()
+        
+        keys1 = yield indexed_model.index_keys_page('a', 1, max_results=2)
+        self.assertEqual(sorted(keys1), ['foo1'])
+        self.assertEqual(keys1.has_next_page(), False)
+        self.assertEqual(keys1.continuation, None)
 
     @Manager.calls_manager
     def test_index_keys_quoting(self):
@@ -536,19 +633,25 @@ class TestModelOnTxRiak(VumiTestCase):
         yield indexed_model("foo3", a=2, b=None).save()
 
         match = indexed_model.index_match
-        yield self.assert_mapreduce_results(["foo1"], match,
+        yield self.assert_mapreduce_results(
+            ["foo1"], match,
             [{'key': 'b', 'pattern': 'one', 'flags': 'i'}], 'a', 1)
-        yield self.assert_mapreduce_results(["foo1", "foo2"], match,
+        yield self.assert_mapreduce_results(
+            ["foo1", "foo2"], match,
             [{'key': 'b', 'pattern': 'one', 'flags': 'i'}], 'b', u"one")
-        yield self.assert_mapreduce_results(["foo3"], match,
+        yield self.assert_mapreduce_results(
+            ["foo3"], match,
             [{'key': 'a', 'pattern': '2', 'flags': 'i'}], 'b', None)
         # test with non-existent key
-        yield self.assert_mapreduce_results([], match,
+        yield self.assert_mapreduce_results(
+            [], match,
             [{'key': 'foo', 'pattern': 'one', 'flags': 'i'}], 'a', 1)
         # test case sensitivity
-        yield self.assert_mapreduce_results(['foo1'], match,
+        yield self.assert_mapreduce_results(
+            ['foo1'], match,
             [{'key': 'b', 'pattern': 'ONE', 'flags': 'i'}], 'a', 1)
-        yield self.assert_mapreduce_results([], match,
+        yield self.assert_mapreduce_results(
+            [], match,
             [{'key': 'b', 'pattern': 'ONE', 'flags': ''}], 'a', 1)
 
     @Manager.calls_manager
@@ -695,7 +798,7 @@ class TestModelOnTxRiak(VumiTestCase):
         f1.simple.set(s1)
         yield s1.save()
         yield f1.save()
-        self.assertEqual(f1._riak_object._data['simple'], s1.key)
+        self.assertEqual(f1._riak_object.get_data()['simple'], s1.key)
 
         f2 = yield fk_model.load("bar")
         s2 = yield f2.simple.get()
@@ -727,7 +830,9 @@ class TestModelOnTxRiak(VumiTestCase):
         # Create index directly and remove data field to simulate old-style
         # index-only implementation
         f1._riak_object.add_index('simple_bin', s1.key)
-        f1._riak_object._data.pop('simple')
+        data = f1._riak_object.get_data()
+        data.pop('simple')
+        f1._riak_object.set_data(data)
         yield s1.save()
         yield f1.save()
 
@@ -786,7 +891,7 @@ class TestModelOnTxRiak(VumiTestCase):
         m1.simples.add(s1)
         yield s1.save()
         yield m1.save()
-        self.assertEqual(m1._riak_object._data['simples'], [s1.key])
+        self.assertEqual(m1._riak_object.get_data()['simples'], [s1.key])
 
         m2 = yield mm_model.load("bar")
         [s2] = yield self.load_all_bunches_flat(m2.simples)
@@ -837,7 +942,9 @@ class TestModelOnTxRiak(VumiTestCase):
         m1._riak_object.add_index('simples_bin', s1.key)
         # Manually remove the entry from the data dict to allow it to be
         # set from the index value in descriptor.clean()
-        m1._riak_object._data.pop('simples')
+        data = m1._riak_object.get_data()
+        data.pop('simples')
+        m1._riak_object.set_data(data)
 
         yield s1.save()
         yield m1.save()

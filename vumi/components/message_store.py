@@ -139,8 +139,8 @@ class MessageStore(object):
     def reconcile_cache(self, batch_id):
         yield self.cache.clear_batch(batch_id)
         yield self.cache.batch_start(batch_id)
-        yield self.reconcile_inbound_cache(batch_id)
         yield self.reconcile_outbound_cache(batch_id)
+        yield self.reconcile_inbound_cache(batch_id)
 
     @Manager.calls_manager
     def reconcile_inbound_cache(self, batch_id):
@@ -328,7 +328,7 @@ class MessageStore(object):
 
     @inlineCallbacks
     def find_inbound_keys_matching(self, batch_id, query, ttl=None,
-                                    wait=False):
+                                   wait=False):
         """
         Has the message search issue a `batch_inbound_keys_matching()`
         query and stores the resulting keys in the cache ordered by

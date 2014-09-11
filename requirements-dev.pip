@@ -1,5 +1,3 @@
-Sphinx==1.0.7
-repoze.sphinx.autointerface
 coverage
 python-subunit
 junitxml

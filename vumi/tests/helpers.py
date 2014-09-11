@@ -1259,15 +1259,7 @@ class PersistenceHelper(object):
                     yield self._purge_riak(manager)
                 except ConnectionRefusedError:
                     pass
-
-        # Hackily close all connections left open by the non-tx riak client.
-        # There's no other way to explicitly close these connections and not
-        # doing it means we can hit server-side connection limits in the middle
-        # of large test runs.
-        for manager in self._riak_managers:
-            if hasattr(manager.client, '_cm'):
-                while manager.client._cm.conns:
-                    manager.client._cm.conns.pop().close()
+            yield manager.close_manager()
 
         for purge, manager in self._get_redis_managers_for_cleanup():
             if purge:
@@ -1350,7 +1342,7 @@ class PersistenceHelper(object):
         try:
             from vumi.persist.txriak_manager import TxRiakManager
         except ImportError, e:
-            import_filter(e, 'riakasaurus', 'riakasaurus.riak')
+            import_filter(e, 'riak')
             return
 
         orig_init = TxRiakManager.__init__
@@ -1433,7 +1425,7 @@ class PersistenceHelper(object):
         try:
             from vumi.persist.txriak_manager import TxRiakManager
         except ImportError, e:
-            import_skip(e, 'riakasaurus', 'riakasaurus.riak')
+            import_skip(e, 'riak')
 
         return TxRiakManager.from_config(config)
 

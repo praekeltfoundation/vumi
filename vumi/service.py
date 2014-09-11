@@ -55,7 +55,7 @@ class AmqpFactory(protocol.ReconnectingClientFactory):
         return self.amqp_client
 
     def clientConnectionFailed(self, connector, reason):
-        log.err("Connection failed: %r" % (reason,))
+        log.err("AmqpFactory connection failed (%s)" % (reason.getErrorMessage(),))
         self.worker._amqp_connection_failed()
         self.amqp_client = None
         protocol.ReconnectingClientFactory.clientConnectionFailed(
@@ -65,7 +65,7 @@ class AmqpFactory(protocol.ReconnectingClientFactory):
         if not self.worker.running:
             # We've specifically asked for this disconnect.
             return
-        log.err("Client connection lost: %r" % (reason,))
+        log.err("AmqpFactory client connection lost (%s)" % (reason.getErrorMessage(),))
         self.worker._amqp_connection_failed()
         self.amqp_client = None
         protocol.ReconnectingClientFactory.clientConnectionLost(

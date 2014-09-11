@@ -67,6 +67,12 @@ class IDeliverShortMessageProcessor(Interface):
         ``short_message`` field.
         """
 
+    def dcs_decode(obj, data_coding):
+        """
+        Decode a byte string and return the unicode string for it according
+        to the specified data coding.
+        """
+
 
 class ISubmitShortMessageProcessor(Interface):
 

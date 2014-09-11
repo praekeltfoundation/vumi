@@ -8,6 +8,7 @@ import resource
 import pkg_resources
 import logging
 from collections import defaultdict
+from datetime import datetime
 
 from OpenSSL.SSL import (
     VERIFY_PEER, VERIFY_FAIL_IF_NO_PEER_CERT, VERIFY_NONE,
@@ -379,6 +380,14 @@ class TestSandbox(SandboxTestCaseBase):
         ack = self.app_helper.make_ack(sandbox_id='sandbox1')
         ack.set_routing_endpoint('foo')
         return self.event_dispatch_check(ack)
+
+    def test_sandbox_command_does_not_parse_timestamps(self):
+        # We should serialise datetime objects correctly.
+        timestamp = datetime(2014, 07, 18, 15, 0, 0)
+        json_cmd = SandboxCommand(cmd='foo', timestamp=timestamp).to_json()
+        # We should not parse timestamp-like strings into datetime objects.
+        cmd = SandboxCommand.from_json(json_cmd)
+        self.assertEqual(cmd['timestamp'], "2014-07-18 15:00:00.000000")
 
 
 class JsSandboxTestMixin(object):

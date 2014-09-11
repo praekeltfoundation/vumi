@@ -77,47 +77,29 @@ class TestRiakManager(CommonRiakManagerTests, VumiTestCase):
         self.assertEqual([d.key for d in results], expected_keys)
         mr_results.sort(key=lambda model_instance: model_instance.key)
         self.assertEqual([model.key for model in mr_results], expected_keys)
-        self.assertEqual([model.get_data() for model in mr_results],
+        self.assertEqual(
+            [model.get_data() for model in mr_results],
             expected_data)
 
     def test_transport_class_protocol_buffer(self):
         manager_class = type(self.manager)
         manager = manager_class.from_config({
-            'transport_type': 'protocol_buffer',
+            'transport_type': 'pbc',
             'bucket_prefix': 'test.',
-            })
-        from riak import RiakPbcTransport
-        self.assertEqual(type(manager.client._transport), RiakPbcTransport)
+        })
+        self.assertEqual(manager.client.protocol, 'pbc')
 
     def test_transport_class_http(self):
         manager_class = type(self.manager)
         manager = manager_class.from_config({
             'transport_type': 'http',
             'bucket_prefix': 'test.',
-            })
-        from riak import RiakHttpTransport
-        self.assertEqual(type(manager.client._transport), RiakHttpTransport)
+        })
+        self.assertEqual(manager.client.protocol, 'http')
 
     def test_transport_class_default(self):
         manager_class = type(self.manager)
         manager = manager_class.from_config({
             'bucket_prefix': 'test.',
-            })
-        from riak import RiakHttpTransport
-        self.assertEqual(type(manager.client._transport), RiakHttpTransport)
-
-    @Manager.calls_manager
-    def test_json_decoding(self):
-        # Some versions of the riak client library use simplejson by
-        # preference, which breaks some of our unicode assumptions. This test
-        # only fails when such a version is being used and our workaround
-        # fails. If we're using a good version of the client library, the test
-        # will pass even if the workaround fails.
-
-        dummy1 = self.mkdummy("foo", {"a": "b"})
-        result1 = yield self.manager.store(dummy1)
-        self.assertTrue(isinstance(result1.get_data()["a"], unicode))
-
-        dummy2 = yield self.manager.load(DummyModel, "foo")
-        self.assertEqual(dummy2.get_data(), {"a": "b"})
-        self.assertTrue(isinstance(dummy2.get_data()["a"], unicode))
+        })
+        self.assertEqual(manager.client.protocol, 'http')

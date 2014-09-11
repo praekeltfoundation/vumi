@@ -241,11 +241,10 @@ class EsmeTestCase(VumiTestCase):
 
     @inlineCallbacks
     def test_deliver_sm_fail(self):
-        self.patch(DeliverShortMessageProcessor, 'decode_pdus',
-                   lambda *a: [str('not a unicode string')])
         transport, protocol = yield self.setup_bind()
         pdu = DeliverSM(
-            sequence_number=0, message_id='foo', short_message='bar')
+            sequence_number=0, message_id='foo', data_coding=4,
+            short_message='string with unknown data coding')
         protocol.dataReceived(pdu.get_bin())
         [deliver_sm_resp] = yield wait_for_pdus(transport, 1)
         self.assertCommand(
@@ -254,13 +253,12 @@ class EsmeTestCase(VumiTestCase):
 
     @inlineCallbacks
     def test_deliver_sm_fail_with_custom_error(self):
-        self.patch(DeliverShortMessageProcessor, 'decode_pdus',
-                   lambda *a: [str('not a unicode string')])
         transport, protocol = yield self.setup_bind(config={
             "deliver_sm_decoding_error": "ESME_RSYSERR"
         })
         pdu = DeliverSM(
-            sequence_number=0, message_id='foo', short_message='bar')
+            sequence_number=0, message_id='foo', data_coding=4,
+            short_message='string with unknown data coding')
         protocol.dataReceived(pdu.get_bin())
         [deliver_sm_resp] = yield wait_for_pdus(transport, 1)
         self.assertCommand(
