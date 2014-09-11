@@ -13,6 +13,10 @@ class ModelMigrationError(VumiError):
     pass
 
 
+class VumiRiakError(VumiError):
+    pass
+
+
 class ModelMetaClass(type):
     def __new__(mcs, name, bases, dict):
         # set default bucket suffix
