@@ -219,6 +219,24 @@ class CommonRiakManagerTests(object):
         self.assertEqual(result, None)
 
     @Manager.calls_manager
+    def test_purge_all_clears_bucket_properties(self):
+        search_enabled = yield self.manager.riak_search_enabled(DummyModel)
+        self.assertEqual(search_enabled, False)
+
+        yield self.manager.riak_enable_search(DummyModel)
+        search_enabled = yield self.manager.riak_search_enabled(DummyModel)
+        self.assertEqual(search_enabled, True)
+
+        # We need at least one key in here so the bucket can be found and
+        # purged.
+        dummy = self.mkdummy("foo", {"baz": 0})
+        yield self.manager.store(dummy)
+
+        yield self.manager.purge_all()
+        search_enabled = yield self.manager.riak_search_enabled(DummyModel)
+        self.assertEqual(search_enabled, False)
+
+    @Manager.calls_manager
     def test_json_decoding(self):
         # Some versions of the riak client library use simplejson by
         # preference, which breaks some of our unicode assumptions. This test
