@@ -12,8 +12,7 @@ from vumi.message import TransportUserMessage
 from vumi.transports.smpp.iprocessors import (
     IDeliveryReportProcessor, IDeliverShortMessageProcessor,
     ISubmitShortMessageProcessor)
-from vumi.transports.smpp.smpp_utils import (
-    unpacked_pdu_opts, detect_ussd, decode_message, decode_pdus)
+from vumi.transports.smpp.smpp_utils import (unpacked_pdu_opts, detect_ussd)
 
 
 class DeliveryReportProcessorConfig(Config):
@@ -134,13 +133,92 @@ class DeliverShortMessageProcessorConfig(Config):
 
 
 class DeliverShortMessageProcessor(object):
+    """
+    Messages can arrive with one of a number of specified
+    encodings. We only handle a subset of these.
+
+    From the SMPP spec:
+
+    00000000 (0) SMSC Default Alphabet
+    00000001 (1) IA5(CCITTT.50)/ASCII(ANSIX3.4)
+    00000010 (2) Octet unspecified (8-bit binary)
+    00000011 (3) Latin1(ISO-8859-1)
+    00000100 (4) Octet unspecified (8-bit binary)
+    00000101 (5) JIS(X0208-1990)
+    00000110 (6) Cyrllic(ISO-8859-5)
+    00000111 (7) Latin/Hebrew (ISO-8859-8)
+    00001000 (8) UCS2(ISO/IEC-10646)
+    00001001 (9) PictogramEncoding
+    00001010 (10) ISO-2022-JP(MusicCodes)
+    00001011 (11) reserved
+    00001100 (12) reserved
+    00001101 (13) Extended Kanji JIS(X 0212-1990)
+    00001110 (14) KSC5601
+    00001111 (15) reserved
+
+    Particularly problematic are the "Octet unspecified" encodings.
+    """
+
     implements(IDeliverShortMessageProcessor)
     CONFIG_CLASS = DeliverShortMessageProcessorConfig
 
     def __init__(self, transport, config):
         self.transport = transport
         self.redis = transport.redis
+        self.codec = transport.get_static_config().codec_class()
         self.config = self.CONFIG_CLASS(config, static=True)
+
+        self.data_coding_map = {
+            1: 'ascii',
+            3: 'latin1',
+            # http://www.herongyang.com/Unicode/JIS-ISO-2022-JP-Encoding.html
+            5: 'iso2022_jp',
+            6: 'iso8859_5',
+            7: 'iso8859_8',
+            # Actually UCS-2, but close enough.
+            8: 'utf-16be',
+            # http://en.wikipedia.org/wiki/Short_Message_Peer-to-Peer
+            9: 'shift_jis',
+            10: 'iso2022_jp'
+        }
+        self.data_coding_map.update(self.config.data_coding_overrides)
+
+    def dcs_decode(self, obj, data_coding):
+        codec_name = self.data_coding_map.get(data_coding, None)
+        if codec_name is None:
+            log.msg("WARNING: Not decoding message with data_coding=%s" % (
+                    data_coding,))
+            return obj
+        elif obj is None:
+            log.msg(
+                "WARNING: Not decoding `None` message with data_coding=%s" % (
+                    data_coding,))
+            return obj
+
+        try:
+            return self.codec.decode(obj, codec_name)
+        except UnicodeDecodeError, e:
+            log.msg("Error decoding message with data_coding=%s" % (
+                data_coding,))
+            log.err(e)
+        return obj
+
+    def decode_pdus(self, pdus):
+        content = []
+        for pdu in pdus:
+            pdu_params = pdu['body']['mandatory_parameters']
+            pdu_opts = unpacked_pdu_opts(pdu)
+
+            # We might have a `message_payload` optional field to worry about.
+            message_payload = pdu_opts.get('message_payload', None)
+            if message_payload is not None:
+                short_message = message_payload.decode('hex')
+            else:
+                short_message = pdu_params['short_message']
+
+            content.append(
+                self.dcs_decode(short_message, pdu_params['data_coding']))
+        return content
 
     def handle_short_message_content(self, source_addr, destination_addr,
                                      short_message, **kw):
@@ -185,8 +263,8 @@ class DeliverShortMessageProcessor(object):
             log.msg("Reassembled Message: %s" % (completed['message']))
             # We assume that all parts have the same data_coding here, because
             # otherwise there's nothing sensible we can do.
-            decoded_msg = self.decode_message(completed['message'],
-                                              pdu_params['data_coding'])
+            decoded_msg = self.dcs_decode(completed['message'],
+                                          pdu_params['data_coding'])
             # and we can finally pass the whole message on
             yield self.handle_short_message_content(
                 source_addr=completed['from_msisdn'],
@@ -239,8 +317,8 @@ class DeliverShortMessageProcessor(object):
             # We have an explicit "end session" flag.
             session_event = 'close'
 
-        decoded_msg = self.decode_message(pdu_params['short_message'],
-                                          pdu_params['data_coding'])
+        decoded_msg = self.dcs_decode(pdu_params['short_message'],
+                                      pdu_params['data_coding'])
         return self.handle_short_message_content(
             source_addr=pdu_params['source_addr'],
             destination_addr=pdu_params['destination_addr'],
@@ -248,13 +326,6 @@ class DeliverShortMessageProcessor(object):
             message_type='ussd',
             session_event=session_event,
             session_info=session_info)
-
-    def decode_pdus(self, pdus):
-        return decode_pdus(pdus, self.config.data_coding_overrides)
-
-    def decode_message(self, message, data_coding):
-        return decode_message(
-            message, data_coding, self.config.data_coding_overrides)
 
     def _hex_for_redis(self, data_dict):
         for index, part in data_dict.items():

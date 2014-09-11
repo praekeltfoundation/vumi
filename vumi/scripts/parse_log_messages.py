@@ -1,6 +1,7 @@
 # -*- test-case-name: vumi.scripts.tests.test_parse_log_messages -*-
 import sys
 import re
+import json
 import warnings
 from twisted.python import usage
 from twisted.internet import reactor
@@ -22,7 +23,13 @@ LOG_PATTERN = {
     'smpp_outbound': re.compile(
         r'(?P<date>[\d\-\:\s]+)\+0000 .* '
         r'Consumed outgoing message <Message payload="(?P<message>.*)">'),
-    }
+    'dispatcher_inbound_message': re.compile(
+        r'(?P<date>[\d\-\:\s]+)\+0000 Processed inbound message for [a-zA-Z0-9_]+: (?P<message>.*)'),
+    'dispatcher_outbound_message': re.compile(
+        r'(?P<date>[\d\-\:\s]+)\+0000 Processed outbound message for [a-zA-Z0-9_]+: (?P<message>.*)'),
+    'dispatcher_event': re.compile(
+        r'(?P<date>[\d\-\:\s]+)\+0000 Processed event message for [a-zA-Z0-9_]+: (?P<message>.*)'),
+}
 
 
 class Options(usage.Options):
@@ -109,7 +116,12 @@ class LogParser(object):
                 return
             if self.stop and date > self.stop:
                 return
-            self.emit(to_json(eval(data['message'])))
+            try:
+                # JSON
+                self.emit(to_json(json.loads(data['message'])))
+            except:
+                # Raw dict being printed
+                self.emit(to_json(eval(data['message'])))
 
 
 if __name__ == '__main__':

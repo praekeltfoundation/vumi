@@ -21,7 +21,7 @@ class TestMessageStoreBase(VumiTestCase):
         try:
             from vumi.components.message_store import MessageStore
         except ImportError, e:
-            import_skip(e, 'riakasaurus', 'riakasaurus.riak')
+            import_skip(e, 'riak')
         self.redis = yield self.persistence_helper.get_redis_manager()
         self.manager = self.persistence_helper.get_riak_manager()
         self.store = MessageStore(self.manager, self.redis)
@@ -50,7 +50,7 @@ class TestMessageStoreBase(VumiTestCase):
 
     @inlineCallbacks
     def _create_inbound(self, tag=("pool", "tag"), by_batch=False,
-                            content='inbound foo'):
+                        content='inbound foo'):
         """Create and store an inbound message."""
         add_kw, batch_id = yield self._maybe_batch(tag, by_batch)
         msg = self.msg_helper.make_inbound(
@@ -61,7 +61,7 @@ class TestMessageStoreBase(VumiTestCase):
 
     @inlineCallbacks
     def create_outbound_messages(self, batch_id, count, start_timestamp=None,
-                                    time_multiplier=10):
+                                 time_multiplier=10):
         # Store via message_store
         now = start_timestamp or datetime.now()
         messages = []
@@ -74,7 +74,7 @@ class TestMessageStoreBase(VumiTestCase):
 
     @inlineCallbacks
     def create_inbound_messages(self, batch_id, count, start_timestamp=None,
-                                    time_multiplier=10):
+                                time_multiplier=10):
         # Store via message_store
         now = start_timestamp or datetime.now()
         messages = []
@@ -86,7 +86,7 @@ class TestMessageStoreBase(VumiTestCase):
         returnValue(messages)
 
     def _batch_status(self, ack=0, nack=0, delivered=0, failed=0, pending=0,
-                        sent=0):
+                      sent=0):
         return {
             'ack': ack, 'nack': nack, 'sent': sent,
             'delivery_report': sum([delivered, failed, pending]),
@@ -378,28 +378,32 @@ class TestMessageStore(TestMessageStoreBase):
     @inlineCallbacks
     def test_inbound_keys_matching(self):
         msg_id, msg, batch_id = yield self._create_inbound(content='hello')
-        self.assertEqual([msg_id],
+        self.assertEqual(
+            [msg_id],
             (yield self.store.batch_inbound_keys_matching(batch_id, query=[{
                 'key': 'msg.content',
                 'pattern': 'hell.+',
                 'flags': 'i',
             }])))
         # test case sensitivity
-        self.assertEqual([],
+        self.assertEqual(
+            [],
             (yield self.store.batch_inbound_keys_matching(batch_id, query=[{
                 'key': 'msg.content',
                 'pattern': 'HELLO',
                 'flags': '',
             }])))
         # the inbound from_addr has a leading +, it needs to be escaped
-        self.assertEqual([msg_id],
+        self.assertEqual(
+            [msg_id],
             (yield self.store.batch_inbound_keys_matching(batch_id, query=[{
                 'key': 'msg.from_addr',
                 'pattern': "\%s" % (msg.payload['from_addr'],),
                 'flags': 'i',
             }])))
         # the outbound to_addr has a leading +, it needs to be escaped
-        self.assertEqual([msg_id],
+        self.assertEqual(
+            [msg_id],
             (yield self.store.batch_inbound_keys_matching(batch_id, query=[{
                 'key': 'msg.to_addr',
                 'pattern': "\%s" % (msg.payload['to_addr'],),
@@ -409,27 +413,31 @@ class TestMessageStore(TestMessageStoreBase):
     @inlineCallbacks
     def test_outbound_keys_matching(self):
         msg_id, msg, batch_id = yield self._create_outbound(content='hello')
-        self.assertEqual([msg_id],
+        self.assertEqual(
+            [msg_id],
             (yield self.store.batch_outbound_keys_matching(batch_id, query=[{
                 'key': 'msg.content',
                 'pattern': 'hell.+',
                 'flags': 'i',
             }])))
         # test case sensitivity
-        self.assertEqual([],
+        self.assertEqual(
+            [],
             (yield self.store.batch_outbound_keys_matching(batch_id, query=[{
                 'key': 'msg.content',
                 'pattern': 'HELLO',
                 'flags': '',
             }])))
-        self.assertEqual([msg_id],
+        self.assertEqual(
+            [msg_id],
             (yield self.store.batch_outbound_keys_matching(batch_id, query=[{
                 'key': 'msg.from_addr',
                 'pattern': msg.payload['from_addr'],
                 'flags': 'i',
             }])))
         # the outbound to_addr has a leading +, it needs to be escaped
-        self.assertEqual([msg_id],
+        self.assertEqual(
+            [msg_id],
             (yield self.store.batch_outbound_keys_matching(batch_id, query=[{
                 'key': 'msg.to_addr',
                 'pattern': "\%s" % (msg.payload['to_addr'],),
@@ -522,20 +530,20 @@ class TestMessageStoreCache(TestMessageStoreBase):
     @inlineCallbacks
     def test_cache_add_outbound_message(self):
         msg_id, msg, batch_id = yield self._create_outbound()
-        [cached_msg_id] = (yield
-            self.store.cache.get_outbound_message_keys(batch_id))
-        [cached_to_addr] = (yield
-            self.store.cache.get_to_addrs(batch_id))
+        [cached_msg_id] = (
+            yield self.store.cache.get_outbound_message_keys(batch_id))
+        [cached_to_addr] = (
+            yield self.store.cache.get_to_addrs(batch_id))
         self.assertEqual(msg_id, cached_msg_id)
         self.assertEqual(msg['to_addr'], cached_to_addr)
 
     @inlineCallbacks
     def test_cache_add_inbound_message(self):
         msg_id, msg, batch_id = yield self._create_inbound()
-        [cached_msg_id] = (yield
-            self.store.cache.get_inbound_message_keys(batch_id))
-        [cached_from_addr] = (yield
-            self.store.cache.get_from_addrs(batch_id))
+        [cached_msg_id] = (
+            yield self.store.cache.get_inbound_message_keys(batch_id))
+        [cached_from_addr] = (
+            yield self.store.cache.get_from_addrs(batch_id))
         self.assertEqual(msg_id, cached_msg_id)
         self.assertEqual(msg['from_addr'], cached_from_addr)
 
@@ -591,14 +599,50 @@ class TestMessageStoreCache(TestMessageStoreBase):
         # Default reconciliation delta should return True
         self.assertTrue((yield self.store.needs_reconciliation(batch_id)))
         yield self.store.reconcile_cache(batch_id)
-        # Default reconciliation delta should return True
+        # Reconciliation check should return False after recon.
         self.assertFalse((yield self.store.needs_reconciliation(batch_id)))
-        # Stricted possible reconciliation delta should return True
-        self.assertFalse((yield self.store.needs_reconciliation(batch_id,
-            delta=0)))
+        self.assertFalse(
+            (yield self.store.needs_reconciliation(batch_id, delta=0)))
         batch_status = yield self.store.batch_status(batch_id)
         self.assertEqual(batch_status['ack'], 10)
         self.assertEqual(batch_status['sent'], 10)
+
+    @inlineCallbacks
+    def test_reconcile_cache_and_switch_to_counters(self):
+        batch_id = yield self.store.batch_start([("pool", "tag")])
+        cache = self.store.cache
+
+        # Clear the cache and restart the batch without counters.
+        yield cache.clear_batch(batch_id)
+        yield cache.batch_start(batch_id, use_counters=False)
+
+        # Store via message_store
+        messages = yield self.create_outbound_messages(batch_id, 10)
+        for msg in messages:
+            ack = self.msg_helper.make_ack(msg)
+            yield self.store.add_event(ack)
+
+        # This will fail if we're using counter-based events with a ZSET.
+        events_scard = yield cache.redis.scard(cache.event_key(batch_id))
+        self.assertEqual(events_scard, 10)
+
+        yield self.clear_cache(self.store)
+        batch_status = yield self.store.batch_status(batch_id)
+        self.assertEqual(batch_status, {})
+        # Default reconciliation delta should return True
+        self.assertTrue((yield self.store.needs_reconciliation(batch_id)))
+        yield self.store.reconcile_cache(batch_id)
+        # Reconciliation check should return False after recon.
+        self.assertFalse((yield self.store.needs_reconciliation(batch_id)))
+        self.assertFalse(
+            (yield self.store.needs_reconciliation(batch_id, delta=0)))
+        batch_status = yield self.store.batch_status(batch_id)
+        self.assertEqual(batch_status['ack'], 10)
+        self.assertEqual(batch_status['sent'], 10)
+
+        # This will fail if we're using old-style events with a SET.
+        events_zcard = yield cache.redis.zcard(cache.event_key(batch_id))
+        self.assertEqual(events_zcard, 10)
 
     @inlineCallbacks
     def test_find_inbound_keys_matching(self):
@@ -608,17 +652,17 @@ class TestMessageStoreCache(TestMessageStoreBase):
         messages = yield self.create_inbound_messages(batch_id, 10)
 
         token = yield self.store.find_inbound_keys_matching(batch_id, [{
-                'key': 'msg.content',
-                'pattern': '.*',
-                'flags': 'i',
-            }], wait=True)
+            'key': 'msg.content',
+            'pattern': '.*',
+            'flags': 'i',
+        }], wait=True)
 
         keys = yield self.store.get_keys_for_token(batch_id, token)
-        in_progress = yield self.store.cache.is_query_in_progress(batch_id,
-                                                                    token)
+        in_progress = yield self.store.cache.is_query_in_progress(
+            batch_id, token)
         self.assertEqual(len(keys), 10)
-        self.assertEqual(10,
-            (yield self.store.count_keys_for_token(batch_id, token)))
+        self.assertEqual(
+            10, (yield self.store.count_keys_for_token(batch_id, token)))
         self.assertEqual(keys, [msg['message_id'] for msg in messages])
         self.assertFalse(in_progress)
 
@@ -630,17 +674,17 @@ class TestMessageStoreCache(TestMessageStoreBase):
         messages = yield self.create_outbound_messages(batch_id, 10)
 
         token = yield self.store.find_outbound_keys_matching(batch_id, [{
-                'key': 'msg.content',
-                'pattern': '.*',
-                'flags': 'i',
-            }], wait=True)
+            'key': 'msg.content',
+            'pattern': '.*',
+            'flags': 'i',
+        }], wait=True)
 
         keys = yield self.store.get_keys_for_token(batch_id, token)
-        in_progress = yield self.store.cache.is_query_in_progress(batch_id,
-                                                                    token)
+        in_progress = yield self.store.cache.is_query_in_progress(
+            batch_id, token)
         self.assertEqual(len(keys), 10)
-        self.assertEqual(10,
-            (yield self.store.count_keys_for_token(batch_id, token)))
+        self.assertEqual(
+            10, (yield self.store.count_keys_for_token(batch_id, token)))
         self.assertEqual(keys, [msg['message_id'] for msg in messages])
         self.assertFalse(in_progress)
 
@@ -658,7 +702,7 @@ class TestMessageStoreCache(TestMessageStoreBase):
         messages = yield self.create_inbound_messages(batch_id, 10)
 
         results = dict((yield self.store.get_inbound_message_keys(
-                                batch_id, with_timestamp=True)))
+            batch_id, with_timestamp=True)))
         for msg in messages:
             found = results[msg['message_id']]
             expected = time.mktime(msg['timestamp'].timetuple())
@@ -678,7 +722,7 @@ class TestMessageStoreCache(TestMessageStoreBase):
         messages = yield self.create_outbound_messages(batch_id, 10)
 
         results = dict((yield self.store.get_outbound_message_keys(
-                                batch_id, with_timestamp=True)))
+            batch_id, with_timestamp=True)))
         for msg in messages:
             found = results[msg['message_id']]
             expected = time.mktime(msg['timestamp'].timetuple())

@@ -32,8 +32,7 @@ from vumi.application.base import ApplicationWorker
 from vumi.message import Message
 from vumi.errors import ConfigError
 from vumi.persist.txredis_manager import TxRedisManager
-from vumi.utils import (
-    load_class_by_string, HttpDataLimitError)
+from vumi.utils import load_class_by_string, HttpDataLimitError, to_kwargs
 from vumi import log
 from vumi.application.sandbox_rlimiter import SandboxRlimiter
 
@@ -1101,6 +1100,11 @@ class SandboxCommand(Message):
             'cmd_id',
             'reply',
         )
+
+    @classmethod
+    def from_json(cls, json_string):
+        # We override this to avoid the datetime conversions.
+        return cls(_process_fields=False, **to_kwargs(json.loads(json_string)))
 
 
 class SandboxConfig(ApplicationWorker.CONFIG_CLASS):

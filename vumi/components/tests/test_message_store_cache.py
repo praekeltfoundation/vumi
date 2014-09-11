@@ -22,7 +22,7 @@ class MessageStoreCacheTestCase(VumiTestCase):
         try:
             from vumi.components.message_store import MessageStore
         except ImportError, e:
-            import_skip(e, 'riakasaurus', 'riakasaurus.riak')
+            import_skip(e, 'riak')
         self.redis = yield self.persistence_helper.get_redis_manager()
         self.manager = yield self.persistence_helper.get_riak_manager()
         self.store = yield MessageStore(self.manager, self.redis)
@@ -44,6 +44,24 @@ class MessageStoreCacheTestCase(VumiTestCase):
             msg['timestamp'] = now - timedelta(seconds=i)
             yield callback(batch_id, msg)
             messages.append(msg)
+        returnValue(messages)
+
+    @inlineCallbacks
+    def add_event_pairs(self, batch_id, now=None, count=10):
+        messages = []
+        now = (datetime.now() if now is None else now)
+        for i in range(count):
+            msg = self.msg_helper.make_inbound(
+                "inbound",
+                from_addr='from-%s' % (i,),
+                to_addr='to-%s' % (i,))
+            msg['timestamp'] = now - timedelta(seconds=i)
+            yield self.cache.add_outbound_message(batch_id, msg)
+            ack = self.msg_helper.make_ack(msg)
+            delivery = self.msg_helper.make_delivery_report(msg)
+            yield self.cache.add_event(self.batch_id, ack)
+            yield self.cache.add_event(self.batch_id, delivery)
+            messages.extend((ack, delivery))
         returnValue(messages)
 
 
@@ -160,6 +178,8 @@ class TestMessageStoreCache(MessageStoreCacheTestCase):
         delivery = self.msg_helper.make_delivery_report(msg)
         yield self.cache.add_event(self.batch_id, ack)
         yield self.cache.add_event(self.batch_id, delivery)
+        event_count = yield self.cache.count_event_keys(self.batch_id)
+        self.assertEqual(event_count, 2)
         status = yield self.cache.get_event_status(self.batch_id)
         self.assertEqual(status, {
             'delivery_report': 1,
@@ -180,6 +200,8 @@ class TestMessageStoreCache(MessageStoreCacheTestCase):
             # send exact same event multiple times
             ack['event_id'] = 'identical'
             yield self.cache.add_event(self.batch_id, ack)
+        event_count = yield self.cache.count_event_keys(self.batch_id)
+        self.assertEqual(event_count, 1)
         status = yield self.cache.get_event_status(self.batch_id)
         self.assertEqual(status, {
             'delivery_report': 0,
@@ -197,6 +219,9 @@ class TestMessageStoreCache(MessageStoreCacheTestCase):
             msg = self.msg_helper.make_outbound("outbound")
             msg['message_id'] = 'the-same-thing'
             yield self.cache.add_outbound_message(self.batch_id, msg)
+        outbound_count = yield self.cache.count_outbound_message_keys(
+            self.batch_id)
+        self.assertEqual(outbound_count, 1)
         status = yield self.cache.get_event_status(self.batch_id)
         self.assertEqual(status['sent'], 1)
         self.assertEqual(
@@ -208,7 +233,10 @@ class TestMessageStoreCache(MessageStoreCacheTestCase):
         for i in range(10):
             msg = self.msg_helper.make_inbound("inbound")
             msg['message_id'] = 'the-same-thing'
-            self.cache.add_inbound_message(self.batch_id, msg)
+            yield self.cache.add_inbound_message(self.batch_id, msg)
+        inbound_count = yield self.cache.count_inbound_message_keys(
+            self.batch_id)
+        self.assertEqual(inbound_count, 1)
         self.assertEqual(
             (yield self.cache.get_inbound_message_keys(self.batch_id)),
             ['the-same-thing'])
@@ -424,6 +452,36 @@ class TestMessageStoreCacheWithCounters(MessageStoreCacheTestCase):
             self.batch_id)), 7)
 
     @inlineCallbacks
+    def test_event_truncate_at_within_limits(self):
+        # We need to use counters here, but have a default truncation limit
+        # higher than what we're testing.
+        self.cache.TRUNCATE_MESSAGE_KEY_COUNT_AT = 100
+        yield self.cache.batch_start(self.batch_id, use_counters=True)
+
+        yield self.add_event_pairs(self.batch_id, count=5)
+        removed_count = yield self.cache.truncate_event_keys(
+            self.batch_id, truncate_at=11)
+        self.assertEqual(removed_count, 0)
+        key_count = yield self.cache.redis.zcard(
+            self.cache.event_key(self.batch_id))
+        self.assertEqual(key_count, 10)
+
+    @inlineCallbacks
+    def test_event_truncate_at_over_limits(self):
+        # We need to use counters here, but have a default truncation limit
+        # higher than what we're testing.
+        self.cache.TRUNCATE_MESSAGE_KEY_COUNT_AT = 100
+        yield self.cache.batch_start(self.batch_id, use_counters=True)
+
+        yield self.add_event_pairs(self.batch_id, count=5)
+        removed_count = yield self.cache.truncate_event_keys(
+            self.batch_id, truncate_at=7)
+        self.assertEqual(removed_count, 3)
+        key_count = yield self.cache.redis.zcard(
+            self.cache.event_key(self.batch_id))
+        self.assertEqual(key_count, 7)
+
+    @inlineCallbacks
     def test_truncation_after_hitting_limit(self):
         truncate_at = 10
         # Check we're actually truncating in the messages
@@ -450,4 +508,4 @@ class TestMessageStoreCacheWithCounters(MessageStoreCacheTestCase):
         # Make sure we're storing the most recent ones
         self.assertEqual(
             set(cached_message_keys),
-            set([m['message_id'] for m in received_messages[truncate_at:]]))
+            set([m['message_id'] for m in received_messages[-truncate_at:]]))
