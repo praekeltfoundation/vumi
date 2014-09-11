@@ -13,6 +13,8 @@ from vumi.persist.model import Manager
 
 
 def to_unicode(text, encoding='utf-8'):
+    if text is None:
+        return text
     if isinstance(text, tuple):
         return tuple(to_unicode(item, encoding) for item in text)
     if not isinstance(text, unicode):

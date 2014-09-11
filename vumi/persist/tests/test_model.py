@@ -585,6 +585,16 @@ class TestModelOnTxRiak(VumiTestCase):
         keys3 = yield keys2.next_page()
         self.assertEqual(sorted(keys3), ["foo4"])
         self.assertEqual(keys3.has_next_page(), False)
+        
+    @Manager.calls_manager
+    def test_index_keys_page_none_continuation(self):
+        indexed_model = self.manager.proxy(IndexedModel)
+        yield indexed_model("foo1", a=1, b=u'one').save()
+        
+        keys1 = yield indexed_model.index_keys_page('a', 1, max_results=2)
+        self.assertEqual(sorted(keys1), ['foo1'])
+        self.assertEqual(keys1.has_next_page(), False)
+        self.assertEqual(keys1.continuation, None)
 
     @Manager.calls_manager
     def test_index_keys_quoting(self):
