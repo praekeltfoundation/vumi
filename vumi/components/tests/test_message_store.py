@@ -512,6 +512,32 @@ class TestMessageStore(TestMessageStoreBase):
         self.assertEqual(outbound_keys1, [msg['message_id']])
         self.assertEqual(outbound_keys2, [msg['message_id']])
 
+    @inlineCallbacks
+    def test_batch_inbound_keys_page(self):
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+        messages = yield self.create_inbound_messages(batch_id, 10)
+        all_keys = sorted(msg['message_id'] for msg in messages)
+
+        keys_p1 = yield self.store.batch_inbound_keys_page(batch_id, 6)
+        # Paginated results are sorted by key.
+        self.assertEqual(sorted(keys_p1), all_keys[:6])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(sorted(keys_p2), all_keys[6:])
+
+    @inlineCallbacks
+    def test_batch_outbound_keys_page(self):
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+        messages = yield self.create_outbound_messages(batch_id, 10)
+        all_keys = sorted(msg['message_id'] for msg in messages)
+
+        keys_p1 = yield self.store.batch_outbound_keys_page(batch_id, 6)
+        # Paginated results are sorted by key.
+        self.assertEqual(sorted(keys_p1), all_keys[:6])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(sorted(keys_p2), all_keys[6:])
+
 
 class TestMessageStoreCache(TestMessageStoreBase):
 
