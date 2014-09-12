@@ -100,6 +100,9 @@ class MessageStore(object):
     reports received) is stored in Redis.
     """
 
+    # The Python Riak client defaults to max_results=1000 in places.
+    DEFAULT_MAX_RESULTS = 1000
+
     def __init__(self, manager, redis):
         self.manager = manager
         self.batches = manager.proxy(Batch)
@@ -302,12 +305,28 @@ class MessageStore(object):
     def batch_outbound_keys(self, batch_id):
         return self.outbound_messages.index_keys('batches', batch_id)
 
+    def batch_outbound_keys_page(self, batch_id, max_results=None,
+                                 continuation=None):
+        if max_results is None:
+            max_results = self.DEFAULT_MAX_RESULTS
+        return self.outbound_messages.index_keys_page(
+            'batches', batch_id, max_results=max_results,
+            continuation=continuation)
+
     def batch_outbound_keys_matching(self, batch_id, query):
         mr = self.outbound_messages.index_match(query, 'batches', batch_id)
         return mr.get_keys()
 
     def batch_inbound_keys(self, batch_id):
         return self.inbound_messages.index_keys('batches', batch_id)
+
+    def batch_inbound_keys_page(self, batch_id, max_results=None,
+                                continuation=None):
+        if max_results is None:
+            max_results = self.DEFAULT_MAX_RESULTS
+        return self.inbound_messages.index_keys_page(
+            'batches', batch_id, max_results=max_results,
+            continuation=continuation)
 
     def batch_inbound_keys_matching(self, batch_id, query):
         mr = self.inbound_messages.index_match(query, 'batches', batch_id)
