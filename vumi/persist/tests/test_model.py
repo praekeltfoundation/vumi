@@ -7,7 +7,7 @@ from datetime import datetime
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.persist.model import (
-    Model, Manager, ModelMigrator, ModelMigrationError)
+    Model, Manager, ModelMigrator, ModelMigrationError, VumiRiakError)
 from vumi.persist.fields import (
     ValidationError, Integer, Unicode, VumiMessage, Dynamic, ListOf,
     ForeignKey, ManyToMany, Timestamp)
@@ -585,16 +585,28 @@ class TestModelOnTxRiak(VumiTestCase):
         keys3 = yield keys2.next_page()
         self.assertEqual(sorted(keys3), ["foo4"])
         self.assertEqual(keys3.has_next_page(), False)
-        
+
     @Manager.calls_manager
     def test_index_keys_page_none_continuation(self):
         indexed_model = self.manager.proxy(IndexedModel)
         yield indexed_model("foo1", a=1, b=u'one').save()
-        
+
         keys1 = yield indexed_model.index_keys_page('a', 1, max_results=2)
         self.assertEqual(sorted(keys1), ['foo1'])
         self.assertEqual(keys1.has_next_page(), False)
         self.assertEqual(keys1.continuation, None)
+
+    @Manager.calls_manager
+    def test_index_keys_page_bad_continutation(self):
+        indexed_model = self.manager.proxy(IndexedModel)
+        yield indexed_model("foo1", a=1, b=u'one').save()
+
+        try:
+            yield indexed_model.index_keys_page(
+                'a', 1, max_results=1, continuation='bad-id')
+            self.fail('Expected VumiRiakError.')
+        except VumiRiakError:
+            pass
 
     @Manager.calls_manager
     def test_index_keys_quoting(self):
