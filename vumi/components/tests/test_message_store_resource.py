@@ -92,3 +92,16 @@ class TestMessageStoreResource(VumiTestCase):
         self.assertEqual(
             set([msg['message_id'] for msg in messages]),
             set([msg1['message_id'], msg2['message_id']]))
+
+    @inlineCallbacks
+    def test_get_inbound_multiple_pages(self):
+        self.store.DEFAULT_MAX_RESULTS = 1
+        batch_id = yield self.make_batch(('foo', 'bar'))
+        msg1 = yield self.make_inbound(batch_id, 'føø')
+        msg2 = yield self.make_inbound(batch_id, 'føø')
+        resp = yield self.make_request('GET', batch_id, 'inbound.json')
+        messages = map(
+            json.loads, filter(None, resp.delivered_body.split('\n')))
+        self.assertEqual(
+            set([msg['message_id'] for msg in messages]),
+            set([msg1['message_id'], msg2['message_id']]))

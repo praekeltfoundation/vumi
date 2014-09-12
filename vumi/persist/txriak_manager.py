@@ -4,12 +4,12 @@
 
 import json
 
-from riak import RiakClient, RiakObject, RiakMapReduce
+from riak import RiakClient, RiakObject, RiakMapReduce, RiakError
 from twisted.internet.threads import deferToThread
 from twisted.internet.defer import (
     inlineCallbacks, returnValue, gatherResults, maybeDeferred)
 
-from vumi.persist.model import Manager
+from vumi.persist.model import Manager, VumiRiakError
 
 
 def to_unicode(text, encoding='utf-8'):
@@ -20,6 +20,11 @@ def to_unicode(text, encoding='utf-8'):
     if not isinstance(text, unicode):
         return text.decode(encoding)
     return text
+
+
+def riakErrorHandler(failure):
+    e = failure.trap(RiakError)
+    raise VumiRiakError(e)
 
 
 class VumiTxIndexPage(object):
@@ -66,6 +71,7 @@ class VumiTxIndexPage(object):
         """
         d = deferToThread(self._index_page.next_page)
         d.addCallback(type(self))
+        d.addErrback(riakErrorHandler)
         return d
 
 
@@ -92,6 +98,7 @@ class VumiTxRiakBucket(object):
             return_terms=return_terms, max_results=max_results,
             continuation=continuation)
         d.addCallback(VumiTxIndexPage)
+        d.addErrback(riakErrorHandler)
         return d
 
 

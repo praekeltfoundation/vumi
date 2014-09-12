@@ -4,9 +4,9 @@
 
 import json
 
-from riak import RiakClient, RiakObject, RiakMapReduce
+from riak import RiakClient, RiakObject, RiakMapReduce, RiakError
 
-from vumi.persist.model import Manager
+from vumi.persist.model import Manager, VumiRiakError
 from vumi.utils import flatten_generator
 
 
@@ -62,7 +62,10 @@ class VumiIndexPage(object):
             A new :class:`VumiIndexPage` object containing the next page of
             results.
         """
-        result = self._index_page.next_page()
+        try:
+            result = self._index_page.next_page()
+        except RiakError as e:
+            raise VumiRiakError(e)
         return type(self)(result)
 
 
@@ -83,9 +86,12 @@ class VumiRiakBucket(object):
 
     def get_index_page(self, index_name, start_value, end_value=None,
                        return_terms=None, max_results=None, continuation=None):
-        result = self._riak_bucket.get_index(
-            index_name, start_value, end_value, return_terms=return_terms,
-            max_results=max_results, continuation=continuation)
+        try:
+            result = self._riak_bucket.get_index(
+                index_name, start_value, end_value, return_terms=return_terms,
+                max_results=max_results, continuation=continuation)
+        except RiakError as e:
+            raise VumiRiakError(e)
         return VumiIndexPage(result)
 
 
