@@ -35,7 +35,7 @@ Documentation available online at http://vumi.readthedocs.org/ and in the `docs`
     :scale: 100%
     :target: https://pypi.python.org/pypi/vumi
 
-.. |vumi-license| .. image:: https://pypip.in/license/vumi/badge.svg
+.. |vumi-license| image:: https://pypip.in/license/vumi/badge.svg
     :target: https://pypi.python.org/pypi/vumi
     :alt: Vumi license
 
