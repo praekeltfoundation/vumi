@@ -3,7 +3,7 @@ Vumi
 
 Documentation available online at http://vumi.readthedocs.org/ and in the `docs` directory of the repository.
 
-|vumi-ver| |vumi-ci| |vumi-cover| |python-ver| |vumi-docs| |vumi-downloads|
+|vumi-ver| |vumi-ci| |vumi-cover| |python-ver| |vumi-docs| |vumi-downloads| |vumi-license|
 
 .. |vumi-ver| image:: https://pypip.in/v/vumi/badge.png?text=pypi
     :alt: Vumi version
@@ -34,6 +34,11 @@ Documentation available online at http://vumi.readthedocs.org/ and in the `docs`
     :alt: Vumi downloads from PyPI
     :scale: 100%
     :target: https://pypi.python.org/pypi/vumi
+
+.. |vumi-license| .. image:: https://pypip.in/license/vumi/badge.svg
+    :target: https://pypi.python.org/pypi/vumi
+    :alt: Vumi license
+
 
 To build the docs locally::
 
