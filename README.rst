@@ -5,7 +5,7 @@ Documentation available online at http://vumi.readthedocs.org/ and in the `docs`
 
 |vumi-ver| |vumi-ci| |vumi-cover| |python-ver| |vumi-docs| |vumi-downloads|
 
-.. |vumi-ver| image:: https://pypip.in/v/vumi/badge.png?text=version
+.. |vumi-ver| image:: https://pypip.in/v/vumi/badge.png?text=pypi
     :alt: Vumi version
     :scale: 100%
     :target: https://pypi.python.org/pypi/vumi
