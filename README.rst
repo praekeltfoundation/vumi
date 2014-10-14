@@ -3,16 +3,37 @@ Vumi
 
 Documentation available online at http://vumi.readthedocs.org/ and in the `docs` directory of the repository.
 
-|vumi-ci|_ |vumi-cover|_ |vumi-waffle|_
+|vumi-ver| |vumi-ci| |vumi-cover| |python-ver| |vumi-docs| |vumi-downloads|
+
+.. |vumi-ver| image:: https://pypip.in/v/vumi/badge.png?text=version
+    :alt: Vumi version
+    :scale: 100%
+    :target: https://pypi.python.org/pypi/vumi
 
 .. |vumi-ci| image:: https://travis-ci.org/praekelt/vumi.png?branch=develop
-.. _vumi-ci: https://travis-ci.org/praekelt/vumi
+    :alt: Vumi Travis CI build status
+    :scale: 100%
+    :target: https://travis-ci.org/praekelt/vumi
 
 .. |vumi-cover| image:: https://coveralls.io/repos/praekelt/vumi/badge.png?branch=develop
-.. _vumi-cover: https://coveralls.io/r/praekelt/vumi
+    :alt: Vumi coverage on Coveralls
+    :scale: 100%
+    :target: https://coveralls.io/r/praekelt/vumi
 
-.. |vumi-waffle| image:: https://badge.waffle.io/praekelt/vumi.png?label=ready
-.. _vumi-waffle: https://waffle.io/praekelt/vumi
+.. |python-ver| image:: https://pypip.in/py_versions/vumi/badge.svg
+    :alt: Python version
+    :scale: 100%
+    :target: https://pypi.python.org/pypi/vumi
+
+.. |vumi-docs| image:: https://readthedocs.org/projects/vumi/badge/?version=latest
+    :alt: Vumi documentation
+    :scale: 100%
+    :target: http://vumi.readthedocs.org/
+
+.. |vumi-downloads| image:: https://pypip.in/download/vumi/badge.svg
+    :alt: Vumi downloads from PyPI
+    :scale: 100%
+    :target: https://pypi.python.org/pypi/vumi
 
 To build the docs locally::
 
