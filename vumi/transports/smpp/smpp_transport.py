@@ -50,9 +50,14 @@ class SmppTransceiverProtocol(EsmeTransceiverFactory.protocol):
     def connectionMade(self):
         EsmeTransceiverFactory.protocol.connectionMade(self)
         config = self.vumi_transport.get_static_config()
+        password = config.password
+        # Overly long passwords should be truncated.
+        if len(password) > 8:
+            password = password[:8]
+            log.warning("Password longer than 8 characters, truncating.")
         self.bind(
             system_id=config.system_id,
-            password=config.password,
+            password=password,
             system_type=config.system_type,
             interface_version=config.interface_version,
             address_range=config.address_range)
