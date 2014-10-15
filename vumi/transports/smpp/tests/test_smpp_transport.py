@@ -961,7 +961,9 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
             'address_range': '*12345',
         })
         transport = smpp_helper.transport
-        bind_pdu = yield self.create_smpp_bind(transport)
+        lc = LogCatcher(message="Password longer than 8 characters,")
+        with lc:
+            bind_pdu = yield self.create_smpp_bind(transport)
         # This test runs for multiple bind types, so we only assert on the
         # common prefix of the command.
         self.assertEqual(bind_pdu['header']['command_id'][:5], 'bind_')
@@ -974,6 +976,11 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
             'addr_ton': 'unknown',
             'addr_npi': 'unknown',
         }})
+
+        # Check that the truncation was logged.
+        [warning] = lc.logs
+        expected_msg = "Password longer than 8 characters, truncating."
+        self.assertEqual(warning['message'], (expected_msg,))
 
     @inlineCallbacks
     def test_default_bind_params(self):
