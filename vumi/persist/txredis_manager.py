@@ -146,6 +146,13 @@ class VumiRedis(txr.Redis):
             lambda r: ((None if r[0] == '0' or r[0] == 0 else r[0]), r[1]))
         return d
 
+    def ttl(self, key):
+        # Synchronous redis returns None if < 0 is returned but
+        # txredis doesn't.
+        d = super(VumiRedis, self).ttl(key)
+        d.addCallback(lambda r: None if r < 0 else r)
+        return d
+
 
 class VumiRedisClientFactory(txr.RedisClientFactory):
     protocol = VumiRedis
