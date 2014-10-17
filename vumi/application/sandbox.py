@@ -262,6 +262,9 @@ class SandboxResource(object):
         return SandboxCommand(cmd=command['cmd'], reply=True,
                               cmd_id=command['cmd_id'], **kwargs)
 
+    def reply_error(self, command, reason):
+        return self.reply(command, success=False, reason=reason)
+
     def dispatch_request(self, api, command):
         handler_name = 'handle_%s' % (command['cmd'],)
         handler = getattr(self, handler_name, self.unknown_request)
@@ -293,6 +296,13 @@ class RedisResource(SandboxResource):
     :param int keys_per_user:
         Synonym for `keys_per_user_hard`. Deprecated.
     """
+
+    # FIXME:
+    #  - Current we allow key expiry to be set. Keys that expire are
+    #    not decrement from the sandboxes key limit. This means that
+    #    some sandboxes might hit their key limit too soon. This is
+    #    better than not allowing expiry of keys and filling up Redis
+    #    though.
 
     @inlineCallbacks
     def setup(self):
@@ -350,6 +360,8 @@ class RedisResource(SandboxResource):
             - ``key``: The key whose value should be set.
             - ``value``: The value to store. May be any JSON serializable
               object.
+            - ``seconds``: Lifetime of the key in seconds. The default ``null``
+              indicates that the key should not expire.
 
         Reply fields:
             - ``success``: ``true`` if the operation was successful, otherwise
@@ -367,10 +379,17 @@ class RedisResource(SandboxResource):
                                                reply.success); });
         """
         key = self._sandboxed_key(api.sandbox_id, command.get('key'))
+        seconds = command.get('seconds')
+        if not (seconds is None or isinstance(seconds, (int, long))):
+            returnValue(self.reply_error(
+                command, "seconds must be a number or null"))
         if not (yield self.check_keys(api, key)):
             returnValue(self._too_many_keys(command))
-        value = command.get('value')
-        yield self.redis.set(key, json.dumps(value))
+        json_value = json.dumps(command.get('value'))
+        if seconds is None:
+            yield self.redis.set(key, json_value)
+        else:
+            yield self.redis.setex(key, seconds, json_value)
         returnValue(self.reply(command, success=True))
 
     @inlineCallbacks
