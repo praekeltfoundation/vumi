@@ -191,6 +191,9 @@ class FakeRedis(object):
 
     @maybe_async
     def setex(self, key, time, value):
+        # Sync and txredis currently have different signatures for setx.
+        if not self._is_async:
+            time, value = value, time
         self.set.sync(self, key, value)
         self.expire.sync(self, key, time)
         return True
@@ -482,6 +485,8 @@ class FakeRedis(object):
 
     @maybe_async
     def ttl(self, key):
+        if key not in self._data:
+            return -2
         delayed = self._expiries.get(key)
         if delayed is not None and delayed.active():
             return int(delayed.getTime() - self.clock.seconds())

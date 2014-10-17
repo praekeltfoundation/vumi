@@ -83,6 +83,8 @@ class VumiRedis(txr.Redis):
         return self.getResponse()
 
     def setex(self, key, seconds, value):
+        # FIXME: This signature swaps seconds and value relative to synchronous
+        #        redis.
         return self.set(key, value, expire=seconds)
 
     # setnx() is implemented in txredis 2.2.1 (which is in Ubuntu), but not 2.2
@@ -147,10 +149,11 @@ class VumiRedis(txr.Redis):
         return d
 
     def ttl(self, key):
-        # Synchronous redis returns None if < 0 is returned but
-        # txredis doesn't.
+        # Synchronous redis returns None if -1 is returned but
+        # txredis doesn't. Both return -2 if the key does not exist
+        # all (WAT).
         d = super(VumiRedis, self).ttl(key)
-        d.addCallback(lambda r: None if r < 0 else r)
+        d.addCallback(lambda r: (None if r == -1 else r))
         return d
 
 

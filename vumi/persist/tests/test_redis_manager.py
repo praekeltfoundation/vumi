@@ -60,3 +60,15 @@ class TestRedisManager(VumiTestCase):
         self.assertEqual(cursor, None)
         self.assertEqual(all_keys, set(
             'key%d' % i for i in range(10)))
+
+    def test_ttl(self):
+        missing_ttl = self.manager.ttl("missing_key")
+        self.assertEqual(missing_ttl, -2)
+
+        self.manager.set("key-no-ttl", "value")
+        no_ttl = self.manager.ttl("key-no-ttl")
+        self.assertEqual(no_ttl, None)
+
+        self.manager.setex("key-ttl", "value", 30)
+        ttl = self.manager.ttl("key-ttl")
+        self.assertTrue(10 <= ttl <= 30)

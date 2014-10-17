@@ -656,7 +656,9 @@ class TestRedisResource(ResourceTestCaseBase):
                          str(total_count) if total_count is not None else None)
         ttl = yield self.r_server.ttl(metric_key)
         if seconds is None:
-            self.assertEqual(ttl, None)
+            # seconds is None means either it is not set or the metric_key
+            # doesn't exist
+            self.assertTrue(ttl in (None, -2))
         else:
             self.assertNotEqual(ttl, None)
             self.assertTrue(0 < ttl <= seconds)

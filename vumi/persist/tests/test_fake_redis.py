@@ -64,7 +64,7 @@ class TestFakeRedis(VumiTestCase):
     @inlineCallbacks
     def test_setex(self):
         yield self.assert_redis_op(False, 'exists', "mykey")
-        yield self.assert_redis_op(True, 'setex', "mykey", 10, "value")
+        yield self.assert_redis_op(True, 'setex', "mykey", "value", 10)
         yield self.assert_redis_op("value", 'get', "mykey")
         yield self.assert_redis_op(9, 'ttl', "mykey")
 
@@ -325,7 +325,7 @@ class TestFakeRedis(VumiTestCase):
     @inlineCallbacks
     def test_expire_persist_ttl(self):
         # Missing key.
-        yield self.assert_redis_op(None, 'ttl', "tempval")
+        yield self.assert_redis_op(-2, 'ttl', "tempval")
         yield self.assert_redis_op(0, 'expire', "tempval", 10)
         yield self.assert_redis_op(0, 'persist', "tempval")
         # Persistent key.
@@ -457,3 +457,10 @@ class TestFakeRedisAsync(TestFakeRedis):
 
     def assert_error(self, func, *args, **kw):
         return self.assertFailure(func(*args, **kw), Exception)
+
+    @inlineCallbacks
+    def test_setex(self):
+        yield self.assert_redis_op(False, 'exists', "mykey")
+        yield self.assert_redis_op(True, 'setex', "mykey", 10, "value")
+        yield self.assert_redis_op("value", 'get', "mykey")
+        yield self.assert_redis_op(9, 'ttl', "mykey")
