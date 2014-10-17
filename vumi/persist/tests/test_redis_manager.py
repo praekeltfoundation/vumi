@@ -63,7 +63,7 @@ class TestRedisManager(VumiTestCase):
 
     def test_ttl(self):
         missing_ttl = self.manager.ttl("missing_key")
-        self.assertEqual(missing_ttl, -2)
+        self.assertEqual(missing_ttl, None)
 
         self.manager.set("key-no-ttl", "value")
         no_ttl = self.manager.ttl("key-no-ttl")

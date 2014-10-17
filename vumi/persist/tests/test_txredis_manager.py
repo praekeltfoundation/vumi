@@ -66,7 +66,7 @@ class TestTxRedisManager(VumiTestCase):
     @inlineCallbacks
     def test_ttl(self):
         missing_ttl = yield self.manager.ttl("missing_key")
-        self.assertEqual(missing_ttl, -2)
+        self.assertEqual(missing_ttl, None)
 
         yield self.manager.set("key-no-ttl", "value")
         no_ttl = yield self.manager.ttl("key-no-ttl")

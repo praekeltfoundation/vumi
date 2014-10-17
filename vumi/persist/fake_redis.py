@@ -485,8 +485,6 @@ class FakeRedis(object):
 
     @maybe_async
     def ttl(self, key):
-        if key not in self._data:
-            return -2
         delayed = self._expiries.get(key)
         if delayed is not None and delayed.active():
             return int(delayed.getTime() - self.clock.seconds())

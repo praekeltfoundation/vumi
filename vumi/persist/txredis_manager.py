@@ -149,11 +149,11 @@ class VumiRedis(txr.Redis):
         return d
 
     def ttl(self, key):
-        # Synchronous redis returns None if -1 is returned but
-        # txredis doesn't. Both return -2 if the key does not exist
-        # all (WAT).
+        # Synchronous redis returns None if -1 or -2 is returned but
+        # txredis doesn't. Older sync redis' return -2 if the key does not
+        # exist so we require redis >= 2.7.1 in setup.py (WAT).
         d = super(VumiRedis, self).ttl(key)
-        d.addCallback(lambda r: (None if r == -1 else r))
+        d.addCallback(lambda r: (None if r < 0 else r))
         return d
 
 
