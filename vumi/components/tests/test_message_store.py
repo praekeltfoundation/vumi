@@ -650,7 +650,9 @@ class TestMessageStoreCache(TestMessageStoreBase):
 
         # This will fail if we're using counter-based events with a ZSET.
         events_scard = yield cache.redis.scard(cache.event_key(batch_id))
-        self.assertEqual(events_scard, 10)
+        # self.assertEqual(events_scard, 10)
+        # HACK: We're not tracking these in the SET anymore.
+        self.assertEqual(events_scard, 0)
 
         yield self.clear_cache(self.store)
         batch_status = yield self.store.batch_status(batch_id)
