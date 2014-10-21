@@ -191,9 +191,6 @@ class FakeRedis(object):
 
     @maybe_async
     def setex(self, key, time, value):
-        # Sync and txredis currently have different signatures for setx.
-        if not self._is_async:
-            time, value = value, time
         self.set.sync(self, key, value)
         self.expire.sync(self, key, time)
         return True

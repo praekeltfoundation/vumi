@@ -64,7 +64,7 @@ class TestFakeRedis(VumiTestCase):
     @inlineCallbacks
     def test_setex(self):
         yield self.assert_redis_op(False, 'exists', "mykey")
-        yield self.assert_redis_op(True, 'setex', "mykey", "value", 10)
+        yield self.assert_redis_op(True, 'setex', "mykey", 10, "value")
         yield self.assert_redis_op("value", 'get', "mykey")
         yield self.assert_redis_op(9, 'ttl', "mykey")
 
@@ -457,10 +457,3 @@ class TestFakeRedisAsync(TestFakeRedis):
 
     def assert_error(self, func, *args, **kw):
         return self.assertFailure(func(*args, **kw), Exception)
-
-    @inlineCallbacks
-    def test_setex(self):
-        yield self.assert_redis_op(False, 'exists', "mykey")
-        yield self.assert_redis_op(True, 'setex', "mykey", 10, "value")
-        yield self.assert_redis_op("value", 'get', "mykey")
-        yield self.assert_redis_op(9, 'ttl', "mykey")
