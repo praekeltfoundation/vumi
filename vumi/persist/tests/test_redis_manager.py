@@ -69,6 +69,6 @@ class TestRedisManager(VumiTestCase):
         no_ttl = self.manager.ttl("key-no-ttl")
         self.assertEqual(no_ttl, None)
 
-        self.manager.setex("key-ttl", "value", 30)
+        self.manager.setex("key-ttl", 30, "value")
         ttl = self.manager.ttl("key-ttl")
         self.assertTrue(10 <= ttl <= 30)

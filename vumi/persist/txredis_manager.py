@@ -83,8 +83,6 @@ class VumiRedis(txr.Redis):
         return self.getResponse()
 
     def setex(self, key, seconds, value):
-        # FIXME: This signature swaps seconds and value relative to synchronous
-        #        redis.
         return self.set(key, value, expire=seconds)
 
     # setnx() is implemented in txredis 2.2.1 (which is in Ubuntu), but not 2.2
