@@ -287,6 +287,9 @@ class MessageStoreCache(object):
             returnValue(new_entry)
         else:
             # HACK: Disabling this because of unbounded growth.
+            #       Please reconcile perform reconciliation on all batches that
+            #       still use SET-based event tracking.
+            # NOTE: Cheaper recon is coming Real Soon Now.
             returnValue(False)
             # This uses a set, not a sorted set.
             new_entry = yield self.redis.sadd(
