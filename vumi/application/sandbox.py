@@ -298,8 +298,8 @@ class RedisResource(SandboxResource):
     """
 
     # FIXME:
-    #  - Current we allow key expiry to be set. Keys that expire are
-    #    not decrement from the sandboxes key limit. This means that
+    #  - Currently we allow key expiry to be set. Keys that expire are
+    #    not decremented from the sandbox's key limit. This means that
     #    some sandboxes might hit their key limit too soon. This is
     #    better than not allowing expiry of keys and filling up Redis
     #    though.
