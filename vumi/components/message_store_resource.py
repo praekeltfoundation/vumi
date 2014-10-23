@@ -2,6 +2,8 @@
 
 from csv import writer
 
+from zope.interface import Interface, implements
+
 from twisted.application.internet import StreamServerEndpointService
 from twisted.internet.defer import DeferredList, inlineCallbacks
 from twisted.web.resource import NoResource, Resource
@@ -26,34 +28,50 @@ def chunks(l, n):
         yield l[i:i + n]
 
 
-class MessageFormatter(object):
+class IMessageFormatter(Interface):
     """ Interface for writing messages to an HTTP request. """
 
-    def add_http_headers(self, request):
-        pass
+    def add_http_headers(request):
+        """
+        Add any needed HTTP headers to the request.
 
-    def write_row_header(self, request):
-        pass
+        Often used to set the Content-Type header.
+        """
 
-    def write_row(self, request, message):
-        pass
+    def write_row_header(request):
+        """
+        Write any header bytes that need to be written to the request before
+        messages.
+        """
+
+    def write_row(request, message):
+        """
+        Write a :class:`TransportUserMessage` to the request.
+        """
 
 
-class JsonFormatter(MessageFormatter):
-    """ Class for writing messages as JSON. """
+class JsonFormatter(object):
+    """ Formatter for writing messages to requests as JSON. """
+
+    implements(IMessageFormatter)
 
     def add_http_headers(self, request):
         resp_headers = request.responseHeaders
         resp_headers.addRawHeader(
             'Content-Type', 'application/json; charset=utf-8')
 
+    def write_row_header(self, request):
+        pass
+
     def write_row(self, request, message):
         request.write(message.to_json())
         request.write('\n')
 
 
-class CsvFormatter(MessageFormatter):
-    """ Class for writing messages as CSV. """
+class CsvFormatter(object):
+    """ Formatter for writing messages to requests as CSV. """
+
+    implements(IMessageFormatter)
 
     FIELDS = (
         'message_id',
