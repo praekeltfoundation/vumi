@@ -274,17 +274,17 @@ class RiakManager(Manager):
 
     def _search_iteration(self, bucket, query, rows, start):
         results = bucket.search(query, rows=rows, start=start)
-        return results["num_found"], [doc["id"] for doc in results["docs"]]
+        return [doc["id"] for doc in results["docs"]]
 
     def real_search(self, modelcls, query, rows=None):
         rows = 1000 if rows is None else rows
         bucket_name = self.bucket_name(modelcls)
         bucket = self.client.bucket(bucket_name)
-        num_found, keys = self._search_iteration(bucket, query, rows, 0)
-        while len(keys) < num_found:
-            num_found, new_keys = self._search_iteration(
-                bucket, query, rows, len(keys))
+        keys = []
+        new_keys = self._search_iteration(bucket, query, rows, 0)
+        while new_keys:
             keys.extend(new_keys)
+            new_keys = self._search_iteration(bucket, query, rows, len(keys))
         return keys
 
     def riak_enable_search(self, modelcls):
