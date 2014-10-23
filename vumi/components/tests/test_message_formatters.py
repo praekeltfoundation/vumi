@@ -63,3 +63,32 @@ class TestCsvFormatter(VumiTestCase):
         self.assertEqual(self.request.written, [
             "%s,9292,+41791234567,,,foo,\r\n" % msg['message_id']
         ])
+
+    def test_write_row_with_in_reply_to(self):
+        msg = self.msg_helper.make_inbound("foo", in_reply_to="msg-2")
+        self.formatter.write_row(self.request, msg)
+        self.assertEqual(self.request.written, [
+            "%s,9292,+41791234567,msg-2,,foo,\r\n" % msg['message_id']
+        ])
+
+    def test_write_row_with_session_event(self):
+        msg = self.msg_helper.make_inbound("foo", session_event="new")
+        self.formatter.write_row(self.request, msg)
+        self.assertEqual(self.request.written, [
+            "%s,9292,+41791234567,,new,foo,\r\n" % msg['message_id']
+        ])
+
+    def test_write_row_with_group(self):
+        msg = self.msg_helper.make_inbound("foo", group="#channel")
+        self.formatter.write_row(self.request, msg)
+        self.assertEqual(self.request.written, [
+            "%s,9292,+41791234567,,,foo,#channel\r\n" % msg['message_id']
+        ])
+
+    def test_write_row_with_unicode_content(self):
+        msg = self.msg_helper.make_inbound(u"føø", group="#channel")
+        self.formatter.write_row(self.request, msg)
+        self.assertEqual(self.request.written, [
+            u"%s,9292,+41791234567,,,føø,#channel\r\n".encode("utf-8")
+            % msg['message_id']
+        ])
