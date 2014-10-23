@@ -300,6 +300,11 @@ class TestModelOnTxRiak(VumiTestCase):
         self.assertEqual(expected_keys, sorted(keys))
         self.assertEqual(len(expected_keys), count)
 
+    @inlineCallbacks
+    def assert_search_results(self, expected_keys, func, *args, **kw):
+        keys = yield func(*args, **kw)
+        self.assertEqual(expected_keys, sorted(keys))
+
     @Manager.calls_manager
     def test_simple_search(self):
         simple_model = self.manager.proxy(SimpleModel)
@@ -339,6 +344,47 @@ class TestModelOnTxRiak(VumiTestCase):
         yield self.assert_mapreduce_results(
             ["one", "two"], search, 'b:abc OR b:def')
         yield self.assert_mapreduce_results(["three", "two"], search, 'a:2')
+
+    @Manager.calls_manager
+    def test_simple_real_search(self):
+        simple_model = self.manager.proxy(SimpleModel)
+        yield simple_model.enable_search()
+        yield simple_model("one", a=1, b=u'abc').save()
+        yield simple_model("two", a=2, b=u'def').save()
+        yield simple_model("three", a=2, b=u'ghi').save()
+
+        search = simple_model.real_search
+        yield self.assert_search_results(["one"], search, 'a:1')
+        yield self.assert_search_results(["two"], search, 'a:2 AND b:def')
+        yield self.assert_search_results(
+            ["one", "two"], search, 'b:abc OR b:def')
+        yield self.assert_search_results(["three", "two"], search, 'a:2')
+
+    @Manager.calls_manager
+    def test_big_real_search(self):
+        simple_model = self.manager.proxy(SimpleModel)
+        yield simple_model.enable_search()
+        keys = []
+        for i in range(100):
+            key = "xx%06d" % (i + 1)
+            keys.append(key)
+            yield simple_model(key, a=99, b=u'abc').save()
+        yield simple_model("yy000001", a=98, b=u'def').save()
+        yield simple_model("yy000002", a=98, b=u'ghi').save()
+
+        search = lambda q: simple_model.real_search(q, rows=11)
+        yield self.assert_search_results(keys, search, 'a:99')
+
+    @Manager.calls_manager
+    def test_empty_real_search(self):
+        simple_model = self.manager.proxy(SimpleModel)
+        yield simple_model.enable_search()
+        yield simple_model("one", a=1, b=u'abc').save()
+        yield simple_model("two", a=2, b=u'def').save()
+        yield simple_model("three", a=2, b=u'ghi').save()
+
+        search = simple_model.real_search
+        yield self.assert_search_results([], search, 'a:7')
 
     @Manager.calls_manager
     def test_load_all_bunches(self):
