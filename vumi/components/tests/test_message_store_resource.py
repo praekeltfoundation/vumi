@@ -82,6 +82,22 @@ class TestMessageStoreResource(VumiTestCase):
             set([msg1['message_id'], msg2['message_id']]))
 
     @inlineCallbacks
+    def test_get_inbound_csv(self):
+        batch_id = yield self.make_batch(('foo', 'bar'))
+        msg1 = yield self.make_inbound(batch_id, 'føø')
+        msg2 = yield self.make_inbound(batch_id, 'føø')
+        resp = yield self.make_request('GET', batch_id, 'inbound.csv')
+        rows = resp.delivered_body.split('\r\n')
+        header, rows = rows[0], rows[1:-1]
+        self.assertEqual(header, (
+            "message_id,to_addr,from_addr,in_reply_to,session_event,content,"
+            "group"))
+        self.assertEqual(sorted(rows), sorted([
+            "%s,9292,+41791234567,,,føø," % msg1['message_id'],
+            "%s,9292,+41791234567,,,føø," % msg2['message_id'],
+        ]))
+
+    @inlineCallbacks
     def test_get_outbound(self):
         batch_id = yield self.make_batch(('foo', 'bar'))
         msg1 = yield self.make_outbound(batch_id, 'føø')
@@ -92,6 +108,22 @@ class TestMessageStoreResource(VumiTestCase):
         self.assertEqual(
             set([msg['message_id'] for msg in messages]),
             set([msg1['message_id'], msg2['message_id']]))
+
+    @inlineCallbacks
+    def test_get_outbound_csv(self):
+        batch_id = yield self.make_batch(('foo', 'bar'))
+        msg1 = yield self.make_outbound(batch_id, 'føø')
+        msg2 = yield self.make_outbound(batch_id, 'føø')
+        resp = yield self.make_request('GET', batch_id, 'outbound.csv')
+        rows = resp.delivered_body.split('\r\n')
+        header, rows = rows[0], rows[1:-1]
+        self.assertEqual(header, (
+            "message_id,to_addr,from_addr,in_reply_to,session_event,content,"
+            "group"))
+        self.assertEqual(sorted(rows), sorted([
+            "%s,+41791234567,9292,,,føø," % msg1['message_id'],
+            "%s,+41791234567,9292,,,føø," % msg2['message_id'],
+        ]))
 
     @inlineCallbacks
     def test_get_inbound_multiple_pages(self):
