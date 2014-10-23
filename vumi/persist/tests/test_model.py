@@ -38,6 +38,10 @@ class ListOfModel(Model):
     items = ListOf(Integer())
 
 
+class IndexedListOfModel(Model):
+    items = ListOf(Integer(), index=True)
+
+
 class ForeignKeyModel(Model):
     simple = ForeignKey(SimpleModel, null=True)
 
@@ -794,6 +798,40 @@ class TestModelOnTxRiak(VumiTestCase):
 
         l2.items = [1]
         self.assertEqual(list(l2.items), [1])
+
+    @Manager.calls_manager
+    def test_listof_fields_indexes(self):
+        list_model = self.manager.proxy(IndexedListOfModel)
+        l1 = list_model("foo")
+        l1.items.append(1)
+        l1.items.append(2)
+        yield l1.save()
+
+        assert_indexes = lambda mdl, values: self.assertEqual(
+            mdl._riak_object.get_indexes(),
+            set(('items_bin', str(v)) for v in values))
+
+        l2 = yield list_model.load("foo")
+        self.assertEqual(l2.items[0], 1)
+        self.assertEqual(l2.items[1], 2)
+        self.assertEqual(list(l2.items), [1, 2])
+        assert_indexes(l2, [1, 2])
+
+        l2.items[0] = 5
+        self.assertEqual(l2.items[0], 5)
+        assert_indexes(l2, [2, 5])
+
+        del l2.items[0]
+        self.assertEqual(list(l2.items), [2])
+        assert_indexes(l2, [2])
+
+        l2.items.extend([3, 4, 5])
+        self.assertEqual(list(l2.items), [2, 3, 4, 5])
+        assert_indexes(l2, [2, 3, 4, 5])
+
+        l2.items = [1]
+        self.assertEqual(list(l2.items), [1])
+        assert_indexes(l2, [1])
 
     def test_listof_setting(self):
         list_model = self.manager.proxy(ListOfModel)
