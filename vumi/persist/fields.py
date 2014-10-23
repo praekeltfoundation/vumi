@@ -512,9 +512,8 @@ class ListOfDescriptor(FieldDescriptor):
     def _set_model_data(self, modelobj, raw_values):
         modelobj._riak_object.set_data_field(self.key, raw_values)
         if self.index_name is not None:
-            field_list = modelobj._riak_object.get_data().get(self.key, [])
             modelobj._riak_object.remove_index(self.index_name)
-            for value in field_list:
+            for value in raw_values:
                 self._add_index(modelobj, value)
 
     def set_value(self, modelobj, values):
