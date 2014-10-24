@@ -509,31 +509,43 @@ class ListOfDescriptor(FieldDescriptor):
         raw_item = raw_list[list_idx]
         return self.field.subfield_from_riak(raw_item)
 
+    def _set_model_data(self, modelobj, raw_values):
+        modelobj._riak_object.set_data_field(self.key, raw_values)
+        if self.index_name is not None:
+            modelobj._riak_object.remove_index(self.index_name)
+            for value in raw_values:
+                self._add_index(modelobj, value)
+
+    def set_value(self, modelobj, values):
+        map(self.field.validate_subfield, values)
+        raw_values = [self.field.subfield_to_riak(value) for value in values]
+        self._set_model_data(modelobj, raw_values)
+
     def set_list_item(self, modelobj, list_idx, value):
         self.field.validate_subfield(value)
         raw_value = self.field.subfield_to_riak(value)
         field_list = modelobj._riak_object.get_data().get(self.key, [])
         field_list[list_idx] = raw_value
-        modelobj._riak_object.set_data_field(self.key, field_list)
+        self._set_model_data(modelobj, field_list)
 
     def del_list_item(self, modelobj, list_idx):
         field_list = modelobj._riak_object.get_data().get(self.key, [])
         del field_list[list_idx]
-        modelobj._riak_object.set_data_field(self.key, field_list)
+        self._set_model_data(modelobj, field_list)
 
     def append_list_item(self, modelobj, value):
         self.field.validate_subfield(value)
         raw_value = self.field.subfield_to_riak(value)
         field_list = modelobj._riak_object.get_data().get(self.key, [])
         field_list.append(raw_value)
-        modelobj._riak_object.set_data_field(self.key, field_list)
+        self._set_model_data(modelobj, field_list)
 
     def extend_list(self, modelobj, values):
         map(self.field.validate_subfield, values)
         raw_values = [self.field.subfield_to_riak(value) for value in values]
         field_list = modelobj._riak_object.get_data().get(self.key, [])
         field_list.extend(raw_values)
-        modelobj._riak_object.set_data_field(self.key, field_list)
+        self._set_model_data(modelobj, field_list)
 
     def iter_list(self, modelobj):
         raw_list = modelobj._riak_object.get_data().get(self.key, [])
@@ -573,8 +585,8 @@ class ListOf(FieldWithSubtype):
     """
     descriptor_class = ListOfDescriptor
 
-    def __init__(self, field_type=None):
-        super(ListOf, self).__init__(field_type=field_type, default=list)
+    def __init__(self, field_type=None, **kw):
+        super(ListOf, self).__init__(field_type=field_type, default=list, **kw)
 
     def custom_validate(self, valuelist):
         if not isinstance(valuelist, list):
