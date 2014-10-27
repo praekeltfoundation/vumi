@@ -8,10 +8,11 @@ from vumi.tests.helpers import (
 
 try:
     from vumi.components.tests.message_store_old_models import (
-        OutboundMessageVNone, InboundMessageVNone, BatchVNone)
+        OutboundMessageVNone, InboundMessageVNone, BatchVNone,
+        OutboundMessageV1, InboundMessageV1)
     from vumi.components.message_store import (
-        OutboundMessage as OutboundMessageV1,
-        InboundMessage as InboundMessageV1)
+        OutboundMessage as OutboundMessageV2,
+        InboundMessage as InboundMessageV2)
     riak_import_error = None
 except ImportError, e:
     riak_import_error = e
