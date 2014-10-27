@@ -197,7 +197,7 @@ class TestMessageStore(TestMessageStoreBase):
              "%s$%s" % (batch_id_1, msg['timestamp'])),
             ('batches_with_timestamps_bin',
              "%s$%s" % (batch_id_2, msg['timestamp'])),
-            ]))
+        ]))
 
     @inlineCallbacks
     def test_get_events_for_message(self):
