@@ -184,10 +184,20 @@ class TestMessageStore(TestMessageStoreBase):
         batch_id_2 = yield self.store.batch_start()
         yield self.store.add_outbound_message(msg, batch_id=batch_id_2)
 
-        self.assertEqual((yield self.store.batch_outbound_keys(batch_id_1)),
-                         [msg_id])
-        self.assertEqual((yield self.store.batch_outbound_keys(batch_id_2)),
-                         [msg_id])
+        self.assertEqual(
+            (yield self.store.batch_outbound_keys(batch_id_1)), [msg_id])
+        self.assertEqual(
+            (yield self.store.batch_outbound_keys(batch_id_2)), [msg_id])
+        stored_msg = yield self.store.outbound_messages.load(msg_id)
+        # Make sure we're writing the right indexes.
+        self.assertEqual(stored_msg._riak_object.get_indexes(), set([
+            ('batches_bin', batch_id_1),
+            ('batches_bin', batch_id_2),
+            ('batches_with_timestamps_bin',
+             "%s$%s" % (batch_id_1, msg['timestamp'])),
+            ('batches_with_timestamps_bin',
+             "%s$%s" % (batch_id_2, msg['timestamp'])),
+            ]))
 
     @inlineCallbacks
     def test_get_events_for_message(self):

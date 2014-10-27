@@ -63,13 +63,24 @@ class CurrentTag(Model):
 
 
 class OutboundMessage(Model):
-
-    VERSION = 1
+    VERSION = 2
     MIGRATOR = OutboundMessageMigrator
 
     # key is message_id
     msg = VumiMessage(TransportUserMessage)
     batches = ManyToMany(Batch)
+
+    # Extra fields for compound indexes
+    batches_with_timestamps = ListOf(Unicode(), index=True)
+
+    def save(self):
+        # We override this method to set our index fields before saving.
+        batches_with_timestamps = []
+        timestamp = self.msg['timestamp']
+        for batch_id in self.batches.keys():
+            batches_with_timestamps.append(u"%s$%s" % (batch_id, timestamp))
+        self.batches_with_timestamps = batches_with_timestamps
+        return super(OutboundMessage, self).save()
 
 
 class Event(Model):
@@ -79,13 +90,24 @@ class Event(Model):
 
 
 class InboundMessage(Model):
-
-    VERSION = 1
+    VERSION = 2
     MIGRATOR = InboundMessageMigrator
 
     # key is message_id
     msg = VumiMessage(TransportUserMessage)
     batches = ManyToMany(Batch)
+
+    # Extra fields for compound indexes
+    batches_with_timestamps = ListOf(Unicode(), index=True)
+
+    def save(self):
+        # We override this method to set our index fields before saving.
+        batches_with_timestamps = []
+        timestamp = self.msg['timestamp']
+        for batch_id in self.batches.keys():
+            batches_with_timestamps.append(u"%s$%s" % (batch_id, timestamp))
+        self.batches_with_timestamps = batches_with_timestamps
+        return super(InboundMessage, self).save()
 
 
 class MessageStore(object):
