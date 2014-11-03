@@ -508,3 +508,89 @@ class MessageStore(object):
         """
         return self.cache.get_outbound_message_keys(
             batch_id, start, stop, with_timestamp=with_timestamp)
+
+    @Manager.calls_manager
+    def batch_inbound_keys_with_timestamps(self, batch_id, max_results=None):
+        """
+        Return all inbound message keys along with timestamps.
+
+        :param str batch_id:
+            The batch_id to fetch keys for.
+
+        This method performs a Riak index query.
+        """
+        start_value = "%s%s" % (batch_id, "#")  # chr(ord('$') - 1)
+        end_value = "%s%s" % (batch_id, "%")  # chr(ord('$') + 1)
+        results = yield self.inbound_messages.index_keys_page(
+            'batches_with_timestamps', start_value, end_value,
+            return_terms=True, max_results=max_results)
+        returnValue(KeysWithTimestamps(self, batch_id, results))
+
+    @Manager.calls_manager
+    def batch_outbound_keys_with_timestamps(self, batch_id, max_results=None):
+        """
+        Return all outbound message keys along with timestamps.
+
+        :param str batch_id:
+            The batch_id to fetch keys for.
+
+        This method performs a Riak index query.
+        """
+        start_value = "%s%s" % (batch_id, "#")  # chr(ord('$') - 1)
+        end_value = "%s%s" % (batch_id, "%")  # chr(ord('$') + 1)
+        results = yield self.outbound_messages.index_keys_page(
+            'batches_with_timestamps', start_value, end_value,
+            return_terms=True, max_results=max_results)
+        returnValue(KeysWithTimestamps(self, batch_id, results))
+
+
+class KeysWithTimestamps(object):
+    """
+    Index page that reformats results into something easier to work with.
+
+    This is a wrapper around the lower-level index page object from Riak and
+    proxies a subset of its functionality.
+
+    TODO: This is currently written specifically for batch_id+timestamp
+          indexes, but the intent is to generalise it to any kind of compound
+          index once we've figured out a good way to do those.
+    """
+    def __init__(self, message_store, batch_id, index_page):
+        self._message_store = message_store
+        self.manager = message_store.manager
+        self._batch_id = batch_id
+        self._index_page = index_page
+
+    @Manager.calls_manager
+    def next_page(self):
+        """
+        Fetch the next page of results.
+
+        :returns:
+            A new :class:`KeysWithTimestamps` object containing the next page
+            of results.
+        """
+        next_page = yield self._index_page.next_page()
+        returnValue(type(self)(self._message_store, self._batch_id, next_page))
+
+    def has_next_page(self):
+        """
+        Indicate whether there are more results to follow.
+
+        :returns:
+            ``True`` if there are more results, ``False`` if this is the last
+            page.
+        """
+        return self._index_page.has_next_page()
+
+    def __iter__(self):
+        return (self._format_result(r) for r in self._index_page)
+
+    def _format_result(self, result):
+        value, key = result
+        prefix = self._batch_id + "$"
+        if not value.startswith(prefix):
+            raise ValueError(
+                "Index value %r does not begin with expected prefix %r." % (
+                    value, prefix))
+        return (key, value[len(prefix):])

@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 
 from twisted.internet.defer import inlineCallbacks, returnValue
 
-from vumi.message import TransportEvent
+from vumi.message import TransportEvent, VUMI_DATE_FORMAT
 from vumi.tests.helpers import (
     VumiTestCase, MessageHelper, PersistenceHelper, import_skip,
 )
@@ -547,6 +547,52 @@ class TestMessageStore(TestMessageStoreBase):
 
         keys_p2 = yield keys_p1.next_page()
         self.assertEqual(sorted(keys_p2), all_keys[6:])
+
+    @inlineCallbacks
+    def test_batch_inbound_keys_with_timestamp(self):
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+        messages = yield self.create_inbound_messages(batch_id, 10)
+        sorted_keys = sorted((msg['timestamp'], msg['message_id'])
+                             for msg in messages)
+        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT))
+                    for (timestamp, key) in sorted_keys]
+
+        first_page = yield self.store.batch_inbound_keys_with_timestamps(
+            batch_id, max_results=6)
+
+        results = list(first_page)
+        self.assertEqual(len(results), 6)
+        self.assertEqual(first_page.has_next_page(), True)
+
+        next_page = yield first_page.next_page()
+        results.extend(next_page)
+        self.assertEqual(len(results), 10)
+        self.assertEqual(next_page.has_next_page(), False)
+
+        self.assertEqual(results, all_keys)
+
+    @inlineCallbacks
+    def test_batch_outbound_keys_with_timestamp(self):
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+        messages = yield self.create_outbound_messages(batch_id, 10)
+        sorted_keys = sorted((msg['timestamp'], msg['message_id'])
+                             for msg in messages)
+        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT))
+                    for (timestamp, key) in sorted_keys]
+
+        first_page = yield self.store.batch_outbound_keys_with_timestamps(
+            batch_id, max_results=6)
+
+        results = list(first_page)
+        self.assertEqual(len(results), 6)
+        self.assertEqual(first_page.has_next_page(), True)
+
+        next_page = yield first_page.next_page()
+        results.extend(next_page)
+        self.assertEqual(len(results), 10)
+        self.assertEqual(next_page.has_next_page(), False)
+
+        self.assertEqual(results, all_keys)
 
 
 class TestMessageStoreCache(TestMessageStoreBase):
