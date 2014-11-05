@@ -17,6 +17,10 @@ setup(
     ],
     package_data={'twisted.plugins': ['twisted/plugins/*.py']},
     include_package_data=True,
+    scripts=[
+        'vumi/scripts/vumi_tagpools.py',
+        'vumi/scripts/vumi_redis_tools.py',
+    ],
     install_requires=[
         'zope.interface',
         'Twisted>=13.1.0',
