@@ -595,6 +595,40 @@ class TestModelOnTxRiak(VumiTestCase):
         self.assertEqual(sorted(keys), [("2", "foo2"), ("3", "foo3")])
 
     @Manager.calls_manager
+    def test_all_keys_page(self):
+        simple_model = self.manager.proxy(SimpleModel)
+
+        keys_page = yield simple_model.all_keys_page()
+        keys = yield self.filter_tombstones(simple_model, list(keys_page))
+        self.assertEqual(keys, [])
+
+        yield simple_model("foo-1", a=5, b=u'1').save()
+        yield simple_model("foo-2", a=5, b=u'2').save()
+
+        keys_page = yield simple_model.all_keys_page()
+        keys = yield self.filter_tombstones(simple_model, list(keys_page))
+        self.assertEqual(sorted(keys), [u"foo-1", u"foo-2"])
+
+    @Manager.calls_manager
+    def test_all_keys_page_multiple_pages(self):
+        simple_model = self.manager.proxy(SimpleModel)
+
+        yield simple_model("foo-1", a=5, b=u'1').save()
+        yield simple_model("foo-2", a=5, b=u'2').save()
+
+        keys_page1 = yield simple_model.all_keys_page(max_results=1)
+        keys1 = yield self.filter_tombstones(simple_model, list(keys_page1))
+        self.assertEqual(keys1, [u"foo-1"])
+
+        keys_page2 = yield keys_page1.next_page()
+        keys2 = yield self.filter_tombstones(simple_model, list(keys_page2))
+        self.assertEqual(keys2, [u"foo-2"])
+
+        keys_page3 = yield keys_page2.next_page()
+        keys3 = yield self.filter_tombstones(simple_model, list(keys_page3))
+        self.assertEqual(keys3, [])
+
+    @Manager.calls_manager
     def test_index_keys_page(self):
         indexed_model = self.manager.proxy(IndexedModel)
         yield indexed_model("foo1", a=1, b=u"one").save()

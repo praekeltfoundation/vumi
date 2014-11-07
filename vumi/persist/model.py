@@ -329,6 +329,32 @@ class Model(object):
             cls, index_name, start_value, end_value, return_terms=return_terms)
 
     @classmethod
+    def all_keys_page(cls, manager, max_results=None, continuation=None):
+        """Return all keys in this model's bucket.
+
+        Uses Riak's special `$bucket` index. Beware of tombstones (i.e.
+        the keys returned might have been deleted from Riak in the near past).
+
+        :param int max_results:
+            The maximum number of results to return per page. If ``None``,
+            pagination will disables and a single page containing all results
+            will be returned.
+
+        :param continuation:
+            An opaque continuation token indicating which page of results to
+            fetch. The index page object returned from this method has a
+            ``continuation`` attribute that contains this value. If ``None``,
+            the first page of results will be returned.
+
+        :returns:
+            :class:`VumiIndexPage` or :class:`VumiTxIndexPage` object
+            containing all keys from this model's bucket.
+        """
+        return manager.index_keys_page(
+            cls, '$bucket', manager.bucket_name(cls), None,
+            max_results=max_results, continuation=continuation)
+
+    @classmethod
     def index_keys_page(cls, manager, field_name, value, end_value=None,
                         return_terms=None, max_results=None,
                         continuation=None):
@@ -856,6 +882,10 @@ class ModelProxy(object):
         return self._modelcls.index_keys(
             self._manager, field_name, value, end_value,
             return_terms=return_terms)
+
+    def all_keys_page(self, max_results=None, continuation=None):
+        return self._modelcls.all_keys_page(
+            self._manager, max_results=max_results, continuation=continuation)
 
     def index_keys_page(self, field_name, value, end_value=None,
                         return_terms=None, max_results=None,
