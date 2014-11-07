@@ -136,7 +136,7 @@ class ModelMigrator(object):
         self.emit("Done, %s objects migrated." % (processed,))
 
 
-def main(name, *args):
+def main(_reactor, name, *args):
     try:
         options = Options()
         options.parseOptions(args)

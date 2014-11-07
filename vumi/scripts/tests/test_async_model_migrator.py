@@ -96,7 +96,7 @@ class TestModelMigrator(VumiTestCase):
         yield self.mk_simple_models(3)
         self.patch(sys, "stdout", StringIO())
         yield main(
-            "name",
+            None, "name",
             "-m", self.model_cls_path,
             "-b", self.riak_manager.bucket_prefix)
         self.assertEqual(
