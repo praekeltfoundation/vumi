@@ -616,17 +616,23 @@ class TestModelOnTxRiak(VumiTestCase):
         yield simple_model("foo-1", a=5, b=u'1').save()
         yield simple_model("foo-2", a=5, b=u'2').save()
 
-        keys_page1 = yield simple_model.all_keys_page(max_results=1)
-        keys1 = yield self.filter_tombstones(simple_model, list(keys_page1))
-        self.assertEqual(keys1, [u"foo-1"])
+        keys = []
 
-        keys_page2 = yield keys_page1.next_page()
-        keys2 = yield self.filter_tombstones(simple_model, list(keys_page2))
-        self.assertEqual(keys2, [u"foo-2"])
+        # We get results in arbitrary order and we may have tombstones left
+        # over from prior tests. Therefore, we iterate through all index pages
+        # and assert that we have exactly one result in each page except the
+        # last.
+        keys_page = yield simple_model.all_keys_page(max_results=1)
+        while keys_page is not None:
+            keys.extend(list(keys_page))
+            if keys_page.has_next_page():
+                self.assertEqual(len(list(keys_page)), 1)
+                keys_page = yield keys_page.next_page()
+            else:
+                keys_page = None
 
-        keys_page3 = yield keys_page2.next_page()
-        keys3 = yield self.filter_tombstones(simple_model, list(keys_page3))
-        self.assertEqual(keys3, [])
+        keys = yield self.filter_tombstones(simple_model, keys)
+        self.assertEqual(sorted(keys), [u"foo-1", u"foo-2"])
 
     @Manager.calls_manager
     def test_index_keys_page(self):
