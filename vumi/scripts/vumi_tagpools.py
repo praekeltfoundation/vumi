@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # -*- test-case-name: vumi.scripts.tests.test_vumi_tagpools -*-
 import sys
 import re

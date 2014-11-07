@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # -*- test-case-name: vumi.scripts.tests.test_vumi_redis_tools -*-
 import re
 import sys
