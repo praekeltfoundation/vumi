@@ -349,6 +349,7 @@ class TestMessageHelper(TestCase):
             'from_addr': 'from',
             'to_addr': 'to',
             'group': '#channel',
+            'provider': 'MY-MNO',
             'session_event': TransportUserMessage.SESSION_NEW,
             'transport_type': 'irc',
             'transport_name': 'vuminet',
