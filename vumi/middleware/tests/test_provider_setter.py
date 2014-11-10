@@ -105,6 +105,57 @@ class TestAddressPrefixProviderSettingMiddleware(VumiTestCase):
         processed_msg = mw.handle_inbound(msg, "dummy_connector")
         self.assertEqual(processed_msg.get("provider"), None)
 
+    def test_set_provider_no_normalize_msisdn(self):
+        """
+        If exactly one prefix matches the address, its corresponding provider
+        value is set on the inbound message.
+        """
+        mw = self.mk_middleware({
+            "provider_prefixes": {
+                "083": "MY-MNO",
+                "+2783": "YOUR-MNO",
+            },
+        })
+        msg = self.msg_helper.make_inbound(None, from_addr="0831234567")
+        self.assertEqual(msg.get("provider"), None)
+        processed_msg = mw.handle_inbound(msg, "dummy_connector")
+        self.assertEqual(processed_msg.get("provider"), "MY-MNO")
+
+    def test_set_provider_normalize_msisdn(self):
+        """
+        If exactly one prefix matches the address, its corresponding provider
+        value is set on the inbound message.
+        """
+        mw = self.mk_middleware({
+            "normalize_msisdn": {"country_code": "27"},
+            "provider_prefixes": {
+                "083": "YOUR-MNO",
+                "+2783": "MY-MNO",
+            },
+        })
+        msg = self.msg_helper.make_inbound(None, from_addr="0831234567")
+        self.assertEqual(msg.get("provider"), None)
+        processed_msg = mw.handle_inbound(msg, "dummy_connector")
+        self.assertEqual(processed_msg.get("provider"), "MY-MNO")
+
+    def test_set_provider_normalize_msisdn_strip_plus(self):
+        """
+        If exactly one prefix matches the address, its corresponding provider
+        value is set on the inbound message.
+        """
+        mw = self.mk_middleware({
+            "normalize_msisdn": {"country_code": "27", "strip_plus": True},
+            "provider_prefixes": {
+                "083": "YOUR-MNO",
+                "+2783": "YOUR-MNO",
+                "2783": "MY-MNO",
+            },
+        })
+        msg = self.msg_helper.make_inbound(None, from_addr="0831234567")
+        self.assertEqual(msg.get("provider"), None)
+        processed_msg = mw.handle_inbound(msg, "dummy_connector")
+        self.assertEqual(processed_msg.get("provider"), "MY-MNO")
+
     def test_do_not_set_provider_on_outbound(self):
         """
         Outbound messages are left as they are.

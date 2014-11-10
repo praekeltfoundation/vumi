@@ -1,19 +1,20 @@
 # -*- test-case-name: vumi.middleware.tests.test_provider_setter -*-
 
 from vumi.middleware.base import TransportMiddleware
+from vumi.utils import normalize_msisdn
 
 
 class StaticProviderSettingMiddleware(TransportMiddleware):
     """
-    Transport middleware that sets a static `provider` on each inbound message.
-    Outbound messages are ignored.
+    Transport middleware that sets a static ``provider`` on each inbound
+    message. Outbound messages are ignored.
 
     Configuration options:
 
-    :param str provider: Value to set the `provider` field to.
+    :param str provider: Value to set the ``provider`` field to.
     """
     def setup_middleware(self):
-        self.provider_value = self.config['provider']
+        self.provider_value = self.config["provider"]
 
     def handle_inbound(self, message, connector_name):
         message["provider"] = self.provider_value
@@ -34,15 +35,35 @@ class AddressPrefixProviderSettingMiddleware(TransportMiddleware):
         Mapping from address prefix to provider value. Longer prefixes are
         checked first to avoid ambiguity. If no prefix matches, the provider
         value will be set to ``None``.
+
+    :param dict normalize_msisdn:
+        Optional MSISDN normalization config. If present, this dict should
+        contain a (mandatory) ``country_code`` field and an optional boolean
+        ``strip_plus`` field (default ``False``). If absent, the ``from_addr``
+        field will not be normalized prior to the prefix check. (This
+        normalization is only used for the prefix check. The ``from_addr``
+        field on the message is not modified.)
     """
     def setup_middleware(self):
         self.provider_prefixes = []
-        prefix_mapping = self.config['provider_prefixes']
+        prefix_mapping = self.config["provider_prefixes"]
         sorted_prefixes = sorted(prefix_mapping.keys(), key=lambda p: -len(p))
         for prefix in sorted_prefixes:
             self.provider_prefixes.append((prefix, prefix_mapping[prefix]))
+        self.normalize_config = self.config.get("normalize_msisdn", {}).copy()
+        if self.normalize_config:
+            assert "country_code" in self.normalize_config
+
+    def process_from_addr(self, from_addr):
+        if self.normalize_config:
+            from_addr = normalize_msisdn(
+                from_addr, country_code=self.normalize_config["country_code"])
+            if self.normalize_config.get("strip_plus"):
+                from_addr = from_addr.lstrip("+")
+        return from_addr
 
     def get_prefix(self, from_addr):
+        from_addr = self.process_from_addr(from_addr)
         for prefix, provider in self.provider_prefixes:
             if from_addr.startswith(prefix):
                 return provider
