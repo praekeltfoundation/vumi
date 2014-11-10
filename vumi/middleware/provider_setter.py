@@ -45,11 +45,9 @@ class AddressPrefixProviderSettingMiddleware(TransportMiddleware):
         field on the message is not modified.)
     """
     def setup_middleware(self):
-        self.provider_prefixes = []
-        prefix_mapping = self.config["provider_prefixes"]
-        sorted_prefixes = sorted(prefix_mapping.keys(), key=lambda p: -len(p))
-        for prefix in sorted_prefixes:
-            self.provider_prefixes.append((prefix, prefix_mapping[prefix]))
+        prefixes = self.config["provider_prefixes"].items()
+        self.provider_prefixes = sorted(
+            prefixes, key=lambda item: -len(item[0]))
         self.normalize_config = self.config.get("normalize_msisdn", {}).copy()
         if self.normalize_config:
             assert "country_code" in self.normalize_config
