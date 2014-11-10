@@ -62,7 +62,7 @@ class AddressPrefixProviderSettingMiddleware(TransportMiddleware):
                 from_addr = from_addr.lstrip("+")
         return from_addr
 
-    def get_prefix(self, from_addr):
+    def get_provider(self, from_addr):
         from_addr = self.process_from_addr(from_addr)
         for prefix, provider in self.provider_prefixes:
             if from_addr.startswith(prefix):
@@ -70,7 +70,7 @@ class AddressPrefixProviderSettingMiddleware(TransportMiddleware):
         return None
 
     def handle_inbound(self, message, connector_name):
-        message["provider"] = self.get_prefix(message["from_addr"])
+        message["provider"] = self.get_provider(message["from_addr"])
         return message
 
     def handle_outbound(self, message, connector_name):
