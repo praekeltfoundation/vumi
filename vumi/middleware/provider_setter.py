@@ -16,7 +16,9 @@ class StaticProviderSettingMiddleware(TransportMiddleware):
     .. note::
 
        If you rely on the provider value in other middleware, please
-       order your middleware carefully.
+       order your middleware carefully. If another middleware requires the
+       provider for both inbound and outbound messages, you might need two
+       copies of this middleware (one on either side of the other middleware).
     """
     def setup_middleware(self):
         self.provider_value = self.config["provider"]
@@ -55,7 +57,9 @@ class AddressPrefixProviderSettingMiddleware(TransportMiddleware):
     .. note::
 
        If you rely on the provider value in other middleware, please
-       order your middleware carefully.
+       order your middleware carefully. If another middleware requires the
+       provider for both inbound and outbound messages, you might need two
+       copies of this middleware (one on either side of the other middleware).
     """
     def setup_middleware(self):
         prefixes = self.config["provider_prefixes"].items()
