@@ -38,7 +38,7 @@ class TestStaticProviderSettingMiddleware(VumiTestCase):
         processed_msg = mw.handle_inbound(msg, "dummy_connector")
         self.assertEqual(processed_msg.get("provider"), "MY-MNO")
 
-    def test_do_not_set_provider_on_outbound(self):
+    def test_set_provider_on_outbound_if_unset(self):
         """
         Outbound messages are left as they are.
         """
@@ -46,7 +46,7 @@ class TestStaticProviderSettingMiddleware(VumiTestCase):
         msg = self.msg_helper.make_outbound(None)
         self.assertEqual(msg.get("provider"), None)
         processed_msg = mw.handle_outbound(msg, "dummy_connector")
-        self.assertEqual(processed_msg.get("provider"), None)
+        self.assertEqual(processed_msg.get("provider"), "MY-MNO")
 
 
 class TestAddressPrefixProviderSettingMiddleware(VumiTestCase):
@@ -156,7 +156,7 @@ class TestAddressPrefixProviderSettingMiddleware(VumiTestCase):
         processed_msg = mw.handle_inbound(msg, "dummy_connector")
         self.assertEqual(processed_msg.get("provider"), "MY-MNO")
 
-    def test_do_not_set_provider_on_outbound(self):
+    def test_set_provider_on_outbound(self):
         """
         Outbound messages are left as they are.
         """
@@ -165,4 +165,4 @@ class TestAddressPrefixProviderSettingMiddleware(VumiTestCase):
             None, to_addr="+1234567", from_addr="+12345")
         self.assertEqual(msg.get("provider"), None)
         processed_msg = mw.handle_outbound(msg, "dummy_connector")
-        self.assertEqual(processed_msg.get("provider"), None)
+        self.assertEqual(processed_msg.get("provider"), "MY-MNO")

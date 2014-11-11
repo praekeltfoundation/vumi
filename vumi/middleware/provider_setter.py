@@ -7,7 +7,7 @@ from vumi.utils import normalize_msisdn
 class StaticProviderSettingMiddleware(TransportMiddleware):
     """
     Transport middleware that sets a static ``provider`` on each inbound
-    message. Outbound messages are ignored.
+    message and outbound message.
 
     Configuration options:
 
@@ -21,13 +21,16 @@ class StaticProviderSettingMiddleware(TransportMiddleware):
         return message
 
     def handle_outbound(self, message, connector_name):
+        message["provider"] = self.provider_value
         return message
 
 
 class AddressPrefixProviderSettingMiddleware(TransportMiddleware):
     """
-    Transport middleware that sets a `provider` on each inbound message based
-    on configured ``from_addr`` prefixes. Outbound messages are ignored.
+    Transport middleware that sets a ``provider`` on each message based
+    on configured address prefixes. Inbound messages have their provider set
+    based on their ``from_addr``. Outbound messages have their provider set
+    based on their ``to_addr``.
 
     Configuration options:
 
@@ -52,16 +55,16 @@ class AddressPrefixProviderSettingMiddleware(TransportMiddleware):
         if self.normalize_config:
             assert "country_code" in self.normalize_config
 
-    def process_from_addr(self, from_addr):
+    def normalize_addr(self, addr):
         if self.normalize_config:
-            from_addr = normalize_msisdn(
-                from_addr, country_code=self.normalize_config["country_code"])
+            addr = normalize_msisdn(
+                addr, country_code=self.normalize_config["country_code"])
             if self.normalize_config.get("strip_plus"):
-                from_addr = from_addr.lstrip("+")
-        return from_addr
+                addr = addr.lstrip("+")
+        return addr
 
-    def get_provider(self, from_addr):
-        from_addr = self.process_from_addr(from_addr)
+    def get_provider(self, addr):
+        from_addr = self.normalize_addr(addr)
         for prefix, provider in self.provider_prefixes:
             if from_addr.startswith(prefix):
                 return provider
@@ -72,4 +75,5 @@ class AddressPrefixProviderSettingMiddleware(TransportMiddleware):
         return message
 
     def handle_outbound(self, message, connector_name):
+        message["provider"] = self.get_provider(message["to_addr"])
         return message
