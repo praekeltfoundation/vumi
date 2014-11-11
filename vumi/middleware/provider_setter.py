@@ -12,6 +12,11 @@ class StaticProviderSettingMiddleware(TransportMiddleware):
     Configuration options:
 
     :param str provider: Value to set the ``provider`` field to.
+
+    .. note::
+
+       If you rely on the provider value in other middleware, please
+       order your middleware carefully.
     """
     def setup_middleware(self):
         self.provider_value = self.config["provider"]
@@ -46,6 +51,11 @@ class AddressPrefixProviderSettingMiddleware(TransportMiddleware):
         field will not be normalized prior to the prefix check. (This
         normalization is only used for the prefix check. The ``from_addr``
         field on the message is not modified.)
+
+    .. note::
+
+       If you rely on the provider value in other middleware, please
+       order your middleware carefully.
     """
     def setup_middleware(self):
         prefixes = self.config["provider_prefixes"].items()
