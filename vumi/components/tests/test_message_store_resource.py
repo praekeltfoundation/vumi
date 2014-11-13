@@ -205,11 +205,9 @@ class TestMessageStoreResource(VumiTestCase):
         # Continue processing messages.
         res.resume_d.callback(None)
 
-        try:
-            yield resp_d
-        except Exception:
-            # This will fail because we've cancelled the request.
-            pass
+        # This will fail because we've cancelled the request. We don't care
+        # about the exception, so we swallow it and move on.
+        yield resp_d.addErrback(lambda _: None)
 
         sorted_message_ids = sorted(
             msg['message_id'] for msg in [msg1, msg2, msg3, msg4])
