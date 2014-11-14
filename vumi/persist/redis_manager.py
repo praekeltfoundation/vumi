@@ -12,6 +12,14 @@ class VumiRedis(redis.Redis):
     Custom Vumi redis client implementation.
     """
 
+    def setex(self, key, seconds, value):
+        """
+        The underlying .setex() signature doesn't match our implementation
+        in the txredis manager. This wrapper swaps the last two parameters,
+        seconds and value, so that they do.
+        """
+        return super(VumiRedis, self).setex(key, value, seconds)
+
     def scan(self, cursor, match=None, count=None):
         """
         Scan through all the keys in the database returning those that

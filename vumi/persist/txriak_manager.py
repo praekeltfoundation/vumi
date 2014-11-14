@@ -304,6 +304,24 @@ class TxRiakManager(Manager):
             mapreduce_done.addCallback(lambda r: reducer_func(self, r))
         return mapreduce_done
 
+    def _search_iteration(self, bucket, query, rows, start):
+        d = deferToThread(bucket.search, query, rows=rows, start=start)
+        d.addCallback(lambda r: [doc["id"] for doc in r["docs"]])
+        return d
+
+    @inlineCallbacks
+    def real_search(self, modelcls, query, rows=None):
+        rows = 1000 if rows is None else rows
+        bucket_name = self.bucket_name(modelcls)
+        bucket = self.client.bucket(bucket_name)
+        keys = []
+        new_keys = yield self._search_iteration(bucket, query, rows, 0)
+        while new_keys:
+            keys.extend(new_keys)
+            new_keys = yield self._search_iteration(
+                bucket, query, rows, len(keys))
+        returnValue(keys)
+
     def riak_enable_search(self, modelcls):
         bucket_name = self.bucket_name(modelcls)
         bucket = self.client.bucket(bucket_name)

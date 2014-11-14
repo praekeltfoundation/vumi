@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="vumi",
-    version="0.5.2",
+    version="0.5.3a",
     url='http://github.com/praekelt/vumi',
     license='BSD',
     description="Super-scalable messaging engine for the delivery of SMS, "
@@ -17,6 +17,10 @@ setup(
     ],
     package_data={'twisted.plugins': ['twisted/plugins/*.py']},
     include_package_data=True,
+    scripts=[
+        'vumi/scripts/vumi_tagpools.py',
+        'vumi/scripts/vumi_redis_tools.py',
+    ],
     install_requires=[
         'zope.interface',
         'Twisted>=13.1.0',
@@ -27,7 +31,7 @@ setup(
         'service_identity',
         'txssmi>=0.3.0',
         'wokkel',
-        'redis',
+        'redis>=2.7.1',
         'txredis',
         'python-smpp>=0.1.2',
         'pytz==2013b',
@@ -43,6 +47,8 @@ setup(
         'License :: OSI Approved :: BSD License',
         'Operating System :: POSIX',
         'Programming Language :: Python',
+        'Programming Language :: Python :: 2.6',
+        'Programming Language :: Python :: 2.7',
         'Topic :: Software Development :: Libraries :: Python Modules',
         'Topic :: System :: Networking',
     ],
