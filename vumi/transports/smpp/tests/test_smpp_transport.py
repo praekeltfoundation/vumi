@@ -232,6 +232,24 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.assertEqual(event['user_message_id'], 'bar')
 
     @inlineCallbacks
+    def test_mo_delivery_report_content_with_nulls(self):
+        smpp_helper = yield self.get_smpp_helper()
+        transport = smpp_helper.transport
+        yield transport.message_stash.set_remote_message_id('bar', 'foo')
+
+        content = (
+            "id:%s sub:null dlvrd:null submit date:200101010030"
+            " done date:200101020030 stat:DELIVRD err:null text:Meep")
+        smpp_helper.send_mo(
+            sequence_number=1, short_message=content % ("foo",),
+            source_addr='123', destination_addr='456')
+
+        [event] = yield self.tx_helper.wait_for_dispatched_events(1)
+        self.assertEqual(event['event_type'], 'delivery_report')
+        self.assertEqual(event['delivery_status'], 'delivered')
+        self.assertEqual(event['user_message_id'], 'bar')
+
+    @inlineCallbacks
     def test_mo_sms_unicode(self):
         smpp_helper = yield self.get_smpp_helper()
         smpp_helper.send_mo(sequence_number=1, short_message='Zo\xc3\xab',
