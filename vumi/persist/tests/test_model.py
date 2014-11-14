@@ -38,6 +38,10 @@ class ListOfModel(Model):
     items = ListOf(Integer())
 
 
+class IndexedListOfModel(Model):
+    items = ListOf(Integer(), index=True)
+
+
 class ForeignKeyModel(Model):
     simple = ForeignKey(SimpleModel, null=True)
 
@@ -300,6 +304,11 @@ class TestModelOnTxRiak(VumiTestCase):
         self.assertEqual(expected_keys, sorted(keys))
         self.assertEqual(len(expected_keys), count)
 
+    @inlineCallbacks
+    def assert_search_results(self, expected_keys, func, *args, **kw):
+        keys = yield func(*args, **kw)
+        self.assertEqual(expected_keys, sorted(keys))
+
     @Manager.calls_manager
     def test_simple_search(self):
         simple_model = self.manager.proxy(SimpleModel)
@@ -339,6 +348,47 @@ class TestModelOnTxRiak(VumiTestCase):
         yield self.assert_mapreduce_results(
             ["one", "two"], search, 'b:abc OR b:def')
         yield self.assert_mapreduce_results(["three", "two"], search, 'a:2')
+
+    @Manager.calls_manager
+    def test_simple_real_search(self):
+        simple_model = self.manager.proxy(SimpleModel)
+        yield simple_model.enable_search()
+        yield simple_model("one", a=1, b=u'abc').save()
+        yield simple_model("two", a=2, b=u'def').save()
+        yield simple_model("three", a=2, b=u'ghi').save()
+
+        search = simple_model.real_search
+        yield self.assert_search_results(["one"], search, 'a:1')
+        yield self.assert_search_results(["two"], search, 'a:2 AND b:def')
+        yield self.assert_search_results(
+            ["one", "two"], search, 'b:abc OR b:def')
+        yield self.assert_search_results(["three", "two"], search, 'a:2')
+
+    @Manager.calls_manager
+    def test_big_real_search(self):
+        simple_model = self.manager.proxy(SimpleModel)
+        yield simple_model.enable_search()
+        keys = []
+        for i in range(100):
+            key = "xx%06d" % (i + 1)
+            keys.append(key)
+            yield simple_model(key, a=99, b=u'abc').save()
+        yield simple_model("yy000001", a=98, b=u'def').save()
+        yield simple_model("yy000002", a=98, b=u'ghi').save()
+
+        search = lambda q: simple_model.real_search(q, rows=11)
+        yield self.assert_search_results(keys, search, 'a:99')
+
+    @Manager.calls_manager
+    def test_empty_real_search(self):
+        simple_model = self.manager.proxy(SimpleModel)
+        yield simple_model.enable_search()
+        yield simple_model("one", a=1, b=u'abc').save()
+        yield simple_model("two", a=2, b=u'def').save()
+        yield simple_model("three", a=2, b=u'ghi').save()
+
+        search = simple_model.real_search
+        yield self.assert_search_results([], search, 'a:7')
 
     @Manager.calls_manager
     def test_load_all_bunches(self):
@@ -794,6 +844,40 @@ class TestModelOnTxRiak(VumiTestCase):
 
         l2.items = [1]
         self.assertEqual(list(l2.items), [1])
+
+    @Manager.calls_manager
+    def test_listof_fields_indexes(self):
+        list_model = self.manager.proxy(IndexedListOfModel)
+        l1 = list_model("foo")
+        l1.items.append(1)
+        l1.items.append(2)
+        yield l1.save()
+
+        assert_indexes = lambda mdl, values: self.assertEqual(
+            mdl._riak_object.get_indexes(),
+            set(('items_bin', str(v)) for v in values))
+
+        l2 = yield list_model.load("foo")
+        self.assertEqual(l2.items[0], 1)
+        self.assertEqual(l2.items[1], 2)
+        self.assertEqual(list(l2.items), [1, 2])
+        assert_indexes(l2, [1, 2])
+
+        l2.items[0] = 5
+        self.assertEqual(l2.items[0], 5)
+        assert_indexes(l2, [2, 5])
+
+        del l2.items[0]
+        self.assertEqual(list(l2.items), [2])
+        assert_indexes(l2, [2])
+
+        l2.items.extend([3, 4, 5])
+        self.assertEqual(list(l2.items), [2, 3, 4, 5])
+        assert_indexes(l2, [2, 3, 4, 5])
+
+        l2.items = [1]
+        self.assertEqual(list(l2.items), [1])
+        assert_indexes(l2, [1])
 
     def test_listof_setting(self):
         list_model = self.manager.proxy(ListOfModel)

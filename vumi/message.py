@@ -214,6 +214,7 @@ class TransportUserMessage(TransportMessage):
         fields = super(TransportUserMessage, self).process_fields(fields)
         fields.setdefault('message_id', self.generate_id())
         fields.setdefault('in_reply_to', None)
+        fields.setdefault('provider', None)
         fields.setdefault('session_event', None)
         fields.setdefault('content', None)
         fields.setdefault('transport_metadata', {})
@@ -222,8 +223,10 @@ class TransportUserMessage(TransportMessage):
 
     def validate_fields(self):
         super(TransportUserMessage, self).validate_fields()
-        # We might get older message versions without the `group` field.
+        # We might get older message versions without the `group` or `provider`
+        # fields.
         self.payload.setdefault('group', None)
+        self.payload.setdefault('provider', None)
         self.assert_field_present(
             'message_id',
             'to_addr',
@@ -235,6 +238,7 @@ class TransportUserMessage(TransportMessage):
             'transport_type',
             'transport_metadata',
             'group',
+            'provider',
             )
         if self['session_event'] not in self.SESSION_EVENTS:
             raise InvalidMessageField("Invalid session_event %r"
@@ -262,7 +266,7 @@ class TransportUserMessage(TransportMessage):
               replied to and may not be overridden by this method:
 
               # If we're not using this addressing, we shouldn't be replying.
-              'to_addr', 'from_addr', 'group', 'in_reply_to',
+              'to_addr', 'from_addr', 'group', 'in_reply_to', 'provider'
               # These three belong together and are supposed to be opaque.
               'transport_name', 'transport_type', 'transport_metadata'
 
@@ -273,7 +277,7 @@ class TransportUserMessage(TransportMessage):
 
         for field in [
                 # If we're not using this addressing, we shouldn't be replying.
-                'to_addr', 'from_addr', 'group', 'in_reply_to',
+                'to_addr', 'from_addr', 'group', 'in_reply_to', 'provider'
                 # These three belong together and are supposed to be opaque.
                 'transport_name', 'transport_type', 'transport_metadata']:
             if field in kw:
@@ -287,6 +291,7 @@ class TransportUserMessage(TransportMessage):
             'from_addr': self['to_addr'],
             'group': self['group'],
             'in_reply_to': self['message_id'],
+            'provider': self['provider'],
             'transport_name': self['transport_name'],
             'transport_type': self['transport_type'],
             'transport_metadata': self['transport_metadata'],

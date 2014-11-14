@@ -6,6 +6,7 @@ from twisted.web.resource import NoResource, Resource
 from twisted.web.server import NOT_DONE_YET
 
 from vumi.components.message_store import MessageStore
+from vumi.components.message_formatters import JsonFormatter, CsvFormatter
 from vumi.config import (
     ConfigDict, ConfigText, ConfigServerEndpoint, ConfigInt,
     ServerEndpointFallback)
@@ -29,15 +30,15 @@ class MessageStoreProxyResource(Resource):
     isLeaf = True
     default_concurrency = 10
 
-    def __init__(self, message_store, batch_id):
+    def __init__(self, message_store, batch_id, formatter):
         Resource.__init__(self)
         self.message_store = message_store
         self.batch_id = batch_id
+        self.formatter = formatter
 
     def render_GET(self, request):
-        resp_headers = request.responseHeaders
-        resp_headers.addRawHeader(
-            'Content-Type', 'application/json; charset=utf-8')
+        self.formatter.add_http_headers(request)
+        self.formatter.write_row_header(request)
 
         if 'concurrency' in request.args:
             concurrency = int(request.args['concurrency'][0])
@@ -45,6 +46,9 @@ class MessageStoreProxyResource(Resource):
             concurrency = self.default_concurrency
 
         d = self.get_keys_page(self.message_store, self.batch_id)
+        request.connection_has_been_closed = False
+        request.notifyFinish().addBoth(
+            lambda _: setattr(request, 'connection_has_been_closed', True))
         d.addCallback(self.fetch_pages, concurrency, request)
         return NOT_DONE_YET
 
@@ -65,6 +69,9 @@ class MessageStoreProxyResource(Resource):
 
         When there are no more pages, we add a callback to close the request.
         """
+        if request.connection_has_been_closed:
+            # We're no longer connected, so stop doing work.
+            return
         d = self.fetch_page(keys_page, concurrency, request)
         if keys_page.has_next_page():
             # We fetch the next page before waiting for the current page to be
@@ -76,8 +83,14 @@ class MessageStoreProxyResource(Resource):
             d.addCallback(self.fetch_pages, concurrency, request)
         else:
             # No more pages, so close the request.
-            d.addCallback(lambda _: request.finish())
+            d.addCallback(self.finish_request_cb, request)
         return d
+
+    def finish_request_cb(self, _result, request):
+        if not request.connection_has_been_closed:
+            # We need to check for this here in case we lose the connection
+            # while delivering the last page.
+            return request.finish()
 
     @inlineCallbacks
     def fetch_page(self, keys_page, concurrency, request):
@@ -85,6 +98,9 @@ class MessageStoreProxyResource(Resource):
         Process a page of keys in chunks of concurrently-fetched messages.
         """
         for keys in chunks(list(keys_page), concurrency):
+            if request.connection_has_been_closed:
+                # We're no longer connected, so stop doing work.
+                return
             yield self.handle_chunk(keys, request)
 
     def handle_chunk(self, message_keys, request):
@@ -100,8 +116,7 @@ class MessageStoreProxyResource(Resource):
         return d
 
     def write_message(self, message, request):
-        request.write(message.to_json())
-        request.write('\n')
+        self.formatter.write_row(request, message)
 
 
 class InboundResource(MessageStoreProxyResource):
@@ -124,19 +139,24 @@ class OutboundResource(MessageStoreProxyResource):
 
 class BatchResource(Resource):
 
+    RESOURCES = {
+        'inbound.json': (InboundResource, JsonFormatter),
+        'outbound.json': (OutboundResource, JsonFormatter),
+        'inbound.csv': (InboundResource, CsvFormatter),
+        'outbound.csv': (OutboundResource, CsvFormatter),
+    }
+
     def __init__(self, message_store, batch_id):
         Resource.__init__(self)
         self.message_store = message_store
         self.batch_id = batch_id
 
     def getChild(self, path, request):
-        resource_class = {
-            'inbound.json': InboundResource,
-            'outbound.json': OutboundResource,
-        }.get(path)
-        if resource_class is None:
+        if path not in self.RESOURCES:
             return NoResource()
-        return resource_class(self.message_store, self.batch_id)
+        resource_class, message_formatter = self.RESOURCES.get(path)
+        return resource_class(
+            self.message_store, self.batch_id, message_formatter())
 
 
 class MessageStoreResource(Resource):

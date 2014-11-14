@@ -2,29 +2,34 @@
 
 import json
 
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet import reactor
+from twisted.internet.defer import inlineCallbacks, Deferred, succeed
+from twisted.web.server import Site
+
+from vumi.components.message_formatters import JsonFormatter
 
 from vumi.utils import http_request_full
 
 from vumi.tests.helpers import (
     VumiTestCase, MessageHelper, PersistenceHelper, import_skip,
-    WorkerHelper
-)
+    WorkerHelper)
 
 
 class TestMessageStoreResource(VumiTestCase):
 
-    @inlineCallbacks
     def setUp(self):
         self.persistence_helper = self.add_helper(
             PersistenceHelper(use_riak=True))
+        self.worker_helper = self.add_helper(WorkerHelper())
+        self.msg_helper = self.add_helper(MessageHelper())
+
+    @inlineCallbacks
+    def start_server(self):
         try:
             from vumi.components.message_store_resource import (
                 MessageStoreResourceWorker)
         except ImportError, e:
             import_skip(e, 'riak')
-
-        self.worker_helper = self.add_helper(WorkerHelper())
 
         config = self.persistence_helper.mk_config({
             'twisted_endpoint': 'tcp:0',
@@ -37,7 +42,6 @@ class TestMessageStoreResource(VumiTestCase):
         port = yield worker.services[0]._waitingForPort
         addr = port.getHost()
 
-        self.msg_helper = self.add_helper(MessageHelper())
         self.url = 'http://%s:%s' % (addr.host, addr.port)
         self.store = worker.store
         self.addCleanup(self.stop_server, port)
@@ -71,6 +75,7 @@ class TestMessageStoreResource(VumiTestCase):
 
     @inlineCallbacks
     def test_get_inbound(self):
+        yield self.start_server()
         batch_id = yield self.make_batch(('foo', 'bar'))
         msg1 = yield self.make_inbound(batch_id, 'føø')
         msg2 = yield self.make_inbound(batch_id, 'føø')
@@ -82,7 +87,25 @@ class TestMessageStoreResource(VumiTestCase):
             set([msg1['message_id'], msg2['message_id']]))
 
     @inlineCallbacks
+    def test_get_inbound_csv(self):
+        yield self.start_server()
+        batch_id = yield self.make_batch(('foo', 'bar'))
+        msg1 = yield self.make_inbound(batch_id, 'føø')
+        msg2 = yield self.make_inbound(batch_id, 'føø')
+        resp = yield self.make_request('GET', batch_id, 'inbound.csv')
+        rows = resp.delivered_body.split('\r\n')
+        header, rows = rows[0], rows[1:-1]
+        self.assertEqual(header, (
+            "message_id,to_addr,from_addr,in_reply_to,session_event,content,"
+            "group"))
+        self.assertEqual(sorted(rows), sorted([
+            "%s,9292,+41791234567,,,føø," % msg1['message_id'],
+            "%s,9292,+41791234567,,,føø," % msg2['message_id'],
+        ]))
+
+    @inlineCallbacks
     def test_get_outbound(self):
+        yield self.start_server()
         batch_id = yield self.make_batch(('foo', 'bar'))
         msg1 = yield self.make_outbound(batch_id, 'føø')
         msg2 = yield self.make_outbound(batch_id, 'føø')
@@ -94,7 +117,25 @@ class TestMessageStoreResource(VumiTestCase):
             set([msg1['message_id'], msg2['message_id']]))
 
     @inlineCallbacks
+    def test_get_outbound_csv(self):
+        yield self.start_server()
+        batch_id = yield self.make_batch(('foo', 'bar'))
+        msg1 = yield self.make_outbound(batch_id, 'føø')
+        msg2 = yield self.make_outbound(batch_id, 'føø')
+        resp = yield self.make_request('GET', batch_id, 'outbound.csv')
+        rows = resp.delivered_body.split('\r\n')
+        header, rows = rows[0], rows[1:-1]
+        self.assertEqual(header, (
+            "message_id,to_addr,from_addr,in_reply_to,session_event,content,"
+            "group"))
+        self.assertEqual(sorted(rows), sorted([
+            "%s,+41791234567,9292,,,føø," % msg1['message_id'],
+            "%s,+41791234567,9292,,,føø," % msg2['message_id'],
+        ]))
+
+    @inlineCallbacks
     def test_get_inbound_multiple_pages(self):
+        yield self.start_server()
         self.store.DEFAULT_MAX_RESULTS = 1
         batch_id = yield self.make_batch(('foo', 'bar'))
         msg1 = yield self.make_inbound(batch_id, 'føø')
@@ -105,3 +146,69 @@ class TestMessageStoreResource(VumiTestCase):
         self.assertEqual(
             set([msg['message_id'] for msg in messages]),
             set([msg1['message_id'], msg2['message_id']]))
+
+    @inlineCallbacks
+    def test_disconnect_kills_server(self):
+        """
+        If the client connection is lost, we stop processing the request.
+
+        This test is a bit hacky, because it has to muck about inside the
+        resource in order to pause and resume at appropriate places.
+        """
+        yield self.start_server()
+
+        from vumi.components.message_store_resource import InboundResource
+
+        batch_id = yield self.make_batch(('foo', 'bar'))
+        msg1 = yield self.make_inbound(batch_id, 'føø')
+        msg2 = yield self.make_inbound(batch_id, 'føø')
+        msg3 = yield self.make_inbound(batch_id, 'føø')
+        msg4 = yield self.make_inbound(batch_id, 'føø')
+
+        class PausingInboundResource(InboundResource):
+            def __init__(self, *args, **kw):
+                InboundResource.__init__(self, *args, **kw)
+                self.pause_after = 2
+                self.pause_d = Deferred()
+                self.resume_d = Deferred()
+                self.fetched = set()
+
+            def add_fetched(self, msg):
+                self.fetched.add(msg['message_id'])
+                return msg
+
+            def get_message(self, message_store, message_id):
+                d = succeed(None)
+                if self.pause_after > 0:
+                    self.pause_after -= 1
+                else:
+                    if not self.pause_d.called:
+                        self.pause_d.callback(None)
+                    d.addCallback(lambda _: self.resume_d)
+                d.addCallback(lambda _: InboundResource.get_message(
+                    self, message_store, message_id))
+                d.addCallback(self.add_fetched)
+                return d
+
+        res = PausingInboundResource(self.store, batch_id, JsonFormatter())
+        site = Site(res)
+        server = yield reactor.listenTCP(0, site, interface='127.0.0.1')
+        self.add_cleanup(server.loseConnection)
+        addr = server.getHost()
+        url = 'http://%s:%s?concurrency=2' % (addr.host, addr.port)
+
+        resp_d = http_request_full(method='GET', url=url)
+        # Wait until we've processed some messages.
+        yield res.pause_d
+        # Kill the client connection.
+        yield resp_d.cancel()
+        # Continue processing messages.
+        res.resume_d.callback(None)
+
+        # This will fail because we've cancelled the request. We don't care
+        # about the exception, so we swallow it and move on.
+        yield resp_d.addErrback(lambda _: None)
+
+        sorted_message_ids = sorted(
+            msg['message_id'] for msg in [msg1, msg2, msg3, msg4])
+        self.assertEqual(res.fetched, set(sorted_message_ids[:2]))
