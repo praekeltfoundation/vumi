@@ -18,7 +18,7 @@ from vumi.transports.smpp.smpp_utils import (unpacked_pdu_opts, detect_ussd)
 class DeliveryReportProcessorConfig(Config):
 
     DELIVERY_REPORT_REGEX = (
-        'id:(?P<id>\S{,65})'
+        'id:(?P<id>[^ ]{,65})'
         ' +sub:(?P<sub>[^ ]+)'
         ' +dlvrd:(?P<dlvrd>[^ ]+)'
         ' +submit date:(?P<submit_date>\d*)'
