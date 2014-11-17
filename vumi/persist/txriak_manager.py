@@ -310,10 +310,13 @@ class TxRiakManager(Manager):
         return d
 
     @inlineCallbacks
-    def real_search(self, modelcls, query, rows=None):
+    def real_search(self, modelcls, query, rows=None, start=None):
         rows = 1000 if rows is None else rows
         bucket_name = self.bucket_name(modelcls)
         bucket = self.client.bucket(bucket_name)
+        if start is not None:
+            keys = yield self._search_iteration(bucket, query, rows, start)
+            returnValue(keys)
         keys = []
         new_keys = yield self._search_iteration(bucket, query, rows, 0)
         while new_keys:
