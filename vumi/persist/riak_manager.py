@@ -276,10 +276,12 @@ class RiakManager(Manager):
         results = bucket.search(query, rows=rows, start=start)
         return [doc["id"] for doc in results["docs"]]
 
-    def real_search(self, modelcls, query, rows=None):
+    def real_search(self, modelcls, query, rows=None, start=None):
         rows = 1000 if rows is None else rows
         bucket_name = self.bucket_name(modelcls)
         bucket = self.client.bucket(bucket_name)
+        if start is not None:
+            return self._search_iteration(bucket, query, rows, start)
         keys = []
         new_keys = self._search_iteration(bucket, query, rows, 0)
         while new_keys:
