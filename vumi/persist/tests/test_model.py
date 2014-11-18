@@ -402,7 +402,9 @@ class TestModelOnTxRiak(VumiTestCase):
         @inlineCallbacks
         def search(q):
             results = yield simple_model.real_search(q, rows=2, start=0)
+            self.assertEqual(len(results), 2)
             results_new = yield simple_model.real_search(q, rows=2, start=2)
+            self.assertEqual(len(results_new), 1)
             returnValue(results + results_new)
 
         yield self.assert_search_results(
