@@ -44,11 +44,16 @@ class TestModelMigrator(VumiTestCase):
             "-b", self.expected_bucket_prefix,
         ]
 
-    def make_migrator(self, args=None, batch_size=None):
+    def make_migrator(self, args=None, index_page_size=None,
+                      concurrent_migrations=None):
         if args is None:
             args = self.default_args
-        if batch_size is not None:
-            args.extend(["--batch-size", str(batch_size)])
+        if concurrent_migrations is not None:
+            args.extend(
+                ["--concurrent-migrations", str(concurrent_migrations)])
+        if index_page_size is not None:
+            args.extend(
+                ["--index-page-size", str(index_page_size)])
         options = Options()
         options.parseOptions(args)
         return StubbedModelMigrator(self, options)
@@ -117,10 +122,10 @@ class TestModelMigrator(VumiTestCase):
         self.assertEqual(sorted(stores), [u"key-%d" % i for i in range(3)])
 
     @inlineCallbacks
-    def test_successful_migration_small_batches(self):
+    def test_successful_migration_small_pages(self):
         yield self.mk_simple_models(3)
         loads, stores = self.record_load_and_store()
-        model_migrator = self.make_migrator(batch_size=2)
+        model_migrator = self.make_migrator(index_page_size=2)
         yield model_migrator.run()
         self.assertEqual(model_migrator.output, [
             "Migrating ...",
@@ -131,10 +136,10 @@ class TestModelMigrator(VumiTestCase):
         self.assertEqual(sorted(stores), [u"key-%d" % i for i in range(3)])
 
     @inlineCallbacks
-    def test_successful_migration_tiny_batches(self):
+    def test_successful_migration_tiny_pages(self):
         yield self.mk_simple_models(3)
         loads, stores = self.record_load_and_store()
-        model_migrator = self.make_migrator(batch_size=1)
+        model_migrator = self.make_migrator(index_page_size=1)
         yield model_migrator.run()
         self.assertEqual(model_migrator.output, [
             "Migrating ...",

@@ -19,8 +19,10 @@ class Options(usage.Options):
         ["keys", None, None,
          "Migrate these specific keys rather than the whole bucket."
          " E.g. --keys 'foo,bar,baz'"],
-        ["batch-size", None, "20",
-         "The number of keys to process in each concurrent batch."],
+        ["concurrent-migrations", None, "20",
+         "The number of concurrent migrations to perform."],
+        ["index-page-size", None, "1000",
+         "The number of key to fetch in each index query."],
     ]
 
     optFlags = [
@@ -37,7 +39,8 @@ class Options(usage.Options):
             raise usage.UsageError("Please specify a model class.")
         if self['bucket-prefix'] is None:
             raise usage.UsageError("Please specify a bucket prefix.")
-        self['batch-size'] = int(self['batch-size'])
+        self['concurrent-migrations'] = int(self['concurrent-migrations'])
+        self['index-page-size'] = int(self['index-page-size'])
 
 
 class ProgressEmitter(object):
@@ -55,19 +58,19 @@ class ProgressEmitter(object):
 
 
 class FakeIndexPage(object):
-    def __init__(self, keys, batch_size):
+    def __init__(self, keys, page_size):
         self._keys = keys
-        self._batch_size = batch_size
+        self._page_size = page_size
 
     def __iter__(self):
-        return iter(self._keys[:self._batch_size])
+        return iter(self._keys[:self._page_size])
 
     def has_next_page(self):
-        return len(self._keys) > self._batch_size
+        return len(self._keys) > self._page_size
 
     def next_page(self):
         return succeed(
-            type(self)(self._keys[self._batch_size:], self._batch_size))
+            type(self)(self._keys[self._page_size:], self._page_size))
 
 
 class ModelMigrator(object):
@@ -99,11 +102,29 @@ class ModelMigrator(object):
             self.emit("Failed to migrate key %r:" % (key,))
             self.emit("  %s: %s" % (type(e).__name__, e))
 
-    def migrate_batch(self, keys, dry_run):
+    def migrate_keys(self, _result, keys_list, dry_run):
+        """
+        Migrate keys from `keys_list` until there are none left.
+
+        This method is expected to be called multiple times concurrently with
+        all instances sharing the same `keys_list`.
+        """
+        if not keys_list:
+            # Nothing left to migrate.
+            return succeed(None)
+
+        key = keys_list.pop(0)
+        d = self.migrate_key(key, dry_run)
+        d.addCallback(self.migrate_keys, keys_list, dry_run)
+        return d
+
+    def migrate_page(self, keys, dry_run):
         # Depending on our Riak client, Python version, and JSON library we may
         # get bytes or unicode here.
         keys = [k.decode('utf-8') if isinstance(k, str) else k for k in keys]
-        return gatherResults([self.migrate_key(key, dry_run) for key in keys])
+        return gatherResults([
+            self.migrate_keys(None, keys, dry_run)
+            for _ in xrange(self.options["concurrent-migrations"])])
 
     @inlineCallbacks
     def run(self):
@@ -113,15 +134,16 @@ class ModelMigrator(object):
             self.emit("Migrating %d specified keys ..." % len(keys))
             emit_progress = lambda t: self.emit(
                 "%s of %s objects migrated." % (t, len(keys)))
-            index_page = FakeIndexPage(keys, self.options["batch-size"])
+            index_page = FakeIndexPage(keys, self.options["index-page-size"])
         else:
             self.emit("Migrating ...")
             emit_progress = lambda t: self.emit(
                 "%s object%s migrated." % (t, "" if t == 1 else "s"))
             index_page = yield self.model.all_keys_page(
-                max_results=self.options["batch-size"])
+                max_results=self.options["index-page-size"])
 
-        progress = ProgressEmitter(emit_progress, self.options["batch-size"])
+        progress = ProgressEmitter(
+            emit_progress, self.options["index-page-size"])
         processed = 0
         while index_page is not None:
             if index_page.has_next_page():
@@ -129,7 +151,7 @@ class ModelMigrator(object):
             else:
                 next_page_d = succeed(None)
             batch_keys = list(index_page)
-            yield self.migrate_batch(batch_keys, dry_run)
+            yield self.migrate_page(batch_keys, dry_run)
             processed += len(batch_keys)
             progress.update(processed)
             index_page = yield next_page_d
