@@ -460,13 +460,13 @@ class Model(object):
         return manager.mr_from_search(cls, query)
 
     @classmethod
-    def real_search(cls, manager, query, rows=None):
+    def real_search(cls, manager, query, rows=None, start=None):
         """
         Performs a real riak search, does no inspection on the given query.
 
         :returns: list of keys.
         """
-        return manager.real_search(cls, query, rows=rows)
+        return manager.real_search(cls, query, rows=rows, start=start)
 
     @classmethod
     def enable_search(cls, manager):
@@ -842,7 +842,7 @@ class Manager(object):
     def mr_from_keys(self, model, keys):
         return VumiMapReduce.from_keys(self, model, keys)
 
-    def real_search(self, model, query, rows=None):
+    def real_search(self, model, query, rows=None, start=None):
         raise NotImplementedError()
 
     def riak_enable_search(self, model):
@@ -908,8 +908,9 @@ class ModelProxy(object):
     def raw_search(self, query):
         return self._modelcls.raw_search(self._manager, query)
 
-    def real_search(self, query, rows=None):
-        return self._modelcls.real_search(self._manager, query, rows=rows)
+    def real_search(self, query, rows=None, start=None):
+        return self._modelcls.real_search(
+            self._manager, query, rows=rows, start=start)
 
     def enable_search(self):
         return self._modelcls.enable_search(self._manager)

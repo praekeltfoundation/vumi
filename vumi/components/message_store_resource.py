@@ -46,6 +46,9 @@ class MessageStoreProxyResource(Resource):
             concurrency = self.default_concurrency
 
         d = self.get_keys_page(self.message_store, self.batch_id)
+        request.connection_has_been_closed = False
+        request.notifyFinish().addBoth(
+            lambda _: setattr(request, 'connection_has_been_closed', True))
         d.addCallback(self.fetch_pages, concurrency, request)
         return NOT_DONE_YET
 
@@ -66,6 +69,9 @@ class MessageStoreProxyResource(Resource):
 
         When there are no more pages, we add a callback to close the request.
         """
+        if request.connection_has_been_closed:
+            # We're no longer connected, so stop doing work.
+            return
         d = self.fetch_page(keys_page, concurrency, request)
         if keys_page.has_next_page():
             # We fetch the next page before waiting for the current page to be
@@ -77,8 +83,14 @@ class MessageStoreProxyResource(Resource):
             d.addCallback(self.fetch_pages, concurrency, request)
         else:
             # No more pages, so close the request.
-            d.addCallback(lambda _: request.finish())
+            d.addCallback(self.finish_request_cb, request)
         return d
+
+    def finish_request_cb(self, _result, request):
+        if not request.connection_has_been_closed:
+            # We need to check for this here in case we lose the connection
+            # while delivering the last page.
+            return request.finish()
 
     @inlineCallbacks
     def fetch_page(self, keys_page, concurrency, request):
@@ -86,6 +98,9 @@ class MessageStoreProxyResource(Resource):
         Process a page of keys in chunks of concurrently-fetched messages.
         """
         for keys in chunks(list(keys_page), concurrency):
+            if request.connection_has_been_closed:
+                # We're no longer connected, so stop doing work.
+                return
             yield self.handle_chunk(keys, request)
 
     def handle_chunk(self, message_keys, request):
