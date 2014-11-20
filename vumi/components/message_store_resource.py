@@ -45,7 +45,17 @@ class MessageStoreProxyResource(Resource):
         else:
             concurrency = self.default_concurrency
 
-        d = self.get_keys_page(self.message_store, self.batch_id)
+        start = request.args.get('start')
+        end = request.args.get('end')
+        if not (start or end):
+            d = self.get_keys_page(self.message_store, self.batch_id)
+        else:
+            if start:
+                [start] = start
+            if end:
+                [end] = end
+            d = self.get_keys_page_for_time(
+                self.message_store, self.batch_id, start, end)
         request.connection_has_been_closed = False
         request.notifyFinish().addBoth(
             lambda _: setattr(request, 'connection_has_been_closed', True))
@@ -53,6 +63,9 @@ class MessageStoreProxyResource(Resource):
         return NOT_DONE_YET
 
     def get_keys_page(self, message_store, batch_id):
+        raise NotImplementedError('To be implemented by sub-class.')
+
+    def get_keys_page_for_time(self, message_store, batch_id, start, end):
         raise NotImplementedError('To be implemented by sub-class.')
 
     def get_message(self, message_store, message_id):
@@ -124,6 +137,11 @@ class InboundResource(MessageStoreProxyResource):
     def get_keys_page(self, message_store, batch_id):
         return message_store.batch_inbound_keys_page(batch_id)
 
+    def get_keys_page_for_time(self, message_store, batch_id, start, end):
+        return message_store.batch_inbound_keys_with_timestamps(
+            batch_id, max_results=message_store.DEFAULT_MAX_RESULTS,
+            start=start, end=end, with_timestamps=False)
+
     def get_message(self, message_store, message_id):
         return message_store.get_inbound_message(message_id)
 
@@ -132,6 +150,11 @@ class OutboundResource(MessageStoreProxyResource):
 
     def get_keys_page(self, message_store, batch_id):
         return message_store.batch_outbound_keys_page(batch_id)
+
+    def get_keys_page_for_time(self, message_store, batch_id, start, end):
+        return message_store.batch_outbound_keys_with_timestamps(
+            batch_id, max_results=message_store.DEFAULT_MAX_RESULTS,
+            start=start, end=end, with_timestamps=False)
 
     def get_message(self, message_store, message_id):
         return message_store.get_outbound_message(message_id)
