@@ -45,15 +45,18 @@ class TestModelMigrator(VumiTestCase):
         ]
 
     def make_migrator(self, args=None, index_page_size=None,
-                      concurrent_migrations=None):
+                      concurrent_migrations=None, continuation_token=None):
         if args is None:
             args = self.default_args
-        if concurrent_migrations is not None:
-            args.extend(
-                ["--concurrent-migrations", str(concurrent_migrations)])
         if index_page_size is not None:
             args.extend(
                 ["--index-page-size", str(index_page_size)])
+        if concurrent_migrations is not None:
+            args.extend(
+                ["--concurrent-migrations", str(concurrent_migrations)])
+        if continuation_token is not None:
+            args.extend(
+                ["--continuation-token", continuation_token])
         options = Options()
         options.parseOptions(args)
         return StubbedModelMigrator(self, options)
@@ -127,9 +130,12 @@ class TestModelMigrator(VumiTestCase):
         loads, stores = self.record_load_and_store()
         model_migrator = self.make_migrator(index_page_size=2)
         yield model_migrator.run()
+        [continuation] = [line for line in model_migrator.output
+                          if line.startswith("Continuation token:")]
         self.assertEqual(model_migrator.output, [
             "Migrating ...",
             "2 objects migrated.",
+            continuation,
             "Done, 3 objects migrated.",
         ])
         self.assertEqual(sorted(loads), [u"key-%d" % i for i in range(3)])
@@ -141,15 +147,53 @@ class TestModelMigrator(VumiTestCase):
         loads, stores = self.record_load_and_store()
         model_migrator = self.make_migrator(index_page_size=1)
         yield model_migrator.run()
+        [ct1, ct2, ct3] = [line for line in model_migrator.output
+                           if line.startswith("Continuation token:")]
         self.assertEqual(model_migrator.output, [
             "Migrating ...",
             "1 object migrated.",
+            ct1,
             "2 objects migrated.",
+            ct2,
             "3 objects migrated.",
+            ct3,
             "Done, 3 objects migrated.",
         ])
         self.assertEqual(sorted(loads), [u"key-%d" % i for i in range(3)])
         self.assertEqual(sorted(stores), [u"key-%d" % i for i in range(3)])
+
+    @inlineCallbacks
+    def test_successful_migration_with_continuation(self):
+        yield self.mk_simple_models(3)
+        loads, stores = self.record_load_and_store()
+
+        # Run a migration all the way through to get a continuation token
+        model_migrator = self.make_migrator(index_page_size=2)
+        yield model_migrator.run()
+        [continuation] = [line for line in model_migrator.output
+                          if line.startswith("Continuation token:")]
+        self.assertEqual(model_migrator.output, [
+            "Migrating ...",
+            "2 objects migrated.",
+            continuation,
+            "Done, 3 objects migrated.",
+        ])
+        self.assertEqual(sorted(loads), [u"key-%d" % i for i in range(3)])
+        self.assertEqual(sorted(stores), [u"key-%d" % i for i in range(3)])
+
+        # Run a migration starting from the continuation point.
+        loads[:] = []
+        stores[:] = []
+        continuation_token = continuation.split()[-1][1:-1]
+        cont_model_migrator = self.make_migrator(
+            index_page_size=2, continuation_token=continuation_token)
+        yield cont_model_migrator.run()
+        self.assertEqual(cont_model_migrator.output, [
+            "Migrating ...",
+            "Done, 1 object migrated.",
+        ])
+        self.assertEqual(loads, [u"key-2"])
+        self.assertEqual(stores, [u"key-2"])
 
     @inlineCallbacks
     def test_migration_with_tombstones(self):

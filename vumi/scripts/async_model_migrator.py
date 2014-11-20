@@ -23,6 +23,8 @@ class Options(usage.Options):
          "The number of concurrent migrations to perform."],
         ["index-page-size", None, "1000",
          "The number of key to fetch in each index query."],
+        ["continuation-token", None, None,
+         "A continuation token for resuming an interrupted migration."],
     ]
 
     optFlags = [
@@ -141,10 +143,17 @@ class ModelMigrator(object):
             yield self.migrate_page(keys, dry_run)
             processed += len(keys)
             progress.update(processed)
+            continuation = getattr(index_page, 'continuation', None)
+            if continuation is not None:
+                self.emit("Continuation token: '%s'" % (continuation,))
             index_page = yield next_page_d
-        self.emit("Done, %s objects migrated." % (processed,))
+        self.emit("Done, %s object%s migrated." % (
+            processed, "" if processed == 1 else "s"))
 
     def migrate_specified_keys(self, keys):
+        """
+        Migrate specified keys.
+        """
         self.emit("Migrating %d specified keys ..." % len(keys))
         emit_progress = lambda t: self.emit(
             "%s of %s objects migrated." % (t, len(keys)))
@@ -152,19 +161,26 @@ class ModelMigrator(object):
         return self.migrate_pages(index_page, emit_progress)
 
     @inlineCallbacks
-    def migrate_all_keys(self):
+    def migrate_all_keys(self, continuation=None):
+        """
+        Perform an index query to get all keys and migrate them.
+
+        If `continuation` is provided, it will be used as the starting point
+        for the query.
+        """
         self.emit("Migrating ...")
         emit_progress = lambda t: self.emit(
             "%s object%s migrated." % (t, "" if t == 1 else "s"))
         index_page = yield self.model.all_keys_page(
-            max_results=self.options["index-page-size"])
+            max_results=self.options["index-page-size"],
+            continuation=continuation)
         yield self.migrate_pages(index_page, emit_progress)
 
     def run(self):
         if self.options["keys"] is not None:
             return self.migrate_specified_keys(self.options["keys"].split(","))
         else:
-            return self.migrate_all_keys()
+            return self.migrate_all_keys(self.options["continuation-token"])
 
 
 def main(_reactor, name, *args):
