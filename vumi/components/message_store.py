@@ -509,8 +509,20 @@ class MessageStore(object):
         return self.cache.get_outbound_message_keys(
             batch_id, start, stop, with_timestamp=with_timestamp)
 
+    def _start_end_values(self, batch_id, start, end):
+        if start is not None:
+            start_value = "%s$%s" % (batch_id, start)
+        else:
+            start_value = "%s%s" % (batch_id, "#")  # chr(ord('$') - 1)
+        if end is not None:
+            end_value = "%s$%s" % (batch_id, end)
+        else:
+            end_value = "%s%s" % (batch_id, "%")  # chr(ord('$') + 1)
+        return start_value, end_value
+
     @Manager.calls_manager
-    def batch_inbound_keys_with_timestamps(self, batch_id, max_results=None):
+    def batch_inbound_keys_with_timestamps(self, batch_id, max_results=None,
+                                           start=None, end=None):
         """
         Return all inbound message keys along with timestamps.
 
@@ -519,15 +531,15 @@ class MessageStore(object):
 
         This method performs a Riak index query.
         """
-        start_value = "%s%s" % (batch_id, "#")  # chr(ord('$') - 1)
-        end_value = "%s%s" % (batch_id, "%")  # chr(ord('$') + 1)
+        start_value, end_value = self._start_end_values(batch_id, start, end)
         results = yield self.inbound_messages.index_keys_page(
             'batches_with_timestamps', start_value, end_value,
             return_terms=True, max_results=max_results)
         returnValue(KeysWithTimestamps(self, batch_id, results))
 
     @Manager.calls_manager
-    def batch_outbound_keys_with_timestamps(self, batch_id, max_results=None):
+    def batch_outbound_keys_with_timestamps(self, batch_id, max_results=None,
+                                            start=None, end=None):
         """
         Return all outbound message keys along with timestamps.
 
@@ -536,8 +548,7 @@ class MessageStore(object):
 
         This method performs a Riak index query.
         """
-        start_value = "%s%s" % (batch_id, "#")  # chr(ord('$') - 1)
-        end_value = "%s%s" % (batch_id, "%")  # chr(ord('$') + 1)
+        start_value, end_value = self._start_end_values(batch_id, start, end)
         results = yield self.outbound_messages.index_keys_page(
             'batches_with_timestamps', start_value, end_value,
             return_terms=True, max_results=max_results)
