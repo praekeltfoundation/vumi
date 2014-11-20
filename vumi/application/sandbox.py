@@ -1006,6 +1006,14 @@ class HttpClientResource(SandboxResource):
         """
         return self._make_request_from_command('POST', command)
 
+    def handle_patch(self, api, command):
+        """
+        Make an HTTP PATCH request.
+
+        See :class:`HttpResource` for details.
+        """
+        return self._make_request_from_command('PATCH', command)
+
 
 class SandboxApi(object):
     """A sandbox API instance for a particular sandbox run."""
