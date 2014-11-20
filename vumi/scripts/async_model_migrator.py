@@ -127,21 +127,8 @@ class ModelMigrator(object):
             for _ in xrange(self.options["concurrent-migrations"])])
 
     @inlineCallbacks
-    def run(self):
+    def migrate_pages(self, index_page, emit_progress):
         dry_run = self.options["dry-run"]
-        if self.options["keys"] is not None:
-            keys = self.options["keys"].split(",")
-            self.emit("Migrating %d specified keys ..." % len(keys))
-            emit_progress = lambda t: self.emit(
-                "%s of %s objects migrated." % (t, len(keys)))
-            index_page = FakeIndexPage(keys, self.options["index-page-size"])
-        else:
-            self.emit("Migrating ...")
-            emit_progress = lambda t: self.emit(
-                "%s object%s migrated." % (t, "" if t == 1 else "s"))
-            index_page = yield self.model.all_keys_page(
-                max_results=self.options["index-page-size"])
-
         progress = ProgressEmitter(
             emit_progress, self.options["index-page-size"])
         processed = 0
@@ -150,12 +137,34 @@ class ModelMigrator(object):
                 next_page_d = index_page.next_page()
             else:
                 next_page_d = succeed(None)
-            batch_keys = list(index_page)
-            yield self.migrate_page(batch_keys, dry_run)
-            processed += len(batch_keys)
+            keys = list(index_page)
+            yield self.migrate_page(keys, dry_run)
+            processed += len(keys)
             progress.update(processed)
             index_page = yield next_page_d
         self.emit("Done, %s objects migrated." % (processed,))
+
+    def migrate_specified_keys(self, keys):
+        self.emit("Migrating %d specified keys ..." % len(keys))
+        emit_progress = lambda t: self.emit(
+            "%s of %s objects migrated." % (t, len(keys)))
+        index_page = FakeIndexPage(keys, self.options["index-page-size"])
+        return self.migrate_pages(index_page, emit_progress)
+
+    @inlineCallbacks
+    def migrate_all_keys(self):
+        self.emit("Migrating ...")
+        emit_progress = lambda t: self.emit(
+            "%s object%s migrated." % (t, "" if t == 1 else "s"))
+        index_page = yield self.model.all_keys_page(
+            max_results=self.options["index-page-size"])
+        yield self.migrate_pages(index_page, emit_progress)
+
+    def run(self):
+        if self.options["keys"] is not None:
+            return self.migrate_specified_keys(self.options["keys"].split(","))
+        else:
+            return self.migrate_all_keys()
 
 
 def main(_reactor, name, *args):
