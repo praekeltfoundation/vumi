@@ -1154,6 +1154,15 @@ class TestHttpClientResource(ResourceTestCaseBase):
         self.assert_http_request('http://www.example.com', method='POST')
 
     @inlineCallbacks
+    def test_handle_patch(self):
+        self.http_request_succeed("foo")
+        reply = yield self.dispatch_command('patch',
+                                            url='http://www.example.com')
+        self.assertTrue(reply['success'])
+        self.assertEqual(reply['body'], "foo")
+        self.assert_http_request('http://www.example.com', method='PATCH')
+
+    @inlineCallbacks
     def test_handle_head(self):
         self.http_request_succeed("foo")
         reply = yield self.dispatch_command('head',
