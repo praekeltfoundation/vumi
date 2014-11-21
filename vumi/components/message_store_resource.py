@@ -55,7 +55,7 @@ class MessageStoreProxyResource(Resource):
             return timestamp.strftime(VUMI_DATE_FORMAT)
         except iso8601.ParseError as e:
             raise TimestampParseError(
-                "Invalid '%s' parameter: %s" % (argname, e.args[0]))
+                "Invalid '%s' parameter: %s" % (argname, str(e)))
 
     def render_GET(self, request):
         if 'concurrency' in request.args:
@@ -68,7 +68,7 @@ class MessageStoreProxyResource(Resource):
             end = self._extract_date_arg(request, 'end')
         except TimestampParseError as e:
             request.setResponseCode(400)
-            return e.args[0]
+            return str(e)
 
         self.formatter.add_http_headers(request)
         self.formatter.write_row_header(request)
