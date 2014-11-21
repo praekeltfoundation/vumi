@@ -1,4 +1,4 @@
-"""Tests for vumi.scripts.model_migrator."""
+"""Tests for vumi.scripts.vumi_model_migrator."""
 
 import sys
 from StringIO import StringIO
@@ -8,7 +8,7 @@ from twisted.python import usage
 
 from vumi.persist.model import Model
 from vumi.persist.fields import Unicode
-from vumi.scripts.async_model_migrator import ModelMigrator, Options, main
+from vumi.scripts.vumi_model_migrator import ModelMigrator, Options, main
 from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 
 

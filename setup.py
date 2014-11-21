@@ -20,6 +20,7 @@ setup(
     scripts=[
         'vumi/scripts/vumi_tagpools.py',
         'vumi/scripts/vumi_redis_tools.py',
+        'vumi/scripts/vumi_model_migrator.py',
     ],
     install_requires=[
         'zope.interface',
