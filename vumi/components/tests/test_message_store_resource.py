@@ -258,6 +258,14 @@ class TestMessageStoreResource(VumiTestCase):
             resp.delivered_body,
             "Invalid 'end' parameter: Unable to parse date string 'bar'")
 
+        url = '%s/%s/%s/%s?start=foo&start=bar' % (
+            self.url, 'resource_path', batch_id, 'inbound.json')
+        resp = yield http_request_full(method='GET', url=url)
+        self.assertEqual(resp.code, 400)
+        self.assertEqual(
+            resp.delivered_body,
+            "Invalid 'start' parameter: Too many values")
+
     @inlineCallbacks
     def test_get_inbound_for_time_range_no_start(self):
         yield self.start_server()
@@ -350,6 +358,14 @@ class TestMessageStoreResource(VumiTestCase):
         self.assertEqual(
             resp.delivered_body,
             "Invalid 'end' parameter: Unable to parse date string 'bar'")
+
+        url = '%s/%s/%s/%s?start=foo&start=bar' % (
+            self.url, 'resource_path', batch_id, 'outbound.json')
+        resp = yield http_request_full(method='GET', url=url)
+        self.assertEqual(resp.code, 400)
+        self.assertEqual(
+            resp.delivered_body,
+            "Invalid 'start' parameter: Too many values")
 
     @inlineCallbacks
     def test_get_outbound_for_time_range_no_start(self):

@@ -28,9 +28,9 @@ def chunks(l, n):
         yield l[i:i + n]
 
 
-class TimestampParseError(Exception):
+class ParameterError(Exception):
     """
-    Exception raised while trying to parse a timestamp.
+    Exception raised while trying to parse a parameter.
     """
     pass
 
@@ -49,12 +49,15 @@ class MessageStoreProxyResource(Resource):
     def _extract_date_arg(self, request, argname):
         if argname not in request.args:
             return None
+        if len(request.args[argname]) > 1:
+            raise ParameterError(
+                "Invalid '%s' parameter: Too many values" % (argname,))
         [value] = request.args[argname]
         try:
             timestamp = iso8601.parse_date(value)
             return timestamp.strftime(VUMI_DATE_FORMAT)
         except iso8601.ParseError as e:
-            raise TimestampParseError(
+            raise ParameterError(
                 "Invalid '%s' parameter: %s" % (argname, str(e)))
 
     def render_GET(self, request):
@@ -66,7 +69,7 @@ class MessageStoreProxyResource(Resource):
         try:
             start = self._extract_date_arg(request, 'start')
             end = self._extract_date_arg(request, 'end')
-        except TimestampParseError as e:
+        except ParameterError as e:
             request.setResponseCode(400)
             return str(e)
 
