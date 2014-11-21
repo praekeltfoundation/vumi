@@ -8,8 +8,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.message import TransportEvent, VUMI_DATE_FORMAT
 from vumi.tests.helpers import (
-    VumiTestCase, MessageHelper, PersistenceHelper, import_skip,
-)
+    VumiTestCase, MessageHelper, PersistenceHelper, import_skip)
 
 
 class TestMessageStoreBase(VumiTestCase):
@@ -572,6 +571,58 @@ class TestMessageStore(TestMessageStoreBase):
         self.assertEqual(results, all_keys)
 
     @inlineCallbacks
+    def test_batch_inbound_keys_with_timestamp_start(self):
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+        messages = yield self.create_inbound_messages(batch_id, 5)
+        sorted_keys = sorted((msg['timestamp'], msg['message_id'])
+                             for msg in messages)
+        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT))
+                    for (timestamp, key) in sorted_keys]
+
+        index_page = yield self.store.batch_inbound_keys_with_timestamps(
+            batch_id, max_results=6, start=all_keys[1][1])
+        self.assertEqual(list(index_page), all_keys[1:])
+
+    @inlineCallbacks
+    def test_batch_inbound_keys_with_timestamp_without_timestamps(self):
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+        messages = yield self.create_inbound_messages(batch_id, 5)
+        sorted_keys = sorted((msg['timestamp'], msg['message_id'])
+                             for msg in messages)
+        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT))
+                    for (timestamp, key) in sorted_keys]
+
+        index_page = yield self.store.batch_inbound_keys_with_timestamps(
+            batch_id, with_timestamps=False)
+        self.assertEqual(list(index_page), [k for k, _ in all_keys])
+
+    @inlineCallbacks
+    def test_batch_inbound_keys_with_timestamp_end(self):
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+        messages = yield self.create_inbound_messages(batch_id, 5)
+        sorted_keys = sorted((msg['timestamp'], msg['message_id'])
+                             for msg in messages)
+        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT))
+                    for (timestamp, key) in sorted_keys]
+
+        index_page = yield self.store.batch_inbound_keys_with_timestamps(
+            batch_id, max_results=6, end=all_keys[-2][1])
+        self.assertEqual(list(index_page), all_keys[:-1])
+
+    @inlineCallbacks
+    def test_batch_inbound_keys_with_timestamp_range(self):
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+        messages = yield self.create_inbound_messages(batch_id, 5)
+        sorted_keys = sorted((msg['timestamp'], msg['message_id'])
+                             for msg in messages)
+        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT))
+                    for (timestamp, key) in sorted_keys]
+
+        index_page = yield self.store.batch_inbound_keys_with_timestamps(
+            batch_id, max_results=6, start=all_keys[1][1], end=all_keys[-2][1])
+        self.assertEqual(list(index_page), all_keys[1:-1])
+
+    @inlineCallbacks
     def test_batch_outbound_keys_with_timestamp(self):
         batch_id = yield self.store.batch_start([('pool', 'tag')])
         messages = yield self.create_outbound_messages(batch_id, 10)
@@ -593,6 +644,58 @@ class TestMessageStore(TestMessageStoreBase):
         self.assertEqual(next_page.has_next_page(), False)
 
         self.assertEqual(results, all_keys)
+
+    @inlineCallbacks
+    def test_batch_outbound_keys_with_timestamp_without_timestamps(self):
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+        messages = yield self.create_outbound_messages(batch_id, 5)
+        sorted_keys = sorted((msg['timestamp'], msg['message_id'])
+                             for msg in messages)
+        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT))
+                    for (timestamp, key) in sorted_keys]
+
+        index_page = yield self.store.batch_outbound_keys_with_timestamps(
+            batch_id, with_timestamps=False)
+        self.assertEqual(list(index_page), [k for k, _ in all_keys])
+
+    @inlineCallbacks
+    def test_batch_outbound_keys_with_timestamp_start(self):
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+        messages = yield self.create_outbound_messages(batch_id, 5)
+        sorted_keys = sorted((msg['timestamp'], msg['message_id'])
+                             for msg in messages)
+        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT))
+                    for (timestamp, key) in sorted_keys]
+
+        index_page = yield self.store.batch_outbound_keys_with_timestamps(
+            batch_id, max_results=6, start=all_keys[1][1])
+        self.assertEqual(list(index_page), all_keys[1:])
+
+    @inlineCallbacks
+    def test_batch_outbound_keys_with_timestamp_end(self):
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+        messages = yield self.create_outbound_messages(batch_id, 5)
+        sorted_keys = sorted((msg['timestamp'], msg['message_id'])
+                             for msg in messages)
+        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT))
+                    for (timestamp, key) in sorted_keys]
+
+        index_page = yield self.store.batch_outbound_keys_with_timestamps(
+            batch_id, max_results=6, end=all_keys[-2][1])
+        self.assertEqual(list(index_page), all_keys[:-1])
+
+    @inlineCallbacks
+    def test_batch_outbound_keys_with_timestamp_range(self):
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+        messages = yield self.create_outbound_messages(batch_id, 5)
+        sorted_keys = sorted((msg['timestamp'], msg['message_id'])
+                             for msg in messages)
+        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT))
+                    for (timestamp, key) in sorted_keys]
+
+        index_page = yield self.store.batch_outbound_keys_with_timestamps(
+            batch_id, max_results=6, start=all_keys[1][1], end=all_keys[-2][1])
+        self.assertEqual(list(index_page), all_keys[1:-1])
 
 
 class TestMessageStoreCache(TestMessageStoreBase):
