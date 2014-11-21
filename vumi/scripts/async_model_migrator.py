@@ -104,6 +104,7 @@ class ModelMigrator(object):
             self.emit("Failed to migrate key %r:" % (key,))
             self.emit("  %s: %s" % (type(e).__name__, e))
 
+    @inlineCallbacks
     def migrate_keys(self, _result, keys_list, dry_run):
         """
         Migrate keys from `keys_list` until there are none left.
@@ -111,14 +112,10 @@ class ModelMigrator(object):
         This method is expected to be called multiple times concurrently with
         all instances sharing the same `keys_list`.
         """
-        if not keys_list:
-            # Nothing left to migrate.
-            return succeed(None)
-
-        key = keys_list.pop(0)
-        d = self.migrate_key(key, dry_run)
-        d.addCallback(self.migrate_keys, keys_list, dry_run)
-        return d
+        # keys_list is a shared mutable list, so we can't just iterate over it.
+        while keys_list:
+            key = keys_list.pop(0)
+            yield self.migrate_key(key, dry_run)
 
     def migrate_page(self, keys, dry_run):
         # Depending on our Riak client, Python version, and JSON library we may
