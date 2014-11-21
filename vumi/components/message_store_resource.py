@@ -1,5 +1,7 @@
 # -*- test-case-name: vumi.components.tests.test_message_store_resource -*-
 
+import iso8601
+
 from twisted.application.internet import StreamServerEndpointService
 from twisted.internet.defer import DeferredList, inlineCallbacks
 from twisted.web.resource import NoResource, Resource
@@ -10,6 +12,7 @@ from vumi.components.message_formatters import JsonFormatter, CsvFormatter
 from vumi.config import (
     ConfigDict, ConfigText, ConfigServerEndpoint, ConfigInt,
     ServerEndpointFallback)
+from vumi.message import VUMI_DATE_FORMAT
 from vumi.persist.txriak_manager import TxRiakManager
 from vumi.persist.txredis_manager import TxRedisManager
 from vumi.transports.httprpc import httprpc
@@ -25,6 +28,13 @@ def chunks(l, n):
         yield l[i:i + n]
 
 
+class TimestampParseError(Exception):
+    """
+    Exception raised while trying to parse a timestamp.
+    """
+    pass
+
+
 class MessageStoreProxyResource(Resource):
 
     isLeaf = True
@@ -36,24 +46,36 @@ class MessageStoreProxyResource(Resource):
         self.batch_id = batch_id
         self.formatter = formatter
 
-    def render_GET(self, request):
-        self.formatter.add_http_headers(request)
-        self.formatter.write_row_header(request)
+    def _extract_date_arg(self, request, argname):
+        if argname not in request.args:
+            return None
+        [value] = request.args[argname]
+        try:
+            timestamp = iso8601.parse_date(value)
+            return timestamp.strftime(VUMI_DATE_FORMAT)
+        except iso8601.ParseError as e:
+            raise TimestampParseError(
+                "Invalid '%s' parameter: %s" % (argname, e.args[0]))
 
+    def render_GET(self, request):
         if 'concurrency' in request.args:
             concurrency = int(request.args['concurrency'][0])
         else:
             concurrency = self.default_concurrency
 
-        start = request.args.get('start')
-        end = request.args.get('end')
+        try:
+            start = self._extract_date_arg(request, 'start')
+            end = self._extract_date_arg(request, 'end')
+        except TimestampParseError as e:
+            request.setResponseCode(400)
+            return e.args[0]
+
+        self.formatter.add_http_headers(request)
+        self.formatter.write_row_header(request)
+
         if not (start or end):
             d = self.get_keys_page(self.message_store, self.batch_id)
         else:
-            if start:
-                [start] = start
-            if end:
-                [end] = end
             d = self.get_keys_page_for_time(
                 self.message_store, self.batch_id, start, end)
         request.connection_has_been_closed = False

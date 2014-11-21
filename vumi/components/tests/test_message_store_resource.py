@@ -240,6 +240,25 @@ class TestMessageStoreResource(VumiTestCase):
             set([msg2['message_id'], msg3['message_id']]))
 
     @inlineCallbacks
+    def test_get_inbound_for_time_range_bad_args(self):
+        yield self.start_server()
+        batch_id = yield self.make_batch(('foo', 'bar'))
+
+        resp = yield self.make_request(
+            'GET', batch_id, 'inbound.json', start='foo')
+        self.assertEqual(resp.code, 400)
+        self.assertEqual(
+            resp.delivered_body,
+            "Invalid 'start' parameter: Unable to parse date string 'foo'")
+
+        resp = yield self.make_request(
+            'GET', batch_id, 'inbound.json', end='bar')
+        self.assertEqual(resp.code, 400)
+        self.assertEqual(
+            resp.delivered_body,
+            "Invalid 'end' parameter: Unable to parse date string 'bar'")
+
+    @inlineCallbacks
     def test_get_inbound_for_time_range_no_start(self):
         yield self.start_server()
         batch_id = yield self.make_batch(('foo', 'bar'))
@@ -312,6 +331,25 @@ class TestMessageStoreResource(VumiTestCase):
         self.assertEqual(
             set([msg['message_id'] for msg in messages]),
             set([msg2['message_id'], msg3['message_id']]))
+
+    @inlineCallbacks
+    def test_get_outbound_for_time_range_bad_args(self):
+        yield self.start_server()
+        batch_id = yield self.make_batch(('foo', 'bar'))
+
+        resp = yield self.make_request(
+            'GET', batch_id, 'outbound.json', start='foo')
+        self.assertEqual(resp.code, 400)
+        self.assertEqual(
+            resp.delivered_body,
+            "Invalid 'start' parameter: Unable to parse date string 'foo'")
+
+        resp = yield self.make_request(
+            'GET', batch_id, 'outbound.json', end='bar')
+        self.assertEqual(resp.code, 400)
+        self.assertEqual(
+            resp.delivered_body,
+            "Invalid 'end' parameter: Unable to parse date string 'bar'")
 
     @inlineCallbacks
     def test_get_outbound_for_time_range_no_start(self):
