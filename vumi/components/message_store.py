@@ -569,10 +569,10 @@ class MessageStore(object):
             Number of results per page. Defaults to DEFAULT_MAX_RESULTS
 
         :param str start:
-            Optional start timestamp in standard vumi format.
+            Optional start timestamp string matching VUMI_DATE_FORMAT.
 
         :param str end:
-            Optional end timestamp in standard vumi format.
+            Optional end timestamp string matching VUMI_DATE_FORMAT.
 
         :param bool with_timestamps:
             If set to ``False``, only the keys will be returned. The results
