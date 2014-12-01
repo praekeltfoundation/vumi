@@ -187,8 +187,8 @@ class TestMessageStore(TestMessageStoreBase):
             (yield self.store.batch_outbound_keys(batch_id_1)), [msg_id])
         self.assertEqual(
             (yield self.store.batch_outbound_keys(batch_id_2)), [msg_id])
-        stored_msg = yield self.store.outbound_messages.load(msg_id)
         # Make sure we're writing the right indexes.
+        stored_msg = yield self.store.outbound_messages.load(msg_id)
         self.assertEqual(stored_msg._riak_object.get_indexes(), set([
             ('batches_bin', batch_id_1),
             ('batches_bin', batch_id_2),
@@ -367,6 +367,16 @@ class TestMessageStore(TestMessageStoreBase):
                          [msg_id])
         self.assertEqual((yield self.store.batch_inbound_keys(batch_id_2)),
                          [msg_id])
+        # Make sure we're writing the right indexes.
+        stored_msg = yield self.store.inbound_messages.load(msg_id)
+        self.assertEqual(stored_msg._riak_object.get_indexes(), set([
+            ('batches_bin', batch_id_1),
+            ('batches_bin', batch_id_2),
+            ('batches_with_timestamps_bin',
+             "%s$%s" % (batch_id_1, msg['timestamp'])),
+            ('batches_with_timestamps_bin',
+             "%s$%s" % (batch_id_2, msg['timestamp'])),
+        ]))
 
     @inlineCallbacks
     def test_inbound_counts(self):
