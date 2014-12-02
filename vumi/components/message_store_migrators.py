@@ -37,6 +37,16 @@ class OutboundMessageMigrator(MessageMigratorBase):
 
         return mdata
 
+    def migrate_from_2(self, mdata):
+        # We only copy existing fields and indexes over. The new fields and
+        # indexes are computed at save time.
+        mdata.set_value('$VERSION', 3)
+        self._copy_msg_field('msg', mdata)
+        mdata.copy_values('batches')
+        mdata.copy_indexes('batches')
+
+        return mdata
+
 
 class InboundMessageMigrator(MessageMigratorBase):
     def migrate_from_unversioned(self, mdata):
@@ -51,6 +61,16 @@ class InboundMessageMigrator(MessageMigratorBase):
         # We only copy existing fields and indexes over. The new fields and
         # indexes are computed at save time.
         mdata.set_value('$VERSION', 2)
+        self._copy_msg_field('msg', mdata)
+        mdata.copy_values('batches')
+        mdata.copy_indexes('batches')
+
+        return mdata
+
+    def migrate_from_2(self, mdata):
+        # We only copy existing fields and indexes over. The new fields and
+        # indexes are computed at save time.
+        mdata.set_value('$VERSION', 3)
         self._copy_msg_field('msg', mdata)
         mdata.copy_values('batches')
         mdata.copy_indexes('batches')

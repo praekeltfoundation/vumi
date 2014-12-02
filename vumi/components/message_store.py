@@ -63,7 +63,7 @@ class CurrentTag(Model):
 
 
 class OutboundMessage(Model):
-    VERSION = 2
+    VERSION = 3
     MIGRATOR = OutboundMessageMigrator
 
     # key is message_id
@@ -72,14 +72,19 @@ class OutboundMessage(Model):
 
     # Extra fields for compound indexes
     batches_with_timestamps = ListOf(Unicode(), index=True)
+    batches_with_addresses = ListOf(Unicode(), index=True)
 
     def save(self):
         # We override this method to set our index fields before saving.
         batches_with_timestamps = []
+        batches_with_addresses = []
         timestamp = self.msg['timestamp']
         for batch_id in self.batches.keys():
             batches_with_timestamps.append(u"%s$%s" % (batch_id, timestamp))
+            batches_with_addresses.append(
+                u"%s$%s$%s" % (batch_id, timestamp, self.msg['to_addr']))
         self.batches_with_timestamps = batches_with_timestamps
+        self.batches_with_addresses = batches_with_addresses
         return super(OutboundMessage, self).save()
 
 
@@ -90,7 +95,7 @@ class Event(Model):
 
 
 class InboundMessage(Model):
-    VERSION = 2
+    VERSION = 3
     MIGRATOR = InboundMessageMigrator
 
     # key is message_id
@@ -99,14 +104,19 @@ class InboundMessage(Model):
 
     # Extra fields for compound indexes
     batches_with_timestamps = ListOf(Unicode(), index=True)
+    batches_with_addresses = ListOf(Unicode(), index=True)
 
     def save(self):
         # We override this method to set our index fields before saving.
         batches_with_timestamps = []
+        batches_with_addresses = []
         timestamp = self.msg['timestamp']
         for batch_id in self.batches.keys():
             batches_with_timestamps.append(u"%s$%s" % (batch_id, timestamp))
+            batches_with_addresses.append(
+                u"%s$%s$%s" % (batch_id, timestamp, self.msg['from_addr']))
         self.batches_with_timestamps = batches_with_timestamps
+        self.batches_with_addresses = batches_with_addresses
         return super(InboundMessage, self).save()
 
 

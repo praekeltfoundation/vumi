@@ -196,6 +196,10 @@ class TestMessageStore(TestMessageStoreBase):
              "%s$%s" % (batch_id_1, msg['timestamp'])),
             ('batches_with_timestamps_bin',
              "%s$%s" % (batch_id_2, msg['timestamp'])),
+            ('batches_with_addresses_bin',
+             "%s$%s$%s" % (batch_id_1, msg['timestamp'], msg['to_addr'])),
+            ('batches_with_addresses_bin',
+             "%s$%s$%s" % (batch_id_2, msg['timestamp'], msg['to_addr'])),
         ]))
 
     @inlineCallbacks
@@ -376,6 +380,10 @@ class TestMessageStore(TestMessageStoreBase):
              "%s$%s" % (batch_id_1, msg['timestamp'])),
             ('batches_with_timestamps_bin',
              "%s$%s" % (batch_id_2, msg['timestamp'])),
+            ('batches_with_addresses_bin',
+             "%s$%s$%s" % (batch_id_1, msg['timestamp'], msg['from_addr'])),
+            ('batches_with_addresses_bin',
+             "%s$%s$%s" % (batch_id_2, msg['timestamp'], msg['from_addr'])),
         ]))
 
     @inlineCallbacks
