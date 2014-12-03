@@ -169,11 +169,12 @@ class RiakManager(Manager):
     def from_config(cls, config):
         config = config.copy()
         bucket_prefix = config.pop('bucket_prefix')
-        load_bunch_size = config.pop('load_bunch_size',
-                                     cls.DEFAULT_LOAD_BUNCH_SIZE)
-        mapreduce_timeout = config.pop('mapreduce_timeout',
-                                       cls.DEFAULT_MAPREDUCE_TIMEOUT)
+        load_bunch_size = config.pop(
+            'load_bunch_size', cls.DEFAULT_LOAD_BUNCH_SIZE)
+        mapreduce_timeout = config.pop(
+            'mapreduce_timeout', cls.DEFAULT_MAPREDUCE_TIMEOUT)
         transport_type = config.pop('transport_type', 'http')
+        store_versions = config.pop('store_versions', None)
 
         host = config.get('host', '127.0.0.1')
         port = config.get('port')
@@ -199,8 +200,9 @@ class RiakManager(Manager):
         client.set_encoder('text/json', json.dumps)
         client.set_decoder('application/json', json.loads)
         client.set_decoder('text/json', json.loads)
-        return cls(client, bucket_prefix, load_bunch_size=load_bunch_size,
-                   mapreduce_timeout=mapreduce_timeout)
+        return cls(
+            client, bucket_prefix, load_bunch_size=load_bunch_size,
+            mapreduce_timeout=mapreduce_timeout, store_versions=store_versions)
 
     def close_manager(self):
         self.client.close()
@@ -233,7 +235,18 @@ class RiakManager(Manager):
         return riak_object
 
     def store(self, modelobj):
-        modelobj._riak_object.store()
+        riak_object = modelobj._riak_object
+        modelcls = type(modelobj)
+        model_name = "%s.%s" % (modelcls.__module__, modelcls.__name__)
+        store_version = self.store_versions.get(model_name, modelcls.VERSION)
+        # Run reverse migrators until we have the correct version of the data.
+        data_version = riak_object.get_data().get('$VERSION', None)
+        while data_version != store_version:
+            migrator = modelcls.MIGRATOR(
+                modelcls, self, data_version, reverse=True)
+            riak_object = migrator(riak_object).get_riak_object()
+            data_version = riak_object.get_data().get('$VERSION', None)
+        riak_object.store()
         return modelobj
 
     def delete(self, modelobj):
