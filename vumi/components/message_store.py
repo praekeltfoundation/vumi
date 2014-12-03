@@ -4,8 +4,8 @@
 """Message store."""
 
 from datetime import datetime
-import itertools
 from uuid import uuid4
+import itertools
 import warnings
 
 from twisted.internet.defer import returnValue, inlineCallbacks
