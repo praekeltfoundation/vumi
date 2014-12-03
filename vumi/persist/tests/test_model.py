@@ -79,6 +79,22 @@ class VersionedModelMigrator(ModelMigrator):
         migration_data.set_value('b', migration_data.old_data['a'])
         return migration_data
 
+    def reverse_from_1(self, migration_data):
+        # Migrator assertions
+        assert self.data_version == 1
+        assert self.model_class is VersionedModel
+        assert isinstance(self.manager, Manager)
+
+        # Data assertions
+        assert set(migration_data.old_data.keys()) == set(['$VERSION', 'b'])
+        assert migration_data.old_data['$VERSION'] == 1
+        assert migration_data.old_index == {}
+
+        # Actual migration
+        migration_data.set_value('$VERSION', None)
+        migration_data.set_value('a', migration_data.old_data['b'])
+        return migration_data
+
     def migrate_from_1(self, migration_data):
         # Migrator assertions
         assert self.data_version == 1
@@ -94,6 +110,24 @@ class VersionedModelMigrator(ModelMigrator):
         migration_data.set_value('$VERSION', 2)
         migration_data.set_value('c', migration_data.old_data['b'])
         migration_data.set_value('text', 'hello')
+        return migration_data
+
+    def reverse_from_2(self, migration_data):
+        # Migrator assertions
+        assert self.data_version == 2
+        assert self.model_class is VersionedModel
+        assert isinstance(self.manager, Manager)
+
+        # Data assertions
+        assert set(migration_data.old_data.keys()) == set(
+            ['$VERSION', 'c', 'text'])
+        assert migration_data.old_data['$VERSION'] == 2
+        assert migration_data.old_index == {}
+
+        # Actual migration
+        migration_data.set_value('$VERSION', 1)
+        migration_data.set_value('b', migration_data.old_data['c'])
+        # Drop the text field.
         return migration_data
 
     def migrate_from_2(self, migration_data):
@@ -113,6 +147,24 @@ class VersionedModelMigrator(ModelMigrator):
         migration_data.copy_values('c')
         migration_data.set_value(
             'text', migration_data.old_data['text'], index='text_bin')
+        return migration_data
+
+    def reverse_from_3(self, migration_data):
+        # Migrator assertions
+        assert self.data_version == 3
+        assert self.model_class is IndexedVersionedModel
+        assert isinstance(self.manager, Manager)
+
+        # Data assertions
+        assert set(migration_data.old_data.keys()) == set(
+            ['$VERSION', 'c', 'text'])
+        assert migration_data.old_data['$VERSION'] == 3
+        assert migration_data.old_index == {"text_bin": ["hi"]}
+
+        # Actual migration
+        migration_data.set_value('$VERSION', 2)
+        migration_data.copy_values('c')
+        migration_data.set_value('text', migration_data.old_data['text'])
         return migration_data
 
 
@@ -172,7 +224,7 @@ class VersionedDynamicModel(Model):
     keep = Dynamic(prefix='keep-')
 
 
-class TestModelOnTxRiak(VumiTestCase):
+class ModelTestMixin(object):
 
     # TODO: all copies of mkmsg must be unified!
     def mkmsg(self, **kw):
@@ -181,16 +233,6 @@ class TestModelOnTxRiak(VumiTestCase):
         kw.setdefault("to_addr", "1234")
         kw.setdefault("from_addr", "5678")
         return TransportUserMessage(**kw)
-
-    @inlineCallbacks
-    def setUp(self):
-        try:
-            from vumi.persist.txriak_manager import TxRiakManager
-        except ImportError, e:
-            import_skip(e, 'riak')
-        self.manager = TxRiakManager.from_config({'bucket_prefix': 'test.'})
-        self.add_cleanup(self.manager.purge_all)
-        yield self.manager.purge_all()
 
     @Manager.calls_manager
     def filter_tombstones(self, model_cls, keys):
@@ -1216,6 +1258,20 @@ class TestModelOnTxRiak(VumiTestCase):
         self.assertEqual(foo_new.was_migrated, True)
 
     @Manager.calls_manager
+    def test_unversioned_reverse_migration(self):
+        old_model = self.manager.proxy(UnversionedModel)
+        new_model = self.manager.proxy(VersionedModel)
+        foo_new = new_model("foo", c=1)
+        model_name = "%s.%s" % (
+            VersionedModel.__module__, VersionedModel.__name__)
+        self.manager.store_versions[model_name] = None
+        yield foo_new.save()
+
+        foo_old = yield old_model.load("foo")
+        self.assertEqual(foo_old.a, 1)
+        self.assertEqual(foo_old.was_migrated, False)
+
+    @Manager.calls_manager
     def test_version_migration(self):
         old_model = self.manager.proxy(OldVersionedModel)
         new_model = self.manager.proxy(VersionedModel)
@@ -1226,6 +1282,20 @@ class TestModelOnTxRiak(VumiTestCase):
         self.assertEqual(foo_new.c, 1)
         self.assertEqual(foo_new.text, "hello")
         self.assertEqual(foo_new.was_migrated, True)
+
+    @Manager.calls_manager
+    def test_version_reverse_migration(self):
+        old_model = self.manager.proxy(OldVersionedModel)
+        new_model = self.manager.proxy(VersionedModel)
+        foo_new = new_model("foo", c=1)
+        model_name = "%s.%s" % (
+            VersionedModel.__module__, VersionedModel.__name__)
+        self.manager.store_versions[model_name] = OldVersionedModel.VERSION
+        yield foo_new.save()
+
+        foo_old = yield old_model.load("foo")
+        self.assertEqual(foo_old.b, 1)
+        self.assertEqual(foo_old.was_migrated, False)
 
     @Manager.calls_manager
     def test_version_migration_new_index(self):
@@ -1239,6 +1309,23 @@ class TestModelOnTxRiak(VumiTestCase):
         self.assertEqual(foo_new.text, "hi")
         self.assertEqual(self.get_model_indexes(foo_new), {"text_bin": ["hi"]})
         self.assertEqual(foo_new.was_migrated, True)
+
+    @Manager.calls_manager
+    def test_version_reverse_migration_new_index(self):
+        old_model = self.manager.proxy(VersionedModel)
+        new_model = self.manager.proxy(IndexedVersionedModel)
+        foo_new = new_model("foo", c=1, text=u"hi")
+        model_name = "%s.%s" % (
+            VersionedModel.__module__, IndexedVersionedModel.__name__)
+        self.manager.store_versions[model_name] = VersionedModel.VERSION
+        yield foo_new.save()
+
+        foo_old = yield old_model.load("foo")
+        self.assertEqual(foo_old.c, 1)
+        self.assertEqual(foo_old.text, "hi")
+        # Old indexes are kept across migrations.
+        self.assertEqual(self.get_model_indexes(foo_old), {"text_bin": ["hi"]})
+        self.assertEqual(foo_old.was_migrated, False)
 
     @Manager.calls_manager
     def test_version_migration_new_index_with_unicode(self):
@@ -1296,7 +1383,20 @@ class TestModelOnTxRiak(VumiTestCase):
         self.assertFalse("bar" in new.drop)
 
 
-class TestModelOnRiak(TestModelOnTxRiak):
+class TestModelOnTxRiak(VumiTestCase, ModelTestMixin):
+
+    @inlineCallbacks
+    def setUp(self):
+        try:
+            from vumi.persist.txriak_manager import TxRiakManager
+        except ImportError, e:
+            import_skip(e, 'riak')
+        self.manager = TxRiakManager.from_config({'bucket_prefix': 'test.'})
+        self.add_cleanup(self.manager.purge_all)
+        yield self.manager.purge_all()
+
+
+class TestModelOnRiak(VumiTestCase, ModelTestMixin):
 
     def setUp(self):
         try:

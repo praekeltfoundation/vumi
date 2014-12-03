@@ -867,20 +867,22 @@ class TestMessageStoreCache(TestMessageStoreBase):
         msg_id, msg, batch_id = yield self._create_outbound()
         [cached_msg_id] = (
             yield self.store.cache.get_outbound_message_keys(batch_id))
-        [cached_to_addr] = (
-            yield self.store.cache.get_to_addrs(batch_id))
+        cached_to_addrs = yield self.store.cache.get_to_addrs(batch_id)
         self.assertEqual(msg_id, cached_msg_id)
-        self.assertEqual(msg['to_addr'], cached_to_addr)
+        # NOTE: This functionality is disabled for now.
+        # self.assertEqual([msg['to_addr']], cached_to_addrs)
+        self.assertEqual([], cached_to_addrs)
 
     @inlineCallbacks
     def test_cache_add_inbound_message(self):
         msg_id, msg, batch_id = yield self._create_inbound()
         [cached_msg_id] = (
             yield self.store.cache.get_inbound_message_keys(batch_id))
-        [cached_from_addr] = (
-            yield self.store.cache.get_from_addrs(batch_id))
+        cached_from_addrs = yield self.store.cache.get_from_addrs(batch_id)
         self.assertEqual(msg_id, cached_msg_id)
-        self.assertEqual(msg['from_addr'], cached_from_addr)
+        # NOTE: This functionality is disabled for now.
+        # self.assertEqual([msg['from_addr']], cached_from_addrs)
+        self.assertEqual([], cached_from_addrs)
 
     @inlineCallbacks
     def test_cache_add_event(self):
