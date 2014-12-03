@@ -1,13 +1,15 @@
 # -*- test-case-name: vumi.components.tests.test_message_store_cache -*-
 # -*- coding: utf-8 -*-
-import time
+
+from datetime import datetime
 import hashlib
 import json
+import time
 
 from twisted.internet.defer import returnValue
 
 from vumi.persist.redis_base import Manager
-from vumi.message import TransportEvent
+from vumi.message import TransportEvent, VUMI_DATE_FORMAT
 from vumi.errors import VumiError
 
 
@@ -223,11 +225,13 @@ class MessageStoreCache(object):
         yield self.redis.delete(self.from_addr_key(batch_id))
         yield self.redis.srem(self.batch_key(), batch_id)
 
-    def get_timestamp(self, datetime):
+    def get_timestamp(self, timestamp):
         """
         Return a timestamp value for a datetime value.
         """
-        return time.mktime(datetime.timetuple())
+        if isinstance(timestamp, basestring):
+            timestamp = datetime.strptime(timestamp, VUMI_DATE_FORMAT)
+        return time.mktime(timestamp.timetuple())
 
     @Manager.calls_manager
     def add_outbound_message(self, batch_id, msg):

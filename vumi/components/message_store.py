@@ -3,13 +3,13 @@
 
 """Message store."""
 
-import warnings
-
+from datetime import datetime
 from uuid import uuid4
+import warnings
 
 from twisted.internet.defer import returnValue, inlineCallbacks
 
-from vumi.message import TransportEvent, TransportUserMessage
+from vumi.message import TransportEvent, TransportUserMessage, VUMI_DATE_FORMAT
 from vumi.persist.model import Model, Manager
 from vumi.persist.fields import (
     VumiMessage, ForeignKey, ManyToMany, ListOf, Tag, Dynamic, Unicode)
@@ -162,31 +162,54 @@ class MessageStore(object):
 
     @Manager.calls_manager
     def reconcile_cache(self, batch_id):
+        timestamp = datetime.utcnow().strftime(VUMI_DATE_FORMAT)
         yield self.cache.clear_batch(batch_id)
         yield self.cache.batch_start(batch_id)
-        yield self.reconcile_outbound_cache(batch_id)
-        yield self.reconcile_inbound_cache(batch_id)
+        yield self.reconcile_outbound_cache(batch_id, timestamp)
+        yield self.reconcile_inbound_cache(batch_id, timestamp)
 
     @Manager.calls_manager
-    def reconcile_inbound_cache(self, batch_id):
-        inbound_keys = yield self.batch_inbound_keys(batch_id)
-        for key in inbound_keys:
-            try:
-                msg = yield self.get_inbound_message(key)
-                yield self.cache.add_inbound_message(batch_id, msg)
-            except Exception:
-                log.err()
+    def reconcile_inbound_cache(self, batch_id, start_timestamp):
+        """
+        Rebuild the inbound message cache.
+
+        TODO: Avoid hitting Redis for messages older than the last
+              TRUNCATE_MESSAGE_KEY_COUNT_AT before `timestamp`.
+        """
+        index_page = yield self.batch_inbound_keys_with_timestamps(batch_id)
+        while index_page is not None:
+            for key, timestamp in index_page:
+                try:
+                    yield self.cache.add_inbound_message_key(
+                        batch_id, key, self.cache.get_timestamp(timestamp))
+                except:
+                    log.err()
+            if index_page.has_next_page():
+                index_page = yield index_page.next_page()
+            else:
+                index_page = None
 
     @Manager.calls_manager
-    def reconcile_outbound_cache(self, batch_id):
-        outbound_keys = yield self.batch_outbound_keys(batch_id)
-        for key in outbound_keys:
-            try:
-                msg = yield self.get_outbound_message(key)
-                yield self.cache.add_outbound_message(batch_id, msg)
-                yield self.reconcile_event_cache(batch_id, key)
-            except Exception:
-                log.err()
+    def reconcile_outbound_cache(self, batch_id, start_timestamp):
+        """
+        Rebuild the outbound message cache.
+
+        TODO: Avoid hitting Redis for messages (and events) older than the last
+              TRUNCATE_MESSAGE_KEY_COUNT_AT before `timestamp`.
+        """
+        index_page = yield self.batch_outbound_keys_with_timestamps(batch_id)
+        while index_page is not None:
+            for key, timestamp in index_page:
+                try:
+                    yield self.cache.add_outbound_message_key(
+                        batch_id, key, self.cache.get_timestamp(timestamp))
+                    yield self.reconcile_event_cache(batch_id, key)
+                except:
+                    log.err()
+            if index_page.has_next_page():
+                index_page = yield index_page.next_page()
+            else:
+                index_page = None
 
     @Manager.calls_manager
     def reconcile_event_cache(self, batch_id, message_id):
