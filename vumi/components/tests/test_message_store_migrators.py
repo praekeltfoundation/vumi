@@ -238,6 +238,28 @@ class TestOutboundMessageMigrator(TestMigratorBase):
             bwa_index(bwa_out_value("batch-2", msg)),
         ]))
 
+    @inlineCallbacks
+    def test_reverse_migrate_v3_to_v2(self):
+        """
+        A v3 model can be stored in a v2-compatible way.
+        """
+        # Configure the manager to save the older message version.
+        modelcls = self.outbound_v3._modelcls
+        model_name = "%s.%s" % (modelcls.__module__, modelcls.__name__)
+        self.manager.store_versions[model_name] = 2
+
+        msg = self.msg_helper.make_outbound("outbound")
+        batch_1 = self.batch_vnone(key=u"batch-1")
+        batch_2 = self.batch_vnone(key=u"batch-2")
+        new_record = self.outbound_v3(msg["message_id"], msg=msg)
+        new_record.batches.add_key(batch_1.key)
+        new_record.batches.add_key(batch_2.key)
+        yield new_record.save()
+
+        old_record = yield self.outbound_v2.load(new_record.key)
+        self.assertEqual(old_record.msg, msg)
+        self.assertEqual(old_record.batches.keys(), [batch_1.key, batch_2.key])
+
 
 class TestInboundMessageMigrator(TestMigratorBase):
 
@@ -425,3 +447,25 @@ class TestInboundMessageMigrator(TestMigratorBase):
             bwa_index(bwa_in_value("batch-1", msg)),
             bwa_index(bwa_in_value("batch-2", msg)),
         ]))
+
+    @inlineCallbacks
+    def test_reverse_migrate_v3_to_v2(self):
+        """
+        A v3 model can be stored in a v2-compatible way.
+        """
+        # Configure the manager to save the older message version.
+        modelcls = self.inbound_v3._modelcls
+        model_name = "%s.%s" % (modelcls.__module__, modelcls.__name__)
+        self.manager.store_versions[model_name] = 2
+
+        msg = self.msg_helper.make_inbound("inbound")
+        batch_1 = self.batch_vnone(key=u"batch-1")
+        batch_2 = self.batch_vnone(key=u"batch-2")
+        new_record = self.inbound_v3(msg["message_id"], msg=msg)
+        new_record.batches.add_key(batch_1.key)
+        new_record.batches.add_key(batch_2.key)
+        yield new_record.save()
+
+        old_record = yield self.inbound_v2.load(new_record.key)
+        self.assertEqual(old_record.msg, msg)
+        self.assertEqual(old_record.batches.keys(), [batch_1.key, batch_2.key])
