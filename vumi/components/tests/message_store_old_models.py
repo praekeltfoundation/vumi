@@ -53,3 +53,49 @@ class InboundMessageV1(Model):
     # key is message_id
     msg = VumiMessage(TransportUserMessage)
     batches = ManyToMany(BatchVNone)
+
+
+class OutboundMessageV2(Model):
+    bucket = 'outboundmessage'
+
+    VERSION = 2
+    MIGRATOR = OutboundMessageMigrator
+
+    # key is message_id
+    msg = VumiMessage(TransportUserMessage)
+    batches = ManyToMany(BatchVNone)
+
+    # Extra fields for compound indexes
+    batches_with_timestamps = ListOf(Unicode(), index=True)
+
+    def save(self):
+        # We override this method to set our index fields before saving.
+        batches_with_timestamps = []
+        timestamp = self.msg['timestamp']
+        for batch_id in self.batches.keys():
+            batches_with_timestamps.append(u"%s$%s" % (batch_id, timestamp))
+        self.batches_with_timestamps = batches_with_timestamps
+        return super(OutboundMessageV2, self).save()
+
+
+class InboundMessageV2(Model):
+    bucket = 'inboundmessage'
+
+    VERSION = 2
+    MIGRATOR = InboundMessageMigrator
+
+    # key is message_id
+    msg = VumiMessage(TransportUserMessage)
+    batches = ManyToMany(BatchVNone)
+
+    # Extra fields for compound indexes
+    batches_with_timestamps = ListOf(Unicode(), index=True)
+
+    def save(self):
+        # We override this method to set our index fields before saving.
+        batches_with_timestamps = []
+        timestamp = self.msg['timestamp']
+        for batch_id in self.batches.keys():
+            batches_with_timestamps.append(u"%s$%s" % (batch_id, timestamp))
+        self.batches_with_timestamps = batches_with_timestamps
+        return super(InboundMessageV2, self).save()
