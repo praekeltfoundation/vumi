@@ -46,7 +46,7 @@ class DeliverShortMessageProcessor(default.DeliverShortMessageProcessor):
         vumi_session_identifier = make_vumi_session_identifier(
             pdu_params['source_addr'], mica_session_identifier)
 
-        session_event = self.ussd_service_op_map[int(service_op, 16)]
+        session_event = self.ussd_service_op_map.get(int(service_op, 16))
 
         if session_event == 'new':
             # PSSR request. Let's assume it means a new session.
@@ -66,8 +66,8 @@ class DeliverShortMessageProcessor(default.DeliverShortMessageProcessor):
 
         else:
             if session_event != 'continue':
-                log.warning('Received %r session event, assuming contiue.' % (
-                    service_op,))
+                log.warning(('Received unknown %r ussd_service_op, '
+                             'assuming continue.') % (service_op,))
                 session_event = 'continue'
 
             session = yield self.session_manager.load_session(

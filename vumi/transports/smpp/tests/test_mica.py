@@ -103,6 +103,28 @@ class MicaProcessorTestCase(SmppTransportTestCase):
                          TransportUserMessage.SESSION_CLOSE)
 
     @inlineCallbacks
+    def test_deliver_sm_unknown_op_code(self):
+        session_identifier = 12345
+        smpp_helper = yield self.get_smpp_helper()
+
+        pdu = DeliverSM(1, short_message="*123#")
+        pdu.add_optional_parameter('ussd_service_op', '01')
+        pdu.add_optional_parameter('user_message_reference',
+                                   session_identifier)
+
+        yield smpp_helper.handle_pdu(pdu)
+
+        pdu = DeliverSM(1, short_message="*123#")
+        pdu.add_optional_parameter('ussd_service_op', '99')
+        pdu.add_optional_parameter('user_message_reference',
+                                   session_identifier)
+
+        yield smpp_helper.handle_pdu(pdu)
+        [start, unknown] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        self.assertEqual(unknown['session_event'],
+                         TransportUserMessage.SESSION_RESUME)
+
+    @inlineCallbacks
     def test_submit_sm_op_codes(self):
         user_msisdn = 'msisdn'
         session_identifier = 12345
