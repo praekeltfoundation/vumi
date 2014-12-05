@@ -4,6 +4,7 @@ from vumi.config import ConfigInt
 from vumi.components.session import SessionManager
 from vumi.message import TransportUserMessage
 from vumi.transports.smpp.processors import default
+from vumi import log
 
 from twisted.internet.defer import inlineCallbacks, returnValue
 
@@ -24,6 +25,12 @@ class DeliverShortMessageProcessor(default.DeliverShortMessageProcessor):
 
     CONFIG_CLASS = DeliverShortMessageProcessorConfig
 
+    ussd_service_op_map = {
+        1: 'new',
+        18: 'continue',
+        129: 'close',  # user abort
+    }
+
     def __init__(self, transport, config):
         super(DeliverShortMessageProcessor, self).__init__(transport, config)
         self.transport = transport
@@ -39,20 +46,17 @@ class DeliverShortMessageProcessor(default.DeliverShortMessageProcessor):
         vumi_session_identifier = make_vumi_session_identifier(
             pdu_params['source_addr'], mica_session_identifier)
 
-        session_event = 'close'
-        if service_op == '01':
+        session_event = self.ussd_service_op_map[int(service_op, 16)]
+
+        if session_event == 'new':
             # PSSR request. Let's assume it means a new session.
-            session_event = 'new'
             ussd_code = pdu_params['short_message']
             content = None
 
             yield self.session_manager.create_session(
                 vumi_session_identifier, ussd_code=ussd_code)
 
-        elif service_op == '17':
-            # PSSR response. This means session end.
-            session_event = 'close'
-
+        elif session_event == 'close':
             session = yield self.session_manager.load_session(
                 vumi_session_identifier)
             ussd_code = session['ussd_code']
@@ -61,7 +65,10 @@ class DeliverShortMessageProcessor(default.DeliverShortMessageProcessor):
             yield self.session_manager.clear_session(vumi_session_identifier)
 
         else:
-            session_event = 'continue'
+            if session_event != 'continue':
+                log.warning('Received %r session event, assuming contiue.' % (
+                    service_op,))
+                session_event = 'continue'
 
             session = yield self.session_manager.load_session(
                 vumi_session_identifier)
@@ -71,6 +78,7 @@ class DeliverShortMessageProcessor(default.DeliverShortMessageProcessor):
         # This is stashed on the message and available when replying
         # with a `submit_sm`
         session_info = {
+            'ussd_service_op': service_op,
             'session_identifier': mica_session_identifier,
         }
 
@@ -98,6 +106,11 @@ class SubmitShortMessageProcessorConfig(
 class SubmitShortMessageProcessor(default.SubmitShortMessageProcessor):
 
     CONFIG_CLASS = SubmitShortMessageProcessorConfig
+
+    ussd_service_op_map = {
+        'continue': '2',
+        'close': '17',  # end
+    }
 
     def __init__(self, transport, config):
         super(SubmitShortMessageProcessor, self).__init__(transport, config)
@@ -128,8 +141,11 @@ class SubmitShortMessageProcessor(default.SubmitShortMessageProcessor):
             vumi_session_identifier = make_vumi_session_identifier(
                 to_addr, mica_session_identifier)
 
+            service_op = self.ussd_service_op_map[('continue'
+                                                   if continue_session
+                                                   else 'close')]
             optional_parameters.update({
-                'ussd_service_op': ('02' if continue_session else '17'),
+                'ussd_service_op': service_op,
                 'user_message_reference': (
                     str(mica_session_identifier).zfill(2)),
             })

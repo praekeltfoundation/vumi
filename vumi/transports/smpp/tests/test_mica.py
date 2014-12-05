@@ -61,9 +61,76 @@ class MicaProcessorTestCase(SmppTransportTestCase):
             mess['transport_metadata'],
             {
                 'session_info': {
-                    'session_identifier': 12345
+                    'session_identifier': 12345,
+                    'ussd_service_op': '01',
                 }
             })
+
+    @inlineCallbacks
+    def test_deliver_sm_op_codes(self):
+        session_identifier = 12345
+        smpp_helper = yield self.get_smpp_helper()
+
+        pdu = DeliverSM(1, short_message="*123#")
+        pdu.add_optional_parameter('ussd_service_op', '01')
+        pdu.add_optional_parameter('user_message_reference',
+                                   session_identifier)
+
+        yield smpp_helper.handle_pdu(pdu)
+
+        pdu = DeliverSM(1, short_message="")
+        pdu.add_optional_parameter('ussd_service_op', '12')
+        pdu.add_optional_parameter('user_message_reference',
+                                   session_identifier)
+
+        yield smpp_helper.handle_pdu(pdu)
+
+        pdu = DeliverSM(1, short_message="")
+        pdu.add_optional_parameter('ussd_service_op', '81')
+        pdu.add_optional_parameter('user_message_reference',
+                                   session_identifier)
+
+        yield smpp_helper.handle_pdu(pdu)
+
+        messages = yield self.tx_helper.wait_for_dispatched_inbound(3)
+        [start, resume, end] = messages
+
+        self.assertEqual(start['session_event'],
+                         TransportUserMessage.SESSION_NEW)
+        self.assertEqual(resume['session_event'],
+                         TransportUserMessage.SESSION_RESUME)
+        self.assertEqual(end['session_event'],
+                         TransportUserMessage.SESSION_CLOSE)
+
+    @inlineCallbacks
+    def test_submit_sm_op_codes(self):
+        user_msisdn = 'msisdn'
+        session_identifier = 12345
+        smpp_helper = yield self.get_smpp_helper()
+
+        yield self.tx_helper.make_dispatch_outbound(
+            "hello world",
+            transport_type="ussd",
+            session_event=TransportUserMessage.SESSION_RESUME,
+            transport_metadata={
+                'session_info': {
+                    'session_identifier': session_identifier
+                }
+            }, to_addr=user_msisdn)
+
+        yield self.tx_helper.make_dispatch_outbound(
+            "hello world",
+            transport_type="ussd",
+            session_event=TransportUserMessage.SESSION_CLOSE,
+            transport_metadata={
+                'session_info': {
+                    'session_identifier': session_identifier
+                }
+            }, to_addr=user_msisdn)
+
+        [resume, close] = yield smpp_helper.wait_for_pdus(2)
+        self.assertEqual(pdu_tlv(resume, 'ussd_service_op'), '02')
+        self.assertEqual(pdu_tlv(close, 'ussd_service_op'), '17')
 
     @inlineCallbacks
     def test_submit_and_deliver_ussd_continue(self):
@@ -95,7 +162,8 @@ class MicaProcessorTestCase(SmppTransportTestCase):
         # Server delivers a USSD message to the Client
         pdu = DeliverSM(seq_no(submit_sm_pdu) + 1, short_message="reply!",
                         source_addr=user_msisdn)
-        pdu.add_optional_parameter('ussd_service_op', '02')
+        # 0x12 is 'continue'
+        pdu.add_optional_parameter('ussd_service_op', '12')
         pdu.add_optional_parameter('user_message_reference',
                                    session_identifier)
 
