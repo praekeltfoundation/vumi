@@ -171,6 +171,10 @@ class TxRedisManager(Manager):
 
     call_decorator = staticmethod(inlineCallbacks)
 
+    def __init__(self, *args, **kwargs):
+        super(TxRedisManager, self).__init__(*args, **kwargs)
+        self._sub_managers = []
+
     @classmethod
     def _fake_manager(cls, fake_redis, manager_config):
         if fake_redis is None:
@@ -207,11 +211,21 @@ class TxRedisManager(Manager):
         cls._attach_reconnector(manager)
         return manager
 
+    def sub_manager(self, sub_prefix):
+        sub_man = super(TxRedisManager, self).sub_manager(sub_prefix)
+        self._sub_managers.append(sub_man)
+        return sub_man
+
+    def set_client(self, client):
+        self._client = client
+        for sub_man in self._sub_managers:
+            sub_man.set_client(client)
+        return client
+
     @staticmethod
     def _attach_reconnector(manager):
         def set_client(client):
-            manager._client = client
-            return client
+            return manager.set_client(client)
 
         def reconnect(client):
             client.factory.deferred.addCallback(reconnect)

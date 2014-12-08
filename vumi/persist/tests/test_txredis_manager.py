@@ -75,3 +75,18 @@ class TestTxRedisManager(VumiTestCase):
         yield self.manager.setex("key-ttl", 30, "value")
         ttl = yield self.manager.ttl("key-ttl")
         self.assertTrue(10 <= ttl <= 30)
+
+    @inlineCallbacks
+    def test_reconnect_sub_managers(self):
+        self.manager = yield TxRedisManager.from_config(
+            {'FAKE_REDIS': None,
+             'key_prefix': 'redistest'})
+        self.sub_manager = self.manager.sub_manager('subredis')
+        self.sub_sub_manager = self.sub_manager.sub_manager('subsubredis')
+
+        self.manager._client.connectionLost('timeout from server')
+
+        #wait for the manager to reconnect
+
+        #then assert that all sub_manager still have a connected clients
+        self.fail()
