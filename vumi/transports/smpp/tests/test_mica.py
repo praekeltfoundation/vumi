@@ -148,7 +148,7 @@ class MicaProcessorTestCase(SmppTransportTestCase):
                          TransportUserMessage.SESSION_RESUME)
 
     @inlineCallbacks
-    def test_submit_sm_op_codes(self):
+    def test_submit_sm_op_codes_resume(self):
         user_msisdn = 'msisdn'
         session_identifier = 12345
         smpp_helper = yield self.get_smpp_helper()
@@ -162,6 +162,14 @@ class MicaProcessorTestCase(SmppTransportTestCase):
                     'session_identifier': session_identifier
                 }
             }, to_addr=user_msisdn)
+        [resume] = yield smpp_helper.wait_for_pdus(1)
+        self.assertEqual(pdu_tlv(resume, 'ussd_service_op'), '02')
+
+    @inlineCallbacks
+    def test_submit_sm_op_codes_close(self):
+        user_msisdn = 'msisdn'
+        session_identifier = 12345
+        smpp_helper = yield self.get_smpp_helper()
 
         yield self.tx_helper.make_dispatch_outbound(
             "hello world",
@@ -173,8 +181,7 @@ class MicaProcessorTestCase(SmppTransportTestCase):
                 }
             }, to_addr=user_msisdn)
 
-        [resume, close] = yield smpp_helper.wait_for_pdus(2)
-        self.assertEqual(pdu_tlv(resume, 'ussd_service_op'), '02')
+        [close] = yield smpp_helper.wait_for_pdus(1)
         self.assertEqual(pdu_tlv(close, 'ussd_service_op'), '17')
 
     @inlineCallbacks
