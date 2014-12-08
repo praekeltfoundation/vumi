@@ -25,10 +25,12 @@ class DeliverShortMessageProcessor(default.DeliverShortMessageProcessor):
 
     CONFIG_CLASS = DeliverShortMessageProcessorConfig
 
+    # NOTE: these keys are hexidecimal because of python-smpp encoding
+    #       quirkiness
     ussd_service_op_map = {
-        1: 'new',
-        18: 'continue',
-        129: 'close',  # user abort
+        '01': 'new',
+        '12': 'continue',
+        '81': 'close',  # user abort
     }
 
     def __init__(self, transport, config):
@@ -46,7 +48,7 @@ class DeliverShortMessageProcessor(default.DeliverShortMessageProcessor):
         vumi_session_identifier = make_vumi_session_identifier(
             pdu_params['source_addr'], mica_session_identifier)
 
-        session_event = self.ussd_service_op_map.get(int(service_op, 16))
+        session_event = self.ussd_service_op_map.get(service_op)
 
         if session_event == 'new':
             # PSSR request. Let's assume it means a new session.
@@ -107,8 +109,10 @@ class SubmitShortMessageProcessor(default.SubmitShortMessageProcessor):
 
     CONFIG_CLASS = SubmitShortMessageProcessorConfig
 
+    # NOTE: these values are hexidecimal because of python-smpp encoding
+    #       quirkiness
     ussd_service_op_map = {
-        'continue': '2',
+        'continue': '02',
         'close': '17',  # end
     }
 
