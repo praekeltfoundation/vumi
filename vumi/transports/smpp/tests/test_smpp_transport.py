@@ -555,7 +555,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
                              message_id='foo',
                              command_status='ESME_RTHROTTLED'))
         [logmsg] = lc.logs
-        self.assertEqual(logmsg['logLevel'], logging.WARNING)
+        self.assertEqual(logmsg['logLevel'], logging.INFO)
 
         self.clock.advance(transport_config.throttle_delay)
 
@@ -577,7 +577,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         with LogCatcher(message="No longer throttling outbound") as lc:
             self.clock.advance(transport_config.throttle_delay)
         [logmsg] = lc.logs
-        self.assertEqual(logmsg['logLevel'], logging.WARNING)
+        self.assertEqual(logmsg['logLevel'], logging.INFO)
 
     @inlineCallbacks
     def test_mt_sms_throttle_while_throttled(self):
