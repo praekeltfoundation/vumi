@@ -104,7 +104,7 @@ class VumiRedis(txr.Redis):
         deferreds = [orig_zadd(key, member, score) for member, score in pieces]
         d = DeferredList(deferreds, fireOnOneErrback=True)
         d.addCallback(lambda results: sum([result for success, result
-                                            in results if success]))
+                                           in results if success]))
         return d
 
     def zrange(self, key, start, end, desc=False, withscores=False):
@@ -113,9 +113,9 @@ class VumiRedis(txr.Redis):
                                              reverse=desc)
 
     def zrangebyscore(self, key, min, max, start=None, num=None,
-                     withscores=False, score_cast_func=float):
-        d = super(VumiRedis, self).zrangebyscore(key, min, max,
-                        offset=start, count=num, withscores=withscores)
+                      withscores=False, score_cast_func=float):
+        d = super(VumiRedis, self).zrangebyscore(
+            key, min, max, offset=start, count=num, withscores=withscores)
         if withscores:
             d.addCallback(lambda r: [(v, score_cast_func(s)) for v, s in r])
         return d
@@ -157,6 +157,10 @@ class VumiRedis(txr.Redis):
 
 class VumiRedisClientFactory(txr.RedisClientFactory):
     protocol = VumiRedis
+
+    # Faster reconnecting.
+    maxDelay = 5.0
+    initialDelay = 0.01
 
     def buildProtocol(self, addr):
         self.client = self.protocol(*self._args, **self._kwargs)
