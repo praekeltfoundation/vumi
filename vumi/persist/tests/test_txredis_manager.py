@@ -1,6 +1,7 @@
 """Tests for vumi.persist.txredis_manager."""
 
 import os
+from functools import wraps
 
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
@@ -16,14 +17,21 @@ def wait(secs):
     return d
 
 
-class TestTxRedisManager(VumiTestCase):
-    @inlineCallbacks
-    def get_manager(self, skip_fake=False):
-        if skip_fake and ('VUMITEST_REDIS_DB' not in os.environ):
+def skip_fake_redis(func):
+    @wraps(func)
+    def wrapper(*args, **kw):
+        if 'VUMITEST_REDIS_DB' not in os.environ:
             # We're using a fake redis, so skip this test.
             raise SkipTest(
                 "This test requires a real Redis server. Set VUMITEST_REDIS_DB"
                 " to run it.")
+        return func(*args, **kw)
+    return wrapper
+
+
+class TestTxRedisManager(VumiTestCase):
+    @inlineCallbacks
+    def get_manager(self):
         manager = yield TxRedisManager.from_config({
             'FAKE_REDIS': 'yes',
             'key_prefix': 'redistest',
@@ -99,9 +107,10 @@ class TestTxRedisManager(VumiTestCase):
         ttl = yield manager.ttl("key-ttl")
         self.assertTrue(10 <= ttl <= 30)
 
+    @skip_fake_redis
     @inlineCallbacks
     def test_reconnect_sub_managers(self):
-        manager = yield self.get_manager(skip_fake=True)
+        manager = yield self.get_manager()
         sub_manager = manager.sub_manager('subredis')
         sub_sub_manager = sub_manager.sub_manager('subsubredis')
 
