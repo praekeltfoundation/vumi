@@ -117,7 +117,7 @@ class TestTxRedisManager(VumiTestCase):
 
         # Kill the connection and wait a few moments for the reconnect.
         yield manager._client.quit()
-        yield wait(0.1)
+        yield wait(manager._client.factory.initialDelay + 0.05)
 
         # Our three managers are all reconnected properly.
         f1 = yield manager.get("foo")
