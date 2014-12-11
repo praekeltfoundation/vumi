@@ -11,6 +11,7 @@ from vumi.transports.smpp.tests.test_smpp_transport import (
 from vumi.transports.smpp.smpp_transport import (
     SmppTransceiverTransport)
 from vumi.transports.smpp.processors.mica import make_vumi_session_identifier
+from vumi.transports.smpp.pdu_utils import short_message
 
 
 class MicaProcessorTestCase(SmppTransportTestCase):
@@ -34,8 +35,31 @@ class MicaProcessorTestCase(SmppTransportTestCase):
                 'data_coding_overrides': {
                     0: 'utf-8',
                 }
+            },
+            'submit_short_message_processor_config': {
+                'submit_sm_encoding': 'utf-16be',
+                'submit_sm_data_coding': 8,
+                'send_multipart_udh': True,
             }
         }
+
+    @inlineCallbacks
+    def test_submit_sm_multipart_udh_ucs2(self):
+        message = (
+            "A cup is a small, open container used for carrying and "
+            "drinking drinks. It may be made of wood, plastic, glass, "
+            "clay, metal, stone, china or other materials, and may have "
+            "a stem, handles or other adornments. Cups are used for "
+            "drinking across a wide range of cultures and social classes, "
+            "and different styles of cups may be used for different liquids "
+            "or in different situations. Cups have been used for thousands "
+            "of years for the ...Reply 1 for more")
+
+        smpp_helper = yield self.get_smpp_helper()
+        yield self.tx_helper.make_dispatch_outbound(message, to_addr='msisdn')
+        pdus = yield smpp_helper.wait_for_pdus(7)
+        for pdu in pdus:
+            self.assertTrue(len(short_message(pdu)) < 140)
 
     @inlineCallbacks
     def test_submit_and_deliver_ussd_new(self):
