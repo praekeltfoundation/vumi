@@ -3,13 +3,14 @@
 
 """Message store."""
 
-import warnings
-
+from datetime import datetime
 from uuid import uuid4
+import itertools
+import warnings
 
 from twisted.internet.defer import returnValue, inlineCallbacks
 
-from vumi.message import TransportEvent, TransportUserMessage
+from vumi.message import TransportEvent, TransportUserMessage, VUMI_DATE_FORMAT
 from vumi.persist.model import Model, Manager
 from vumi.persist.fields import (
     VumiMessage, ForeignKey, ManyToMany, ListOf, Tag, Dynamic, Unicode)
@@ -120,6 +121,44 @@ class InboundMessage(Model):
         return super(InboundMessage, self).save()
 
 
+class ReconKeyManager(object):
+    """
+    A helper for tracking keys during cache recon.
+
+    Keys are added one at a time from oldest to newest, and a buffer of recent
+    keys is kept to allow old and new keys to be handled differently.
+    """
+
+    def __init__(self, start_timestamp, key_count):
+        self.start_timestamp = start_timestamp
+        self.key_count = key_count
+        self.cache_keys = []
+        self.new_keys = []
+
+    def add_key(self, key, timestamp):
+        """
+        Add a key and timestamp to the manager.
+
+        If ``timestamp`` is newer than :attr:`start_timestamp`, the pair is
+        added to :attr:`new_keys`, otherwise it is added to :attr:`cache_keys`.
+        If this causes :attr:`cache_keys` to grow larger than
+        :attr:`key_count`, the earliest entry is removed and returned. If not,
+        ``None`` is returned.
+
+        It is assumed that keys will be added from oldest to newest.
+        """
+        if timestamp > self.start_timestamp:
+            self.new_keys.append((key, timestamp))
+            return None
+        self.cache_keys.append((key, timestamp))
+        if len(self.cache_keys) > self.key_count:
+            return self.cache_keys.pop(0)
+        return None
+
+    def __iter__(self):
+        return itertools.chain(self.cache_keys, self.new_keys)
+
+
 class MessageStore(object):
     """Vumi message store.
 
@@ -171,35 +210,87 @@ class MessageStore(object):
         returnValue(False)
 
     @Manager.calls_manager
-    def reconcile_cache(self, batch_id):
+    def reconcile_cache(self, batch_id, start_timestamp=None):
+        """
+        Rebuild the cache for the given batch.
+
+        The ``start_timestamp`` parameter is used for testing only.
+        """
+        if start_timestamp is None:
+            start_timestamp = datetime.utcnow().strftime(VUMI_DATE_FORMAT)
         yield self.cache.clear_batch(batch_id)
         yield self.cache.batch_start(batch_id)
-        yield self.reconcile_outbound_cache(batch_id)
-        yield self.reconcile_inbound_cache(batch_id)
+        yield self.reconcile_outbound_cache(batch_id, start_timestamp)
+        yield self.reconcile_inbound_cache(batch_id, start_timestamp)
 
     @Manager.calls_manager
-    def reconcile_inbound_cache(self, batch_id):
-        inbound_keys = yield self.batch_inbound_keys(batch_id)
-        for key in inbound_keys:
+    def reconcile_inbound_cache(self, batch_id, start_timestamp):
+        """
+        Rebuild the inbound message cache.
+        """
+        key_manager = ReconKeyManager(
+            start_timestamp, self.cache.TRUNCATE_MESSAGE_KEY_COUNT_AT)
+        key_count = 0
+
+        index_page = yield self.batch_inbound_keys_with_timestamps(batch_id)
+        while index_page is not None:
+            for key, timestamp in index_page:
+                old_key = key_manager.add_key(key, timestamp)
+                if old_key is not None:
+                    key_count += 1
+            if index_page.has_next_page():
+                index_page = yield index_page.next_page()
+            else:
+                index_page = None
+
+        self.cache.add_inbound_message_count(batch_id, key_count)
+        for key, timestamp in key_manager:
             try:
-                msg = yield self.get_inbound_message(key)
-                yield self.cache.add_inbound_message(batch_id, msg)
-            except Exception:
+                yield self.cache.add_inbound_message_key(
+                    batch_id, key, self.cache.get_timestamp(timestamp))
+            except:
                 log.err()
 
     @Manager.calls_manager
-    def reconcile_outbound_cache(self, batch_id):
-        outbound_keys = yield self.batch_outbound_keys(batch_id)
-        for key in outbound_keys:
+    def reconcile_outbound_cache(self, batch_id, start_timestamp):
+        """
+        Rebuild the outbound message cache.
+
+        TODO: Correctly reconcile old events.
+        """
+        key_manager = ReconKeyManager(
+            start_timestamp, self.cache.TRUNCATE_MESSAGE_KEY_COUNT_AT)
+        key_count = 0
+
+        index_page = yield self.batch_outbound_keys_with_timestamps(batch_id)
+        while index_page is not None:
+            for key, timestamp in index_page:
+                old_key = key_manager.add_key(key, timestamp)
+                if old_key is not None:
+                    key_count += 1
+                    # TODO: Reconcile events for this message when it becomes
+                    #       less expensive.
+            if index_page.has_next_page():
+                index_page = yield index_page.next_page()
+            else:
+                index_page = None
+
+        self.cache.add_outbound_message_count(batch_id, key_count)
+        for key, timestamp in key_manager:
             try:
-                msg = yield self.get_outbound_message(key)
-                yield self.cache.add_outbound_message(batch_id, msg)
+                yield self.cache.add_outbound_message_key(
+                    batch_id, key, self.cache.get_timestamp(timestamp))
                 yield self.reconcile_event_cache(batch_id, key)
-            except Exception:
+            except:
                 log.err()
 
     @Manager.calls_manager
     def reconcile_event_cache(self, batch_id, message_id):
+        """
+        Update the event cache for a particular message.
+
+        TODO: Use indexes here instead of loading event objects.
+        """
         event_keys = yield self.message_event_keys(message_id)
         for event_key in event_keys:
             event = yield self.get_event(event_key)

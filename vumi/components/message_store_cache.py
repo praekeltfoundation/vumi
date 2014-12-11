@@ -1,13 +1,15 @@
 # -*- test-case-name: vumi.components.tests.test_message_store_cache -*-
 # -*- coding: utf-8 -*-
-import time
+
+from datetime import datetime
 import hashlib
 import json
+import time
 
 from twisted.internet.defer import returnValue
 
 from vumi.persist.redis_base import Manager
-from vumi.message import TransportEvent
+from vumi.message import TransportEvent, VUMI_DATE_FORMAT
 from vumi.errors import VumiError
 
 
@@ -223,11 +225,13 @@ class MessageStoreCache(object):
         yield self.redis.delete(self.from_addr_key(batch_id))
         yield self.redis.srem(self.batch_key(), batch_id)
 
-    def get_timestamp(self, datetime):
+    def get_timestamp(self, timestamp):
         """
         Return a timestamp value for a datetime value.
         """
-        return time.mktime(datetime.timetuple())
+        if isinstance(timestamp, basestring):
+            timestamp = datetime.strptime(timestamp, VUMI_DATE_FORMAT)
+        return time.mktime(timestamp.timetuple())
 
     @Manager.calls_manager
     def add_outbound_message(self, batch_id, msg):
@@ -254,6 +258,14 @@ class MessageStoreCache(object):
             if uses_counters:
                 yield self.redis.incr(self.outbound_count_key(batch_id))
                 yield self.truncate_outbound_message_keys(batch_id)
+
+    @Manager.calls_manager
+    def add_outbound_message_count(self, batch_id, count):
+        """
+        Add a count to all outbound message counters. (Used for recon.)
+        """
+        yield self.increment_event_status(batch_id, 'sent', count)
+        yield self.redis.incr(self.outbound_count_key(batch_id), count)
 
     @Manager.calls_manager
     def add_event(self, batch_id, event):
@@ -296,12 +308,11 @@ class MessageStoreCache(object):
                 self.event_key(batch_id), event_key)
             returnValue(new_entry)
 
-    def increment_event_status(self, batch_id, event_type):
+    def increment_event_status(self, batch_id, event_type, count=1):
         """
-        Increment the status for the given event_type by 1 for the given
-        batch_id
+        Increment the status for the given event_type for the given batch_id.
         """
-        return self.redis.hincrby(self.status_key(batch_id), event_type, 1)
+        return self.redis.hincrby(self.status_key(batch_id), event_type, count)
 
     @Manager.calls_manager
     def get_event_status(self, batch_id):
@@ -336,6 +347,13 @@ class MessageStoreCache(object):
             if uses_counters:
                 yield self.redis.incr(self.inbound_count_key(batch_id))
                 yield self.truncate_inbound_message_keys(batch_id)
+
+    @Manager.calls_manager
+    def add_inbound_message_count(self, batch_id, count):
+        """
+        Add a count to all inbound message counters. (Used for recon.)
+        """
+        yield self.redis.incr(self.inbound_count_key(batch_id), count)
 
     def add_from_addr(self, batch_id, from_addr, timestamp):
         """

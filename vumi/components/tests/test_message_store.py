@@ -945,6 +945,42 @@ class TestMessageStoreCache(TestMessageStoreBase):
         self.assertEqual(batch_status['sent'], 10)
 
     @inlineCallbacks
+    def test_reconcile_cache_with_old_and_new_messages(self):
+        """
+        If we're reconciling a batch that contains messages older than the
+        truncation threshold and newer than the start of the recon, we still
+        end up with the correct numbers.
+        """
+        cache = self.store.cache
+        cache.TRUNCATE_MESSAGE_KEY_COUNT_AT = 5
+        batch_id = yield self.store.batch_start([("pool", "tag")])
+
+        # Store via message_store
+        inbound_messages = yield self.create_inbound_messages(batch_id, 10)
+        outbound_messages = yield self.create_outbound_messages(batch_id, 10)
+        for msg in outbound_messages:
+            ack = self.msg_helper.make_ack(msg)
+            yield self.store.add_event(ack)
+
+        # We want one message newer than the start of the recon, and they're
+        # ordered from newest to oldest.
+        start_timestamp = inbound_messages[1]["timestamp"].strftime(
+            VUMI_DATE_FORMAT)
+
+        yield self.store.reconcile_cache(batch_id, start_timestamp)
+
+        inbound_count = yield cache.count_inbound_message_keys(batch_id)
+        self.assertEqual(inbound_count, 10)
+        outbound_count = yield cache.count_outbound_message_keys(batch_id)
+        self.assertEqual(outbound_count, 10)
+        batch_status = yield self.store.batch_status(batch_id)
+        # NOTE: The 'ack' count will we wrong until we can correctly reconcile
+        #       old events without reading each object from Riak individually.
+        # self.assertEqual(batch_status['ack'], 10)
+        self.assertEqual(batch_status['ack'], 7)
+        self.assertEqual(batch_status['sent'], 10)
+
+    @inlineCallbacks
     def test_reconcile_cache_and_switch_to_counters(self):
         batch_id = yield self.store.batch_start([("pool", "tag")])
         cache = self.store.cache
