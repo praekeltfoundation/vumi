@@ -81,6 +81,14 @@ class TestMessageStoreResource(VumiTestCase):
     def get_batch_resource(self, batch_id):
         return self.store_resource.getChild(batch_id, None)
 
+    def assert_csv_rows(self, rows, expected):
+        self.assertEqual(sorted(rows), sorted([
+            row_template % {
+                'id': msg['message_id'],
+                'ts': msg['timestamp'].isoformat(),
+            } for row_template, msg in expected
+        ]))
+
     @inlineCallbacks
     def test_get_inbound(self):
         yield self.start_server()
@@ -104,12 +112,12 @@ class TestMessageStoreResource(VumiTestCase):
         rows = resp.delivered_body.split('\r\n')
         header, rows = rows[0], rows[1:-1]
         self.assertEqual(header, (
-            "message_id,to_addr,from_addr,in_reply_to,session_event,content,"
-            "group"))
-        self.assertEqual(sorted(rows), sorted([
-            "%s,9292,+41791234567,,,føø," % msg1['message_id'],
-            "%s,9292,+41791234567,,,føø," % msg2['message_id'],
-        ]))
+            "timestamp,message_id,to_addr,from_addr,in_reply_to,session_event,"
+            "content,group"))
+        self.assert_csv_rows(rows, [
+            ("%(ts)s,%(id)s,9292,+41791234567,,,føø,", msg1),
+            ("%(ts)s,%(id)s,9292,+41791234567,,,føø,", msg2),
+        ])
 
     @inlineCallbacks
     def test_get_outbound(self):
@@ -134,12 +142,12 @@ class TestMessageStoreResource(VumiTestCase):
         rows = resp.delivered_body.split('\r\n')
         header, rows = rows[0], rows[1:-1]
         self.assertEqual(header, (
-            "message_id,to_addr,from_addr,in_reply_to,session_event,content,"
-            "group"))
-        self.assertEqual(sorted(rows), sorted([
-            "%s,+41791234567,9292,,,føø," % msg1['message_id'],
-            "%s,+41791234567,9292,,,føø," % msg2['message_id'],
-        ]))
+            "timestamp,message_id,to_addr,from_addr,in_reply_to,session_event,"
+            "content,group"))
+        self.assert_csv_rows(rows, [
+            ("%(ts)s,%(id)s,+41791234567,9292,,,føø,", msg1),
+            ("%(ts)s,%(id)s,+41791234567,9292,,,føø,", msg2),
+        ])
 
     @inlineCallbacks
     def test_get_inbound_multiple_pages(self):
@@ -315,12 +323,12 @@ class TestMessageStoreResource(VumiTestCase):
         rows = resp.delivered_body.split('\r\n')
         header, rows = rows[0], rows[1:-1]
         self.assertEqual(header, (
-            "message_id,to_addr,from_addr,in_reply_to,session_event,content,"
-            "group"))
-        self.assertEqual(sorted(rows), sorted([
-            "%s,9292,+41791234567,,,føø," % msg2['message_id'],
-            "%s,9292,+41791234567,,,føø," % msg3['message_id'],
-        ]))
+            "timestamp,message_id,to_addr,from_addr,in_reply_to,session_event,"
+            "content,group"))
+        self.assert_csv_rows(rows, [
+            ("%(ts)s,%(id)s,9292,+41791234567,,,føø,", msg2),
+            ("%(ts)s,%(id)s,9292,+41791234567,,,føø,", msg3),
+        ])
 
     @inlineCallbacks
     def test_get_outbound_for_time_range(self):
@@ -416,9 +424,9 @@ class TestMessageStoreResource(VumiTestCase):
         rows = resp.delivered_body.split('\r\n')
         header, rows = rows[0], rows[1:-1]
         self.assertEqual(header, (
-            "message_id,to_addr,from_addr,in_reply_to,session_event,content,"
-            "group"))
-        self.assertEqual(sorted(rows), sorted([
-            "%s,+41791234567,9292,,,føø," % msg2['message_id'],
-            "%s,+41791234567,9292,,,føø," % msg3['message_id'],
-        ]))
+            "timestamp,message_id,to_addr,from_addr,in_reply_to,session_event,"
+            "content,group"))
+        self.assert_csv_rows(rows, [
+            ("%(ts)s,%(id)s,+41791234567,9292,,,føø,", msg2),
+            ("%(ts)s,%(id)s,+41791234567,9292,,,føø,", msg3),
+        ])
