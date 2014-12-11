@@ -18,7 +18,7 @@ from vumi.persist.txriak_manager import TxRiakManager
 from vumi import log
 from vumi.components.message_store_cache import MessageStoreCache
 from vumi.components.message_store_migrators import (
-    InboundMessageMigrator, OutboundMessageMigrator)
+    EventMigrator, InboundMessageMigrator, OutboundMessageMigrator)
 
 
 class Batch(Model):
@@ -90,9 +90,25 @@ class OutboundMessage(Model):
 
 
 class Event(Model):
-    # key is message_id
+    VERSION = 1
+    MIGRATOR = EventMigrator
+
+    # key is event_id
     event = VumiMessage(TransportEvent)
     message = ForeignKey(OutboundMessage)
+
+    # Extra fields for compound indexes
+    message_with_status = Unicode(index=True, null=True)
+
+    def save(self):
+        # We override this method to set our index fields before saving.
+        timestamp = self.event['timestamp']
+        status = self.event['event_type']
+        if status == "delivery_report":
+            status = "%s.%s" % (status, self.event['delivery_status'])
+        self.message_with_status = u"%s$%s$%s" % (
+            self.message.key, timestamp, status)
+        return super(Event, self).save()
 
 
 class InboundMessage(Model):
@@ -750,6 +766,29 @@ class MessageStore(object):
             'batches_with_addresses', start_value, end_value,
             return_terms=True, max_results=max_results)
         returnValue(KeysWithAddresses(self, batch_id, results))
+
+    @inlineCallbacks
+    def message_event_keys_with_statuses(self, msg_id, max_results=None):
+        """
+        Return all event keys with (and ordered by) timestamps and statuses.
+
+        :param str msg_id:
+            The message_id to fetch event keys for.
+
+        :param int max_results:
+            Number of results per page. Defaults to DEFAULT_MAX_RESULTS
+
+        This method performs a Riak index query. Unlike similar message key
+        methods, start and end values are not supported as the number of events
+        per message is expected to be small.
+        """
+        if max_results is None:
+            max_results = self.DEFAULT_MAX_RESULTS
+        start_value, end_value = self._start_end_values(msg_id, None, None)
+        results = yield self.events.index_keys_page(
+            'message_with_status', start_value, end_value,
+            return_terms=True, max_results=max_results)
+        returnValue(KeysWithAddresses(self, msg_id, results))
 
 
 class KeysWithTimestamps(object):
