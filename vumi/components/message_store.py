@@ -3,6 +3,7 @@
 
 """Message store."""
 
+from collections import defaultdict
 from datetime import datetime
 from uuid import uuid4
 import itertools
@@ -259,7 +260,7 @@ class MessageStore(object):
             else:
                 index_page = None
 
-        self.cache.add_inbound_message_count(batch_id, key_count)
+        yield self.cache.add_inbound_message_count(batch_id, key_count)
         for key, timestamp in key_manager:
             try:
                 yield self.cache.add_inbound_message_key(
@@ -271,12 +272,11 @@ class MessageStore(object):
     def reconcile_outbound_cache(self, batch_id, start_timestamp):
         """
         Rebuild the outbound message cache.
-
-        TODO: Correctly reconcile old events.
         """
         key_manager = ReconKeyManager(
             start_timestamp, self.cache.TRUNCATE_MESSAGE_KEY_COUNT_AT)
         key_count = 0
+        status_counts = defaultdict(int)
 
         index_page = yield self.batch_outbound_keys_with_timestamps(batch_id)
         while index_page is not None:
@@ -284,14 +284,17 @@ class MessageStore(object):
                 old_key = key_manager.add_key(key, timestamp)
                 if old_key is not None:
                     key_count += 1
-                    # TODO: Reconcile events for this message when it becomes
-                    #       less expensive.
+                    sc = yield self.get_event_counts(old_key[0])
+                    for status, count in sc.iteritems():
+                        status_counts[status] += count
             if index_page.has_next_page():
                 index_page = yield index_page.next_page()
             else:
                 index_page = None
 
-        self.cache.add_outbound_message_count(batch_id, key_count)
+        yield self.cache.add_outbound_message_count(batch_id, key_count)
+        for status, count in status_counts.iteritems():
+            yield self.cache.add_event_count(batch_id, status, count)
         for key, timestamp in key_manager:
             try:
                 yield self.cache.add_outbound_message_key(
@@ -301,11 +304,31 @@ class MessageStore(object):
                 log.err()
 
     @Manager.calls_manager
+    def get_event_counts(self, message_id):
+        """
+        Get event counts for a particular message.
+
+        This is used for old messages that we want to bulk-update.
+        """
+        status_counts = defaultdict(int)
+
+        index_page = yield self.message_event_keys_with_statuses(message_id)
+        while index_page is not None:
+            for key, _timestamp, status in index_page:
+                status_counts[status] += 1
+                if status.startswith("delivery_report."):
+                    status_counts["delivery_report"] += 1
+            if index_page.has_next_page():
+                index_page = yield index_page.next_page()
+            else:
+                index_page = None
+
+        returnValue(status_counts)
+
+    @Manager.calls_manager
     def reconcile_event_cache(self, batch_id, message_id):
         """
         Update the event cache for a particular message.
-
-        TODO: Use indexes here instead of loading event objects.
         """
         event_keys = yield self.message_event_keys(message_id)
         for event_key in event_keys:

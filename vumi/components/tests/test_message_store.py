@@ -1010,6 +1010,9 @@ class TestMessageStoreCache(TestMessageStoreBase):
         for msg in outbound_messages:
             ack = self.msg_helper.make_ack(msg)
             yield self.store.add_event(ack)
+            dr = self.msg_helper.make_delivery_report(
+                msg, delivery_status="delivered")
+            yield self.store.add_event(dr)
 
         # We want one message newer than the start of the recon, and they're
         # ordered from newest to oldest.
@@ -1023,11 +1026,10 @@ class TestMessageStoreCache(TestMessageStoreBase):
         outbound_count = yield cache.count_outbound_message_keys(batch_id)
         self.assertEqual(outbound_count, 10)
         batch_status = yield self.store.batch_status(batch_id)
-        # NOTE: The 'ack' count will we wrong until we can correctly reconcile
-        #       old events without reading each object from Riak individually.
-        # self.assertEqual(batch_status['ack'], 10)
-        self.assertEqual(batch_status['ack'], 7)
-        self.assertEqual(batch_status['sent'], 10)
+        self.assertEqual(batch_status["sent"], 10)
+        self.assertEqual(batch_status["ack"], 10)
+        self.assertEqual(batch_status["delivery_report"], 10)
+        self.assertEqual(batch_status["delivery_report.delivered"], 10)
 
     @inlineCallbacks
     def test_reconcile_cache_and_switch_to_counters(self):

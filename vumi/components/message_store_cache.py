@@ -268,6 +268,14 @@ class MessageStoreCache(object):
         yield self.redis.incr(self.outbound_count_key(batch_id), count)
 
     @Manager.calls_manager
+    def add_event_count(self, batch_id, status, count):
+        """
+        Add a count to all relevant event counters. (Used for recon.)
+        """
+        yield self.increment_event_status(batch_id, status, count)
+        yield self.redis.incr(self.event_count_key(batch_id), count)
+
+    @Manager.calls_manager
     def add_event(self, batch_id, event):
         """
         Add an event to the cache for the given batch_id
