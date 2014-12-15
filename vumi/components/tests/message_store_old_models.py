@@ -1,7 +1,7 @@
 """Previous versions of message store models."""
 
 
-from vumi.message import TransportUserMessage
+from vumi.message import TransportUserMessage, TransportEvent
 from vumi.persist.model import Model
 from vumi.persist.fields import (
     VumiMessage, ForeignKey, ListOf, Dynamic, Tag, Unicode, ManyToMany)
@@ -23,6 +23,14 @@ class OutboundMessageVNone(Model):
     # key is message_id
     msg = VumiMessage(TransportUserMessage)
     batch = ForeignKey(BatchVNone, null=True)
+
+
+class EventVNone(Model):
+    bucket = 'event'
+
+    # key is event_id
+    event = VumiMessage(TransportEvent)
+    message = ForeignKey(OutboundMessageVNone)
 
 
 class InboundMessageVNone(Model):

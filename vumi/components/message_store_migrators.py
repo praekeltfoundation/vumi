@@ -18,6 +18,27 @@ class MessageMigratorBase(ModelMigrator):
             mdata.add_index(many_to_many_index, old_key)
 
 
+class EventMigrator(MessageMigratorBase):
+    def migrate_from_unversioned(self, mdata):
+        mdata.set_value('$VERSION', 1)
+
+        self._copy_msg_field('event', mdata)
+        mdata.copy_values('message')
+        mdata.copy_indexes('message_bin')
+
+        return mdata
+
+    def reverse_from_1(self, mdata):
+        # We only copy existing fields and indexes over. The new fields and
+        # indexes are computed at save time.
+        # We don't set the version because we're writing unversioned models.
+        self._copy_msg_field('event', mdata)
+        mdata.copy_values('message')
+        mdata.copy_indexes('message_bin')
+
+        return mdata
+
+
 class OutboundMessageMigrator(MessageMigratorBase):
     def migrate_from_unversioned(self, mdata):
         mdata.set_value('$VERSION', 1)

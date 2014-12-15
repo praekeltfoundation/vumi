@@ -239,6 +239,10 @@ class TestMessageStore(TestMessageStoreBase):
         self.assertEqual(event_keys, [ack_id])
         self.assertEqual(batch_status, self._batch_status(sent=1, ack=1))
 
+        event = yield self.store.events.load(ack_id)
+        self.assertEqual(event.message_with_status, "%s$%s$ack" % (
+            msg_id, ack["timestamp"]))
+
     @inlineCallbacks
     def test_add_ack_event_again(self):
         msg_id, msg, batch_id = yield self._create_outbound()
@@ -274,6 +278,10 @@ class TestMessageStore(TestMessageStoreBase):
         self.assertEqual(stored_nack, nack)
         self.assertEqual(event_keys, [nack_id])
         self.assertEqual(batch_status, self._batch_status(sent=1, nack=1))
+
+        event = yield self.store.events.load(nack_id)
+        self.assertEqual(event.message_with_status, "%s$%s$nack" % (
+            msg_id, nack["timestamp"]))
 
     @inlineCallbacks
     def test_add_ack_event_without_batch(self):
@@ -314,6 +322,10 @@ class TestMessageStore(TestMessageStoreBase):
             yield self.store.add_event(dr)
             stored_dr = yield self.store.get_event(dr_id)
             self.assertEqual(stored_dr, dr)
+
+            event = yield self.store.events.load(dr_id)
+            self.assertEqual(event.message_with_status, "%s$%s$%s" % (
+                msg_id, dr["timestamp"], "delivery_report.%s" % (status,)))
 
         event_keys = yield self.store.message_event_keys(msg_id)
         self.assertEqual(sorted(event_keys), sorted(dr_ids))
@@ -847,6 +859,43 @@ class TestMessageStore(TestMessageStoreBase):
             batch_id, max_results=6, start=all_keys[1][1], end=all_keys[-2][1])
         self.assertEqual(list(index_page), all_keys[1:-1])
 
+    @inlineCallbacks
+    def test_message_event_keys_with_statuses(self):
+        """
+        Event keys and statuses for a message can be retrieved by index.
+        """
+        msg_id, msg, batch_id = yield self._create_outbound()
+
+        ack = self.msg_helper.make_ack(msg)
+        yield self.store.add_event(ack)
+        drs = []
+        for status in TransportEvent.DELIVERY_STATUSES:
+            dr = self.msg_helper.make_delivery_report(
+                msg, delivery_status=status)
+            drs.append(dr)
+            yield self.store.add_event(dr)
+
+        mk_tuple = lambda e, status: (
+            e["event_id"], e["timestamp"].strftime(VUMI_DATE_FORMAT), status)
+
+        all_keys = [mk_tuple(ack, "ack")] + [
+            mk_tuple(e, "delivery_report.%s" % (e["delivery_status"],))
+            for e in drs]
+
+        first_page = yield self.store.message_event_keys_with_statuses(
+            msg_id, max_results=3)
+
+        results = list(first_page)
+        self.assertEqual(len(results), 3)
+        self.assertEqual(first_page.has_next_page(), True)
+
+        next_page = yield first_page.next_page()
+        results.extend(next_page)
+        self.assertEqual(len(results), 4)
+        self.assertEqual(next_page.has_next_page(), False)
+
+        self.assertEqual(results, all_keys)
+
 
 class TestMessageStoreCache(TestMessageStoreBase):
 
@@ -961,6 +1010,9 @@ class TestMessageStoreCache(TestMessageStoreBase):
         for msg in outbound_messages:
             ack = self.msg_helper.make_ack(msg)
             yield self.store.add_event(ack)
+            dr = self.msg_helper.make_delivery_report(
+                msg, delivery_status="delivered")
+            yield self.store.add_event(dr)
 
         # We want one message newer than the start of the recon, and they're
         # ordered from newest to oldest.
@@ -974,11 +1026,10 @@ class TestMessageStoreCache(TestMessageStoreBase):
         outbound_count = yield cache.count_outbound_message_keys(batch_id)
         self.assertEqual(outbound_count, 10)
         batch_status = yield self.store.batch_status(batch_id)
-        # NOTE: The 'ack' count will we wrong until we can correctly reconcile
-        #       old events without reading each object from Riak individually.
-        # self.assertEqual(batch_status['ack'], 10)
-        self.assertEqual(batch_status['ack'], 7)
-        self.assertEqual(batch_status['sent'], 10)
+        self.assertEqual(batch_status["sent"], 10)
+        self.assertEqual(batch_status["ack"], 10)
+        self.assertEqual(batch_status["delivery_report"], 10)
+        self.assertEqual(batch_status["delivery_report.delivered"], 10)
 
     @inlineCallbacks
     def test_reconcile_cache_and_switch_to_counters(self):

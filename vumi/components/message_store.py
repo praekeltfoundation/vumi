@@ -3,6 +3,7 @@
 
 """Message store."""
 
+from collections import defaultdict
 from datetime import datetime
 from uuid import uuid4
 import itertools
@@ -18,7 +19,7 @@ from vumi.persist.txriak_manager import TxRiakManager
 from vumi import log
 from vumi.components.message_store_cache import MessageStoreCache
 from vumi.components.message_store_migrators import (
-    InboundMessageMigrator, OutboundMessageMigrator)
+    EventMigrator, InboundMessageMigrator, OutboundMessageMigrator)
 
 
 class Batch(Model):
@@ -90,9 +91,25 @@ class OutboundMessage(Model):
 
 
 class Event(Model):
-    # key is message_id
+    VERSION = 1
+    MIGRATOR = EventMigrator
+
+    # key is event_id
     event = VumiMessage(TransportEvent)
     message = ForeignKey(OutboundMessage)
+
+    # Extra fields for compound indexes
+    message_with_status = Unicode(index=True, null=True)
+
+    def save(self):
+        # We override this method to set our index fields before saving.
+        timestamp = self.event['timestamp']
+        status = self.event['event_type']
+        if status == "delivery_report":
+            status = "%s.%s" % (status, self.event['delivery_status'])
+        self.message_with_status = u"%s$%s$%s" % (
+            self.message.key, timestamp, status)
+        return super(Event, self).save()
 
 
 class InboundMessage(Model):
@@ -243,7 +260,7 @@ class MessageStore(object):
             else:
                 index_page = None
 
-        self.cache.add_inbound_message_count(batch_id, key_count)
+        yield self.cache.add_inbound_message_count(batch_id, key_count)
         for key, timestamp in key_manager:
             try:
                 yield self.cache.add_inbound_message_key(
@@ -255,12 +272,11 @@ class MessageStore(object):
     def reconcile_outbound_cache(self, batch_id, start_timestamp):
         """
         Rebuild the outbound message cache.
-
-        TODO: Correctly reconcile old events.
         """
         key_manager = ReconKeyManager(
             start_timestamp, self.cache.TRUNCATE_MESSAGE_KEY_COUNT_AT)
         key_count = 0
+        status_counts = defaultdict(int)
 
         index_page = yield self.batch_outbound_keys_with_timestamps(batch_id)
         while index_page is not None:
@@ -268,14 +284,17 @@ class MessageStore(object):
                 old_key = key_manager.add_key(key, timestamp)
                 if old_key is not None:
                     key_count += 1
-                    # TODO: Reconcile events for this message when it becomes
-                    #       less expensive.
+                    sc = yield self.get_event_counts(old_key[0])
+                    for status, count in sc.iteritems():
+                        status_counts[status] += count
             if index_page.has_next_page():
                 index_page = yield index_page.next_page()
             else:
                 index_page = None
 
-        self.cache.add_outbound_message_count(batch_id, key_count)
+        yield self.cache.add_outbound_message_count(batch_id, key_count)
+        for status, count in status_counts.iteritems():
+            yield self.cache.add_event_count(batch_id, status, count)
         for key, timestamp in key_manager:
             try:
                 yield self.cache.add_outbound_message_key(
@@ -285,11 +304,31 @@ class MessageStore(object):
                 log.err()
 
     @Manager.calls_manager
+    def get_event_counts(self, message_id):
+        """
+        Get event counts for a particular message.
+
+        This is used for old messages that we want to bulk-update.
+        """
+        status_counts = defaultdict(int)
+
+        index_page = yield self.message_event_keys_with_statuses(message_id)
+        while index_page is not None:
+            for key, _timestamp, status in index_page:
+                status_counts[status] += 1
+                if status.startswith("delivery_report."):
+                    status_counts["delivery_report"] += 1
+            if index_page.has_next_page():
+                index_page = yield index_page.next_page()
+            else:
+                index_page = None
+
+        returnValue(status_counts)
+
+    @Manager.calls_manager
     def reconcile_event_cache(self, batch_id, message_id):
         """
         Update the event cache for a particular message.
-
-        TODO: Use indexes here instead of loading event objects.
         """
         event_keys = yield self.message_event_keys(message_id)
         for event_key in event_keys:
@@ -750,6 +789,29 @@ class MessageStore(object):
             'batches_with_addresses', start_value, end_value,
             return_terms=True, max_results=max_results)
         returnValue(KeysWithAddresses(self, batch_id, results))
+
+    @inlineCallbacks
+    def message_event_keys_with_statuses(self, msg_id, max_results=None):
+        """
+        Return all event keys with (and ordered by) timestamps and statuses.
+
+        :param str msg_id:
+            The message_id to fetch event keys for.
+
+        :param int max_results:
+            Number of results per page. Defaults to DEFAULT_MAX_RESULTS
+
+        This method performs a Riak index query. Unlike similar message key
+        methods, start and end values are not supported as the number of events
+        per message is expected to be small.
+        """
+        if max_results is None:
+            max_results = self.DEFAULT_MAX_RESULTS
+        start_value, end_value = self._start_end_values(msg_id, None, None)
+        results = yield self.events.index_keys_page(
+            'message_with_status', start_value, end_value,
+            return_terms=True, max_results=max_results)
+        returnValue(KeysWithAddresses(self, msg_id, results))
 
 
 class KeysWithTimestamps(object):
