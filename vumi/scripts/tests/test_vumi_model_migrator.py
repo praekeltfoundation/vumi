@@ -6,13 +6,28 @@ from StringIO import StringIO
 from twisted.internet.defer import inlineCallbacks, succeed
 from twisted.python import usage
 
-from vumi.persist.model import Model
+from vumi.persist import model
 from vumi.persist.fields import Unicode
 from vumi.scripts.vumi_model_migrator import ModelMigrator, Options, main
 from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 
 
-class SimpleModel(Model):
+class SimpleModelMigrator(model.ModelMigrator):
+    def migrate_from_1(self, migration_data):
+        migration_data.set_value('$VERSION', 2)
+        migration_data.copy_values("a")
+        return migration_data
+
+
+class SimpleModelOld(model.Model):
+    VERSION = 1
+    bucket = 'simplemodel'
+    a = Unicode()
+
+
+class SimpleModel(model.Model):
+    VERSION = 2
+    MIGRATOR = SimpleModelMigrator
     a = Unicode()
 
 
@@ -35,6 +50,7 @@ class TestModelMigrator(VumiTestCase):
         self.persistence_helper = self.add_helper(
             PersistenceHelper(use_riak=True, is_sync=False))
         self.riak_manager = self.persistence_helper.get_riak_manager()
+        self.old_model = self.riak_manager.proxy(SimpleModelOld)
         self.model = self.riak_manager.proxy(SimpleModel)
         self.model_cls_path = ".".join([
             SimpleModel.__module__, SimpleModel.__name__])
@@ -67,8 +83,14 @@ class TestModelMigrator(VumiTestCase):
         return self.riak_manager
 
     @inlineCallbacks
-    def mk_simple_models(self, n):
-        for i in range(n):
+    def mk_simple_models_old(self, n, start=0):
+        for i in range(start, start + n):
+            obj = self.old_model(u"key-%d" % i, a=u"value-%d" % i)
+            yield obj.save()
+
+    @inlineCallbacks
+    def mk_simple_models_new(self, n, start=0):
+        for i in range(start, start + n):
             obj = self.model(u"key-%d" % i, a=u"value-%d" % i)
             yield obj.save()
 
@@ -101,7 +123,7 @@ class TestModelMigrator(VumiTestCase):
 
     @inlineCallbacks
     def test_main(self):
-        yield self.mk_simple_models(3)
+        yield self.mk_simple_models_old(3)
         self.patch(sys, "stdout", StringIO())
         yield main(
             None, "name",
@@ -113,7 +135,7 @@ class TestModelMigrator(VumiTestCase):
 
     @inlineCallbacks
     def test_successful_migration(self):
-        yield self.mk_simple_models(3)
+        yield self.mk_simple_models_old(3)
         loads, stores = self.record_load_and_store()
         model_migrator = self.make_migrator()
         yield model_migrator.run()
@@ -126,7 +148,7 @@ class TestModelMigrator(VumiTestCase):
 
     @inlineCallbacks
     def test_successful_migration_small_pages(self):
-        yield self.mk_simple_models(3)
+        yield self.mk_simple_models_old(3)
         loads, stores = self.record_load_and_store()
         model_migrator = self.make_migrator(index_page_size=2)
         yield model_migrator.run()
@@ -143,7 +165,7 @@ class TestModelMigrator(VumiTestCase):
 
     @inlineCallbacks
     def test_successful_migration_tiny_pages(self):
-        yield self.mk_simple_models(3)
+        yield self.mk_simple_models_old(3)
         loads, stores = self.record_load_and_store()
         model_migrator = self.make_migrator(index_page_size=1)
         yield model_migrator.run()
@@ -164,7 +186,7 @@ class TestModelMigrator(VumiTestCase):
 
     @inlineCallbacks
     def test_successful_migration_with_continuation(self):
-        yield self.mk_simple_models(3)
+        yield self.mk_simple_models_old(3)
         loads, stores = self.record_load_and_store()
 
         # Run a migration all the way through to get a continuation token
@@ -181,6 +203,9 @@ class TestModelMigrator(VumiTestCase):
         self.assertEqual(sorted(loads), [u"key-%d" % i for i in range(3)])
         self.assertEqual(sorted(stores), [u"key-%d" % i for i in range(3)])
 
+        # Recreate key-2 because it was already migrated and would otherwise be
+        # skipped.
+        yield self.mk_simple_models_old(1, start=2)
         # Run a migration starting from the continuation point.
         loads[:] = []
         stores[:] = []
@@ -197,7 +222,7 @@ class TestModelMigrator(VumiTestCase):
 
     @inlineCallbacks
     def test_migration_with_tombstones(self):
-        yield self.mk_simple_models(3)
+        yield self.mk_simple_models_old(3)
 
         def tombstone_load(modelcls, key, result=None):
             return succeed(None)
@@ -218,7 +243,7 @@ class TestModelMigrator(VumiTestCase):
 
     @inlineCallbacks
     def test_migration_with_failures(self):
-        yield self.mk_simple_models(3)
+        yield self.mk_simple_models_old(3)
 
         def error_load(modelcls, key, result=None):
             raise ValueError("Failed to load.")
@@ -242,7 +267,7 @@ class TestModelMigrator(VumiTestCase):
 
     @inlineCallbacks
     def test_migrating_specific_keys(self):
-        yield self.mk_simple_models(3)
+        yield self.mk_simple_models_old(3)
         loads, stores = self.record_load_and_store()
         model_migrator = self.make_migrator(
             self.default_args + ["--keys", "key-1,key-2"])
@@ -256,7 +281,7 @@ class TestModelMigrator(VumiTestCase):
 
     @inlineCallbacks
     def test_dry_run(self):
-        yield self.mk_simple_models(3)
+        yield self.mk_simple_models_old(3)
         loads, stores = self.record_load_and_store()
         model_migrator = self.make_migrator(self.default_args + ["--dry-run"])
         yield model_migrator.run()
@@ -266,3 +291,22 @@ class TestModelMigrator(VumiTestCase):
         ])
         self.assertEqual(sorted(loads), [u"key-%d" % i for i in range(3)])
         self.assertEqual(sorted(stores), [])
+
+    @inlineCallbacks
+    def test_migrating_old_and_new_keys(self):
+        """
+        Models that haven't been migrated don't need to be stored.
+        """
+        yield self.mk_simple_models_old(1)
+        yield self.mk_simple_models_new(1, start=1)
+        yield self.mk_simple_models_old(1, start=2)
+        loads, stores = self.record_load_and_store()
+        model_migrator = self.make_migrator(self.default_args)
+
+        yield model_migrator.run()
+        self.assertEqual(model_migrator.output, [
+            "Migrating ...",
+            "Done, 3 objects migrated.",
+        ])
+        self.assertEqual(sorted(loads), [u"key-0", u"key-1", u"key-2"])
+        self.assertEqual(sorted(stores), [u"key-0", u"key-2"])

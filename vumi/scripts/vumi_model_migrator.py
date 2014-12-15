@@ -97,7 +97,7 @@ class ModelMigrator(object):
         try:
             obj = yield self.model.load(key)
             if obj is not None:
-                if not dry_run:
+                if obj.was_migrated and not dry_run:
                     yield obj.save()
             else:
                 self.emit("Skipping tombstone key %r." % (key,))
