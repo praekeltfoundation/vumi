@@ -117,6 +117,42 @@ class TestEventMigrator(TestMigratorBase):
         self.assertEqual(old_record.event, event)
         self.assertEqual(old_record.message.key, msg_id)
 
+    @inlineCallbacks
+    def test_migrate_vnone_to_v1_index_only_foreign_key(self):
+        """
+        A vNone model can be migrated to v1 even if it's old enough to still
+        have index-only foreign keys.
+        """
+        msg = self.msg_helper.make_outbound("outbound")
+        msg_id = msg["message_id"]
+        event = self.msg_helper.make_ack(msg)
+        old_record = self.event_vnone(
+            event["event_id"], event=event, message=msg_id)
+
+        # Remove the foreign key field from the data before saving it.
+        old_record._riak_object.delete_data_field("message")
+        yield old_record.save()
+
+        new_record = yield self.event_v1.load(old_record.key)
+        self.assertEqual(new_record.event, event)
+        self.assertEqual(new_record.message.key, msg_id)
+
+        # The migration doesn't set the new fields and indexes, that only
+        # happens at save time.
+
+        self.assertEqual(new_record.message_with_status, None)
+        self.assertEqual(new_record._riak_object.get_indexes(), set([
+            ("message_bin", msg_id),
+        ]))
+
+        yield new_record.save()
+        self.assertEqual(
+            new_record.message_with_status, mws_value(msg_id, event, "ack"))
+        self.assertEqual(new_record._riak_object.get_indexes(), set([
+            ("message_bin", msg_id),
+            ("message_with_status_bin", mws_value(msg_id, event, "ack")),
+        ]))
+
 
 class TestOutboundMessageMigrator(TestMigratorBase):
     @inlineCallbacks

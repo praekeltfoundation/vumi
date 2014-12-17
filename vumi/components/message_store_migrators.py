@@ -22,6 +22,11 @@ class EventMigrator(MessageMigratorBase):
     def migrate_from_unversioned(self, mdata):
         mdata.set_value('$VERSION', 1)
 
+        if 'message' not in mdata.old_data:
+            # We have an old-style index-only field here, so add the data.
+            [message_id] = mdata.old_index['message_bin']
+            mdata.old_data['message'] = message_id
+
         self._copy_msg_field('event', mdata)
         mdata.copy_values('message')
         mdata.copy_indexes('message_bin')
