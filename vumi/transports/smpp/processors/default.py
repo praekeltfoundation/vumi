@@ -88,7 +88,8 @@ class DeliveryReportProcessor(object):
         """
         Check if this might be a delivery report with optional PDU parameters.
 
-        If so, handle it and return ``True``, otherwise return ``False``.
+        If so, handle it and return a deferred ``True``, otherwise return a
+        deferred ``False``.
         """
         pdu_opts = unpacked_pdu_opts(pdu)
         receipted_message_id = pdu_opts.get('receipted_message_id', None)
@@ -119,7 +120,8 @@ class DeliveryReportProcessor(object):
         """
         Check if the ``esm_class`` indicates that this is a delivery report.
 
-        If so, handle it and return ``True``, otherwise return ``False``.
+        If so, handle it and return a deferred ``True``, otherwise return a
+        deferred ``False``.
 
         NOTE: We assume the message content is a string that matches our regex.
               We can't use the usual decoding process here because it lives
@@ -157,9 +159,9 @@ class DeliveryReportProcessor(object):
         Check PDU optional params and ``esm_class`` to detect and handle
         delivery reports.
 
-        Return ``True`` if a delivery report was detected and handled,
-        otherwise return ``False``. In the latter case, the content may be
-        examined in ``handle_delivery_report_content`` later.
+        Return a deferred ``True`` if a delivery report was detected and
+        handled, otherwise return a deferred ``False``. In the latter case, the
+        content may be examined in ``handle_delivery_report_content`` later.
         """
         # Check for optional params indicating a DR.
         if (yield self._handle_delivery_report_optional_params(pdu)):
