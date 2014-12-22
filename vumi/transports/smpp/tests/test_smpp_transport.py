@@ -19,7 +19,7 @@ from vumi.transports.smpp.smpp_transport import (
     SmppTransmitterTransport, SmppReceiverTransport,
     message_key, remote_message_key, SmppService)
 from vumi.transports.smpp.pdu_utils import (
-    pdu_ok, short_message, command_id, seq_no, pdu_tlv)
+    pdu_ok, short_message, command_id, seq_no, pdu_tlv, unpacked_pdu_opts)
 from vumi.transports.smpp.tests.test_protocol import (
     bind_protocol, wait_for_pdus)
 from vumi.transports.smpp.processors import SubmitShortMessageProcessor
@@ -930,6 +930,11 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         yield self.tx_helper.dispatch_outbound(msg)
         [submit_sm1, submit_sm2] = yield smpp_helper.wait_for_pdus(2)
 
+        self.assertEqual(
+            submit_sm1["body"]["mandatory_parameters"]["esm_class"], 0x40)
+        self.assertEqual(
+            submit_sm2["body"]["mandatory_parameters"]["esm_class"], 0x40)
+
         udh_hlen, udh_tag, udh_len, udh_ref, udh_tot, udh_seq = [
             ord(octet) for octet in short_message(submit_sm1)[:6]]
         self.assertEqual(5, udh_hlen)
@@ -942,6 +947,25 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
             ord(octet) for octet in short_message(submit_sm2)[:6]]
         self.assertEqual(ref_to_udh_ref, udh_ref)
         self.assertEqual(udh_seq, 2)
+
+    @inlineCallbacks
+    def test_mt_sms_multipart_udh_one_part(self):
+        """
+        Messages that fit in a single part should not have a UDH.
+        """
+        smpp_helper = yield self.get_smpp_helper(config={
+            'submit_short_message_processor_config': {
+                'send_multipart_udh': True,
+            }
+        })
+        content = "1" * 158
+        msg = self.tx_helper.make_outbound(content)
+        yield self.tx_helper.dispatch_outbound(msg)
+        [submit_sm] = yield smpp_helper.wait_for_pdus(1)
+
+        self.assertEqual(
+            submit_sm["body"]["mandatory_parameters"]["esm_class"], 0)
+        self.assertEqual(short_message(submit_sm), "1" * 158)
 
     @inlineCallbacks
     def test_mt_sms_multipart_sar(self):
@@ -962,6 +986,24 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.assertEqual(pdu_tlv(submit_sm2, 'sar_msg_ref_num'), ref_num)
         self.assertEqual(pdu_tlv(submit_sm2, 'sar_total_segments'), 2)
         self.assertEqual(pdu_tlv(submit_sm2, 'sar_segment_seqnum'), 2)
+
+    @inlineCallbacks
+    def test_mt_sms_multipart_sar_one_part(self):
+        """
+        Messages that fit in a single part should not have SAR params set.
+        """
+        smpp_helper = yield self.get_smpp_helper(config={
+            'submit_short_message_processor_config': {
+                'send_multipart_sar': True,
+            }
+        })
+        content = '1' * 158
+        msg = self.tx_helper.make_outbound(content)
+        yield self.tx_helper.dispatch_outbound(msg)
+        [submit_sm] = yield smpp_helper.wait_for_pdus(1)
+
+        self.assertEqual(unpacked_pdu_opts(submit_sm), {})
+        self.assertEqual(short_message(submit_sm), "1" * 158)
 
     @inlineCallbacks
     def test_mt_sms_multipart_ack(self):
