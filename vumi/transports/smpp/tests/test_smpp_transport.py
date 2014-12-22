@@ -89,6 +89,7 @@ class SmppTransportTestCase(VumiTestCase):
 
     DR_TEMPLATE = ("id:%s sub:... dlvrd:... submit date:200101010030"
                    " done date:200101020030 stat:DELIVRD err:... text:Meep")
+    DR_MINIMAL_TEMPLATE = "id:%s stat:DELIVRD text:Meep"
     transport_class = None
 
     def setUp(self):
@@ -282,6 +283,25 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.assertEqual(event['user_message_id'], 'bar')
 
     @inlineCallbacks
+    def test_mo_delivery_report_esm_class_with_minimal_content(self):
+        """
+        If ``esm_class`` and content are both set appropriately, we process the
+        DR even if the minimal subset of the content regex matches.
+        """
+        smpp_helper = yield self.get_smpp_helper()
+        transport = smpp_helper.transport
+        yield transport.message_stash.set_remote_message_id('bar', 'foo')
+
+        smpp_helper.send_mo(
+            sequence_number=1, source_addr='123', destination_addr='456',
+            short_message=self.DR_MINIMAL_TEMPLATE % ('foo',), esm_class=4)
+
+        [event] = yield self.tx_helper.wait_for_dispatched_events(1)
+        self.assertEqual(event['event_type'], 'delivery_report')
+        self.assertEqual(event['delivery_status'], 'delivered')
+        self.assertEqual(event['user_message_id'], 'bar')
+
+    @inlineCallbacks
     def test_mo_delivery_report_content_with_nulls(self):
         """
         If ``esm_class`` and content are both set appropriately, we process the
@@ -378,6 +398,30 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         smpp_helper.send_mo(
             sequence_number=1, short_message=self.DR_TEMPLATE % ('foo',),
             source_addr='123', destination_addr='456', esm_class=0)
+
+        [event] = yield self.tx_helper.wait_for_dispatched_events(1)
+        self.assertEqual(event['event_type'], 'delivery_report')
+        self.assertEqual(event['delivery_status'], 'delivered')
+        self.assertEqual(event['user_message_id'], 'bar')
+
+    @inlineCallbacks
+    def test_mo_delivery_report_esm_disabled_with_minimal_content(self):
+        """
+        If ``esm_class`` checking is disabled and the content is set
+        appropriately, we process the DR even if the minimal subset of the
+        content regex matches.
+        """
+        smpp_helper = yield self.get_smpp_helper(config={
+            "delivery_report_processor_config": {
+                "delivery_report_use_esm_class": False,
+            }
+        })
+        transport = smpp_helper.transport
+        yield transport.message_stash.set_remote_message_id('bar', 'foo')
+
+        smpp_helper.send_mo(
+            sequence_number=1, source_addr='123', destination_addr='456',
+            short_message=self.DR_MINIMAL_TEMPLATE % ('foo',), esm_class=0)
 
         [event] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(event['event_type'], 'delivery_report')
