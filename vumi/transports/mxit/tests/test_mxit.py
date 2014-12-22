@@ -252,6 +252,7 @@ class TestMxitTransport(VumiTestCase):
 
         access_token = yield d
         self.assertEqual(access_token, 'access_token')
+        self.assertFalse(isinstance(access_token, unicode))
         ttl = yield redis.ttl(transport.access_token_key)
         self.assertTrue(
             0 < ttl <= (transport.access_token_auto_decay * 10))

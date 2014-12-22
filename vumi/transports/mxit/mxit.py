@@ -201,7 +201,9 @@ class MxitTransport(HttpRpcTransport):
         if 'error' in data:
             raise MxitTransportException(
                 '%(error)s: %(error_description)s.' % data)
-        returnValue((data['access_token'], int(data['expires_in'])))
+
+        returnValue(
+            (data['access_token'].encode('utf8'), int(data['expires_in'])))
 
     @inlineCallbacks
     def handle_outbound_send(self, message):
