@@ -33,7 +33,7 @@ class MxitTransportConfig(HttpRpcTransport.CONFIG_CLASS):
         'How to connect to Redis', required=True, static=True)
     api_send_url = ConfigText(
         'The URL for the Mxit message sending API.',
-        required=False, default="https://api.mxit.com",
+        required=False, default="https://api.mxit.com/message/send/",
         static=True)
     api_auth_url = ConfigText(
         'The URL for the Mxit authentication API.',
@@ -41,7 +41,7 @@ class MxitTransportConfig(HttpRpcTransport.CONFIG_CLASS):
         static=True)
     api_auth_scopes = ConfigList(
         'The list of scopes to request access to.',
-        required=False, static=True, default=['message/user'])
+        required=False, static=True, default=['message/send'])
 
 
 class MxitTransport(HttpRpcTransport):
