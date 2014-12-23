@@ -89,6 +89,7 @@ class SmppTransportTestCase(VumiTestCase):
 
     DR_TEMPLATE = ("id:%s sub:... dlvrd:... submit date:200101010030"
                    " done date:200101020030 stat:DELIVRD err:... text:Meep")
+    DR_MINIMAL_TEMPLATE = "id:%s stat:DELIVRD text:Meep"
     transport_class = None
 
     def setUp(self):
@@ -201,7 +202,31 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.assertEqual(msg['transport_type'], 'sms')
 
     @inlineCallbacks
-    def test_mo_delivery_report_pdu(self):
+    def test_mo_delivery_report_pdu_opt_params(self):
+        """
+        We always treat a message with the optional PDU params set as a
+        delivery report.
+        """
+        smpp_helper = yield self.get_smpp_helper()
+        transport = smpp_helper.transport
+        yield transport.message_stash.set_remote_message_id('bar', 'foo')
+
+        pdu = DeliverSM(sequence_number=1, esm_class=4)
+        pdu.add_optional_parameter('receipted_message_id', 'foo')
+        pdu.add_optional_parameter('message_state', 2)
+        yield smpp_helper.handle_pdu(pdu)
+
+        [event] = yield self.tx_helper.wait_for_dispatched_events(1)
+        self.assertEqual(event['event_type'], 'delivery_report')
+        self.assertEqual(event['delivery_status'], 'delivered')
+        self.assertEqual(event['user_message_id'], 'bar')
+
+    @inlineCallbacks
+    def test_mo_delivery_report_pdu_opt_params_esm_class_not_set(self):
+        """
+        We always treat a message with the optional PDU params set as a
+        delivery report, even if ``esm_class`` is not set.
+        """
         smpp_helper = yield self.get_smpp_helper()
         transport = smpp_helper.transport
         yield transport.message_stash.set_remote_message_id('bar', 'foo')
@@ -217,7 +242,11 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.assertEqual(event['user_message_id'], 'bar')
 
     @inlineCallbacks
-    def test_mo_delivery_report_content(self):
+    def test_mo_delivery_report_pdu_esm_class_not_set(self):
+        """
+        We treat a content-based DR as a normal message if the ``esm_class``
+        flags are not set.
+        """
         smpp_helper = yield self.get_smpp_helper()
         transport = smpp_helper.transport
         yield transport.message_stash.set_remote_message_id('bar', 'foo')
@@ -225,6 +254,47 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         smpp_helper.send_mo(
             sequence_number=1, short_message=self.DR_TEMPLATE % ('foo',),
             source_addr='123', destination_addr='456')
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        self.assertEqual(msg['content'], self.DR_TEMPLATE % ('foo',))
+        self.assertEqual(msg['from_addr'], '123')
+        self.assertEqual(msg['to_addr'], '456')
+        self.assertEqual(msg['transport_type'], 'sms')
+
+        events = yield self.tx_helper.get_dispatched_events()
+        self.assertEqual(events, [])
+
+    @inlineCallbacks
+    def test_mo_delivery_report_esm_class_with_full_content(self):
+        """
+        If ``esm_class`` and content are both set appropriately, we process the
+        DR.
+        """
+        smpp_helper = yield self.get_smpp_helper()
+        transport = smpp_helper.transport
+        yield transport.message_stash.set_remote_message_id('bar', 'foo')
+
+        smpp_helper.send_mo(
+            sequence_number=1, short_message=self.DR_TEMPLATE % ('foo',),
+            source_addr='123', destination_addr='456', esm_class=4)
+
+        [event] = yield self.tx_helper.wait_for_dispatched_events(1)
+        self.assertEqual(event['event_type'], 'delivery_report')
+        self.assertEqual(event['delivery_status'], 'delivered')
+        self.assertEqual(event['user_message_id'], 'bar')
+
+    @inlineCallbacks
+    def test_mo_delivery_report_esm_class_with_minimal_content(self):
+        """
+        If ``esm_class`` and content are both set appropriately, we process the
+        DR even if the minimal subset of the content regex matches.
+        """
+        smpp_helper = yield self.get_smpp_helper()
+        transport = smpp_helper.transport
+        yield transport.message_stash.set_remote_message_id('bar', 'foo')
+
+        smpp_helper.send_mo(
+            sequence_number=1, source_addr='123', destination_addr='456',
+            short_message=self.DR_MINIMAL_TEMPLATE % ('foo',), esm_class=4)
 
         [event] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(event['event_type'], 'delivery_report')
@@ -233,6 +303,10 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_mo_delivery_report_content_with_nulls(self):
+        """
+        If ``esm_class`` and content are both set appropriately, we process the
+        DR even if some content fields contain null values.
+        """
         smpp_helper = yield self.get_smpp_helper()
         transport = smpp_helper.transport
         yield transport.message_stash.set_remote_message_id('bar', 'foo')
@@ -242,7 +316,139 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
             " done date:200101020030 stat:DELIVRD err:null text:Meep")
         smpp_helper.send_mo(
             sequence_number=1, short_message=content % ("foo",),
-            source_addr='123', destination_addr='456')
+            source_addr='123', destination_addr='456', esm_class=4)
+
+        [event] = yield self.tx_helper.wait_for_dispatched_events(1)
+        self.assertEqual(event['event_type'], 'delivery_report')
+        self.assertEqual(event['delivery_status'], 'delivered')
+        self.assertEqual(event['user_message_id'], 'bar')
+
+    @inlineCallbacks
+    def test_mo_delivery_report_esm_class_with_bad_content(self):
+        """
+        If ``esm_class`` indicates a DR but the regex fails to match, we log a
+        warning and do nothing.
+        """
+        smpp_helper = yield self.get_smpp_helper()
+        transport = smpp_helper.transport
+        yield transport.message_stash.set_remote_message_id('bar', 'foo')
+
+        lc = LogCatcher(message="esm_class 4 indicates")
+        with lc:
+            smpp_helper.send_mo(
+                sequence_number=1, source_addr='123', destination_addr='456',
+                short_message="foo", esm_class=4)
+            yield smpp_helper.wait_for_pdus(1)
+
+        # check that failure to process delivery report was logged
+        [warning] = lc.logs
+        self.assertEqual(
+            warning["message"][0],
+            "esm_class 4 indicates delivery report, but content does not"
+            " match regex: 'foo'")
+
+        inbound = self.tx_helper.get_dispatched_inbound()
+        self.assertEqual(inbound, [])
+        events = self.tx_helper.get_dispatched_events()
+        self.assertEqual(events, [])
+
+    @inlineCallbacks
+    def test_mo_delivery_report_esm_class_with_no_content(self):
+        """
+        If ``esm_class`` indicates a DR but the content is empty, we log a
+        warning and do nothing.
+        """
+        smpp_helper = yield self.get_smpp_helper()
+        transport = smpp_helper.transport
+        yield transport.message_stash.set_remote_message_id('bar', 'foo')
+
+        lc = LogCatcher(message="esm_class 4 indicates")
+        with lc:
+            smpp_helper.send_mo(
+                sequence_number=1, source_addr='123', destination_addr='456',
+                short_message=None, esm_class=4)
+            yield smpp_helper.wait_for_pdus(1)
+
+        # check that failure to process delivery report was logged
+        [warning] = lc.logs
+        self.assertEqual(
+            warning["message"][0],
+            "esm_class 4 indicates delivery report, but content does not"
+            " match regex: None")
+
+        inbound = self.tx_helper.get_dispatched_inbound()
+        self.assertEqual(inbound, [])
+        events = self.tx_helper.get_dispatched_events()
+        self.assertEqual(events, [])
+
+    @inlineCallbacks
+    def test_mo_delivery_report_esm_disabled_with_full_content(self):
+        """
+        If ``esm_class`` checking is disabled and the content is set
+        appropriately, we process the DR.
+        """
+        smpp_helper = yield self.get_smpp_helper(config={
+            "delivery_report_processor_config": {
+                "delivery_report_use_esm_class": False,
+            }
+        })
+        transport = smpp_helper.transport
+        yield transport.message_stash.set_remote_message_id('bar', 'foo')
+
+        smpp_helper.send_mo(
+            sequence_number=1, short_message=self.DR_TEMPLATE % ('foo',),
+            source_addr='123', destination_addr='456', esm_class=0)
+
+        [event] = yield self.tx_helper.wait_for_dispatched_events(1)
+        self.assertEqual(event['event_type'], 'delivery_report')
+        self.assertEqual(event['delivery_status'], 'delivered')
+        self.assertEqual(event['user_message_id'], 'bar')
+
+    @inlineCallbacks
+    def test_mo_delivery_report_esm_disabled_with_minimal_content(self):
+        """
+        If ``esm_class`` checking is disabled and the content is set
+        appropriately, we process the DR even if the minimal subset of the
+        content regex matches.
+        """
+        smpp_helper = yield self.get_smpp_helper(config={
+            "delivery_report_processor_config": {
+                "delivery_report_use_esm_class": False,
+            }
+        })
+        transport = smpp_helper.transport
+        yield transport.message_stash.set_remote_message_id('bar', 'foo')
+
+        smpp_helper.send_mo(
+            sequence_number=1, source_addr='123', destination_addr='456',
+            short_message=self.DR_MINIMAL_TEMPLATE % ('foo',), esm_class=0)
+
+        [event] = yield self.tx_helper.wait_for_dispatched_events(1)
+        self.assertEqual(event['event_type'], 'delivery_report')
+        self.assertEqual(event['delivery_status'], 'delivered')
+        self.assertEqual(event['user_message_id'], 'bar')
+
+    @inlineCallbacks
+    def test_mo_delivery_report_esm_disabled_content_with_nulls(self):
+        """
+        If ``esm_class`` checking is disabled and the content is set
+        appropriately, we process the DR even if some content fields contain
+        null values.
+        """
+        smpp_helper = yield self.get_smpp_helper(config={
+            "delivery_report_processor_config": {
+                "delivery_report_use_esm_class": False,
+            }
+        })
+        transport = smpp_helper.transport
+        yield transport.message_stash.set_remote_message_id('bar', 'foo')
+
+        content = (
+            "id:%s sub:null dlvrd:null submit date:200101010030"
+            " done date:200101020030 stat:DELIVRD err:null text:Meep")
+        smpp_helper.send_mo(
+            sequence_number=1, short_message=content % ("foo",),
+            source_addr='123', destination_addr='456', esm_class=0)
 
         [event] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(event['event_type'], 'delivery_report')
@@ -388,7 +594,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         lc = LogCatcher(message="Failed to retrieve message id")
         with lc:
             yield smpp_helper.handle_pdu(
-                DeliverSM(sequence_number=1,
+                DeliverSM(sequence_number=1, esm_class=4,
                           short_message=self.DR_TEMPLATE % ('foo',)))
 
         # check that failure to send delivery report was logged
@@ -962,7 +1168,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
     @inlineCallbacks
     def test_delivery_report_for_unknown_message(self):
         dr = self.DR_TEMPLATE % ('foo',)
-        deliver = DeliverSM(1, short_message=dr)
+        deliver = DeliverSM(1, short_message=dr, esm_class=4)
         smpp_helper = yield self.get_smpp_helper()
         with LogCatcher(message="Failed to retrieve message id") as lc:
             yield smpp_helper.handle_pdu(deliver)
