@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="vumi",
-    version="0.5.5",
+    version="0.5.6a",
     url='http://github.com/praekelt/vumi',
     license='BSD',
     description="Super-scalable messaging engine for the delivery of SMS, "
@@ -20,6 +20,8 @@ setup(
     scripts=[
         'vumi/scripts/vumi_tagpools.py',
         'vumi/scripts/vumi_redis_tools.py',
+        'vumi/scripts/vumi_model_migrator.py',
+        'vumi/scripts/vumi_count_models.py',
     ],
     install_requires=[
         'zope.interface',

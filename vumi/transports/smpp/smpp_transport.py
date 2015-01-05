@@ -521,9 +521,9 @@ class SmppTransceiverTransport(Transport):
     def start_throttling(self, quiet=False):
         if self.throttled:
             return
-        # We always want to log throttling messages, but we don't always want
-        # them to be warnings.
-        logger = log.msg if quiet else log.warning
+        # We used to use `quiet` to decide log level, but now we always use
+        # `log.msg`.
+        logger = log.msg
         logger("Throttling outbound messages.")
         self.throttled = True
         return self.pause_connectors()
@@ -531,9 +531,9 @@ class SmppTransceiverTransport(Transport):
     def stop_throttling(self, quiet=False):
         if not self.throttled:
             return
-        # We always want to log throttling messages, but we don't always want
-        # them to be warnings.
-        logger = log.msg if quiet else log.warning
+        # We used to use `quiet` to decide log level, but now we always use
+        # `log.msg`.
+        logger = log.msg
         logger("No longer throttling outbound messages.")
         self.throttled = False
         self.unpause_connectors()

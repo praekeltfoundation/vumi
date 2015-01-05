@@ -1,13 +1,15 @@
 # -*- test-case-name: vumi.components.tests.test_message_store_cache -*-
 # -*- coding: utf-8 -*-
-import time
+
+from datetime import datetime
 import hashlib
 import json
+import time
 
 from twisted.internet.defer import returnValue
 
 from vumi.persist.redis_base import Manager
-from vumi.message import TransportEvent
+from vumi.message import TransportEvent, VUMI_DATE_FORMAT
 from vumi.errors import VumiError
 
 
@@ -223,11 +225,13 @@ class MessageStoreCache(object):
         yield self.redis.delete(self.from_addr_key(batch_id))
         yield self.redis.srem(self.batch_key(), batch_id)
 
-    def get_timestamp(self, datetime):
+    def get_timestamp(self, timestamp):
         """
         Return a timestamp value for a datetime value.
         """
-        return time.mktime(datetime.timetuple())
+        if isinstance(timestamp, basestring):
+            timestamp = datetime.strptime(timestamp, VUMI_DATE_FORMAT)
+        return time.mktime(timestamp.timetuple())
 
     @Manager.calls_manager
     def add_outbound_message(self, batch_id, msg):
@@ -254,6 +258,22 @@ class MessageStoreCache(object):
             if uses_counters:
                 yield self.redis.incr(self.outbound_count_key(batch_id))
                 yield self.truncate_outbound_message_keys(batch_id)
+
+    @Manager.calls_manager
+    def add_outbound_message_count(self, batch_id, count):
+        """
+        Add a count to all outbound message counters. (Used for recon.)
+        """
+        yield self.increment_event_status(batch_id, 'sent', count)
+        yield self.redis.incr(self.outbound_count_key(batch_id), count)
+
+    @Manager.calls_manager
+    def add_event_count(self, batch_id, status, count):
+        """
+        Add a count to all relevant event counters. (Used for recon.)
+        """
+        yield self.increment_event_status(batch_id, status, count)
+        yield self.redis.incr(self.event_count_key(batch_id), count)
 
     @Manager.calls_manager
     def add_event(self, batch_id, event):
@@ -296,12 +316,11 @@ class MessageStoreCache(object):
                 self.event_key(batch_id), event_key)
             returnValue(new_entry)
 
-    def increment_event_status(self, batch_id, event_type):
+    def increment_event_status(self, batch_id, event_type, count=1):
         """
-        Increment the status for the given event_type by 1 for the given
-        batch_id
+        Increment the status for the given event_type for the given batch_id.
         """
-        return self.redis.hincrby(self.status_key(batch_id), event_type, 1)
+        return self.redis.hincrby(self.status_key(batch_id), event_type, count)
 
     @Manager.calls_manager
     def get_event_status(self, batch_id):
@@ -337,50 +356,81 @@ class MessageStoreCache(object):
                 yield self.redis.incr(self.inbound_count_key(batch_id))
                 yield self.truncate_inbound_message_keys(batch_id)
 
+    @Manager.calls_manager
+    def add_inbound_message_count(self, batch_id, count):
+        """
+        Add a count to all inbound message counters. (Used for recon.)
+        """
+        yield self.redis.incr(self.inbound_count_key(batch_id), count)
+
     def add_from_addr(self, batch_id, from_addr, timestamp):
         """
         Add a from_addr to this batch_id, weighted by timestamp. Generally
         this information is retrieved when `add_inbound_message()` is called.
         """
-        return self.redis.zadd(self.from_addr_key(batch_id), **{
-            from_addr.encode('utf-8'): timestamp,
-        })
+        # NOTE: Disabled because this doesn't scale to large batches.
+        #       See https://github.com/praekelt/vumi/issues/877
+
+        # return self.redis.zadd(self.from_addr_key(batch_id), **{
+        #     from_addr.encode('utf-8'): timestamp,
+        # })
+        return
 
     def get_from_addrs(self, batch_id, asc=False):
         """
         Return a set of all known from_addrs sorted by timestamp.
         """
-        return self.redis.zrange(self.from_addr_key(batch_id), 0, -1,
-                                 desc=not asc)
+        # NOTE: Disabled because this doesn't scale to large batches.
+        #       See https://github.com/praekelt/vumi/issues/877
+
+        # return self.redis.zrange(self.from_addr_key(batch_id), 0, -1,
+        #                          desc=not asc)
+        return []
 
     def count_from_addrs(self, batch_id):
         """
         Return the number of from_addrs for this batch_id
         """
-        return self.redis.zcard(self.from_addr_key(batch_id))
+        # NOTE: Disabled because this doesn't scale to large batches.
+        #       See https://github.com/praekelt/vumi/issues/877
+
+        # return self.redis.zcard(self.from_addr_key(batch_id))
+        return 0
 
     def add_to_addr(self, batch_id, to_addr, timestamp):
         """
         Add a to-addr to this batch_id, weighted by timestamp. Generally
         this information is retrieved when `add_outbound_message()` is called.
         """
-        return self.redis.zadd(self.to_addr_key(batch_id), **{
-            to_addr.encode('utf-8'): timestamp,
-        })
+        # NOTE: Disabled because this doesn't scale to large batches.
+        #       See https://github.com/praekelt/vumi/issues/877
+
+        # return self.redis.zadd(self.to_addr_key(batch_id), **{
+        #     to_addr.encode('utf-8'): timestamp,
+        # })
+        return
 
     def get_to_addrs(self, batch_id, asc=False):
         """
         Return a set of unique to_addrs addressed in this batch ordered
         by the most recent timestamp.
         """
-        return self.redis.zrange(self.to_addr_key(batch_id), 0, -1,
-                                 desc=not asc)
+        # NOTE: Disabled because this doesn't scale to large batches.
+        #       See https://github.com/praekelt/vumi/issues/877
+
+        # return self.redis.zrange(self.to_addr_key(batch_id), 0, -1,
+        #                          desc=not asc)
+        return []
 
     def count_to_addrs(self, batch_id):
         """
         Return count of the unique to_addrs in this batch.
         """
-        return self.redis.zcard(self.to_addr_key(batch_id))
+        # NOTE: Disabled because this doesn't scale to large batches.
+        #       See https://github.com/praekelt/vumi/issues/877
+
+        # return self.redis.zcard(self.to_addr_key(batch_id))
+        return 0
 
     def get_inbound_message_keys(self, batch_id, start=0, stop=-1, asc=False,
                                  with_timestamp=False):

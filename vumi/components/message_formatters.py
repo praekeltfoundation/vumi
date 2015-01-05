@@ -51,6 +51,7 @@ class CsvFormatter(object):
     implements(IMessageFormatter)
 
     FIELDS = (
+        'timestamp',
         'message_id',
         'to_addr',
         'from_addr',
@@ -69,6 +70,19 @@ class CsvFormatter(object):
         writer(request).writerow(self.FIELDS)
 
     def write_row(self, request, message):
-        writer(request).writerow(list(
-            (message[key] or '').encode('utf-8')
-            for key in self.FIELDS))
+        writer(request).writerow([
+            self._format_field(field, message) for field in self.FIELDS])
+
+    def _format_field(self, field, message):
+        field_formatter = getattr(self, '_format_field_%s' % (field,), None)
+        if field_formatter is not None:
+            field_value = field_formatter(message)
+        else:
+            field_value = self._format_field_default(field, message)
+        return field_value.encode('utf-8')
+
+    def _format_field_default(self, field, message):
+        return message[field] or u''
+
+    def _format_field_timestamp(self, message):
+        return message['timestamp'].isoformat()

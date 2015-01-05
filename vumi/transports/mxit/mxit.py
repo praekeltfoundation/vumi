@@ -33,7 +33,7 @@ class MxitTransportConfig(HttpRpcTransport.CONFIG_CLASS):
         'How to connect to Redis', required=True, static=True)
     api_send_url = ConfigText(
         'The URL for the Mxit message sending API.',
-        required=False, default="https://api.mxit.com",
+        required=False, default="https://api.mxit.com/message/send/",
         static=True)
     api_auth_url = ConfigText(
         'The URL for the Mxit authentication API.',
@@ -41,7 +41,7 @@ class MxitTransportConfig(HttpRpcTransport.CONFIG_CLASS):
         static=True)
     api_auth_scopes = ConfigList(
         'The list of scopes to request access to.',
-        required=False, static=True, default=['message/user'])
+        required=False, static=True, default=['message/send'])
 
 
 class MxitTransport(HttpRpcTransport):
@@ -201,7 +201,9 @@ class MxitTransport(HttpRpcTransport):
         if 'error' in data:
             raise MxitTransportException(
                 '%(error)s: %(error_description)s.' % data)
-        returnValue((data['access_token'], int(data['expires_in'])))
+
+        returnValue(
+            (data['access_token'].encode('utf8'), int(data['expires_in'])))
 
     @inlineCallbacks
     def handle_outbound_send(self, message):
