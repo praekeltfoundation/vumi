@@ -617,7 +617,7 @@ class SetOfDescriptor(FieldDescriptor):
         return set(modelobj._riak_object.get_data().get(self.key, []))
 
     def _set_model_data(self, modelobj, raw_values):
-        raw_values = list(sorted(set(raw_values)))
+        raw_values = sorted(set(raw_values))
         modelobj._riak_object.set_data_field(self.key, raw_values)
         if self.index_name is not None:
             modelobj._riak_object.remove_index(self.index_name)
@@ -705,7 +705,7 @@ class SetOf(FieldWithSubtype):
         map(self.validate_subfield, valueset)
 
     def custom_to_riak(self, value):
-        return list(sorted(value))
+        return sorted(value)
 
     def custom_from_riak(self, raw_value):
         return set(raw_value)
