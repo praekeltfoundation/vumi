@@ -9,10 +9,13 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from vumi.persist.model import (
     Model, Manager, ModelMigrator, ModelMigrationError, VumiRiakError)
 from vumi.persist.fields import (
-    ValidationError, Integer, Unicode, VumiMessage, Dynamic, ListOf,
+    ValidationError, Integer, Unicode, VumiMessage, Dynamic, ListOf, SetOf,
     ForeignKey, ManyToMany, Timestamp)
 from vumi.message import TransportUserMessage
 from vumi.tests.helpers import VumiTestCase, import_skip
+
+
+# TODO: Split up the field-specific tests and move them to ``test_fields``.
 
 
 class SimpleModel(Model):
@@ -40,6 +43,14 @@ class ListOfModel(Model):
 
 class IndexedListOfModel(Model):
     items = ListOf(Integer(), index=True)
+
+
+class SetOfModel(Model):
+    items = SetOf(Integer())
+
+
+class IndexedSetOfModel(Model):
+    items = SetOf(Integer(), index=True)
 
 
 class ForeignKeyModel(Model):
@@ -986,6 +997,72 @@ class ModelTestMixin(object):
         l1 = list_model("foo")
         l1.items = [7, 8, 9]
         self.assertEqual(list(l1.items), [7, 8, 9])
+
+    @Manager.calls_manager
+    def test_setof_fields(self):
+        set_model = self.manager.proxy(SetOfModel)
+        m1 = set_model("foo")
+        m1.items.add(1)
+        m1.items.add(2)
+        yield m1.save()
+
+        m2 = yield set_model.load("foo")
+        self.assertTrue(1 in m2.items)
+        self.assertTrue(2 in m2.items)
+        self.assertEqual(set(m2.items), set([1, 2]))
+
+        m2.items.add(5)
+        self.assertTrue(5 in m2.items)
+
+        m2.items.remove(1)
+        self.assertTrue(1 not in m2.items)
+        self.assertRaises(KeyError, m2.items.remove, 1)
+
+        m2.items.add(1)
+        m2.items.discard(1)
+        self.assertTrue(1 not in m2.items)
+        m2.items.discard(1)
+        self.assertTrue(1 not in m2.items)
+
+        m2.items.update([3, 4, 5])
+        self.assertEqual(set(m2.items), set([2, 3, 4, 5]))
+
+        m2.items = set([7, 8])
+        self.assertEqual(set(m2.items), set([7, 8]))
+
+    @Manager.calls_manager
+    def test_setof_fields_indexes(self):
+        set_model = self.manager.proxy(IndexedSetOfModel)
+        m1 = set_model("foo")
+        m1.items.add(1)
+        m1.items.add(2)
+        yield m1.save()
+
+        assert_indexes = lambda mdl, values: self.assertEqual(
+            mdl._riak_object.get_indexes(),
+            set(('items_bin', str(v)) for v in values))
+
+        m2 = yield set_model.load("foo")
+        self.assertTrue(1 in m2.items)
+        self.assertTrue(2 in m2.items)
+        self.assertEqual(set(m2.items), set([1, 2]))
+        assert_indexes(m2, [1, 2])
+
+        m2.items.add(5)
+        self.assertTrue(5 in m2.items)
+        assert_indexes(m2, [1, 2, 5])
+
+        m2.items.remove(1)
+        self.assertTrue(1 not in m2.items)
+        assert_indexes(m2, [2, 5])
+
+        m2.items.update([3, 4, 5])
+        self.assertEqual(set(m2.items), set([2, 3, 4, 5]))
+        assert_indexes(m2, [2, 3, 4, 5])
+
+        m2.items = set([7, 8])
+        self.assertEqual(set(m2.items), set([7, 8]))
+        assert_indexes(m2, [7, 8])
 
     @Manager.calls_manager
     def test_foreignkey_fields(self):
