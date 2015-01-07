@@ -6,7 +6,7 @@ from datetime import datetime
 
 from vumi.persist.fields import (
     ValidationError, Field, Integer, Unicode, Tag, Timestamp, Json,
-    ListOf, Dynamic, FieldWithSubtype, Boolean)
+    ListOf, SetOf, Dynamic, FieldWithSubtype, Boolean)
 from vumi.tests.helpers import VumiTestCase
 
 
@@ -167,3 +167,25 @@ class TestListOf(VumiTestCase):
         self.assertRaises(ValidationError, listof.validate,
                           u'this is not a list')
         self.assertRaises(ValidationError, listof.validate, ['a', 2])
+
+
+class TestSetOf(VumiTestCase):
+    def test_validate(self):
+        f = SetOf()
+        f.validate(set([u'foo', u'bar']))
+        self.assertRaises(ValidationError, f.validate, u'this is not a set')
+        self.assertRaises(ValidationError, f.validate, set(['a', 2]))
+
+    def test_to_riak(self):
+        """
+        The JSON representation of a SetOf field is a sorted list.
+        """
+        f = SetOf()
+        self.assertEqual(f.to_riak(set([1, 2, 3])), [1, 2, 3])
+
+    def test_from_riak(self):
+        """
+        The JSON list is turned into a set when read.
+        """
+        f = SetOf()
+        self.assertEqual(f.from_riak([1, 2, 3]), set([1, 2, 3]))
