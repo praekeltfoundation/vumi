@@ -540,6 +540,13 @@ class ListOfDescriptor(FieldDescriptor):
         field_list.append(raw_value)
         self._set_model_data(modelobj, field_list)
 
+    def remove_list_item(self, modelobj, value):
+        self.field.validate_subfield(value)
+        raw_value = self.field.subfield_to_riak(value)
+        field_list = modelobj._riak_object.get_data().get(self.key, [])
+        field_list.remove(raw_value)
+        self._set_model_data(modelobj, field_list)
+
     def extend_list(self, modelobj, values):
         map(self.field.validate_subfield, values)
         raw_values = [self.field.subfield_to_riak(value) for value in values]
@@ -567,8 +574,11 @@ class ListProxy(object):
     def __delitem__(self, idx):
         self._descriptor.del_list_item(self._modelobj, idx)
 
-    def append(self, idx):
-        self._descriptor.append_list_item(self._modelobj, idx)
+    def remove(self, value):
+        self._descriptor.remove_list_item(self._modelobj, value)
+
+    def append(self, value):
+        self._descriptor.append_list_item(self._modelobj, value)
 
     def extend(self, values):
         self._descriptor.extend_list(self._modelobj, values)

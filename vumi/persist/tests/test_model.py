@@ -952,6 +952,11 @@ class ModelTestMixin(object):
         del l2.items[0]
         self.assertEqual(list(l2.items), [2])
 
+        l2.items.append(5)
+        self.assertEqual(list(l2.items), [2, 5])
+        l2.items.remove(5)
+        self.assertEqual(list(l2.items), [2])
+
         l2.items.extend([3, 4, 5])
         self.assertEqual(list(l2.items), [2, 3, 4, 5])
 
@@ -981,6 +986,13 @@ class ModelTestMixin(object):
         assert_indexes(l2, [2, 5])
 
         del l2.items[0]
+        self.assertEqual(list(l2.items), [2])
+        assert_indexes(l2, [2])
+
+        l2.items.append(5)
+        self.assertEqual(list(l2.items), [2, 5])
+        assert_indexes(l2, [2, 5])
+        l2.items.remove(5)
         self.assertEqual(list(l2.items), [2])
         assert_indexes(l2, [2])
 
