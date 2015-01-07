@@ -1068,6 +1068,14 @@ class ModelTestMixin(object):
         self.assertTrue(1 not in m2.items)
         assert_indexes(m2, [2, 5])
 
+        m2.items.add(1)
+        m2.items.discard(1)
+        self.assertTrue(1 not in m2.items)
+        assert_indexes(m2, [2, 5])
+        m2.items.discard(1)
+        self.assertTrue(1 not in m2.items)
+        assert_indexes(m2, [2, 5])
+
         m2.items.update([3, 4, 5])
         self.assertEqual(set(m2.items), set([2, 3, 4, 5]))
         assert_indexes(m2, [2, 3, 4, 5])
@@ -1075,6 +1083,15 @@ class ModelTestMixin(object):
         m2.items = set([7, 8])
         self.assertEqual(set(m2.items), set([7, 8]))
         assert_indexes(m2, [7, 8])
+
+    def test_setof_fields_validation(self):
+        set_model = self.manager.proxy(SetOfModel)
+        m1 = set_model("foo")
+
+        self.assertRaises(ValidationError, m1.items.add, "foo")
+        self.assertRaises(ValidationError, m1.items.remove, "foo")
+        self.assertRaises(ValidationError, m1.items.discard, "foo")
+        self.assertRaises(ValidationError, m1.items.update, set(["foo"]))
 
     @Manager.calls_manager
     def test_foreignkey_fields(self):

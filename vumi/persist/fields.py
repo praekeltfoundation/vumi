@@ -640,11 +640,13 @@ class SetOfDescriptor(FieldDescriptor):
         self._set_model_data(modelobj, field_set)
 
     def remove_set_item(self, modelobj, value):
+        self.field.validate_subfield(value)
         field_set = self._get_model_data(modelobj)
         field_set.remove(value)
         self._set_model_data(modelobj, field_set)
 
     def discard_set_item(self, modelobj, value):
+        self.field.validate_subfield(value)
         field_set = self._get_model_data(modelobj)
         field_set.discard(value)
         self._set_model_data(modelobj, field_set)
