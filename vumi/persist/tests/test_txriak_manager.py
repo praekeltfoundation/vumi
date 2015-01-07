@@ -87,6 +87,20 @@ class CommonRiakManagerTests(object):
                                            })
         self.assertEqual(manager.mapreduce_timeout, 1000)
 
+    def test_from_config_with_store_versions(self):
+        manager_cls = self.manager.__class__
+        manager = manager_cls.from_config({
+            'bucket_prefix': 'test.',
+            'store_versions': {
+                'foo.Foo': 3,
+                'bar.Bar': None,
+            },
+        })
+        self.assertEqual(manager.store_versions, {
+            'foo.Foo': 3,
+            'bar.Bar': None,
+        })
+
     def test_sub_manager(self):
         sub_manager = self.manager.sub_manager("foo.")
         self.assertEqual(sub_manager.client, self.manager.client)

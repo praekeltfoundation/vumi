@@ -147,28 +147,36 @@ class TestMessageStoreCache(MessageStoreCacheTestCase):
         yield self.add_messages(
             self.batch_id, self.cache.add_inbound_message)
         from_addrs = yield self.cache.get_from_addrs(self.batch_id)
-        self.assertEqual(from_addrs, ['from-%s' % i for i in range(10)])
+        # NOTE: This functionality is disabled for now.
+        # self.assertEqual(from_addrs, ['from-%s' % i for i in range(10)])
+        self.assertEqual(from_addrs, [])
 
     @inlineCallbacks
     def test_count_from_addrs(self):
         yield self.add_messages(
             self.batch_id, self.cache.add_inbound_message)
         count = yield self.cache.count_from_addrs(self.batch_id)
-        self.assertEqual(count, 10)
+        # NOTE: This functionality is disabled for now.
+        # self.assertEqual(count, 10)
+        self.assertEqual(count, 0)
 
     @inlineCallbacks
     def test_get_to_addrs(self):
         yield self.add_messages(
             self.batch_id, self.cache.add_outbound_message)
         to_addrs = yield self.cache.get_to_addrs(self.batch_id)
-        self.assertEqual(to_addrs, ['to-%s' % i for i in range(10)])
+        # NOTE: This functionality is disabled for now.
+        # self.assertEqual(to_addrs, ['to-%s' % i for i in range(10)])
+        self.assertEqual(to_addrs, [])
 
     @inlineCallbacks
     def test_count_to_addrs(self):
         yield self.add_messages(
             self.batch_id, self.cache.add_outbound_message)
         count = yield self.cache.count_to_addrs(self.batch_id)
-        self.assertEqual(count, 10)
+        # NOTE: This functionality is disabled for now.
+        # self.assertEqual(count, 10)
+        self.assertEqual(count, 0)
 
     @inlineCallbacks
     def test_add_event(self):

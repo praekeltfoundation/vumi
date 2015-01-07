@@ -242,7 +242,7 @@ class TestMxitTransport(VumiTestCase):
             auth, 'Basic %s' % (
                 base64.b64encode('client_id:client_secret')))
         self.assertEqual(
-            'scope=message%2Fuser&grant_type=client_credentials',
+            'scope=message%2Fsend&grant_type=client_credentials',
             req.content.read())
         req.write(json.dumps({
             'access_token': 'access_token',
@@ -252,6 +252,7 @@ class TestMxitTransport(VumiTestCase):
 
         access_token = yield d
         self.assertEqual(access_token, 'access_token')
+        self.assertFalse(isinstance(access_token, unicode))
         ttl = yield redis.ttl(transport.access_token_key)
         self.assertTrue(
             0 < ttl <= (transport.access_token_auto_decay * 10))

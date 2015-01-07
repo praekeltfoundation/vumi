@@ -104,7 +104,7 @@ class VumiRedis(txr.Redis):
         deferreds = [orig_zadd(key, member, score) for member, score in pieces]
         d = DeferredList(deferreds, fireOnOneErrback=True)
         d.addCallback(lambda results: sum([result for success, result
-                                            in results if success]))
+                                           in results if success]))
         return d
 
     def zrange(self, key, start, end, desc=False, withscores=False):
@@ -113,9 +113,9 @@ class VumiRedis(txr.Redis):
                                              reverse=desc)
 
     def zrangebyscore(self, key, min, max, start=None, num=None,
-                     withscores=False, score_cast_func=float):
-        d = super(VumiRedis, self).zrangebyscore(key, min, max,
-                        offset=start, count=num, withscores=withscores)
+                      withscores=False, score_cast_func=float):
+        d = super(VumiRedis, self).zrangebyscore(
+            key, min, max, offset=start, count=num, withscores=withscores)
         if withscores:
             d.addCallback(lambda r: [(v, score_cast_func(s)) for v, s in r])
         return d
@@ -158,6 +158,10 @@ class VumiRedis(txr.Redis):
 class VumiRedisClientFactory(txr.RedisClientFactory):
     protocol = VumiRedis
 
+    # Faster reconnecting.
+    maxDelay = 5.0
+    initialDelay = 0.01
+
     def buildProtocol(self, addr):
         self.client = self.protocol(*self._args, **self._kwargs)
         self.client.factory = self
@@ -170,6 +174,10 @@ class VumiRedisClientFactory(txr.RedisClientFactory):
 class TxRedisManager(Manager):
 
     call_decorator = staticmethod(inlineCallbacks)
+
+    def __init__(self, *args, **kwargs):
+        super(TxRedisManager, self).__init__(*args, **kwargs)
+        self._sub_managers = []
 
     @classmethod
     def _fake_manager(cls, fake_redis, manager_config):
@@ -207,11 +215,21 @@ class TxRedisManager(Manager):
         cls._attach_reconnector(manager)
         return manager
 
+    def sub_manager(self, sub_prefix):
+        sub_man = super(TxRedisManager, self).sub_manager(sub_prefix)
+        self._sub_managers.append(sub_man)
+        return sub_man
+
+    def set_client(self, client):
+        self._client = client
+        for sub_man in self._sub_managers:
+            sub_man.set_client(client)
+        return client
+
     @staticmethod
     def _attach_reconnector(manager):
         def set_client(client):
-            manager._client = client
-            return client
+            return manager.set_client(client)
 
         def reconnect(client):
             client.factory.deferred.addCallback(reconnect)

@@ -8,8 +8,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.message import TransportEvent, VUMI_DATE_FORMAT
 from vumi.tests.helpers import (
-    VumiTestCase, MessageHelper, PersistenceHelper, import_skip,
-)
+    VumiTestCase, MessageHelper, PersistenceHelper, import_skip)
 
 
 class TestMessageStoreBase(VumiTestCase):
@@ -188,8 +187,8 @@ class TestMessageStore(TestMessageStoreBase):
             (yield self.store.batch_outbound_keys(batch_id_1)), [msg_id])
         self.assertEqual(
             (yield self.store.batch_outbound_keys(batch_id_2)), [msg_id])
-        stored_msg = yield self.store.outbound_messages.load(msg_id)
         # Make sure we're writing the right indexes.
+        stored_msg = yield self.store.outbound_messages.load(msg_id)
         self.assertEqual(stored_msg._riak_object.get_indexes(), set([
             ('batches_bin', batch_id_1),
             ('batches_bin', batch_id_2),
@@ -197,6 +196,10 @@ class TestMessageStore(TestMessageStoreBase):
              "%s$%s" % (batch_id_1, msg['timestamp'])),
             ('batches_with_timestamps_bin',
              "%s$%s" % (batch_id_2, msg['timestamp'])),
+            ('batches_with_addresses_bin',
+             "%s$%s$%s" % (batch_id_1, msg['timestamp'], msg['to_addr'])),
+            ('batches_with_addresses_bin',
+             "%s$%s$%s" % (batch_id_2, msg['timestamp'], msg['to_addr'])),
         ]))
 
     @inlineCallbacks
@@ -236,6 +239,10 @@ class TestMessageStore(TestMessageStoreBase):
         self.assertEqual(event_keys, [ack_id])
         self.assertEqual(batch_status, self._batch_status(sent=1, ack=1))
 
+        event = yield self.store.events.load(ack_id)
+        self.assertEqual(event.message_with_status, "%s$%s$ack" % (
+            msg_id, ack["timestamp"]))
+
     @inlineCallbacks
     def test_add_ack_event_again(self):
         msg_id, msg, batch_id = yield self._create_outbound()
@@ -271,6 +278,10 @@ class TestMessageStore(TestMessageStoreBase):
         self.assertEqual(stored_nack, nack)
         self.assertEqual(event_keys, [nack_id])
         self.assertEqual(batch_status, self._batch_status(sent=1, nack=1))
+
+        event = yield self.store.events.load(nack_id)
+        self.assertEqual(event.message_with_status, "%s$%s$nack" % (
+            msg_id, nack["timestamp"]))
 
     @inlineCallbacks
     def test_add_ack_event_without_batch(self):
@@ -311,6 +322,10 @@ class TestMessageStore(TestMessageStoreBase):
             yield self.store.add_event(dr)
             stored_dr = yield self.store.get_event(dr_id)
             self.assertEqual(stored_dr, dr)
+
+            event = yield self.store.events.load(dr_id)
+            self.assertEqual(event.message_with_status, "%s$%s$%s" % (
+                msg_id, dr["timestamp"], "delivery_report.%s" % (status,)))
 
         event_keys = yield self.store.message_event_keys(msg_id)
         self.assertEqual(sorted(event_keys), sorted(dr_ids))
@@ -368,6 +383,20 @@ class TestMessageStore(TestMessageStoreBase):
                          [msg_id])
         self.assertEqual((yield self.store.batch_inbound_keys(batch_id_2)),
                          [msg_id])
+        # Make sure we're writing the right indexes.
+        stored_msg = yield self.store.inbound_messages.load(msg_id)
+        self.assertEqual(stored_msg._riak_object.get_indexes(), set([
+            ('batches_bin', batch_id_1),
+            ('batches_bin', batch_id_2),
+            ('batches_with_timestamps_bin',
+             "%s$%s" % (batch_id_1, msg['timestamp'])),
+            ('batches_with_timestamps_bin',
+             "%s$%s" % (batch_id_2, msg['timestamp'])),
+            ('batches_with_addresses_bin',
+             "%s$%s$%s" % (batch_id_1, msg['timestamp'], msg['from_addr'])),
+            ('batches_with_addresses_bin',
+             "%s$%s$%s" % (batch_id_2, msg['timestamp'], msg['from_addr'])),
+        ]))
 
     @inlineCallbacks
     def test_inbound_counts(self):
@@ -572,6 +601,58 @@ class TestMessageStore(TestMessageStoreBase):
         self.assertEqual(results, all_keys)
 
     @inlineCallbacks
+    def test_batch_inbound_keys_with_timestamp_start(self):
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+        messages = yield self.create_inbound_messages(batch_id, 5)
+        sorted_keys = sorted((msg['timestamp'], msg['message_id'])
+                             for msg in messages)
+        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT))
+                    for (timestamp, key) in sorted_keys]
+
+        index_page = yield self.store.batch_inbound_keys_with_timestamps(
+            batch_id, max_results=6, start=all_keys[1][1])
+        self.assertEqual(list(index_page), all_keys[1:])
+
+    @inlineCallbacks
+    def test_batch_inbound_keys_with_timestamp_without_timestamps(self):
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+        messages = yield self.create_inbound_messages(batch_id, 5)
+        sorted_keys = sorted((msg['timestamp'], msg['message_id'])
+                             for msg in messages)
+        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT))
+                    for (timestamp, key) in sorted_keys]
+
+        index_page = yield self.store.batch_inbound_keys_with_timestamps(
+            batch_id, with_timestamps=False)
+        self.assertEqual(list(index_page), [k for k, _ in all_keys])
+
+    @inlineCallbacks
+    def test_batch_inbound_keys_with_timestamp_end(self):
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+        messages = yield self.create_inbound_messages(batch_id, 5)
+        sorted_keys = sorted((msg['timestamp'], msg['message_id'])
+                             for msg in messages)
+        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT))
+                    for (timestamp, key) in sorted_keys]
+
+        index_page = yield self.store.batch_inbound_keys_with_timestamps(
+            batch_id, max_results=6, end=all_keys[-2][1])
+        self.assertEqual(list(index_page), all_keys[:-1])
+
+    @inlineCallbacks
+    def test_batch_inbound_keys_with_timestamp_range(self):
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+        messages = yield self.create_inbound_messages(batch_id, 5)
+        sorted_keys = sorted((msg['timestamp'], msg['message_id'])
+                             for msg in messages)
+        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT))
+                    for (timestamp, key) in sorted_keys]
+
+        index_page = yield self.store.batch_inbound_keys_with_timestamps(
+            batch_id, max_results=6, start=all_keys[1][1], end=all_keys[-2][1])
+        self.assertEqual(list(index_page), all_keys[1:-1])
+
+    @inlineCallbacks
     def test_batch_outbound_keys_with_timestamp(self):
         batch_id = yield self.store.batch_start([('pool', 'tag')])
         messages = yield self.create_outbound_messages(batch_id, 10)
@@ -590,6 +671,227 @@ class TestMessageStore(TestMessageStoreBase):
         next_page = yield first_page.next_page()
         results.extend(next_page)
         self.assertEqual(len(results), 10)
+        self.assertEqual(next_page.has_next_page(), False)
+
+        self.assertEqual(results, all_keys)
+
+    @inlineCallbacks
+    def test_batch_outbound_keys_with_timestamp_without_timestamps(self):
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+        messages = yield self.create_outbound_messages(batch_id, 5)
+        sorted_keys = sorted((msg['timestamp'], msg['message_id'])
+                             for msg in messages)
+        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT))
+                    for (timestamp, key) in sorted_keys]
+
+        index_page = yield self.store.batch_outbound_keys_with_timestamps(
+            batch_id, with_timestamps=False)
+        self.assertEqual(list(index_page), [k for k, _ in all_keys])
+
+    @inlineCallbacks
+    def test_batch_outbound_keys_with_timestamp_start(self):
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+        messages = yield self.create_outbound_messages(batch_id, 5)
+        sorted_keys = sorted((msg['timestamp'], msg['message_id'])
+                             for msg in messages)
+        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT))
+                    for (timestamp, key) in sorted_keys]
+
+        index_page = yield self.store.batch_outbound_keys_with_timestamps(
+            batch_id, max_results=6, start=all_keys[1][1])
+        self.assertEqual(list(index_page), all_keys[1:])
+
+    @inlineCallbacks
+    def test_batch_outbound_keys_with_timestamp_end(self):
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+        messages = yield self.create_outbound_messages(batch_id, 5)
+        sorted_keys = sorted((msg['timestamp'], msg['message_id'])
+                             for msg in messages)
+        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT))
+                    for (timestamp, key) in sorted_keys]
+
+        index_page = yield self.store.batch_outbound_keys_with_timestamps(
+            batch_id, max_results=6, end=all_keys[-2][1])
+        self.assertEqual(list(index_page), all_keys[:-1])
+
+    @inlineCallbacks
+    def test_batch_outbound_keys_with_timestamp_range(self):
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+        messages = yield self.create_outbound_messages(batch_id, 5)
+        sorted_keys = sorted((msg['timestamp'], msg['message_id'])
+                             for msg in messages)
+        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT))
+                    for (timestamp, key) in sorted_keys]
+
+        index_page = yield self.store.batch_outbound_keys_with_timestamps(
+            batch_id, max_results=6, start=all_keys[1][1], end=all_keys[-2][1])
+        self.assertEqual(list(index_page), all_keys[1:-1])
+
+    @inlineCallbacks
+    def test_batch_inbound_keys_with_address(self):
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+        messages = yield self.create_inbound_messages(batch_id, 10)
+        sorted_keys = sorted(
+            (msg['timestamp'], msg['from_addr'], msg['message_id'])
+            for msg in messages)
+        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT), addr)
+                    for (timestamp, addr, key) in sorted_keys]
+
+        first_page = yield self.store.batch_inbound_keys_with_addresses(
+            batch_id, max_results=6)
+
+        results = list(first_page)
+        self.assertEqual(len(results), 6)
+        self.assertEqual(first_page.has_next_page(), True)
+
+        next_page = yield first_page.next_page()
+        results.extend(next_page)
+        self.assertEqual(len(results), 10)
+        self.assertEqual(next_page.has_next_page(), False)
+
+        self.assertEqual(results, all_keys)
+
+    @inlineCallbacks
+    def test_batch_inbound_keys_with_address_start(self):
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+        messages = yield self.create_inbound_messages(batch_id, 5)
+        sorted_keys = sorted(
+            (msg['timestamp'], msg['from_addr'], msg['message_id'])
+            for msg in messages)
+        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT), addr)
+                    for (timestamp, addr, key) in sorted_keys]
+
+        index_page = yield self.store.batch_inbound_keys_with_addresses(
+            batch_id, max_results=6, start=all_keys[1][1])
+        self.assertEqual(list(index_page), all_keys[1:])
+
+    @inlineCallbacks
+    def test_batch_inbound_keys_with_address_end(self):
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+        messages = yield self.create_inbound_messages(batch_id, 5)
+        sorted_keys = sorted(
+            (msg['timestamp'], msg['from_addr'], msg['message_id'])
+            for msg in messages)
+        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT), addr)
+                    for (timestamp, addr, key) in sorted_keys]
+
+        index_page = yield self.store.batch_inbound_keys_with_addresses(
+            batch_id, max_results=6, end=all_keys[-2][1])
+        self.assertEqual(list(index_page), all_keys[:-1])
+
+    @inlineCallbacks
+    def test_batch_inbound_keys_with_address_range(self):
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+        messages = yield self.create_inbound_messages(batch_id, 5)
+        sorted_keys = sorted(
+            (msg['timestamp'], msg['from_addr'], msg['message_id'])
+            for msg in messages)
+        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT), addr)
+                    for (timestamp, addr, key) in sorted_keys]
+
+        index_page = yield self.store.batch_inbound_keys_with_addresses(
+            batch_id, max_results=6, start=all_keys[1][1], end=all_keys[-2][1])
+        self.assertEqual(list(index_page), all_keys[1:-1])
+
+    @inlineCallbacks
+    def test_batch_outbound_keys_with_address(self):
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+        messages = yield self.create_outbound_messages(batch_id, 10)
+        sorted_keys = sorted(
+            (msg['timestamp'], msg['to_addr'], msg['message_id'])
+            for msg in messages)
+        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT), addr)
+                    for (timestamp, addr, key) in sorted_keys]
+
+        first_page = yield self.store.batch_outbound_keys_with_addresses(
+            batch_id, max_results=6)
+
+        results = list(first_page)
+        self.assertEqual(len(results), 6)
+        self.assertEqual(first_page.has_next_page(), True)
+
+        next_page = yield first_page.next_page()
+        results.extend(next_page)
+        self.assertEqual(len(results), 10)
+        self.assertEqual(next_page.has_next_page(), False)
+
+        self.assertEqual(results, all_keys)
+
+    @inlineCallbacks
+    def test_batch_outbound_keys_with_address_start(self):
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+        messages = yield self.create_outbound_messages(batch_id, 5)
+        sorted_keys = sorted(
+            (msg['timestamp'], msg['to_addr'], msg['message_id'])
+            for msg in messages)
+        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT), addr)
+                    for (timestamp, addr, key) in sorted_keys]
+
+        index_page = yield self.store.batch_outbound_keys_with_addresses(
+            batch_id, max_results=6, start=all_keys[1][1])
+        self.assertEqual(list(index_page), all_keys[1:])
+
+    @inlineCallbacks
+    def test_batch_outbound_keys_with_address_end(self):
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+        messages = yield self.create_outbound_messages(batch_id, 5)
+        sorted_keys = sorted(
+            (msg['timestamp'], msg['to_addr'], msg['message_id'])
+            for msg in messages)
+        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT), addr)
+                    for (timestamp, addr, key) in sorted_keys]
+
+        index_page = yield self.store.batch_outbound_keys_with_addresses(
+            batch_id, max_results=6, end=all_keys[-2][1])
+        self.assertEqual(list(index_page), all_keys[:-1])
+
+    @inlineCallbacks
+    def test_batch_outbound_keys_with_address_range(self):
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+        messages = yield self.create_outbound_messages(batch_id, 5)
+        sorted_keys = sorted(
+            (msg['timestamp'], msg['to_addr'], msg['message_id'])
+            for msg in messages)
+        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT), addr)
+                    for (timestamp, addr, key) in sorted_keys]
+
+        index_page = yield self.store.batch_outbound_keys_with_addresses(
+            batch_id, max_results=6, start=all_keys[1][1], end=all_keys[-2][1])
+        self.assertEqual(list(index_page), all_keys[1:-1])
+
+    @inlineCallbacks
+    def test_message_event_keys_with_statuses(self):
+        """
+        Event keys and statuses for a message can be retrieved by index.
+        """
+        msg_id, msg, batch_id = yield self._create_outbound()
+
+        ack = self.msg_helper.make_ack(msg)
+        yield self.store.add_event(ack)
+        drs = []
+        for status in TransportEvent.DELIVERY_STATUSES:
+            dr = self.msg_helper.make_delivery_report(
+                msg, delivery_status=status)
+            drs.append(dr)
+            yield self.store.add_event(dr)
+
+        mk_tuple = lambda e, status: (
+            e["event_id"], e["timestamp"].strftime(VUMI_DATE_FORMAT), status)
+
+        all_keys = [mk_tuple(ack, "ack")] + [
+            mk_tuple(e, "delivery_report.%s" % (e["delivery_status"],))
+            for e in drs]
+
+        first_page = yield self.store.message_event_keys_with_statuses(
+            msg_id, max_results=3)
+
+        results = list(first_page)
+        self.assertEqual(len(results), 3)
+        self.assertEqual(first_page.has_next_page(), True)
+
+        next_page = yield first_page.next_page()
+        results.extend(next_page)
+        self.assertEqual(len(results), 4)
         self.assertEqual(next_page.has_next_page(), False)
 
         self.assertEqual(results, all_keys)
@@ -614,20 +916,22 @@ class TestMessageStoreCache(TestMessageStoreBase):
         msg_id, msg, batch_id = yield self._create_outbound()
         [cached_msg_id] = (
             yield self.store.cache.get_outbound_message_keys(batch_id))
-        [cached_to_addr] = (
-            yield self.store.cache.get_to_addrs(batch_id))
+        cached_to_addrs = yield self.store.cache.get_to_addrs(batch_id)
         self.assertEqual(msg_id, cached_msg_id)
-        self.assertEqual(msg['to_addr'], cached_to_addr)
+        # NOTE: This functionality is disabled for now.
+        # self.assertEqual([msg['to_addr']], cached_to_addrs)
+        self.assertEqual([], cached_to_addrs)
 
     @inlineCallbacks
     def test_cache_add_inbound_message(self):
         msg_id, msg, batch_id = yield self._create_inbound()
         [cached_msg_id] = (
             yield self.store.cache.get_inbound_message_keys(batch_id))
-        [cached_from_addr] = (
-            yield self.store.cache.get_from_addrs(batch_id))
+        cached_from_addrs = yield self.store.cache.get_from_addrs(batch_id)
         self.assertEqual(msg_id, cached_msg_id)
-        self.assertEqual(msg['from_addr'], cached_from_addr)
+        # NOTE: This functionality is disabled for now.
+        # self.assertEqual([msg['from_addr']], cached_from_addrs)
+        self.assertEqual([], cached_from_addrs)
 
     @inlineCallbacks
     def test_cache_add_event(self):
@@ -688,6 +992,44 @@ class TestMessageStoreCache(TestMessageStoreBase):
         batch_status = yield self.store.batch_status(batch_id)
         self.assertEqual(batch_status['ack'], 10)
         self.assertEqual(batch_status['sent'], 10)
+
+    @inlineCallbacks
+    def test_reconcile_cache_with_old_and_new_messages(self):
+        """
+        If we're reconciling a batch that contains messages older than the
+        truncation threshold and newer than the start of the recon, we still
+        end up with the correct numbers.
+        """
+        cache = self.store.cache
+        cache.TRUNCATE_MESSAGE_KEY_COUNT_AT = 5
+        batch_id = yield self.store.batch_start([("pool", "tag")])
+
+        # Store via message_store
+        inbound_messages = yield self.create_inbound_messages(batch_id, 10)
+        outbound_messages = yield self.create_outbound_messages(batch_id, 10)
+        for msg in outbound_messages:
+            ack = self.msg_helper.make_ack(msg)
+            yield self.store.add_event(ack)
+            dr = self.msg_helper.make_delivery_report(
+                msg, delivery_status="delivered")
+            yield self.store.add_event(dr)
+
+        # We want one message newer than the start of the recon, and they're
+        # ordered from newest to oldest.
+        start_timestamp = inbound_messages[1]["timestamp"].strftime(
+            VUMI_DATE_FORMAT)
+
+        yield self.store.reconcile_cache(batch_id, start_timestamp)
+
+        inbound_count = yield cache.count_inbound_message_keys(batch_id)
+        self.assertEqual(inbound_count, 10)
+        outbound_count = yield cache.count_outbound_message_keys(batch_id)
+        self.assertEqual(outbound_count, 10)
+        batch_status = yield self.store.batch_status(batch_id)
+        self.assertEqual(batch_status["sent"], 10)
+        self.assertEqual(batch_status["ack"], 10)
+        self.assertEqual(batch_status["delivery_report"], 10)
+        self.assertEqual(batch_status["delivery_report.delivered"], 10)
 
     @inlineCallbacks
     def test_reconcile_cache_and_switch_to_counters(self):

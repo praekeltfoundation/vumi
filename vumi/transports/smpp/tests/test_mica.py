@@ -61,9 +61,128 @@ class MicaProcessorTestCase(SmppTransportTestCase):
             mess['transport_metadata'],
             {
                 'session_info': {
-                    'session_identifier': 12345
+                    'session_identifier': 12345,
+                    'ussd_service_op': '01',
                 }
             })
+
+    @inlineCallbacks
+    def test_deliver_sm_op_codes_new(self):
+        session_identifier = 12345
+        smpp_helper = yield self.get_smpp_helper()
+        pdu = DeliverSM(1, short_message="*123#")
+        pdu.add_optional_parameter('ussd_service_op', '01')
+        pdu.add_optional_parameter('user_message_reference',
+                                   session_identifier)
+        yield smpp_helper.handle_pdu(pdu)
+        [start] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        self.assertEqual(start['session_event'],
+                         TransportUserMessage.SESSION_NEW)
+
+    @inlineCallbacks
+    def test_deliver_sm_op_codes_resume(self):
+        source_addr = 'msisdn'
+        session_identifier = 12345
+        vumi_session_identifier = make_vumi_session_identifier(
+            source_addr, session_identifier)
+
+        smpp_helper = yield self.get_smpp_helper()
+        deliver_sm_processor = smpp_helper.transport.deliver_sm_processor
+        session_manager = deliver_sm_processor.session_manager
+
+        yield session_manager.create_session(
+            vumi_session_identifier, ussd_code='*123#')
+
+        pdu = DeliverSM(1, short_message="", source_addr=source_addr)
+        pdu.add_optional_parameter('ussd_service_op', '12')
+        pdu.add_optional_parameter('user_message_reference',
+                                   session_identifier)
+        yield smpp_helper.handle_pdu(pdu)
+        [resume] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        self.assertEqual(resume['session_event'],
+                         TransportUserMessage.SESSION_RESUME)
+
+    @inlineCallbacks
+    def test_deliver_sm_op_codes_end(self):
+        source_addr = 'msisdn'
+        session_identifier = 12345
+        vumi_session_identifier = make_vumi_session_identifier(
+            source_addr, session_identifier)
+
+        smpp_helper = yield self.get_smpp_helper()
+        deliver_sm_processor = smpp_helper.transport.deliver_sm_processor
+        session_manager = deliver_sm_processor.session_manager
+
+        yield session_manager.create_session(
+            vumi_session_identifier, ussd_code='*123#')
+
+        pdu = DeliverSM(1, short_message="", source_addr=source_addr)
+        pdu.add_optional_parameter('ussd_service_op', '81')
+        pdu.add_optional_parameter('user_message_reference',
+                                   session_identifier)
+        yield smpp_helper.handle_pdu(pdu)
+        [end] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        self.assertEqual(end['session_event'],
+                         TransportUserMessage.SESSION_CLOSE)
+
+    @inlineCallbacks
+    def test_deliver_sm_unknown_op_code(self):
+        session_identifier = 12345
+        smpp_helper = yield self.get_smpp_helper()
+
+        pdu = DeliverSM(1, short_message="*123#")
+        pdu.add_optional_parameter('ussd_service_op', '01')
+        pdu.add_optional_parameter('user_message_reference',
+                                   session_identifier)
+
+        yield smpp_helper.handle_pdu(pdu)
+
+        pdu = DeliverSM(1, short_message="*123#")
+        pdu.add_optional_parameter('ussd_service_op', '99')
+        pdu.add_optional_parameter('user_message_reference',
+                                   session_identifier)
+
+        yield smpp_helper.handle_pdu(pdu)
+        [start, unknown] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        self.assertEqual(unknown['session_event'],
+                         TransportUserMessage.SESSION_RESUME)
+
+    @inlineCallbacks
+    def test_submit_sm_op_codes_resume(self):
+        user_msisdn = 'msisdn'
+        session_identifier = 12345
+        smpp_helper = yield self.get_smpp_helper()
+
+        yield self.tx_helper.make_dispatch_outbound(
+            "hello world",
+            transport_type="ussd",
+            session_event=TransportUserMessage.SESSION_RESUME,
+            transport_metadata={
+                'session_info': {
+                    'session_identifier': session_identifier
+                }
+            }, to_addr=user_msisdn)
+        [resume] = yield smpp_helper.wait_for_pdus(1)
+        self.assertEqual(pdu_tlv(resume, 'ussd_service_op'), '02')
+
+    @inlineCallbacks
+    def test_submit_sm_op_codes_close(self):
+        user_msisdn = 'msisdn'
+        session_identifier = 12345
+        smpp_helper = yield self.get_smpp_helper()
+
+        yield self.tx_helper.make_dispatch_outbound(
+            "hello world",
+            transport_type="ussd",
+            session_event=TransportUserMessage.SESSION_CLOSE,
+            transport_metadata={
+                'session_info': {
+                    'session_identifier': session_identifier
+                }
+            }, to_addr=user_msisdn)
+
+        [close] = yield smpp_helper.wait_for_pdus(1)
+        self.assertEqual(pdu_tlv(close, 'ussd_service_op'), '17')
 
     @inlineCallbacks
     def test_submit_and_deliver_ussd_continue(self):
@@ -95,7 +214,8 @@ class MicaProcessorTestCase(SmppTransportTestCase):
         # Server delivers a USSD message to the Client
         pdu = DeliverSM(seq_no(submit_sm_pdu) + 1, short_message="reply!",
                         source_addr=user_msisdn)
-        pdu.add_optional_parameter('ussd_service_op', '02')
+        # 0x12 is 'continue'
+        pdu.add_optional_parameter('ussd_service_op', '12')
         pdu.add_optional_parameter('user_message_reference',
                                    session_identifier)
 

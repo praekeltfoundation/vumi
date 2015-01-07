@@ -85,7 +85,8 @@ class BackLinkProxy(object):
 
 
 class ModelMigrator(object):
-    """Migration handler for old Model versions.
+    """
+    Migration handler for old Model versions.
 
     Subclasses of this should implement ``migrate_from_<version>()`` methods
     for each previous version of the model being migrated. This method will
@@ -99,22 +100,30 @@ class ModelMigrator(object):
 
     There is a special-case ``migrate_from_unversioned()`` method that is
     called for objects that do not contain a model version.
+
+    In order to facilitate different processes using different model versions,
+    reverse migrations are also supported. These are similar to forward
+    migrations, except they are applied at save time (rather than load time)
+    and methods are named ``reverse_from_<version>()``.
     """
-    def __init__(self, model_class, manager, data_version):
+    def __init__(self, model_class, manager, data_version, reverse=False):
         self.model_class = model_class
         self.manager = manager
         self.data_version = data_version
+        self.reverse = reverse
+        prefix = "reverse" if reverse else "migrate"
         if data_version is not None:
-            migration_method_name = 'migrate_from_%s' % str(data_version)
+            migration_method_name = '%s_from_%s' % (prefix, str(data_version))
         else:
-            migration_method_name = 'migrate_from_unversioned'
+            migration_method_name = '%s_from_unversioned' % (prefix,)
         self.migration_method = getattr(self, migration_method_name, None)
 
     def __call__(self, riak_object):
         if self.migration_method is None:
+            prefix = "reverse " if self.reverse else ""
             raise ModelMigrationError(
-                'No migrators defined for %s version %s' % (
-                    self.model_class.__name__, self.data_version))
+                'No %smigrators defined for %s version %s' % (
+                    prefix, self.model_class.__name__, self.data_version))
         return self.migration_method(MigrationData(riak_object))
 
 
@@ -130,6 +139,7 @@ class MigrationData(object):
 
     def get_riak_object(self):
         self.riak_object.set_data(self.new_data)
+        # Note: This keeps old indexes.
         for field, values in self.new_index.iteritems():
             for value in values:
                 self.riak_object.add_index(field, value)
@@ -327,6 +337,32 @@ class Model(object):
             cls, field_name, value, end_value)
         return manager.index_keys(
             cls, index_name, start_value, end_value, return_terms=return_terms)
+
+    @classmethod
+    def all_keys_page(cls, manager, max_results=None, continuation=None):
+        """Return all keys in this model's bucket.
+
+        Uses Riak's special `$bucket` index. Beware of tombstones (i.e.
+        the keys returned might have been deleted from Riak in the near past).
+
+        :param int max_results:
+            The maximum number of results to return per page. If ``None``,
+            pagination will disables and a single page containing all results
+            will be returned.
+
+        :param continuation:
+            An opaque continuation token indicating which page of results to
+            fetch. The index page object returned from this method has a
+            ``continuation`` attribute that contains this value. If ``None``,
+            the first page of results will be returned.
+
+        :returns:
+            :class:`VumiIndexPage` or :class:`VumiTxIndexPage` object
+            containing all keys from this model's bucket.
+        """
+        return manager.index_keys_page(
+            cls, '$bucket', manager.bucket_name(cls), None,
+            max_results=max_results, continuation=continuation)
 
     @classmethod
     def index_keys_page(cls, manager, field_name, value, end_value=None,
@@ -614,13 +650,14 @@ class Manager(object):
     USE_MAPREDUCE_BUNCH_LOADING = False
 
     def __init__(self, client, bucket_prefix, load_bunch_size=None,
-                 mapreduce_timeout=None):
+                 mapreduce_timeout=None, store_versions=None):
         self.client = client
         self.bucket_prefix = bucket_prefix
         self.load_bunch_size = load_bunch_size or self.DEFAULT_LOAD_BUNCH_SIZE
         self.mapreduce_timeout = (mapreduce_timeout or
                                   self.DEFAULT_MAPREDUCE_TIMEOUT)
         self._bucket_cache = {}
+        self.store_versions = store_versions or {}
 
     def proxy(self, modelcls):
         return ModelProxy(self, modelcls)
@@ -856,6 +893,10 @@ class ModelProxy(object):
         return self._modelcls.index_keys(
             self._manager, field_name, value, end_value,
             return_terms=return_terms)
+
+    def all_keys_page(self, max_results=None, continuation=None):
+        return self._modelcls.all_keys_page(
+            self._manager, max_results=max_results, continuation=continuation)
 
     def index_keys_page(self, field_name, value, end_value=None,
                         return_terms=None, max_results=None,
