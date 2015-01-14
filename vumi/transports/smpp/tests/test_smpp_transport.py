@@ -647,6 +647,18 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
             u'Zoë destroyer of Ascii!'.encode('latin-1'))
 
     @inlineCallbacks
+    def test_mt_sms_submit_sm_null_message(self):
+        """
+        We can successfully send a message with null content.
+        """
+        smpp_helper = yield self.get_smpp_helper()
+        msg = self.tx_helper.make_outbound(None)
+        yield self.tx_helper.dispatch_outbound(msg)
+        [pdu] = yield smpp_helper.wait_for_pdus(1)
+        self.assertEqual(command_id(pdu), 'submit_sm')
+        self.assertEqual(short_message(pdu), None)
+
+    @inlineCallbacks
     def test_submit_sm_data_coding(self):
         smpp_helper = yield self.get_smpp_helper(config={
             'submit_short_message_processor_config': {
