@@ -347,7 +347,9 @@ class TestMessageHelper(TestCase):
         msg_fields = {
             'content': 'outbound message',
             'from_addr': 'from',
+            'from_addr_type': 'msisdn',
             'to_addr': 'to',
+            'to_addr_type': 'mxit_id',
             'group': '#channel',
             'provider': 'MY-MNO',
             'session_event': TransportUserMessage.SESSION_NEW,
