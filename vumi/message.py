@@ -257,6 +257,8 @@ class TransportUserMessage(TransportMessage):
         if self['session_event'] not in self.SESSION_EVENTS:
             raise InvalidMessageField("Invalid session_event %r"
                                       % (self['session_event'],))
+        self.assert_field_value('from_addr_type', *self.ADDRESS_TYPES)
+        self.assert_field_value('to_addr_type', *self.ADDRESS_TYPES)
 
     def user(self):
         return self['from_addr']
