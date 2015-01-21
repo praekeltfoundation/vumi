@@ -211,7 +211,6 @@ class TransportUserMessage(TransportMessage):
                            TT_USSD, TT_XMPP, TT_MXIT, TT_WECHAT])
 
     AT_IRC_NICKNAME = 'irc_nickname'
-    AT_TELNET_ADDRESS = 'telnet_address'
     AT_TWITTER_HANDLE = 'twitter_handle'
     AT_MSISDN = 'msisdn'
     AT_GTALK_ID = 'gtalk_id'
@@ -219,8 +218,8 @@ class TransportUserMessage(TransportMessage):
     AT_MXIT_ID = 'mxit_id'
     AT_WECHAT_ID = 'wechat_id'
     ADDRESS_TYPES = set([
-        AT_IRC_NICKNAME, AT_TELNET_ADDRESS, AT_TWITTER_HANDLE, AT_MSISDN,
-        AT_GTALK_ID, AT_JABBER_ID, AT_MXIT_ID, AT_WECHAT_ID])
+        AT_IRC_NICKNAME, AT_TWITTER_HANDLE, AT_MSISDN, AT_GTALK_ID,
+        AT_JABBER_ID, AT_MXIT_ID, AT_WECHAT_ID])
 
     def process_fields(self, fields):
         fields = super(TransportUserMessage, self).process_fields(fields)
