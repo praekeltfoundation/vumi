@@ -129,8 +129,8 @@ class TransportUserMessageTest(TransportMessageTestMixin, VumiTestCase):
         self.assertEqual(UTCNearNow(), msg['timestamp'])
         self.assertEqual('+27831234567', msg['to_addr'])
         self.assertEqual('12345', msg['from_addr'])
-        self.assertEqual('msisdn', msg['to_addr_type'])
-        self.assertEqual('msisdn', msg['from_addr_type'])
+        self.assertEqual(None, msg['to_addr_type'])
+        self.assertEqual(None, msg['from_addr_type'])
 
     def test_transport_user_message_reply_no_group(self):
         msg = TransportUserMessage(
