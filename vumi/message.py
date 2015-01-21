@@ -231,8 +231,8 @@ class TransportUserMessage(TransportMessage):
         fields.setdefault('content', None)
         fields.setdefault('transport_metadata', {})
         fields.setdefault('group', None)
-        fields.setdefault('to_addr_type', self.AT_MSISDN)
-        fields.setdefault('from_addr_type', self.AT_MSISDN)
+        fields.setdefault('to_addr_type', None)
+        fields.setdefault('from_addr_type', None)
         return fields
 
     def validate_fields(self):
