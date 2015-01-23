@@ -187,8 +187,8 @@ class MiddlewareStack(object):
         priorities = defaultdict(list)
         for mw in middlewares:
             priorities[mw.config.get(priority_key, None)].append(mw)
-        sorted_priorities = [p for p in sorted(
-            priorities.keys(), key=lambda a: '' if not a else a)]
+        sorted_priorities = sorted(
+            priorities.keys(), key=lambda a: '' if not a else a)
         return [mw for p in sorted_priorities for mw in priorities[p]]
 
     @inlineCallbacks
