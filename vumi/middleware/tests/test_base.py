@@ -160,12 +160,12 @@ class TestMiddlewareStack(VumiTestCase):
     def test_teardown_in_reverse_order(self):
 
         def get_teardown_timestamps():
-            return [mw._teardown_done for mw in self.stack.middlewares]
+            return [mw._teardown_done for mw in self.stack.consume_middlewares]
 
         self.assertFalse(any(get_teardown_timestamps()))
         yield self.stack.teardown()
         self.assertTrue(all(get_teardown_timestamps()))
-        teardown_order = sorted(self.stack.middlewares,
+        teardown_order = sorted(self.stack.consume_middlewares,
             key=lambda mw: mw._teardown_done)
         self.assertEqual([mw.name for mw in teardown_order],
             ['mw3', 'mw2', 'mw1'])
