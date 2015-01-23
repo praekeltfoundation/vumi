@@ -197,7 +197,7 @@ class TestMiddlewareStack(VumiTestCase):
             ('p1_1', 'event', 'dummy_msg.pasym.p1_1', 'end_foo'),
             ('p1_2', 'event', 'dummy_msg.pasym.p1_1.p1_2', 'end_foo'),
             ('p2', 'event', 'dummy_msg.pasym.p1_1.p1_2.p2', 'end_foo'),
-            ('pn', 'event', 'dummy_msg.pasym.p1_1.p1_2.p2.pn', 'end_foo')
+            ('pn', 'event', 'dummy_msg.pasym.p1_1.p1_2.p2.pn', 'end_foo'),
         ])
         # test publish
         self.processed_messages = []
@@ -207,10 +207,8 @@ class TestMiddlewareStack(VumiTestCase):
             ('p1_1', 'event', 'dummy_msg.p1_2.p1_1', 'end_foo'),
             ('p2', 'event', 'dummy_msg.p1_2.p1_1.p2', 'end_foo'),
             ('pasym', 'event', 'dummy_msg.p1_2.p1_1.p2.pasym', 'end_foo'),
-            ('pn', 'event', 'dummy_msg.p1_2.p1_1.p2.pasym.pn', 'end_foo')
+            ('pn', 'event', 'dummy_msg.p1_2.p1_1.p2.pasym.pn', 'end_foo'),
         ])
-
-
 
 
 class TestUtilityFunctions(VumiTestCase):
