@@ -239,8 +239,6 @@ def create_middlewares_from_config(worker, config):
         middleware_config = config.get(middleware_name, {})
         if type(item[middleware_name]) is str:
             cls_name = item[middleware_name]
-            middleware_config['consume_priority'] = None
-            middleware_config['publish_priority'] = None
         elif type(item[middleware_name]) is dict:
             conf = item[middleware_name]
             cls_name = conf.get('class')
