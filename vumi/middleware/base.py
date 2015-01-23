@@ -214,14 +214,27 @@ def create_middlewares_from_config(worker, config):
     for item in config.get("middleware", []):
         keys = item.keys()
         if len(keys) != 1:
-            raise ConfigError("Middleware items contain only a single"
-                              " key-value pair. The key should be a name"
-                              " for the middleware. The value should be"
-                              " the full dotted name of the class"
-                              " implementing the middleware.")
+            raise ConfigError(
+                "Middleware items contain only a single key-value pair. The"
+                " key should be a name for the middleware. The value should be"
+                " the full dotted name of the class implementing the"
+                " middleware, or a mapping containing the keys 'class' with a"
+                " value of the full dotted class name, 'consume_priority' with"
+                " the priority level for consuming, and 'publish_priority'"
+                " with the priority level for publishing, both integers.")
         middleware_name = keys[0]
-        cls_name = item[middleware_name]
         middleware_config = config.get(middleware_name, {})
+        if type(item[middleware_name]) is str:
+            cls_name = item[middleware_name]
+            middleware_config['consume_priority'] = None
+            middleware_config['publish_priority'] = None
+        elif type(item[middleware_name]) is dict:
+            conf = item[middleware_name]
+            cls_name = conf.get('class')
+            middleware_config['consume_priority'] = conf.get(
+                'consume_priority', None)
+            middleware_config['publish_priority'] = conf.get(
+                'publish_priority', None)
         cls = load_class_by_string(cls_name)
         middleware = cls(middleware_name, middleware_config, worker)
         middlewares.append(middleware)
