@@ -217,8 +217,11 @@ class TestUtilityFunctions(VumiTestCase):
     TEST_CONFIG_1 = {
         "middleware": [
             {"mw1": "vumi.middleware.tests.test_base.ToyMiddleware"},
-            {"mw2": "vumi.middleware.tests.test_base.ToyMiddleware"},
-            ],
+            {"mw2": {
+                'class': "vumi.middleware.tests.test_base.ToyMiddleware",
+                'consume_priority': 1,
+                'publish_priority': -1}},
+        ],
         "mw1": {
             "param_foo": 1,
             "param_bar": 2,
@@ -239,9 +242,13 @@ class TestUtilityFunctions(VumiTestCase):
                          [ToyMiddleware, ToyMiddleware])
         self.assertEqual([mw._setup_done for mw in middlewares],
                          [False, False])
-        self.assertEqual(middlewares[0].config,
-                         {"param_foo": 1, "param_bar": 2})
-        self.assertEqual(middlewares[1].config, {})
+        self.assertEqual(
+            middlewares[0].config, {
+                "param_foo": 1, "param_bar": 2,
+                'consume_priority': 0, 'publish_priority': 0})
+        self.assertEqual(
+            middlewares[1].config,
+            {'consume_priority': 1, 'publish_priority': -1})
 
     @inlineCallbacks
     def test_setup_middleware_from_config(self):
@@ -252,9 +259,13 @@ class TestUtilityFunctions(VumiTestCase):
                          [ToyMiddleware, ToyMiddleware])
         self.assertEqual([mw._setup_done for mw in middlewares],
                          [True, True])
-        self.assertEqual(middlewares[0].config,
-                         {"param_foo": 1, "param_bar": 2})
-        self.assertEqual(middlewares[1].config, {})
+        self.assertEqual(
+            middlewares[0].config, {
+                "param_foo": 1, "param_bar": 2,
+                'consume_priority': 0, 'publish_priority': 0})
+        self.assertEqual(
+            middlewares[1].config,
+            {'consume_priority': 1, 'publish_priority': -1})
 
     def test_parse_yaml(self):
         # this test is here to ensure the YAML one has to
