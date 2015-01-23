@@ -184,10 +184,7 @@ class MiddlewareStack(object):
 
     @staticmethod
     def _sort_by_priority(middlewares, priority_key):
-        sorted_middlewares = sorted(
-            (mw.config[priority_key], idx, mw)
-            for idx, mw in enumerate(middlewares))
-        return [mw for priority, idx, mw in sorted_middlewares]
+        return sorted(middlewares, key=lambda mw: mw.config[priority_key])
 
     @inlineCallbacks
     def _handle(self, middlewares, handler_name, message, connector_name):
