@@ -225,3 +225,16 @@ class TestUtilityFunctions(VumiTestCase):
                          [ToyMiddleware, ToyMiddleware])
         self.assertEqual([mw._setup_done for mw in middlewares],
                          [False, False])
+
+    @inlineCallbacks
+    def test_sort_by_priority(self):
+        priority2 = ToyMiddleware('priority2', {"priority": 2}, self)
+        nopriority = ToyMiddleware('nopriority', {}, self)
+        priority1_1 = ToyMiddleware('priority1_1', {"priority": 1}, self)
+        priority1_2 = ToyMiddleware('priority1_2', {"priority": 1}, self)
+        middlewares = [priority2, nopriority, priority1_1, priority1_2]
+        for mw in middlewares:
+            yield mw.setup_middleware()
+        mw_sorted = MiddlewareStack._sort_by_priority(middlewares, 'priority')
+        self.assertEqual(
+            mw_sorted, [priority1_1, priority1_2, priority2, nopriority])
