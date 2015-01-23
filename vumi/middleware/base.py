@@ -232,11 +232,11 @@ def create_middlewares_from_config(worker, config):
                 " with the priority level for publishing, both integers.")
         middleware_name = keys[0]
         middleware_config = config.get(middleware_name, {})
-        if type(item[middleware_name]) is str:
+        if isinstance(item[middleware_name], basestring):
             cls_name = item[middleware_name]
             middleware_config['consume_priority'] = 0
             middleware_config['publish_priority'] = 0
-        elif type(item[middleware_name]) is dict:
+        elif isinstance(item[middleware_name], dict):
             conf = item[middleware_name]
             cls_name = conf.get('class')
             try:
