@@ -239,14 +239,16 @@ def create_middlewares_from_config(worker, config):
         middleware_config = config.get(middleware_name, {})
         if type(item[middleware_name]) is str:
             cls_name = item[middleware_name]
+            middleware_config['consume_priority'] = 0
+            middleware_config['publish_priority'] = 0
         elif type(item[middleware_name]) is dict:
             conf = item[middleware_name]
             cls_name = conf.get('class')
             try:
                 middleware_config['consume_priority'] = int(conf.get(
-                    'consume_priority', None))
+                    'consume_priority', 0))
                 middleware_config['publish_priority'] = int(conf.get(
-                    'publish_priority', None))
+                    'publish_priority', 0))
             except ValueError:
                 raise ConfigError(
                     "Middleware priority level must be an integer")
