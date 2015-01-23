@@ -184,12 +184,10 @@ class MiddlewareStack(object):
 
     @staticmethod
     def _sort_by_priority(middlewares, priority_key):
-        priorities = defaultdict(list)
-        for mw in middlewares:
-            priorities[mw.config.get(priority_key, None)].append(mw)
-        sorted_priorities = sorted(
-            priorities.keys(), key=lambda a: '' if not a else a)
-        return [mw for p in sorted_priorities for mw in priorities[p]]
+        sorted_middlewares = sorted(
+            (mw.config[priority_key], idx, mw)
+            for idx, mw in enumerate(middlewares))
+        return [mw for priority, idx, mw in sorted_middlewares]
 
     @inlineCallbacks
     def _handle(self, middlewares, handler_name, message, connector_name):
