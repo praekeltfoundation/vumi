@@ -94,7 +94,7 @@ class TestMiddlewareStack(VumiTestCase):
         mw = mw_class(
             name, {
                 'consume_priority': consume_pri,
-                'publish_priority': publish_pri
+                'publish_priority': publish_pri,
                 }, self)
         yield mw.setup_middleware()
         returnValue(mw)
