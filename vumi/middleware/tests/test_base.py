@@ -89,6 +89,16 @@ class TestMiddlewareStack(VumiTestCase):
         yield mw.setup_middleware()
         returnValue(mw)
 
+    @inlineCallbacks
+    def mk_priority_middleware(self, name, mw_class, consume_pri, publish_pri):
+        mw = mw_class(
+            name, {
+                'consume_priority': consume_pri,
+                'publish_priority': publish_pri
+                }, self)
+        yield mw.setup_middleware()
+        returnValue(mw)
+
     def processed(self, name, direction, message, connector_name):
         self.processed_messages.append(
             (name, direction, message, connector_name))
@@ -169,6 +179,38 @@ class TestMiddlewareStack(VumiTestCase):
             key=lambda mw: mw._teardown_done)
         self.assertEqual([mw.name for mw in teardown_order],
             ['mw3', 'mw2', 'mw1'])
+
+    @inlineCallbacks
+    def test_middleware_priority_ordering(self):
+        self.stack = MiddlewareStack([
+            (yield self.mk_priority_middleware('p2', ToyMiddleware, 3, 3)),
+            (yield self.mkmiddleware('pn', ToyMiddleware)),
+            (yield self.mk_priority_middleware('p1_1', ToyMiddleware, 2, 2)),
+            (yield self.mk_priority_middleware('p1_2', ToyMiddleware, 2, 2)),
+            (yield self.mk_priority_middleware('pasym', ToyMiddleware, 1, 4)),
+            ])
+        # test consume
+        self.assert_processed([])
+        yield self.stack.apply_consume('event', 'dummy_msg', 'end_foo')
+        self.assert_processed([
+            ('pasym', 'event', 'dummy_msg.pasym', 'end_foo'),
+            ('p1_1', 'event', 'dummy_msg.pasym.p1_1', 'end_foo'),
+            ('p1_2', 'event', 'dummy_msg.pasym.p1_1.p1_2', 'end_foo'),
+            ('p2', 'event', 'dummy_msg.pasym.p1_1.p1_2.p2', 'end_foo'),
+            ('pn', 'event', 'dummy_msg.pasym.p1_1.p1_2.p2.pn', 'end_foo')
+        ])
+        # test publish
+        self.processed_messages = []
+        yield self.stack.apply_publish('event', 'dummy_msg', 'end_foo')
+        self.assert_processed([
+            ('p1_2', 'event', 'dummy_msg.p1_2', 'end_foo'),
+            ('p1_1', 'event', 'dummy_msg.p1_2.p1_1', 'end_foo'),
+            ('p2', 'event', 'dummy_msg.p1_2.p1_1.p2', 'end_foo'),
+            ('pasym', 'event', 'dummy_msg.p1_2.p1_1.p2.pasym', 'end_foo'),
+            ('pn', 'event', 'dummy_msg.p1_2.p1_1.p2.pasym.pn', 'end_foo')
+        ])
+
+
 
 
 class TestUtilityFunctions(VumiTestCase):
