@@ -1,4 +1,5 @@
 # -*- test-case-name: vumi.middleware.tests.test_base -*-
+from collections import defaultdict
 
 from twisted.internet.defer import inlineCallbacks, returnValue
 
@@ -176,7 +177,19 @@ class MiddlewareStack(object):
     """
 
     def __init__(self, middlewares):
-        self.middlewares = middlewares
+        self.consume_middlewares = self._sort_by_priority(
+            middlewares, 'consume_priority')
+        self.publish_middlewares = self._sort_by_priority(
+            reversed(middlewares), 'publish_priority')
+
+    @staticmethod
+    def _sort_by_priority(middlewares, priority_key):
+        priorities = defaultdict(list)
+        for mw in middlewares:
+            priorities[mw.config.get(priority_key, None)] = mw
+        sorted_priorities = [p for p in sorted(
+            priorities.keys(), key=lambda a: '' if not a else a)]
+        return [mw for p in sorted_priorities for mw in priorities[p]]
 
     @inlineCallbacks
     def _handle(self, middlewares, handler_name, message, connector_name):
@@ -193,16 +206,16 @@ class MiddlewareStack(object):
     def apply_consume(self, handler_name, message, connector_name):
         handler_name = 'consume_%s' % (handler_name,)
         return self._handle(
-            self.middlewares, handler_name, message, connector_name)
+            self.consume_middlewares, handler_name, message, connector_name)
 
     def apply_publish(self, handler_name, message, connector_name):
         handler_name = 'publish_%s' % (handler_name,)
         return self._handle(
-            reversed(self.middlewares), handler_name, message, connector_name)
+            self.publish_middlewares, handler_name, message, connector_name)
 
     @inlineCallbacks
     def teardown(self):
-        for mw in reversed(self.middlewares):
+        for mw in self.publish_middlewares:
             yield mw.teardown_middleware()
 
 
