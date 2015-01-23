@@ -85,7 +85,8 @@ class TestMiddlewareStack(VumiTestCase):
 
     @inlineCallbacks
     def mkmiddleware(self, name, mw_class):
-        mw = mw_class(name, {}, self)
+        mw = mw_class(
+            name, {'consume_priority': 0, 'publish_priority': 0}, self)
         yield mw.setup_middleware()
         returnValue(mw)
 
