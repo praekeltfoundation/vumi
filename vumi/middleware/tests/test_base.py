@@ -194,21 +194,21 @@ class TestMiddlewareStack(VumiTestCase):
         self.assert_processed([])
         yield self.stack.apply_consume('event', 'dummy_msg', 'end_foo')
         self.assert_processed([
-            ('pasym', 'event', 'dummy_msg.pasym', 'end_foo'),
-            ('p1_1', 'event', 'dummy_msg.pasym.p1_1', 'end_foo'),
-            ('p1_2', 'event', 'dummy_msg.pasym.p1_1.p1_2', 'end_foo'),
-            ('p2', 'event', 'dummy_msg.pasym.p1_1.p1_2.p2', 'end_foo'),
-            ('pn', 'event', 'dummy_msg.pasym.p1_1.p1_2.p2.pn', 'end_foo'),
+            ('pn', 'event', 'dummy_msg.pn', 'end_foo'),
+            ('pasym', 'event', 'dummy_msg.pn.pasym', 'end_foo'),
+            ('p1_1', 'event', 'dummy_msg.pn.pasym.p1_1', 'end_foo'),
+            ('p1_2', 'event', 'dummy_msg.pn.pasym.p1_1.p1_2', 'end_foo'),
+            ('p2', 'event', 'dummy_msg.pn.pasym.p1_1.p1_2.p2', 'end_foo'),
         ])
         # test publish
         self.processed_messages = []
         yield self.stack.apply_publish('event', 'dummy_msg', 'end_foo')
         self.assert_processed([
-            ('p1_2', 'event', 'dummy_msg.p1_2', 'end_foo'),
-            ('p1_1', 'event', 'dummy_msg.p1_2.p1_1', 'end_foo'),
-            ('p2', 'event', 'dummy_msg.p1_2.p1_1.p2', 'end_foo'),
-            ('pasym', 'event', 'dummy_msg.p1_2.p1_1.p2.pasym', 'end_foo'),
-            ('pn', 'event', 'dummy_msg.p1_2.p1_1.p2.pasym.pn', 'end_foo'),
+            ('pn', 'event', 'dummy_msg.pn', 'end_foo'),
+            ('p1_2', 'event', 'dummy_msg.pn.p1_2', 'end_foo'),
+            ('p1_1', 'event', 'dummy_msg.pn.p1_2.p1_1', 'end_foo'),
+            ('p2', 'event', 'dummy_msg.pn.p1_2.p1_1.p2', 'end_foo'),
+            ('pasym', 'event', 'dummy_msg.pn.p1_2.p1_1.p2.pasym', 'end_foo'),
         ])
 
 
