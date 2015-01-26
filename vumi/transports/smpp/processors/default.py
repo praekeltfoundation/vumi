@@ -23,7 +23,7 @@ class DeliveryReportProcessorConfig(Config):
         '(?: +dlvrd:(?P<dlvrd>[^ ]+))?'
         '(?: +submit date:(?P<submit_date>\d*))?'
         '(?: +done date:(?P<done_date>\d*))?'
-        ' +stat:(?P<stat>[A-Z]{7})'
+        ' +stat:(?P<stat>[A-Z]{5,7})'
         '(?: +err:(?P<err>[^ ]+))?'
         ' +[Tt]ext:(?P<text>.{,20})'
         '.*'
@@ -46,6 +46,7 @@ class DeliveryReportProcessorConfig(Config):
         # From the most common regex-extracted format:
         'DELIVRD': 'delivered',
         'REJECTD': 'failed',
+        'FAILED': 'failed',
         # Currently we will accept this for Yo! TODO: investigate
         '0': 'delivered',
     }

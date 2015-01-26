@@ -283,6 +283,28 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.assertEqual(event['user_message_id'], 'bar')
 
     @inlineCallbacks
+    def test_mo_delivery_report_esm_class_with_short_status(self):
+        """
+        If the delivery report has a shorter status field, the default regex
+        still matches.
+        """
+        smpp_helper = yield self.get_smpp_helper()
+        transport = smpp_helper.transport
+        yield transport.message_stash.set_remote_message_id('bar', 'foo')
+
+        short_message = (
+            "id:foo sub:... dlvrd:... submit date:200101010030"
+            " done date:200101020030 stat:FAILED err:042 text:Meep")
+        smpp_helper.send_mo(
+            sequence_number=1, short_message=short_message,
+            source_addr='123', destination_addr='456', esm_class=4)
+
+        [event] = yield self.tx_helper.wait_for_dispatched_events(1)
+        self.assertEqual(event['event_type'], 'delivery_report')
+        self.assertEqual(event['delivery_status'], 'failed')
+        self.assertEqual(event['user_message_id'], 'bar')
+
+    @inlineCallbacks
     def test_mo_delivery_report_esm_class_with_minimal_content(self):
         """
         If ``esm_class`` and content are both set appropriately, we process the
