@@ -50,7 +50,7 @@ def read_yaml_config(config_file, optional=True):
         return {}
     with file(config_file, 'r') as stream:
         # Assume we get a dict out of this.
-        return yaml.safe_load(stream)
+        return yaml.load(stream, Loader=SafeLoaderWithInclude)
 
 
 class VumiOptions(usage.Options):
