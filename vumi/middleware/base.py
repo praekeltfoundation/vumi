@@ -1,6 +1,4 @@
 # -*- test-case-name: vumi.middleware.tests.test_base -*-
-from collections import defaultdict
-
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.utils import load_class_by_string
