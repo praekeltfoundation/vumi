@@ -172,6 +172,14 @@ class TestFakeRedis(VumiTestCase):
             'zrange', 'set', 0, -1, withscores=True)
 
     @inlineCallbacks
+    def test_zremrangebyrank_negative_empty_range(self):
+        yield self.redis.zadd('set', one=1, two=2, three=3)
+        yield self.assert_redis_op(0, 'zremrangebyrank', 'set', -11, -10)
+        yield self.assert_redis_op(
+            [('one', 1), ('two', 2), ('three', 3)],
+            'zrange', 'set', 0, -1, withscores=True)
+
+    @inlineCallbacks
     def test_zremrangebyrank_negative_start(self):
         yield self.redis.zadd('set', one=1, two=2, three=3)
         yield self.assert_redis_op(2, 'zremrangebyrank', 'set', -2, 2)
