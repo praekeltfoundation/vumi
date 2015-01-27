@@ -19,8 +19,11 @@ from vumi.sentry import SentryLoggerService
 class SafeLoaderWithInclude(yaml.SafeLoader):
     def __init__(self, *args, **kwargs):
         super(SafeLoaderWithInclude, self).__init__(*args, **kwargs)
-        self._root = os.path.split(self.stream.name)[0]
         self.add_constructor('!include', self._include)
+        if isinstance(self.stream, file):
+            self._root = os.path.dirname(self.stream.name)
+        else:
+            self._root = os.path.curdir
 
     def _include(self, loader, node):
         filename = os.path.join(self._root, self.construct_scalar(node))
