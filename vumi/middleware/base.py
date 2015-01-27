@@ -1,5 +1,4 @@
 # -*- test-case-name: vumi.middleware.tests.test_base -*-
-
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.utils import load_class_by_string
@@ -176,7 +175,16 @@ class MiddlewareStack(object):
     """
 
     def __init__(self, middlewares):
-        self.middlewares = middlewares
+        self.consume_middlewares = self._sort_by_priority(
+            middlewares, 'consume_priority')
+        self.publish_middlewares = self._sort_by_priority(
+            reversed(middlewares), 'publish_priority')
+
+    @staticmethod
+    def _sort_by_priority(middlewares, priority_key):
+        # We rely on Python's sorting algorithm being stable to preserve
+        # order within priority levels.
+        return sorted(middlewares, key=lambda mw: mw.config[priority_key])
 
     @inlineCallbacks
     def _handle(self, middlewares, handler_name, message, connector_name):
@@ -193,16 +201,16 @@ class MiddlewareStack(object):
     def apply_consume(self, handler_name, message, connector_name):
         handler_name = 'consume_%s' % (handler_name,)
         return self._handle(
-            self.middlewares, handler_name, message, connector_name)
+            self.consume_middlewares, handler_name, message, connector_name)
 
     def apply_publish(self, handler_name, message, connector_name):
         handler_name = 'publish_%s' % (handler_name,)
         return self._handle(
-            reversed(self.middlewares), handler_name, message, connector_name)
+            self.publish_middlewares, handler_name, message, connector_name)
 
     @inlineCallbacks
     def teardown(self):
-        for mw in reversed(self.middlewares):
+        for mw in self.publish_middlewares:
             yield mw.teardown_middleware()
 
 
@@ -214,14 +222,37 @@ def create_middlewares_from_config(worker, config):
     for item in config.get("middleware", []):
         keys = item.keys()
         if len(keys) != 1:
-            raise ConfigError("Middleware items contain only a single"
-                              " key-value pair. The key should be a name"
-                              " for the middleware. The value should be"
-                              " the full dotted name of the class"
-                              " implementing the middleware.")
+            raise ConfigError(
+                "Middleware items contain only a single key-value pair. The"
+                " key should be a name for the middleware. The value should be"
+                " the full dotted name of the class implementing the"
+                " middleware, or a mapping containing the keys 'class' with a"
+                " value of the full dotted class name, 'consume_priority' with"
+                " the priority level for consuming, and 'publish_priority'"
+                " with the priority level for publishing, both integers.")
         middleware_name = keys[0]
-        cls_name = item[middleware_name]
         middleware_config = config.get(middleware_name, {})
+        if isinstance(item[middleware_name], basestring):
+            cls_name = item[middleware_name]
+            middleware_config['consume_priority'] = 0
+            middleware_config['publish_priority'] = 0
+        elif isinstance(item[middleware_name], dict):
+            conf = item[middleware_name]
+            cls_name = conf.get('class')
+            try:
+                middleware_config['consume_priority'] = int(conf.get(
+                    'consume_priority', 0))
+                middleware_config['publish_priority'] = int(conf.get(
+                    'publish_priority', 0))
+            except ValueError:
+                raise ConfigError(
+                    "Middleware priority level must be an integer")
+        else:
+            raise ConfigError(
+                "Middleware item values must either be a string with the",
+                " full dotted name of the class implementing the middleware,"
+                " or a dictionary with 'class', 'consume_priority', and"
+                " 'publish_priority' keys.")
         cls = load_class_by_string(cls_name)
         middleware = cls(middleware_name, middleware_config, worker)
         middlewares.append(middleware)
