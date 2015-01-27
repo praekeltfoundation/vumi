@@ -1,3 +1,5 @@
+import os
+
 from vumi.servicemaker import (
     VumiOptions, StartWorkerOptions, VumiWorkerServiceMaker)
 from vumi import servicemaker
@@ -102,6 +104,36 @@ class TestStartWorkerOptions(OptionsTestCase):
                 'transport_name': 'sphex',
                 'blah': 'thingy',
                 }, options.worker_config)
+
+    def test_config_file_with_include(self):
+        # Create include file
+        self.mk_config_file('provider_prefixes', [
+            '"+27606": "vodacom"',
+            '"+27603": "mtn"'])
+        # Create root file
+        self.mk_config_file('worker', [
+            'transport_name: foo',
+            'middleware:',
+            '  - provider_inbound_mw: vumi.provider.foo',
+            'provider_inbound_mw:'])
+        # Find rel path between include and root files
+        rel_path_providers = os.path.relpath(
+            self.config_file['provider_prefixes'],
+            os.path.dirname(self.config_file['worker']))
+        # Add rel path to root file
+        with open(self.config_file['worker'], 'a') as f:
+            f.write('    !include %s\n' % rel_path_providers)
+        # Process config files
+        options = StartWorkerOptions()
+        options.parseOptions([
+            '--worker-class', 'foo.fooWorker',
+            '--config', self.config_file['worker']])
+        self.assertEqual(
+            options.worker_config['provider_inbound_mw'],
+            {
+                '+27606': 'vodacom',
+                '+27603': 'mtn',
+            })
 
     def test_config_file_override(self):
         self.mk_config_file('worker',
