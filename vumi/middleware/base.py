@@ -182,6 +182,8 @@ class MiddlewareStack(object):
 
     @staticmethod
     def _sort_by_priority(middlewares, priority_key):
+        # We rely on Python's sorting algorithm being stable to preserve
+        # order within priority levels.
         return sorted(middlewares, key=lambda mw: mw.config[priority_key])
 
     @inlineCallbacks
