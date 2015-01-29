@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="vumi",
-    version="0.5.9",
+    version="0.5.10a",
     url='http://github.com/praekelt/vumi',
     license='BSD',
     description="Super-scalable messaging engine for the delivery of SMS, "
