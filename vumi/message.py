@@ -210,6 +210,17 @@ class TransportUserMessage(TransportMessage):
     TRANSPORT_TYPES = set([TT_HTTP_API, TT_IRC, TT_TELNET, TT_TWITTER, TT_SMS,
                            TT_USSD, TT_XMPP, TT_MXIT, TT_WECHAT])
 
+    AT_IRC_NICKNAME = 'irc_nickname'
+    AT_TWITTER_HANDLE = 'twitter_handle'
+    AT_MSISDN = 'msisdn'
+    AT_GTALK_ID = 'gtalk_id'
+    AT_JABBER_ID = 'jabber_id'
+    AT_MXIT_ID = 'mxit_id'
+    AT_WECHAT_ID = 'wechat_id'
+    ADDRESS_TYPES = set([
+        AT_IRC_NICKNAME, AT_TWITTER_HANDLE, AT_MSISDN, AT_GTALK_ID,
+        AT_JABBER_ID, AT_MXIT_ID, AT_WECHAT_ID])
+
     def process_fields(self, fields):
         fields = super(TransportUserMessage, self).process_fields(fields)
         fields.setdefault('message_id', self.generate_id())
@@ -219,6 +230,8 @@ class TransportUserMessage(TransportMessage):
         fields.setdefault('content', None)
         fields.setdefault('transport_metadata', {})
         fields.setdefault('group', None)
+        fields.setdefault('to_addr_type', None)
+        fields.setdefault('from_addr_type', None)
         return fields
 
     def validate_fields(self):

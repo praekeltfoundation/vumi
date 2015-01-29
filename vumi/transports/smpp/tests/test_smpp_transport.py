@@ -283,6 +283,28 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.assertEqual(event['user_message_id'], 'bar')
 
     @inlineCallbacks
+    def test_mo_delivery_report_esm_class_with_short_status(self):
+        """
+        If the delivery report has a shorter status field, the default regex
+        still matches.
+        """
+        smpp_helper = yield self.get_smpp_helper()
+        transport = smpp_helper.transport
+        yield transport.message_stash.set_remote_message_id('bar', 'foo')
+
+        short_message = (
+            "id:foo sub:... dlvrd:... submit date:200101010030"
+            " done date:200101020030 stat:FAILED err:042 text:Meep")
+        smpp_helper.send_mo(
+            sequence_number=1, short_message=short_message,
+            source_addr='123', destination_addr='456', esm_class=4)
+
+        [event] = yield self.tx_helper.wait_for_dispatched_events(1)
+        self.assertEqual(event['event_type'], 'delivery_report')
+        self.assertEqual(event['delivery_status'], 'failed')
+        self.assertEqual(event['user_message_id'], 'bar')
+
+    @inlineCallbacks
     def test_mo_delivery_report_esm_class_with_minimal_content(self):
         """
         If ``esm_class`` and content are both set appropriately, we process the
@@ -645,6 +667,18 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.assertEqual(
             short_message(submit_sm_pdu),
             u'Zoë destroyer of Ascii!'.encode('latin-1'))
+
+    @inlineCallbacks
+    def test_mt_sms_submit_sm_null_message(self):
+        """
+        We can successfully send a message with null content.
+        """
+        smpp_helper = yield self.get_smpp_helper()
+        msg = self.tx_helper.make_outbound(None)
+        yield self.tx_helper.dispatch_outbound(msg)
+        [pdu] = yield smpp_helper.wait_for_pdus(1)
+        self.assertEqual(command_id(pdu), 'submit_sm')
+        self.assertEqual(short_message(pdu), None)
 
     @inlineCallbacks
     def test_submit_sm_data_coding(self):
