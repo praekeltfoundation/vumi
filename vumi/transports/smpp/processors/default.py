@@ -23,7 +23,7 @@ class DeliveryReportProcessorConfig(Config):
         '(?: +dlvrd:(?P<dlvrd>[^ ]+))?'
         '(?: +submit date:(?P<submit_date>\d*))?'
         '(?: +done date:(?P<done_date>\d*))?'
-        ' +stat:(?P<stat>[A-Z]{7})'
+        ' +stat:(?P<stat>[A-Z]{5,7})'
         '(?: +err:(?P<err>[^ ]+))?'
         ' +[Tt]ext:(?P<text>.{,20})'
         '.*'
@@ -46,6 +46,7 @@ class DeliveryReportProcessorConfig(Config):
         # From the most common regex-extracted format:
         'DELIVRD': 'delivered',
         'REJECTD': 'failed',
+        'FAILED': 'failed',
         # Currently we will accept this for Yo! TODO: investigate
         '0': 'delivered',
     }
@@ -469,6 +470,8 @@ class SubmitShortMessageProcessor(object):
         to_addr = message['to_addr']
         from_addr = message['from_addr']
         text = message['content']
+        if text is None:
+            text = u""
         vumi_message_id = message['message_id']
 
         # TODO: this should probably be handled by a processor as these
