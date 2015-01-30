@@ -62,6 +62,8 @@ class VumiIndexPage(object):
             A new :class:`VumiIndexPage` object containing the next page of
             results.
         """
+        if not self.has_next_page():
+            return None
         try:
             result = self._index_page.next_page()
         except RiakError as e:
