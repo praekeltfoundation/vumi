@@ -7,7 +7,7 @@ import json
 from riak import RiakClient, RiakObject, RiakMapReduce, RiakError
 from twisted.internet.threads import deferToThread
 from twisted.internet.defer import (
-    inlineCallbacks, returnValue, gatherResults, maybeDeferred)
+    inlineCallbacks, returnValue, gatherResults, maybeDeferred, succeed)
 
 from vumi.persist.model import Manager, VumiRiakError
 
@@ -69,6 +69,8 @@ class VumiTxIndexPage(object):
             A new :class:`VumiTxIndexPage` object containing the next page of
             results.
         """
+        if not self.has_next_page():
+            return succeed(None)
         d = deferToThread(self._index_page.next_page)
         d.addCallback(type(self))
         d.addErrback(riakErrorHandler)
