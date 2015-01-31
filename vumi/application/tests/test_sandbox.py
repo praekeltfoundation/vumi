@@ -952,11 +952,22 @@ class DummyHTTPClient(object):
         self.agent = agent
 
     def get_context_factory(self):
-        # This test's behaviour depends on the version of Twisted being used.
-        if HttpClientPolicyForHTTPS is None:
+        # We need to dig around inside our Agent to find the context factory.
+        # Since this involves private attributes that have changed a few times
+        # recently, we need to try various options.
+        if hasattr(self.agent, "_contextFactory"):
+            # For Twisted 13.x
             return self.agent._contextFactory
-        else:
+        elif hasattr(self.agent, "_policyForHTTPS"):
+            # For Twisted 14.x
             return self.agent._policyForHTTPS
+        elif hasattr(self.agent, "_endpointFactory"):
+            # For Twisted 15.0.0 (and possibly newer)
+            return self.agent._endpointFactory._policyForHTTPS
+        else:
+            raise NotImplementedError(
+                "I can't find the context factory on this Agent. This seems"
+                " to change every few versions of Twisted.")
 
     def fail_next(self, error):
         self._next_http_request_result = fail(error)
