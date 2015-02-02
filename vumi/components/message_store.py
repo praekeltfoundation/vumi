@@ -255,10 +255,7 @@ class MessageStore(object):
                 old_key = key_manager.add_key(key, timestamp)
                 if old_key is not None:
                     key_count += 1
-            if index_page.has_next_page():
-                index_page = yield index_page.next_page()
-            else:
-                index_page = None
+            index_page = yield index_page.next_page()
 
         yield self.cache.add_inbound_message_count(batch_id, key_count)
         for key, timestamp in key_manager:
@@ -287,10 +284,7 @@ class MessageStore(object):
                     sc = yield self.get_event_counts(old_key[0])
                     for status, count in sc.iteritems():
                         status_counts[status] += count
-            if index_page.has_next_page():
-                index_page = yield index_page.next_page()
-            else:
-                index_page = None
+            index_page = yield index_page.next_page()
 
         yield self.cache.add_outbound_message_count(batch_id, key_count)
         for status, count in status_counts.iteritems():
@@ -318,10 +312,7 @@ class MessageStore(object):
                 status_counts[status] += 1
                 if status.startswith("delivery_report."):
                     status_counts["delivery_report"] += 1
-            if index_page.has_next_page():
-                index_page = yield index_page.next_page()
-            else:
-                index_page = None
+            index_page = yield index_page.next_page()
 
         returnValue(status_counts)
 
@@ -813,6 +804,102 @@ class MessageStore(object):
             return_terms=True, max_results=max_results)
         returnValue(KeysWithAddresses(self, msg_id, results))
 
+    @Manager.calls_manager
+    def batch_inbound_stats(self, batch_id, max_results=None,
+                            start=None, end=None):
+        """
+        Return inbound message stats for the specified time range.
+
+        Currently, message stats include total message count and unique address
+        count.
+
+        :param str batch_id:
+            The batch_id to fetch keys for.
+
+        :param int max_results:
+            Number of results per page. Defaults to DEFAULT_MAX_RESULTS.
+
+        :param str start:
+            Optional start timestamp string matching VUMI_DATE_FORMAT.
+
+        :param str end:
+            Optional end timestamp string matching VUMI_DATE_FORMAT.
+
+        :returns:
+            ``dict`` containing 'total' and 'unique_addresses' entries.
+
+        This method performs multiple Riak index queries.
+        """
+        total = 0
+        unique_addresses = set()
+
+        start_value, end_value = self._start_end_values(batch_id, start, end)
+        if max_results is None:
+            max_results = self.DEFAULT_MAX_RESULTS
+        raw_page = yield self.inbound_messages.index_keys_page(
+            'batches_with_addresses', start_value, end_value,
+            return_terms=True, max_results=max_results)
+        page = KeysWithAddresses(self, batch_id, raw_page)
+
+        while page is not None:
+            results = list(page)
+            total += len(results)
+            unique_addresses.update(addr for key, timestamp, addr in results)
+            page = yield page.next_page()
+
+        returnValue({
+            "total": total,
+            "unique_addresses": len(unique_addresses),
+        })
+
+    @Manager.calls_manager
+    def batch_outbound_stats(self, batch_id, max_results=None,
+                             start=None, end=None):
+        """
+        Return outbound message stats for the specified time range.
+
+        Currently, message stats include total message count and unique address
+        count.
+
+        :param str batch_id:
+            The batch_id to fetch keys for.
+
+        :param int max_results:
+            Number of results per page. Defaults to DEFAULT_MAX_RESULTS.
+
+        :param str start:
+            Optional start timestamp string matching VUMI_DATE_FORMAT.
+
+        :param str end:
+            Optional end timestamp string matching VUMI_DATE_FORMAT.
+
+        :returns:
+            ``dict`` containing 'total' and 'unique_addresses' entries.
+
+        This method performs multiple Riak index queries.
+        """
+        total = 0
+        unique_addresses = set()
+
+        start_value, end_value = self._start_end_values(batch_id, start, end)
+        if max_results is None:
+            max_results = self.DEFAULT_MAX_RESULTS
+        raw_page = yield self.outbound_messages.index_keys_page(
+            'batches_with_addresses', start_value, end_value,
+            return_terms=True, max_results=max_results)
+        page = KeysWithAddresses(self, batch_id, raw_page)
+
+        while page is not None:
+            results = list(page)
+            total += len(results)
+            unique_addresses.update(addr for key, timestamp, addr in results)
+            page = yield page.next_page()
+
+        returnValue({
+            "total": total,
+            "unique_addresses": len(unique_addresses),
+        })
+
 
 class KeysWithTimestamps(object):
     """
@@ -841,6 +928,8 @@ class KeysWithTimestamps(object):
             of results.
         """
         next_page = yield self._index_page.next_page()
+        if next_page is None:
+            returnValue(None)
         returnValue(type(self)(self._message_store, self._batch_id, next_page))
 
     def has_next_page(self):
@@ -893,6 +982,8 @@ class KeysWithAddresses(object):
             results.
         """
         next_page = yield self._index_page.next_page()
+        if next_page is None:
+            returnValue(None)
         returnValue(type(self)(self._message_store, self._batch_id, next_page))
 
     def has_next_page(self):

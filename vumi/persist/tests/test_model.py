@@ -727,6 +727,9 @@ class ModelTestMixin(object):
         self.assertEqual(sorted(keys3), [])
         self.assertEqual(keys3.has_next_page(), False)
 
+        no_keys = yield keys3.next_page()
+        self.assertEqual(no_keys, None)
+
     @Manager.calls_manager
     def test_index_keys_page_explicit_continuation(self):
         indexed_model = self.manager.proxy(IndexedModel)
