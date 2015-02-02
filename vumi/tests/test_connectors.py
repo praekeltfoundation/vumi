@@ -64,8 +64,9 @@ class TestBaseConnector(BaseConnectorTestCase):
     @inlineCallbacks
     def test_middlewares_consume(self):
         worker = yield self.worker_helper.get_worker(DummyWorker, {})
-        middlewares = [RecordingMiddleware(str(i), {}, worker)
-                       for i in range(3)]
+        middlewares = [RecordingMiddleware(
+            str(i), {'consume_priority': 0, 'publish_priority': 0}, worker)
+            for i in range(3)]
         conn, consumer = yield self.mk_consumer(
             worker=worker, connector_name='foo', middlewares=middlewares)
         consumer.unpause()
@@ -81,8 +82,9 @@ class TestBaseConnector(BaseConnectorTestCase):
     @inlineCallbacks
     def test_middlewares_publish(self):
         worker = yield self.worker_helper.get_worker(DummyWorker, {})
-        middlewares = [RecordingMiddleware(str(i), {}, worker)
-                       for i in range(3)]
+        middlewares = [RecordingMiddleware(
+            str(i), {'consume_priority': 0, 'publish_priority': 0}, worker)
+            for i in range(3)]
         conn = yield self.mk_connector(
             worker=worker, connector_name='foo', middlewares=middlewares)
         yield conn._setup_publisher('outbound')

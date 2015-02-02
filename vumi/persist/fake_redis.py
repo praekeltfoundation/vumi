@@ -503,10 +503,9 @@ class Zset(object):
         self._zval = []
 
     def _redis_range_to_py_range(self, start, end):
-        if start < 0:
-            start = len(self._zval) + start
-        if end < 0:
-            end = len(self._zval) + end
+        end += 1  # redis start/end are element indexes
+        if end == 0:
+            end = None
         return start, end
 
     def zadd(self, **valscores):
@@ -528,9 +527,7 @@ class Zset(object):
         return len(self._zval)
 
     def zrange(self, start, stop, desc=False, score_cast_func=float):
-        stop += 1  # redis start/stop are element indexes
-        if stop == 0:
-            stop = None
+        start, stop = self._redis_range_to_py_range(start, stop)
 
         # copy before changing in place
         zval = self._zval[:]
@@ -577,6 +574,6 @@ class Zset(object):
 
     def zremrangebyrank(self, start, stop):
         start, stop = self._redis_range_to_py_range(start, stop)
-        deleted_keys = self._zval[start:stop + 1]
-        del self._zval[start:stop + 1]
+        deleted_keys = self._zval[start:stop]
+        del self._zval[start:stop]
         return len(deleted_keys)

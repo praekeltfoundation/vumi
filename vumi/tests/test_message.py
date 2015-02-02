@@ -95,6 +95,8 @@ class TransportUserMessageTest(TransportMessageTestMixin, VumiTestCase):
             transport_name='sphex',
             transport_type='sms',
             transport_metadata={},
+            from_addr_type='twitter_handle',
+            to_addr_type='gtalk_id',
             )
         self.assertEqual('user_message', msg['message_type'])
         self.assertEqual('sms', msg['transport_type'])
@@ -106,6 +108,8 @@ class TransportUserMessageTest(TransportMessageTestMixin, VumiTestCase):
         self.assertEqual(UTCNearNow(), msg['timestamp'])
         self.assertEqual('+27831234567', msg['to_addr'])
         self.assertEqual('12345', msg['from_addr'])
+        self.assertEqual('twitter_handle', msg['from_addr_type'])
+        self.assertEqual('gtalk_id', msg['to_addr_type'])
 
     def test_transport_user_message_defaults(self):
         msg = TransportUserMessage(
@@ -125,6 +129,8 @@ class TransportUserMessageTest(TransportMessageTestMixin, VumiTestCase):
         self.assertEqual(UTCNearNow(), msg['timestamp'])
         self.assertEqual('+27831234567', msg['to_addr'])
         self.assertEqual('12345', msg['from_addr'])
+        self.assertEqual(None, msg['to_addr_type'])
+        self.assertEqual(None, msg['from_addr_type'])
 
     def test_transport_user_message_reply_no_group(self):
         msg = TransportUserMessage(

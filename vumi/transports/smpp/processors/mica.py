@@ -129,6 +129,8 @@ class SubmitShortMessageProcessor(default.SubmitShortMessageProcessor):
         to_addr = message['to_addr']
         from_addr = message['from_addr']
         text = message['content']
+        if text is None:
+            text = u""
         vumi_message_id = message['message_id']
 
         session_event = message['session_event']
