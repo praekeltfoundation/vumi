@@ -60,26 +60,30 @@ class TestMessageStoreBase(VumiTestCase):
 
     @inlineCallbacks
     def create_outbound_messages(self, batch_id, count, start_timestamp=None,
-                                 time_multiplier=10):
+                                 time_multiplier=10, to_addr=None):
         # Store via message_store
         now = start_timestamp or datetime.now()
         messages = []
         for i in range(count):
             msg = self.msg_helper.make_outbound(
                 "foo", timestamp=(now - timedelta(i * time_multiplier)))
+            if to_addr is not None:
+                msg['to_addr'] = to_addr
             yield self.store.add_outbound_message(msg, batch_id=batch_id)
             messages.append(msg)
         returnValue(messages)
 
     @inlineCallbacks
     def create_inbound_messages(self, batch_id, count, start_timestamp=None,
-                                time_multiplier=10):
+                                time_multiplier=10, from_addr=None):
         # Store via message_store
         now = start_timestamp or datetime.now()
         messages = []
         for i in range(count):
             msg = self.msg_helper.make_inbound(
                 "foo", timestamp=(now - timedelta(i * time_multiplier)))
+            if from_addr is not None:
+                msg['from_addr'] = from_addr
             yield self.store.add_inbound_message(msg, batch_id=batch_id)
             messages.append(msg)
         returnValue(messages)
@@ -895,6 +899,262 @@ class TestMessageStore(TestMessageStoreBase):
         self.assertEqual(next_page.has_next_page(), False)
 
         self.assertEqual(results, all_keys)
+
+    @inlineCallbacks
+    def test_batch_inbound_stats(self):
+        """
+        batch_inbound_stats returns total and unique address counts for the
+        whole batch if no time range is specified.
+        """
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+
+        now = datetime.now()
+        start_3 = now - timedelta(5)
+        start_2 = now - timedelta(35)
+        yield self.create_inbound_messages(
+            batch_id, 5, start_timestamp=now, from_addr=u'00005')
+        yield self.create_inbound_messages(
+            batch_id, 3, start_timestamp=start_3, from_addr=u'00003')
+        yield self.create_inbound_messages(
+            batch_id, 2, start_timestamp=start_2, from_addr=u'00002')
+
+        inbound_stats = yield self.store.batch_inbound_stats(
+            batch_id, max_results=6)
+        self.assertEqual(inbound_stats, {"total": 10, "unique_addresses": 3})
+
+    @inlineCallbacks
+    def test_batch_inbound_stats_start(self):
+        """
+        batch_inbound_stats returns total and unique address counts for all
+        messages newer than the start date if only the start date is specified.
+        """
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+
+        now = datetime.now()
+        start_3 = now - timedelta(5)
+        start_2 = now - timedelta(35)
+        messages_5 = yield self.create_inbound_messages(
+            batch_id, 5, start_timestamp=now, from_addr=u'00005')
+        messages_3 = yield self.create_inbound_messages(
+            batch_id, 3, start_timestamp=start_3, from_addr=u'00003')
+        messages_2 = yield self.create_inbound_messages(
+            batch_id, 2, start_timestamp=start_2, from_addr=u'00002')
+        messages = messages_5 + messages_3 + messages_2
+
+        sorted_keys = sorted(
+            (msg['timestamp'], msg['from_addr'], msg['message_id'])
+            for msg in messages)
+        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT), addr)
+                    for (timestamp, addr, key) in sorted_keys]
+
+        inbound_stats_1 = yield self.store.batch_inbound_stats(
+            batch_id, start=all_keys[2][1])
+
+        self.assertEqual(inbound_stats_1, {"total": 8, "unique_addresses": 3})
+
+        inbound_stats_2 = yield self.store.batch_inbound_stats(
+            batch_id, start=all_keys[6][1])
+
+        self.assertEqual(inbound_stats_2, {"total": 4, "unique_addresses": 2})
+
+    @inlineCallbacks
+    def test_batch_inbound_stats_end(self):
+        """
+        batch_inbound_stats returns total and unique address counts for all
+        messages older than the end date if only the end date is specified.
+        """
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+
+        now = datetime.now()
+        start_3 = now - timedelta(5)
+        start_2 = now - timedelta(35)
+        messages_5 = yield self.create_inbound_messages(
+            batch_id, 5, start_timestamp=now, from_addr=u'00005')
+        messages_3 = yield self.create_inbound_messages(
+            batch_id, 3, start_timestamp=start_3, from_addr=u'00003')
+        messages_2 = yield self.create_inbound_messages(
+            batch_id, 2, start_timestamp=start_2, from_addr=u'00002')
+        messages = messages_5 + messages_3 + messages_2
+
+        sorted_keys = sorted(
+            (msg['timestamp'], msg['from_addr'], msg['message_id'])
+            for msg in messages)
+        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT), addr)
+                    for (timestamp, addr, key) in sorted_keys]
+
+        inbound_stats_1 = yield self.store.batch_inbound_stats(
+            batch_id, end=all_keys[-3][1])
+
+        self.assertEqual(inbound_stats_1, {"total": 8, "unique_addresses": 3})
+
+        inbound_stats_2 = yield self.store.batch_inbound_stats(
+            batch_id, end=all_keys[-7][1])
+
+        self.assertEqual(inbound_stats_2, {"total": 4, "unique_addresses": 2})
+
+    @inlineCallbacks
+    def test_batch_inbound_stats_range(self):
+        """
+        batch_inbound_stats returns total and unique address counts for all
+        messages newer than the start date and older than the end date if both
+        are specified.
+        """
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+
+        now = datetime.now()
+        start_3 = now - timedelta(5)
+        start_2 = now - timedelta(35)
+        messages_5 = yield self.create_inbound_messages(
+            batch_id, 5, start_timestamp=now, from_addr=u'00005')
+        messages_3 = yield self.create_inbound_messages(
+            batch_id, 3, start_timestamp=start_3, from_addr=u'00003')
+        messages_2 = yield self.create_inbound_messages(
+            batch_id, 2, start_timestamp=start_2, from_addr=u'00002')
+        messages = messages_5 + messages_3 + messages_2
+
+        sorted_keys = sorted(
+            (msg['timestamp'], msg['from_addr'], msg['message_id'])
+            for msg in messages)
+        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT), addr)
+                    for (timestamp, addr, key) in sorted_keys]
+
+        inbound_stats_1 = yield self.store.batch_inbound_stats(
+            batch_id, start=all_keys[2][1], end=all_keys[-3][1])
+
+        self.assertEqual(inbound_stats_1, {"total": 6, "unique_addresses": 3})
+
+        inbound_stats_2 = yield self.store.batch_inbound_stats(
+            batch_id, start=all_keys[2][1], end=all_keys[-7][1])
+
+        self.assertEqual(inbound_stats_2, {"total": 2, "unique_addresses": 2})
+
+    @inlineCallbacks
+    def test_batch_outbound_stats(self):
+        """
+        batch_outbound_stats returns total and unique address counts for the
+        whole batch if no time range is specified.
+        """
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+
+        now = datetime.now()
+        start_3 = now - timedelta(5)
+        start_2 = now - timedelta(35)
+        yield self.create_outbound_messages(
+            batch_id, 5, start_timestamp=now, to_addr=u'00005')
+        yield self.create_outbound_messages(
+            batch_id, 3, start_timestamp=start_3, to_addr=u'00003')
+        yield self.create_outbound_messages(
+            batch_id, 2, start_timestamp=start_2, to_addr=u'00002')
+
+        outbound_stats = yield self.store.batch_outbound_stats(
+            batch_id, max_results=6)
+        self.assertEqual(outbound_stats, {"total": 10, "unique_addresses": 3})
+
+    @inlineCallbacks
+    def test_batch_outbound_stats_start(self):
+        """
+        batch_outbound_stats returns total and unique address counts for all
+        messages newer than the start date if only the start date is specified.
+        """
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+
+        now = datetime.now()
+        start_3 = now - timedelta(5)
+        start_2 = now - timedelta(35)
+        messages_5 = yield self.create_outbound_messages(
+            batch_id, 5, start_timestamp=now, to_addr=u'00005')
+        messages_3 = yield self.create_outbound_messages(
+            batch_id, 3, start_timestamp=start_3, to_addr=u'00003')
+        messages_2 = yield self.create_outbound_messages(
+            batch_id, 2, start_timestamp=start_2, to_addr=u'00002')
+        messages = messages_5 + messages_3 + messages_2
+
+        sorted_keys = sorted(
+            (msg['timestamp'], msg['to_addr'], msg['message_id'])
+            for msg in messages)
+        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT), addr)
+                    for (timestamp, addr, key) in sorted_keys]
+
+        outbound_stats_1 = yield self.store.batch_outbound_stats(
+            batch_id, start=all_keys[2][1])
+
+        self.assertEqual(outbound_stats_1, {"total": 8, "unique_addresses": 3})
+
+        outbound_stats_2 = yield self.store.batch_outbound_stats(
+            batch_id, start=all_keys[6][1])
+
+        self.assertEqual(outbound_stats_2, {"total": 4, "unique_addresses": 2})
+
+    @inlineCallbacks
+    def test_batch_outbound_stats_end(self):
+        """
+        batch_outbound_stats returns total and unique address counts for all
+        messages older than the end date if only the end date is specified.
+        """
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+
+        now = datetime.now()
+        start_3 = now - timedelta(5)
+        start_2 = now - timedelta(35)
+        messages_5 = yield self.create_outbound_messages(
+            batch_id, 5, start_timestamp=now, to_addr=u'00005')
+        messages_3 = yield self.create_outbound_messages(
+            batch_id, 3, start_timestamp=start_3, to_addr=u'00003')
+        messages_2 = yield self.create_outbound_messages(
+            batch_id, 2, start_timestamp=start_2, to_addr=u'00002')
+        messages = messages_5 + messages_3 + messages_2
+
+        sorted_keys = sorted(
+            (msg['timestamp'], msg['to_addr'], msg['message_id'])
+            for msg in messages)
+        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT), addr)
+                    for (timestamp, addr, key) in sorted_keys]
+
+        outbound_stats_1 = yield self.store.batch_outbound_stats(
+            batch_id, end=all_keys[-3][1])
+
+        self.assertEqual(outbound_stats_1, {"total": 8, "unique_addresses": 3})
+
+        outbound_stats_2 = yield self.store.batch_outbound_stats(
+            batch_id, end=all_keys[-7][1])
+
+        self.assertEqual(outbound_stats_2, {"total": 4, "unique_addresses": 2})
+
+    @inlineCallbacks
+    def test_batch_outbound_stats_range(self):
+        """
+        batch_outbound_stats returns total and unique address counts for all
+        messages newer than the start date and older than the end date if both
+        are specified.
+        """
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+
+        now = datetime.now()
+        start_3 = now - timedelta(5)
+        start_2 = now - timedelta(35)
+        messages_5 = yield self.create_outbound_messages(
+            batch_id, 5, start_timestamp=now, to_addr=u'00005')
+        messages_3 = yield self.create_outbound_messages(
+            batch_id, 3, start_timestamp=start_3, to_addr=u'00003')
+        messages_2 = yield self.create_outbound_messages(
+            batch_id, 2, start_timestamp=start_2, to_addr=u'00002')
+        messages = messages_5 + messages_3 + messages_2
+
+        sorted_keys = sorted(
+            (msg['timestamp'], msg['to_addr'], msg['message_id'])
+            for msg in messages)
+        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT), addr)
+                    for (timestamp, addr, key) in sorted_keys]
+
+        outbound_stats_1 = yield self.store.batch_outbound_stats(
+            batch_id, start=all_keys[2][1], end=all_keys[-3][1])
+
+        self.assertEqual(outbound_stats_1, {"total": 6, "unique_addresses": 3})
+
+        outbound_stats_2 = yield self.store.batch_outbound_stats(
+            batch_id, start=all_keys[2][1], end=all_keys[-7][1])
+
+        self.assertEqual(outbound_stats_2, {"total": 2, "unique_addresses": 2})
 
 
 class TestMessageStoreCache(TestMessageStoreBase):
