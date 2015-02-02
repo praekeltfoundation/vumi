@@ -255,10 +255,7 @@ class MessageStore(object):
                 old_key = key_manager.add_key(key, timestamp)
                 if old_key is not None:
                     key_count += 1
-            if index_page.has_next_page():
-                index_page = yield index_page.next_page()
-            else:
-                index_page = None
+            index_page = yield index_page.next_page()
 
         yield self.cache.add_inbound_message_count(batch_id, key_count)
         for key, timestamp in key_manager:
@@ -287,10 +284,7 @@ class MessageStore(object):
                     sc = yield self.get_event_counts(old_key[0])
                     for status, count in sc.iteritems():
                         status_counts[status] += count
-            if index_page.has_next_page():
-                index_page = yield index_page.next_page()
-            else:
-                index_page = None
+            index_page = yield index_page.next_page()
 
         yield self.cache.add_outbound_message_count(batch_id, key_count)
         for status, count in status_counts.iteritems():
@@ -318,10 +312,7 @@ class MessageStore(object):
                 status_counts[status] += 1
                 if status.startswith("delivery_report."):
                     status_counts["delivery_report"] += 1
-            if index_page.has_next_page():
-                index_page = yield index_page.next_page()
-            else:
-                index_page = None
+            index_page = yield index_page.next_page()
 
         returnValue(status_counts)
 
@@ -943,6 +934,8 @@ class KeysWithTimestamps(object):
             of results.
         """
         next_page = yield self._index_page.next_page()
+        if next_page is None:
+            returnValue(None)
         returnValue(type(self)(self._message_store, self._batch_id, next_page))
 
     def has_next_page(self):
@@ -995,6 +988,8 @@ class KeysWithAddresses(object):
             results.
         """
         next_page = yield self._index_page.next_page()
+        if next_page is None:
+            returnValue(None)
         returnValue(type(self)(self._message_store, self._batch_id, next_page))
 
     def has_next_page(self):
