@@ -845,10 +845,7 @@ class MessageStore(object):
             results = list(page)
             total += len(results)
             unique_addresses.update(addr for key, timestamp, addr in results)
-            if page.has_next_page():
-                page = yield page.next_page()
-            else:
-                page = None
+            page = yield page.next_page()
 
         returnValue({
             "total": total,
@@ -896,10 +893,7 @@ class MessageStore(object):
             results = list(page)
             total += len(results)
             unique_addresses.update(addr for key, timestamp, addr in results)
-            if page.has_next_page():
-                page = yield page.next_page()
-            else:
-                page = None
+            page = yield page.next_page()
 
         returnValue({
             "total": total,
