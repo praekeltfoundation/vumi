@@ -43,13 +43,16 @@ def to_json(obj):
 
 class Message(object):
     """
-    Start of a somewhat unified message object to be
-    used internally in Vumi and while being in transit
-    over AMQP
+    A unified message object used by Vumi when transmitting messages over AMQP
+    and occassionally as a standardised JSON format for use in external APIs.
 
-    scary transport format -> Vumi Tansport -> Unified Message -> Vumi Worker
-
+    The special ``.cache`` attribute stores a dictionary of data that is not
+    stored by the ``vumi.fields.VumiMessage`` and hence not stored by the
+    Vumi message store.
     """
+
+    # name of the special attribute that isn't stored by the message store
+    _CACHE_ATTRIBUTE = "__cache__"
 
     def __init__(self, _process_fields=True, **kwargs):
         if _process_fields:
@@ -114,7 +117,7 @@ class Message(object):
         """
         A special payload attribute that isn't stored by the message store.
         """
-        return self.payload.setdefault('__cache__', {})
+        return self.payload.setdefault(self._CACHE_ATTRIBUTE, {})
 
 
 class TransportMessage(Message):

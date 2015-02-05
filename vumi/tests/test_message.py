@@ -23,7 +23,7 @@ class MessageTest(VumiTestCase):
         self.assertEqual(msg.cache, {
             "thing": "dont_store_me",
         })
-        self.assertEqual(msg["__cache__"], {
+        self.assertEqual(msg[Message._CACHE_ATTRIBUTE], {
             "thing": "dont_store_me",
         })
 
