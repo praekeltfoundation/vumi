@@ -4,9 +4,11 @@
 
 from datetime import datetime
 
+from vumi.message import Message
+
 from vumi.persist.fields import (
     ValidationError, Field, Integer, Unicode, Tag, Timestamp, Json,
-    ListOf, SetOf, Dynamic, FieldWithSubtype, Boolean)
+    ListOf, SetOf, Dynamic, FieldWithSubtype, Boolean, VumiMessage)
 from vumi.tests.helpers import VumiTestCase
 
 
@@ -189,3 +191,14 @@ class TestSetOf(VumiTestCase):
         """
         f = SetOf()
         self.assertEqual(f.from_riak([1, 2, 3]), set([1, 2, 3]))
+
+
+class TestVumiMessage(VumiTestCase):
+    def test_validate(self):
+        f = VumiMessage(Message)
+        msg = Message()
+        f.validate(msg)
+        self.assertRaises(
+            ValidationError, f.validate, u'this is not a vumi message')
+        self.assertRaises(
+            ValidationError, f.validate, None)
