@@ -109,6 +109,13 @@ class Message(object):
     def copy(self):
         return self.from_json(self.to_json())
 
+    @property
+    def cache(self):
+        """
+        A special payload attribute that isn't stored by the message store.
+        """
+        return self.payload.setdefault('__cache__', {})
+
 
 class TransportMessage(Message):
     """Common base class for messages sent to or from a transport."""
