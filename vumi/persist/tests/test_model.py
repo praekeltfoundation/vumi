@@ -854,7 +854,8 @@ class ModelTestMixin(object):
     def test_vumimessage_field_excludes_cache(self):
         msg_model = self.manager.proxy(VumiMessageModel)
         cache_attr = TransportUserMessage._CACHE_ATTRIBUTE
-        msg = self.mkmsg(extra="bar", __cache__={"cache": "me"})
+        msg = self.mkmsg(extra="bar")
+        msg.cache["cache"] = "me"
         self.assertEqual(msg[cache_attr], {"cache": "me"})
 
         m1 = msg_model("foo", msg=msg)
