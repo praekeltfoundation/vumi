@@ -46,9 +46,9 @@ class Message(object):
     A unified message object used by Vumi when transmitting messages over AMQP
     and occassionally as a standardised JSON format for use in external APIs.
 
-    The special ``.cache`` attribute stores a dictionary of data that is not
-    stored by the ``vumi.fields.VumiMessage`` and hence not stored by the
-    Vumi message store.
+    The special ``.cache`` property stores a dictionary of data that is not
+    stored by the :class:`vumi.fields.VumiMessage` field and hence not stored
+    by Vumi's message store.
     """
 
     # name of the special attribute that isn't stored by the message store
