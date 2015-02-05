@@ -28,14 +28,6 @@ class Options(usage.Options):
     address, and message_id are returned in a comma-separated format.
     """
 
-    def ensure_dependent_option(self, needed, needs):
-        """
-        Raise UsageError if `needs` is provided without `needed`.
-        """
-        if self[needed] is None and self[needs] is not None:
-            raise usage.UsageError("%s requires %s to be specified." % (
-                needs, needed))
-
     def postOptions(self):
         if self["batch"] is None:
             raise usage.UsageError("Please specify a batch.")
