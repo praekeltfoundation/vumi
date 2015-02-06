@@ -264,6 +264,7 @@ class VumiMessageDescriptor(FieldDescriptor):
 
     def setup(self, model_cls):
         super(VumiMessageDescriptor, self).setup(model_cls)
+        self.message_class = self.field.message_class
         if self.field.prefix is None:
             self.prefix = "%s." % self.key
         else:
@@ -286,6 +287,8 @@ class VumiMessageDescriptor(FieldDescriptor):
         if msg is None:
             return
         for key, value in msg.payload.iteritems():
+            if key == self.message_class._CACHE_ATTRIBUTE:
+                continue
             # TODO: timestamp as datetime in payload must die.
             if key == "timestamp":
                 value = self._timestamp_to_json(value)
@@ -318,6 +321,11 @@ class VumiMessage(Field):
     :param string prefix:
         The prefix to use when storing message payload keys in Riak. Default is
         the name of the field followed by a dot ('.').
+
+    Note::
+
+       The special message attribute ``__cache__`` is not stored by this
+       field.
     """
     descriptor_class = VumiMessageDescriptor
 

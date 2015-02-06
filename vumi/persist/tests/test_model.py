@@ -850,6 +850,22 @@ class ModelTestMixin(object):
         m1.msg = msg2
         self.assertTrue("extra" not in m1.msg)
 
+    @Manager.calls_manager
+    def test_vumimessage_field_excludes_cache(self):
+        msg_model = self.manager.proxy(VumiMessageModel)
+        cache_attr = TransportUserMessage._CACHE_ATTRIBUTE
+        msg = self.mkmsg(extra="bar")
+        msg.cache["cache"] = "me"
+        self.assertEqual(msg[cache_attr], {"cache": "me"})
+
+        m1 = msg_model("foo", msg=msg)
+        self.assertTrue(cache_attr not in m1.msg)
+        yield m1.save()
+
+        m2 = yield msg_model.load("foo")
+        self.assertTrue(cache_attr not in m2.msg)
+        self.assertEqual(m2.msg, m1.msg)
+
     def _create_dynamic_instance(self, dynamic_model):
         d1 = dynamic_model("foo", a=u"ab")
         d1.contact_info['cellphone'] = u"+27123"
