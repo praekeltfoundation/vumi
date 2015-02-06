@@ -33,6 +33,10 @@ install:
   - "pip install -r requirements.pip --use-wheel"
   - "pip install coveralls --use-wheel"
   - "python setup.py install"
+before_script:
+  # To see what version of Riak we're running and check that it's happy.
+  - riak version
+  - riak-admin member-status
 script:
   - VUMITEST_REDIS_DB=1 VUMI_TEST_NODE_PATH="$(which node)" coverage run --source=vumi `which trial` vumi
 after_success:
