@@ -17,15 +17,14 @@ services:
   - redis-server
 before_install:
   # We need Riak 1.4, so we add Basho's repo and install from there.
-  # NOTE: This is unacceptably hacky. :-(
+  # Additionally, we remove existing Riak data and replace the config with ours.
   - sudo service riak stop
   - "curl http://apt.basho.com/gpg/basho.apt.key | sudo apt-key add -"
   - sudo bash -c "echo deb http://apt.basho.com $(lsb_release -sc) main > /etc/apt/sources.list.d/basho.list"
   - sudo apt-get -qq update
   - sudo apt-get install -qq -y --force-yes riak=1.4.12-1
   - sudo rm -rf /var/lib/riak/*
-  - sudo sed -i.bak 's/{storage_backend, riak_kv_bitcask_backend}/{storage_backend, riak_kv_eleveldb_backend}/' /etc/riak/app.config
-  - sudo sed -i.bak 's/{enabled, false}$/{enabled, true}/' /etc/riak/app.config
+  - sudo cp utils/app.config /etc/riak/app.config
   - sudo service riak start
   # We need the protobuf-compiler so we can install Riak client libraries.
   - sudo apt-get install -qq protobuf-compiler
