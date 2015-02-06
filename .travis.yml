@@ -20,7 +20,7 @@ before_install:
   - "curl http://apt.basho.com/gpg/basho.apt.key | sudo apt-key add -"
   - sudo bash -c "echo deb http://apt.basho.com $(lsb_release -sc) main > /etc/apt/sources.list.d/basho.list"
   - sudo apt-get update
-  - sudo apt-get install -q riak=1.4
+  - sudo apt-get install -q riak=1.4.12
   # We need the protobuf-compiler so we can install Riak client libraries.
   - sudo apt-get install -qq protobuf-compiler
 install:
