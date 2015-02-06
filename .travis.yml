@@ -9,18 +9,21 @@ env:
   - TWISTED_VERSION="Twisted"
 matrix:
   include:
-    # Test against the oldest version of Twisted that we claim to support
+    # Test against the oldest version of Twisted that we claim to support.
     # This is a separate matrix inclusion to avoid spawning unnecessary builds.
     - python: "2.7"
       env: TWISTED_VERSION="Twisted==13.1.0"
 services:
-  - riak
   - redis-server
 before_install:
-  # we need the protobuf-compiler so we can install Riak client libraries
+  # We need Riak 1.4, so we add Basho's repo and install from there.
+  - "curl http://apt.basho.com/gpg/basho.apt.key | sudo apt-key add -"
+  - sudo bash -c "echo deb http://apt.basho.com $(lsb_release -sc) main > /etc/apt/sources.list.d/basho.list"
+  - sudo apt-get update
+  - sudo apt-get install -q riak=1.4
+  # We need the protobuf-compiler so we can install Riak client libraries.
   - sudo apt-get install -qq protobuf-compiler
 install:
-  # We easy_install a binary riak_pb package because pip install needs `protoc'.
   - "pip install ${TWISTED_VERSION}"
   - "pip install -r requirements.pip --use-wheel"
   - "pip install coveralls --use-wheel"
