@@ -729,18 +729,35 @@ class ForeignKeyDescriptor(FieldDescriptor):
             self.index_name = "%s_bin" % self.key
         else:
             self.index_name = self.field.index
-        if self.field.backlink is None:
-            self.backlink_name = model_cls.__name__.lower() + "s"
-        else:
-            self.backlink_name = self.field.backlink
+
+        backlink_name = self.field.backlink
+        if backlink_name is None:
+            backlink_name = model_cls.__name__.lower() + "s"
         self.other_model.backlinks.declare_backlink(
-            self.backlink_name, self.reverse_lookup_keys)
+            backlink_name, self.reverse_lookup_keys)
+
+        backlink_keys_name = backlink_name + "_keys"
+        if backlink_keys_name.endswith("s_keys"):
+            backlink_keys_name = backlink_name[:-1] + "_keys"
+        self.other_model.backlinks.declare_backlink(
+            backlink_keys_name, self.reverse_lookup_keys_paginated)
 
     def reverse_lookup_keys(self, modelobj, manager=None):
         if manager is None:
             manager = modelobj.manager
         return manager.index_keys(
             self.model_cls, self.index_name, modelobj.key)
+
+    def reverse_lookup_keys_paginated(self, modelobj, manager=None,
+                                      max_results=None, continuation=None):
+        """
+        Perform a paginated index query for backlinked objects.
+        """
+        if manager is None:
+            manager = modelobj.manager
+        return manager.index_keys_page(
+            self.model_cls, self.index_name, modelobj.key,
+            max_results=max_results, continuation=continuation)
 
     def clean(self, modelobj):
         if self.key not in modelobj._riak_object.get_data():
@@ -821,7 +838,9 @@ class ForeignKey(Field):
         The name to use for the backlink on :attr:`other_model.backlinks`.
         The default is the name of the class the field is on converted
         to lowercase and with 's' appended (e.g. 'FooModel' would result
-        in :attr:`other_model.backlinks.foomodels`).
+        in :attr:`other_model.backlinks.foomodels`). This is also used (with
+        `_keys` appended and a trailing `s` omitted if one is present) for the
+        paginated keys backlink function.
     """
     descriptor_class = ForeignKeyDescriptor
 
@@ -929,7 +948,9 @@ class ManyToMany(ForeignKey):
         The name to use for the backlink on :attr:`other_model.backlinks`.
         The default is the name of the class the field is on converted
         to lowercase and with 's' appended (e.g. 'FooModel' would result
-        in :attr:`other_model.backlinks.foomodels`).
+        in :attr:`other_model.backlinks.foomodels`). This is also used (with
+        `_keys` appended and a trailing `s` omitted if one is present) for the
+        paginated keys backlink function.
     """
     descriptor_class = ManyToManyDescriptor
     initializable = False

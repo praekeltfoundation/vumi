@@ -1182,6 +1182,11 @@ class ModelTestMixin(object):
 
     @Manager.calls_manager
     def test_reverse_foreignkey_fields(self):
+        """
+        When we declare a ForeignKey field, we add both a paginated index
+        lookup method and a legacy non-paginated index lookup method to the
+        foreign model's backlinks attribute.
+        """
         fk_model = self.manager.proxy(ForeignKeyModel)
         simple_model = self.manager.proxy(SimpleModel)
         s1 = simple_model("foo", a=5, b=u'3')
@@ -1196,6 +1201,11 @@ class ModelTestMixin(object):
         s2 = yield simple_model.load("foo")
         results = yield s2.backlinks.foreignkeymodels()
         self.assertEqual(sorted(results), ["bar1", "bar2"])
+
+        s2 = yield simple_model.load("foo")
+        results = yield s2.backlinks.foreignkeymodel_keys()
+        self.assertEqual(sorted(results), ["bar1", "bar2"])
+        self.assertEqual(results.has_next_page(), False)
 
     @Manager.calls_manager
     def load_all_bunches_flat(self, m2m_field):
