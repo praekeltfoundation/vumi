@@ -1202,10 +1202,9 @@ class ModelTestMixin(object):
         results = yield s2.backlinks.foreignkeymodels()
         self.assertEqual(sorted(results), ["bar1", "bar2"])
 
-        s2 = yield simple_model.load("foo")
-        results = yield s2.backlinks.foreignkeymodel_keys()
-        self.assertEqual(sorted(results), ["bar1", "bar2"])
-        self.assertEqual(results.has_next_page(), False)
+        results_p1 = yield s2.backlinks.foreignkeymodel_keys()
+        self.assertEqual(sorted(results_p1), ["bar1", "bar2"])
+        self.assertEqual(results_p1.has_next_page(), False)
 
     @Manager.calls_manager
     def load_all_bunches_flat(self, m2m_field):
@@ -1340,9 +1339,17 @@ class ModelTestMixin(object):
         results = yield s1.backlinks.manytomanymodels()
         self.assertEqual(sorted(results), ["bar1", "bar2"])
 
+        results_p1 = yield s1.backlinks.manytomanymodel_keys()
+        self.assertEqual(sorted(results_p1), ["bar1", "bar2"])
+        self.assertEqual(results_p1.has_next_page(), False)
+
         s2 = yield simple_model.load("foo2")
         results = yield s2.backlinks.manytomanymodels()
         self.assertEqual(sorted(results), ["bar1"])
+
+        results_p1 = yield s2.backlinks.manytomanymodel_keys()
+        self.assertEqual(sorted(results_p1), ["bar1"])
+        self.assertEqual(results_p1.has_next_page(), False)
 
     def test_timestamp_field_setting(self):
         timestamp_model = self.manager.proxy(TimestampModel)
