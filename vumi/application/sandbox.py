@@ -344,8 +344,8 @@ class RedisResource(SandboxResource):
             else:
                 api.log('Redis hard limit of %s keys reached for sandbox %s. '
                         'No more keys can be written.' % (
-                            api.sandbox_id,
-                            self.keys_per_user_hard),
+                            self.keys_per_user_hard,
+                            api.sandbox_id),
                         logging.ERROR)
                 yield self.redis.incr(count_key, -1)
                 returnValue(False)
