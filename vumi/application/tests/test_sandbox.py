@@ -709,7 +709,7 @@ class TestRedisResource(ResourceTestCaseBase):
         yield self.check_metric('bar', None, 100)
         self.assert_api_log(
             logging.ERROR,
-            'Redis hard limit of test_id keys reached for sandbox 100. '
+            'Redis hard limit of 100 keys reached for sandbox test_id. '
             'No more keys can be written.'
         )
 
@@ -723,7 +723,7 @@ class TestRedisResource(ResourceTestCaseBase):
         self.check_reply(reply, success=False, reason='Too many keys')
         self.assert_api_log(
             logging.ERROR,
-            'Redis hard limit of test_id keys reached for sandbox 10. '
+            'Redis hard limit of 10 keys reached for sandbox test_id. '
             'No more keys can be written.'
         )
 
@@ -813,7 +813,7 @@ class TestRedisResource(ResourceTestCaseBase):
         self.assertEqual(level, logging.ERROR)
         self.assertEqual(
             message,
-            'Redis hard limit of test_id keys reached for sandbox 100. '
+            'Redis hard limit of 100 keys reached for sandbox test_id. '
             'No more keys can be written.')
 
 
