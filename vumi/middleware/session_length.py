@@ -31,6 +31,7 @@ class SessionLengthMiddleware(BaseMiddleware):
     def teardown_middleware(self):
         yield self.redis.close_manager()
 
+    @inlineCallbacks
     def handle_inbound(self, message, connector_name):
         redis_key = '%s:%s' % (message.get('from_addr'), 'session_created')
         if message.get('event_type') == self.SESSION_NEW:
@@ -39,7 +40,9 @@ class SessionLengthMiddleware(BaseMiddleware):
             created_time = yield self.redis.get(redis_key)
             if created_time:
                 created_time = float(created_time)
-                time_diff = time.time() - created_time
-                message['session_length'] = time_diff
+                if not message['helper_metadata'].get('billing'):
+                    message['helper_metadata']['billing'] = {}
+                message['helper_metadata']['billing']['session_length'] = (
+                    time.time() - created_time)
                 yield self.redis.delete(redis_key)
         returnValue(message)
