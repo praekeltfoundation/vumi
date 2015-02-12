@@ -543,7 +543,7 @@ class TestXmlOverTcpClient(VumiTestCase, XmlOverTcpClientServerMixin):
         self.assert_in_log(
             'err',
             "(208) Invalid Message: Missing mandatory fields in received "
-            "packet: %s" % ['errorCode', 'authMsg'])
+            "packet: %s" % ['authMsg', 'errorCode'])
 
         received_packet = yield self.server.wait_for_data()
         self.assertEqual(received_packet, utils.mk_packet(
@@ -587,7 +587,7 @@ class TestXmlOverTcpClient(VumiTestCase, XmlOverTcpClientServerMixin):
         self.assert_in_log(
             'err',
             "(208) Invalid Message: Missing mandatory fields in received "
-            "packet: %s" % missing_fields)
+            "packet: %s" % sorted(missing_fields))
 
         received_packet = yield self.server.wait_for_data()
         self.assertEqual(received_packet, utils.mk_packet(
