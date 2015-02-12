@@ -2,7 +2,7 @@
 
 import time
 
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.message.TransportUserMessage import SESSION_NEW, SESSION_CLOSE
 from vumi.middleware.base import BaseMiddleware
@@ -28,16 +28,15 @@ class SessionLengthMiddleware(BaseMiddleware):
     def teardown_middleware(self):
         yield self.redis.close_manager()
 
-    def handle_event(self, event, connector_name):
-        if event.get('event_type') == SESSION_NEW:
-            self.redis.set(
-                '%s:%s' % (event.get('from_addr'), 'session_created'),
-                str(time.time()))
-        elif event.get('event_type') == SESSION_CLOSE:
-            created_time = self.redis.get(
-                '%s:%s' % (event.get('from_addr'), 'session_created'))
+    def handle_inbound(self, message, connector_name):
+        redis_key = '%s:%s' % (message.get('from_addr'), 'session_created')
+        if message.get('event_type') == SESSION_NEW:
+            yield self.redis.set(redis_key, str(time.time()))
+        elif message.get('event_type') == SESSION_CLOSE:
+            created_time = yield self.redis.get(redis_key)
             if created_time:
                 created_time = float(created_time)
                 time_diff = time.time() - created_time
-                event['session_length'] = time_diff
-        return event
+                message['session_length'] = time_diff
+                yield self.redis.delete(redis_key)
+        returnValue(message)
