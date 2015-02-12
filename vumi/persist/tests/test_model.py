@@ -727,6 +727,9 @@ class ModelTestMixin(object):
         self.assertEqual(sorted(keys3), [])
         self.assertEqual(keys3.has_next_page(), False)
 
+        no_keys = yield keys3.next_page()
+        self.assertEqual(no_keys, None)
+
     @Manager.calls_manager
     def test_index_keys_page_explicit_continuation(self):
         indexed_model = self.manager.proxy(IndexedModel)
@@ -846,6 +849,22 @@ class ModelTestMixin(object):
         msg2 = self.mkmsg()
         m1.msg = msg2
         self.assertTrue("extra" not in m1.msg)
+
+    @Manager.calls_manager
+    def test_vumimessage_field_excludes_cache(self):
+        msg_model = self.manager.proxy(VumiMessageModel)
+        cache_attr = TransportUserMessage._CACHE_ATTRIBUTE
+        msg = self.mkmsg(extra="bar")
+        msg.cache["cache"] = "me"
+        self.assertEqual(msg[cache_attr], {"cache": "me"})
+
+        m1 = msg_model("foo", msg=msg)
+        self.assertTrue(cache_attr not in m1.msg)
+        yield m1.save()
+
+        m2 = yield msg_model.load("foo")
+        self.assertTrue(cache_attr not in m2.msg)
+        self.assertEqual(m2.msg, m1.msg)
 
     def _create_dynamic_instance(self, dynamic_model):
         d1 = dynamic_model("foo", a=u"ab")
@@ -1163,6 +1182,11 @@ class ModelTestMixin(object):
 
     @Manager.calls_manager
     def test_reverse_foreignkey_fields(self):
+        """
+        When we declare a ForeignKey field, we add both a paginated index
+        lookup method and a legacy non-paginated index lookup method to the
+        foreign model's backlinks attribute.
+        """
         fk_model = self.manager.proxy(ForeignKeyModel)
         simple_model = self.manager.proxy(SimpleModel)
         s1 = simple_model("foo", a=5, b=u'3')
@@ -1177,6 +1201,10 @@ class ModelTestMixin(object):
         s2 = yield simple_model.load("foo")
         results = yield s2.backlinks.foreignkeymodels()
         self.assertEqual(sorted(results), ["bar1", "bar2"])
+
+        results_p1 = yield s2.backlinks.foreignkeymodel_keys()
+        self.assertEqual(sorted(results_p1), ["bar1", "bar2"])
+        self.assertEqual(results_p1.has_next_page(), False)
 
     @Manager.calls_manager
     def load_all_bunches_flat(self, m2m_field):
@@ -1311,9 +1339,17 @@ class ModelTestMixin(object):
         results = yield s1.backlinks.manytomanymodels()
         self.assertEqual(sorted(results), ["bar1", "bar2"])
 
+        results_p1 = yield s1.backlinks.manytomanymodel_keys()
+        self.assertEqual(sorted(results_p1), ["bar1", "bar2"])
+        self.assertEqual(results_p1.has_next_page(), False)
+
         s2 = yield simple_model.load("foo2")
         results = yield s2.backlinks.manytomanymodels()
         self.assertEqual(sorted(results), ["bar1"])
+
+        results_p1 = yield s2.backlinks.manytomanymodel_keys()
+        self.assertEqual(sorted(results_p1), ["bar1"])
+        self.assertEqual(results_p1.has_next_page(), False)
 
     def test_timestamp_field_setting(self):
         timestamp_model = self.manager.proxy(TimestampModel)

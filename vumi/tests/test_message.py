@@ -16,6 +16,17 @@ class MessageTest(VumiTestCase):
         self.assertTrue('a' in Message(a=5))
         self.assertFalse('a' in Message(b=5))
 
+    def test_message_cache(self):
+        msg = Message(a=5)
+        self.assertEqual(msg.cache, {})
+        msg.cache["thing"] = "dont_store_me"
+        self.assertEqual(msg.cache, {
+            "thing": "dont_store_me",
+        })
+        self.assertEqual(msg[Message._CACHE_ATTRIBUTE], {
+            "thing": "dont_store_me",
+        })
+
 
 class TransportMessageTestMixin(object):
     def make_message(self, **fields):
