@@ -166,3 +166,25 @@ class TestAddressPrefixProviderSettingMiddleware(VumiTestCase):
         self.assertEqual(msg.get("provider"), None)
         processed_msg = mw.handle_outbound(msg, "dummy_connector")
         self.assertEqual(processed_msg.get("provider"), "MY-MNO")
+
+    def test_provider_not_overwritten_for_inbound(self):
+        """
+        If a provider already exists for an inbound message, it isn't
+        overwritten.
+        """
+        mw = self.mk_middleware({"provider_prefixes": {"+123": "MY-MNO"}})
+        msg = self.msg_helper.make_inbound(
+            None, to_addr="+345", from_addr="+12345", provider="OTHER-MNO")
+        processed_msg = mw.handle_inbound(msg, "dummy_connector")
+        self.assertEqual(processed_msg.get("provider"), "OTHER-MNO")
+
+    def test_provider_not_overwritten_for_outbound(self):
+        """
+        If a provider already exists for an outbound message, it isn't
+        overwritten.
+        """
+        mw = self.mk_middleware({"provider_prefixes": {"+123": "MY-MNO"}})
+        msg = self.msg_helper.make_outbound(
+            None, to_addr="+1234567", from_addr="+345", provider="OTHER-MNO")
+        processed_msg = mw.handle_outbound(msg, "dummy_connector")
+        self.assertEqual(processed_msg.get("provider"), "OTHER-MNO")
