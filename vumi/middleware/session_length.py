@@ -4,7 +4,7 @@ import time
 
 from twisted.internet.defer import inlineCallbacks, returnValue
 
-from vumi.message.TransportUserMessage import SESSION_NEW, SESSION_CLOSE
+from vumi.message import TransportUserMessage
 from vumi.middleware.base import BaseMiddleware
 from vumi.persist.txredis_manager import TxRedisManager
 
@@ -19,6 +19,9 @@ class SessionLengthMiddleware(BaseMiddleware):
     :param dict redis:
         Redis configuration parameters.
     """
+    SESSION_NEW, SESSION_CLOSE = (
+        TransportUserMessage.SESSION_NEW, TransportUserMessage.SESSION_CLOSE)
+
     @inlineCallbacks
     def setup_middleware(self):
         r_config = self.config.get('redis_manager', {})
@@ -30,9 +33,9 @@ class SessionLengthMiddleware(BaseMiddleware):
 
     def handle_inbound(self, message, connector_name):
         redis_key = '%s:%s' % (message.get('from_addr'), 'session_created')
-        if message.get('event_type') == SESSION_NEW:
+        if message.get('event_type') == self.SESSION_NEW:
             yield self.redis.set(redis_key, str(time.time()))
-        elif message.get('event_type') == SESSION_CLOSE:
+        elif message.get('event_type') == self.SESSION_CLOSE:
             created_time = yield self.redis.get(redis_key)
             if created_time:
                 created_time = float(created_time)
