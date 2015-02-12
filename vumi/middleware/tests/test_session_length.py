@@ -72,3 +72,43 @@ class TestStaticProviderSettingMiddleware(VumiTestCase):
                 msg['helper_metadata']['billing']['session_start'], float))
         self.assertTrue(isinstance(
             msg['helper_metadata']['billing']['session_end'], float))
+
+    @inlineCallbacks
+    def test_outgoing_message_session_start(self):
+        mw = yield self.mk_middleware()
+        msg_start = self.mk_msg('+12345', '+54321')
+
+        msg = yield mw.handle_outbound(msg_start, "dummy_connector")
+        value = yield self.redis.get('+12345:session_created')
+        self.assertTrue(value is not None)
+        self.assertTrue(isinstance(
+                msg['helper_metadata']['billing']['session_start'], float))
+
+    @inlineCallbacks
+    def test_outgoing_message_session_end(self):
+        mw = yield self.mk_middleware()
+        msg_end = self.mk_msg('+12345', '+54321', session_event=SESSION_CLOSE)
+
+        msg = yield mw.handle_outbound(msg_end, "dummy_connector")
+        self.assertTrue(isinstance(
+                msg['helper_metadata']['billing']['session_end'], float))
+
+    @inlineCallbacks
+    def test_outgoing_message_session_start_end(self):
+        mw = yield self.mk_middleware()
+        msg_start = self.mk_msg('+12345', '+54321')
+        msg_end = self.mk_msg('+12345', '+54321', session_event=SESSION_CLOSE)
+
+        msg = yield mw.handle_outbound(msg_start, "dummy_connector")
+        value = yield self.redis.get('+12345:session_created')
+        self.assertTrue(value is not None)
+        self.assertTrue(isinstance(
+                msg['helper_metadata']['billing']['session_start'], float))
+
+        msg = yield mw.handle_outbound(msg_end, "dummy_connector")
+        value = yield self.redis.get('+54321:session_created')
+        self.assertTrue(value is None)
+        self.assertTrue(isinstance(
+                msg['helper_metadata']['billing']['session_start'], float))
+        self.assertTrue(isinstance(
+            msg['helper_metadata']['billing']['session_end'], float))
