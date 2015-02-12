@@ -56,6 +56,11 @@ class DummyService(Service):
             self.wait_on_protocol_deferreds.append(d)
             return d
 
+    def is_bound(self):
+        if self.protocol is not None:
+            return self.protocol.is_bound()
+        return False
+
 
 class SMPPHelper(object):
     def __init__(self, string_transport, transport, protocol):
@@ -169,6 +174,8 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         protocol = yield transport.service.get_protocol()
 
         service = SmppService(None, None)
+        self.assertEqual(service._protocol, None)
+        self.assertEqual(service.is_bound(), False)
 
         d = service.get_protocol()
         self.assertEqual(len(service.wait_on_protocol_deferreds), 1)
@@ -176,6 +183,11 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         received_protocol = yield d
         self.assertEqual(received_protocol, protocol)
         self.assertEqual(len(service.wait_on_protocol_deferreds), 0)
+        self.assertEqual(service.is_bound(), True)
+
+        # Replace protocol.is_bound() to test that service.is_bound() uses it.
+        received_protocol.is_bound = lambda: False
+        self.assertEqual(service.is_bound(), False)
 
     @inlineCallbacks
     def test_setup_transport_host_port_fallback(self):
@@ -831,12 +843,10 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         [ssm_pdu1, ssm_pdu2] = yield smpp_helper.wait_for_pdus(2)
         yield smpp_helper.handle_pdu(
             SubmitSMResp(sequence_number=seq_no(ssm_pdu1),
-                         message_id='foo1',
-                         command_status='ESME_RTHROTTLED'))
+                         message_id='foo1', command_status='ESME_RTHROTTLED'))
         yield smpp_helper.handle_pdu(
             SubmitSMResp(sequence_number=seq_no(ssm_pdu2),
-                         message_id='foo2',
-                         command_status='ESME_RTHROTTLED'))
+                         message_id='foo2', command_status='ESME_RTHROTTLED'))
 
         # Advance clock, still throttled.
         self.clock.advance(transport_config.throttle_delay)
@@ -872,6 +882,62 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.assertEqual(event1['user_message_id'], msg1['message_id'])
         self.assertEqual(event2['event_type'], 'ack')
         self.assertEqual(event2['user_message_id'], msg2['message_id'])
+
+    @inlineCallbacks
+    def test_mt_sms_reconnect_while_throttled(self):
+        """
+        If we reconnect while throttled, we don't try to unthrottle before we
+        the connection is in a suitable state.
+        """
+        smpp_helper = yield self.get_smpp_helper()
+        smpp_service = smpp_helper.transport.service
+        transport_config = smpp_helper.transport.get_static_config()
+        msg = self.tx_helper.make_outbound('hello world')
+        yield self.tx_helper.dispatch_outbound(msg)
+        [ssm_pdu] = yield smpp_helper.wait_for_pdus(1)
+        yield smpp_helper.handle_pdu(
+            SubmitSMResp(sequence_number=seq_no(ssm_pdu),
+                         message_id='foo1',
+                         command_status='ESME_RTHROTTLED'))
+
+        # Drop SMPP connection and check throttling.
+        with LogCatcher(message="Can't check throttling while unbound") as lc:
+            smpp_service.stopService()
+            self.clock.advance(transport_config.throttle_delay)
+        [logmsg] = lc.logs
+        self.assertEqual(
+            logmsg["message"][0],
+            "Can't check throttling while unbound, trying later.")
+
+        # Reconnect (but don't bind) and check throttling.
+        with LogCatcher(message="Can't check throttling while unbound") as lc:
+            smpp_helper.transport.service.startService()
+            protocol = yield smpp_service.get_protocol()
+            protocol.makeConnection(self.string_transport)
+            [bind_pdu] = yield smpp_helper.wait_for_pdus(1)
+            self.clock.advance(transport_config.throttle_delay)
+        [logmsg] = lc.logs
+        self.assertEqual(
+            logmsg["message"][0],
+            "Can't check throttling while unbound, trying later.")
+
+        # Bind and check throttling.
+        with LogCatcher(message="Can't check throttling while unbound") as lc:
+            yield bind_protocol(
+                self.string_transport, protocol, bind_pdu=bind_pdu)
+            self.clock.advance(transport_config.throttle_delay)
+
+        [ssm_pdu_retry] = yield smpp_helper.wait_for_pdus(1)
+        yield smpp_helper.handle_pdu(
+            SubmitSMResp(sequence_number=seq_no(ssm_pdu_retry),
+                         message_id='foo',
+                         command_status='ESME_ROK'))
+        self.assertEqual(lc.logs, [])
+        self.assertEqual(short_message(ssm_pdu), 'hello world')
+        self.assertEqual(short_message(ssm_pdu_retry), 'hello world')
+        [event] = yield self.tx_helper.wait_for_dispatched_events(1)
+        self.assertEqual(event['event_type'], 'ack')
+        self.assertEqual(event['user_message_id'], msg['message_id'])
 
     @inlineCallbacks
     def test_mt_sms_tps_limits(self):
