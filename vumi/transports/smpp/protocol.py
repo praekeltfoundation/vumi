@@ -6,8 +6,7 @@ from twisted.internet import reactor
 from twisted.internet.protocol import Protocol, ClientFactory
 from twisted.internet.task import LoopingCall
 from twisted.internet.defer import (
-    inlineCallbacks, returnValue, maybeDeferred, DeferredQueue, succeed,
-    TimeoutError)
+    inlineCallbacks, returnValue, maybeDeferred, DeferredQueue, succeed)
 
 from smpp.pdu import unpack_pdu
 from smpp.pdu_builder import (
@@ -22,6 +21,7 @@ from vumi.transports.smpp.pdu_utils import (
     pdu_ok, seq_no, command_status, command_id, message_id, chop_pdu_stream)
 
 GSM_MAX_SMS_BYTES = 140
+GSM_MAX_SMS_7BIT_CHARS = 160
 
 
 def require_bind(func):
@@ -200,7 +200,7 @@ class EsmeTransceiver(Protocol):
         :param smpp.pdu_builder.PDU pdu:
             The PDU object to send.
         """
-        self.emit('<< %r' % (pdu.get_obj(),))
+        self.emit('OUTGOING >> %r' % (pdu.get_obj(),))
         return self.transport.write(pdu.get_bin())
 
     def dataReceived(self, data):
@@ -226,7 +226,7 @@ class EsmeTransceiver(Protocol):
             The dict result one gets when calling ``smpp.pdu.unpack_pdu()``
             on the received PDU
         """
-        self.emit('>> %r' % (pdu,))
+        self.emit('INCOMING << %r' % (pdu,))
         handler = getattr(self, 'handle_%s' % (command_id(pdu),),
                           self.on_unsupported_command_id)
         return maybeDeferred(handler, pdu)
@@ -324,11 +324,12 @@ class EsmeTransceiver(Protocol):
         # or have a normal SMS that needs to be decoded and handled.
         content_parts = self.deliver_sm_processor.decode_pdus([pdu])
         if not all([isinstance(part, unicode) for part in content_parts]):
+            command_status = self.config.deliver_sm_decoding_error
             log.msg('Not all parts of the PDU were able to be decoded. '
-                    'Responding wtih ESME_RDELIVERYFAILURE.',
+                    'Responding with %s.' % (command_status,),
                     parts=content_parts)
             self.send_pdu(DeliverSMResp(seq_no(pdu),
-                          command_status='ESME_RDELIVERYFAILURE'))
+                          command_status=command_status))
             return
 
         content = u''.join(content_parts)
@@ -345,12 +346,13 @@ class EsmeTransceiver(Protocol):
                           command_status="ESME_ROK"))
             return
 
+        command_status = self.config.deliver_sm_decoding_error
         log.warning('Unable to process message. '
-                    'Responding with ESME_RDELIVERYFAILURE.',
+                    'Responding with %s.' % (command_status,),
                     content=content, pdu=pdu.get_obj())
 
         self.send_pdu(DeliverSMResp(seq_no(pdu),
-                      command_status="ESME_RDELIVERYFAILURE"))
+                      command_status=command_status))
 
     def handle_enquire_link(self, pdu):
         return self.send_pdu(EnquireLinkResp(seq_no(pdu)))
@@ -361,25 +363,21 @@ class EsmeTransceiver(Protocol):
     @require_bind
     @inlineCallbacks
     def submit_sm(self,
+                  vumi_message_id,
                   destination_addr,
                   source_addr='',
-                  service_type='',
-                  source_addr_ton=0,
-                  source_addr_npi=0,
-                  dest_addr_ton=0,
-                  dest_addr_npi=1,
                   esm_class=0,
                   protocol_id=0,
                   priority_flag=0,
                   schedule_delivery_time='',
                   validity_period='',
-                  registered_delivery=1,
                   replace_if_present=0,
                   data_coding=0,
                   sm_default_msg_id=0,
                   sm_length=0,
                   short_message='',
-                  optional_parameters=None
+                  optional_parameters=None,
+                  **configured_parameters
                   ):
         """
         Put a `submit_sm` command on the wire.
@@ -447,36 +445,43 @@ class EsmeTransceiver(Protocol):
         :rtype: list
 
         """
+        configured_param_values = {
+            'service_type': self.config.service_type,
+            'source_addr_ton': self.config.source_addr_ton,
+            'source_addr_npi': self.config.source_addr_npi,
+            'dest_addr_ton': self.config.dest_addr_ton,
+            'dest_addr_npi': self.config.dest_addr_npi,
+            'registered_delivery': self.config.registered_delivery,
+        }
+        configured_param_values.update(configured_parameters)
         sequence_number = yield self.sequence_generator.next()
         pdu = SubmitSM(
             sequence_number=sequence_number,
             source_addr=source_addr,
             destination_addr=destination_addr,
-            service_type=service_type,
-            source_addr_ton=source_addr_ton,
-            source_addr_npi=source_addr_npi,
-            dest_addr_ton=dest_addr_ton,
-            dest_addr_npi=dest_addr_npi,
             esm_class=esm_class,
             protocol_id=protocol_id,
             priority_flag=priority_flag,
             schedule_delivery_time=schedule_delivery_time,
             validity_period=validity_period,
-            registered_delivery=registered_delivery,
             replace_if_present=replace_if_present,
             data_coding=data_coding,
             sm_default_msg_id=sm_default_msg_id,
             sm_length=sm_length,
-            short_message=short_message)
+            short_message=short_message,
+            **configured_param_values)
 
         if optional_parameters:
             for key, value in optional_parameters.items():
                 pdu.add_optional_parameter(key, value)
 
+        yield self.vumi_transport.message_stash.set_sequence_number_message_id(
+            sequence_number, vumi_message_id)
         self.send_pdu(pdu)
         returnValue([sequence_number])
 
-    def submit_sm_long(self, destination_addr, long_message, **pdu_params):
+    def submit_sm_long(self, vumi_message_id, destination_addr, long_message,
+                       **pdu_params):
         """
         Send a `submit_sm` command with the message encoded in the
         ``message_payload`` optional parameter.
@@ -500,8 +505,21 @@ class EsmeTransceiver(Protocol):
                 ''.join('%02x' % ord(c) for c in long_message))
         })
         return self.submit_sm(
-            destination_addr, short_message='', sm_length=0,
+            vumi_message_id, destination_addr, short_message='', sm_length=0,
             optional_parameters=optional_parameters, **pdu_params)
+
+    def _fits_in_one_message(self, message):
+        if len(message) <= GSM_MAX_SMS_BYTES:
+            return True
+
+        # NOTE: We already have byte strings here, so we assume that printable
+        #       ASCII characters are all the same as single-width GSM 03.38
+        #       characters.
+        if len(message) <= GSM_MAX_SMS_7BIT_CHARS:
+            # TODO: We need better character handling and counting stuff.
+            return all(0x20 <= ord(ch) <= 0x7f for ch in message)
+
+        return False
 
     def csm_split_message(self, message):
         """
@@ -521,6 +539,9 @@ class EsmeTransceiver(Protocol):
         :rtype: list
 
         """
+        if self._fits_in_one_message(message):
+            return [message]
+
         payload_length = GSM_MAX_SMS_BYTES - 10
         split_msg = []
         while message:
@@ -529,7 +550,7 @@ class EsmeTransceiver(Protocol):
         return split_msg
 
     @inlineCallbacks
-    def submit_csm_sar(self, destination_addr, **pdu_params):
+    def submit_csm_sar(self, vumi_message_id, destination_addr, **pdu_params):
         """
         Submit a concatenated SMS to the SMSC using the optional
         SAR parameter names in the various PDUS.
@@ -538,10 +559,20 @@ class EsmeTransceiver(Protocol):
         :rtype: list
         """
 
-        optional_parameters = pdu_params.pop('optional_parameters', {}).copy()
         split_msg = self.csm_split_message(pdu_params.pop('short_message'))
+
+        if len(split_msg) == 1:
+            # There is only one part, so send it without SAR stuff.
+            sequence_numbers = yield self.submit_sm(
+                vumi_message_id, destination_addr, short_message=split_msg[0],
+                **pdu_params)
+            returnValue(sequence_numbers)
+
+        optional_parameters = pdu_params.pop('optional_parameters', {}).copy()
         ref_num = yield self.sequence_generator.next()
         sequence_numbers = []
+        yield self.vumi_transport.message_stash.init_multipart_info(
+            vumi_message_id, len(split_msg))
         for i, msg in enumerate(split_msg):
             pdu_params = pdu_params.copy()
             optional_parameters.update({
@@ -551,15 +582,15 @@ class EsmeTransceiver(Protocol):
                 'sar_segment_seqnum': i + 1,
             })
             sequence_number = yield self.submit_sm(
-                destination_addr, short_message=msg,
+                vumi_message_id, destination_addr, short_message=msg,
                 optional_parameters=optional_parameters, **pdu_params)
             sequence_numbers.extend(sequence_number)
         returnValue(sequence_numbers)
 
     @inlineCallbacks
-    def submit_csm_udh(self, destination_addr, **pdu_params):
+    def submit_csm_udh(self, vumi_message_id, destination_addr, **pdu_params):
         """
-        Submit a concatenated SMS to the SMSC using UDH headers
+        Submit a concatenated SMS to the SMSC using user data headers (UDH)
         in the message content.
 
         Same parameters apply as for ``submit_sm`` with the exception
@@ -577,8 +608,18 @@ class EsmeTransceiver(Protocol):
 
         pdu_params = pdu_params.copy()
         split_msg = self.csm_split_message(pdu_params.pop('short_message'))
+
+        if len(split_msg) == 1:
+            # There is only one part, so send it without UDH stuff.
+            sequence_numbers = yield self.submit_sm(
+                vumi_message_id, destination_addr, short_message=split_msg[0],
+                **pdu_params)
+            returnValue(sequence_numbers)
+
         ref_num = yield self.sequence_generator.next()
         sequence_numbers = []
+        yield self.vumi_transport.message_stash.init_multipart_info(
+            vumi_message_id, len(split_msg))
         for i, msg in enumerate(split_msg):
             # 0x40 is the UDHI flag indicating that this payload contains a
             # user data header.
@@ -603,7 +644,8 @@ class EsmeTransceiver(Protocol):
             ])
             short_message = udh + msg
             sequence_number = yield self.submit_sm(
-                destination_addr, short_message=short_message, **pdu_params)
+                vumi_message_id, destination_addr, short_message=short_message,
+                **pdu_params)
             sequence_numbers.extend(sequence_number)
         returnValue(sequence_numbers)
 

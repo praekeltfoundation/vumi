@@ -1,7 +1,8 @@
+# -*- coding: utf-8 -*-
 from twisted.test import proto_helpers
 from twisted.internet import reactor
 from twisted.internet.defer import (
-    inlineCallbacks, Deferred, returnValue, succeed)
+    inlineCallbacks, gatherResults, Deferred, returnValue, succeed)
 from twisted.internet.error import ConnectionDone
 from twisted.internet.task import Clock
 
@@ -16,6 +17,7 @@ from vumi.transports.smpp.pdu_utils import (
     seq_no, command_status, command_id, chop_pdu_stream, short_message)
 from vumi.transports.smpp.smpp_utils import unpacked_pdu_opts
 from vumi.transports.smpp.sequence import RedisSequence
+from vumi.transports.tests.helpers import TransportHelper
 
 from smpp.pdu import unpack_pdu
 from smpp.pdu_builder import (
@@ -38,8 +40,9 @@ def connect_transport(protocol, system_id='', password='', system_type=''):
 
 
 @inlineCallbacks
-def bind_protocol(transport, protocol, clear=True):
-    [bind_pdu] = yield wait_for_pdus(transport, 1)
+def bind_protocol(transport, protocol, clear=True, bind_pdu=None):
+    if bind_pdu is None:
+        [bind_pdu] = yield wait_for_pdus(transport, 1)
     resp_pdu_class = {
         BindTransceiver: BindTransceiverResp,
         BindReceiver: BindReceiverResp,
@@ -78,10 +81,6 @@ def wait_for_pdus(transport, count):
     return d
 
 
-class DummySmppTransport(object):
-    pass
-
-
 class ForwardableRedisSequence(RedisSequence):
 
     def advance(self, seq_nr):
@@ -90,15 +89,22 @@ class ForwardableRedisSequence(RedisSequence):
         return d
 
 
+class DummySmppTransport(SmppTransceiverTransport):
+
+    sequence_class = ForwardableRedisSequence
+
+
 class EsmeTestCase(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
+        self.tx_helper = self.add_helper(TransportHelper(DummySmppTransport))
         self.persistence_helper = self.add_helper(PersistenceHelper())
         self.redis = yield self.persistence_helper.get_redis_manager()
         self.clock = Clock()
         self.patch(EsmeTransceiver, 'clock', self.clock)
 
+    @inlineCallbacks
     def get_protocol(self, config={},
                      deliver_sm_processor=None, dr_processor=None,
                      factory_class=None):
@@ -107,43 +113,28 @@ class EsmeTestCase(VumiTestCase):
 
         default_config = {
             'transport_name': 'sphex_transport',
-            'twisted_endpoint': 'tcp:host=localhost:port=0',
-            'deliver_short_message_processor': (
-                'vumi.transports.smpp.processors.'
-                'DeliverShortMessageProcessor'),
-            'delivery_report_processor': ('vumi.transports.smpp.processors.'
-                                          'DeliveryReportProcessor'),
+            'twisted_endpoint': 'tcp:host=127.0.0.1:port=0',
             'system_id': 'system_id',
             'password': 'password',
             'smpp_bind_timeout': 30,
         }
+
+        if deliver_sm_processor:
+            default_config['deliver_short_message_processor'] = (
+                deliver_sm_processor)
+
+        if dr_processor:
+            default_config['delivery_report_processor'] = (
+                dr_processor)
+
         default_config.update(config)
 
-        cfg = SmppTransceiverTransport.CONFIG_CLASS(
-            default_config, static=True)
+        smpp_transport = yield self.tx_helper.get_transport(default_config)
 
-        dummy_smpp_transport = DummySmppTransport()
-        dummy_smpp_transport.get_static_config = lambda: cfg
-        dummy_smpp_transport.redis = self.redis
-
-        if deliver_sm_processor is None:
-            deliver_sm_processor = cfg.deliver_short_message_processor(
-                dummy_smpp_transport,
-                cfg.deliver_short_message_processor_config)
-        if dr_processor is None:
-            dr_processor = cfg.delivery_report_processor(
-                dummy_smpp_transport, cfg.delivery_report_processor_config)
-
-        sequence_generator = ForwardableRedisSequence(self.redis)
-
-        dummy_smpp_transport.dr_processor = dr_processor
-        dummy_smpp_transport.deliver_sm_processor = deliver_sm_processor
-        dummy_smpp_transport.sequence_generator = sequence_generator
-
-        factory = factory_class(dummy_smpp_transport)
+        factory = factory_class(smpp_transport)
         proto = factory.buildProtocol(('127.0.0.1', 0))
         self.add_cleanup(proto.connectionLost, reason=ConnectionDone)
-        return proto
+        returnValue(proto)
 
     def assertCommand(self, pdu, cmd_id, sequence_number=None,
                       status=None, params={}):
@@ -153,24 +144,33 @@ class EsmeTestCase(VumiTestCase):
         if status is not None:
             self.assertEqual(command_status(pdu), status)
 
+        pdu_params = {}
         if params:
             if 'body' not in pdu:
                 raise Exception('Body does not have parameters.')
 
             mandatory_parameters = pdu['body']['mandatory_parameters']
-            for key, value in params.items():
-                self.assertEqual(mandatory_parameters.get(key), value)
+            for key in params:
+                if key in mandatory_parameters:
+                    pdu_params[key] = mandatory_parameters[key]
+
+            self.assertEqual(params, pdu_params)
 
     @inlineCallbacks
     def setup_bind(self, config={}, clear=True, factory_class=None):
-        protocol = self.get_protocol(config, factory_class=factory_class)
+        protocol = yield self.get_protocol(config, factory_class=factory_class)
         transport = yield connect_transport(protocol)
         yield bind_protocol(transport, protocol, clear=clear)
         returnValue((transport, protocol))
 
+    def lookup_message_ids(self, protocol, seq_nums):
+        message_stash = protocol.vumi_transport.message_stash
+        lookup_func = message_stash.get_sequence_number_message_id
+        return gatherResults([lookup_func(seq_num) for seq_num in seq_nums])
+
     @inlineCallbacks
     def test_on_connection_made(self):
-        protocol = self.get_protocol()
+        protocol = yield self.get_protocol()
         self.assertEqual(protocol.state, EsmeTransceiver.CLOSED_STATE)
         transport = yield connect_transport(
             protocol, system_id='system_id', password='password')
@@ -187,7 +187,7 @@ class EsmeTestCase(VumiTestCase):
 
     @inlineCallbacks
     def test_drop_link(self):
-        protocol = self.get_protocol()
+        protocol = yield self.get_protocol()
         transport = yield connect_transport(protocol)
         [bind_pdu] = yield wait_for_pdus(transport, 1)
         self.assertCommand(bind_pdu, 'bind_transceiver')
@@ -203,7 +203,7 @@ class EsmeTestCase(VumiTestCase):
 
     @inlineCallbacks
     def test_on_smpp_bind(self):
-        protocol = self.get_protocol()
+        protocol = yield self.get_protocol()
         transport = yield connect_transport(protocol)
         yield bind_protocol(transport, protocol)
         self.assertEqual(protocol.state, EsmeTransceiver.BOUND_STATE_TRX)
@@ -242,16 +242,29 @@ class EsmeTestCase(VumiTestCase):
 
     @inlineCallbacks
     def test_deliver_sm_fail(self):
-        self.patch(DeliverShortMessageProcessor, 'decode_pdus',
-                   lambda *a: [str('not a unicode string')])
         transport, protocol = yield self.setup_bind()
         pdu = DeliverSM(
-            sequence_number=0, message_id='foo', short_message='bar')
+            sequence_number=0, message_id='foo', data_coding=4,
+            short_message='string with unknown data coding')
         protocol.dataReceived(pdu.get_bin())
         [deliver_sm_resp] = yield wait_for_pdus(transport, 1)
         self.assertCommand(
             deliver_sm_resp, 'deliver_sm_resp', sequence_number=0,
             status='ESME_RDELIVERYFAILURE')
+
+    @inlineCallbacks
+    def test_deliver_sm_fail_with_custom_error(self):
+        transport, protocol = yield self.setup_bind(config={
+            "deliver_sm_decoding_error": "ESME_RSYSERR"
+        })
+        pdu = DeliverSM(
+            sequence_number=0, message_id='foo', data_coding=4,
+            short_message='string with unknown data coding')
+        protocol.dataReceived(pdu.get_bin())
+        [deliver_sm_resp] = yield wait_for_pdus(transport, 1)
+        self.assertCommand(
+            deliver_sm_resp, 'deliver_sm_resp', sequence_number=0,
+            status='ESME_RSYSERR')
 
     @inlineCallbacks
     def test_on_enquire_link(self):
@@ -304,17 +317,46 @@ class EsmeTestCase(VumiTestCase):
     @inlineCallbacks
     def test_submit_sm(self):
         transport, protocol = yield self.setup_bind()
-        yield protocol.submit_sm('dest_addr', short_message='foo')
+        seq_nums = yield protocol.submit_sm(
+            'abc123', 'dest_addr', short_message='foo')
         [submit_sm] = yield wait_for_pdus(transport, 1)
         self.assertCommand(submit_sm, 'submit_sm', params={
             'short_message': 'foo',
         })
+        stored_ids = yield self.lookup_message_ids(protocol, seq_nums)
+        self.assertEqual(['abc123'], stored_ids)
+
+    @inlineCallbacks
+    def test_submit_sm_configured_parameters(self):
+        transport, protocol = yield self.setup_bind({
+            'service_type': 'stype',
+            'source_addr_ton': 2,
+            'source_addr_npi': 2,
+            'dest_addr_ton': 2,
+            'dest_addr_npi': 2,
+            'registered_delivery': 0,
+        })
+        seq_nums = yield protocol.submit_sm(
+            'abc123', 'dest_addr', short_message='foo')
+        [submit_sm] = yield wait_for_pdus(transport, 1)
+        self.assertCommand(submit_sm, 'submit_sm', params={
+            'short_message': 'foo',
+            'service_type': 'stype',
+            'source_addr_ton': 'national',  # replaced by unpack_pdu()
+            'source_addr_npi': 2,
+            'dest_addr_ton': 'national',  # replaced by unpack_pdu()
+            'dest_addr_npi': 2,
+            'registered_delivery': 0,
+        })
+        stored_ids = yield self.lookup_message_ids(protocol, seq_nums)
+        self.assertEqual(['abc123'], stored_ids)
 
     @inlineCallbacks
     def test_submit_sm_long(self):
         transport, protocol = yield self.setup_bind()
         long_message = 'This is a long message.' * 20
-        yield protocol.submit_sm_long('dest_addr', long_message)
+        seq_nums = yield protocol.submit_sm_long(
+            'abc123', 'dest_addr', long_message)
         [submit_sm] = yield wait_for_pdus(transport, 1)
         pdu_opts = unpacked_pdu_opts(submit_sm)
 
@@ -323,6 +365,8 @@ class EsmeTestCase(VumiTestCase):
             None, submit_sm['body']['mandatory_parameters']['short_message'])
         self.assertEqual(''.join('%02x' % ord(c) for c in long_message),
                          pdu_opts['message_payload'])
+        stored_ids = yield self.lookup_message_ids(protocol, seq_nums)
+        self.assertEqual(['abc123'], stored_ids)
 
     @inlineCallbacks
     def test_submit_sm_multipart_udh(self):
@@ -331,7 +375,7 @@ class EsmeTestCase(VumiTestCase):
         })
         long_message = 'This is a long message.' * 20
         seq_numbers = yield protocol.submit_csm_udh(
-            'dest_addr', short_message=long_message)
+            'abc123', 'dest_addr', short_message=long_message)
         pdus = yield wait_for_pdus(transport, 4)
         self.assertEqual(len(seq_numbers), 4)
 
@@ -358,6 +402,9 @@ class EsmeTestCase(VumiTestCase):
         self.assertEqual(long_message, ''.join(msg_parts))
         self.assertEqual(1, len(set(msg_refs)))
 
+        stored_ids = yield self.lookup_message_ids(protocol, seq_numbers)
+        self.assertEqual(['abc123'] * len(seq_numbers), stored_ids)
+
     @inlineCallbacks
     def test_udh_ref_num_limit(self):
         transport, protocol = yield self.setup_bind(config={
@@ -369,7 +416,7 @@ class EsmeTestCase(VumiTestCase):
 
         long_message = 'This is a long message.' * 20
         seq_numbers = yield protocol.submit_csm_udh(
-            'dest_addr', short_message=long_message)
+            'abc123', 'dest_addr', short_message=long_message)
         pdus = yield wait_for_pdus(transport, 4)
 
         self.assertEqual(len(seq_numbers), 4)
@@ -392,7 +439,7 @@ class EsmeTestCase(VumiTestCase):
         })
         long_message = 'This is a long message.' * 20
         seq_nums = yield protocol.submit_csm_sar(
-            'dest_addr', short_message=long_message)
+            'abc123', 'dest_addr', short_message=long_message)
         pdus = yield wait_for_pdus(transport, 4)
         # seq no 1 == bind_transceiver, 2 == enquire_link, 3 == sar_msg_ref_num
         self.assertEqual([4, 5, 6, 7], seq_nums)
@@ -413,6 +460,9 @@ class EsmeTestCase(VumiTestCase):
         self.assertEqual(long_message, ''.join(msg_parts))
         self.assertEqual([3, 3, 3, 3], msg_refs)
 
+        stored_ids = yield self.lookup_message_ids(protocol, seq_nums)
+        self.assertEqual(['abc123'] * len(seq_nums), stored_ids)
+
     @inlineCallbacks
     def test_sar_ref_num_limit(self):
         transport, protocol = yield self.setup_bind(config={
@@ -424,7 +474,7 @@ class EsmeTestCase(VumiTestCase):
 
         long_message = 'This is a long message.' * 20
         seq_numbers = yield protocol.submit_csm_udh(
-            'dest_addr', short_message=long_message)
+            'abc123', 'dest_addr', short_message=long_message)
         pdus = yield wait_for_pdus(transport, 4)
 
         self.assertEqual(len(seq_numbers), 4)
@@ -507,3 +557,17 @@ class EsmeTestCase(VumiTestCase):
         transport, protocol = yield self.setup_bind()
         protocol.on_pdu(invalid_pdu)
         self.assertEqual(calls, [invalid_pdu])
+
+    @inlineCallbacks
+    def test_csm_split_message(self):
+        protocol = yield self.get_protocol()
+
+        def split(msg):
+            return protocol.csm_split_message(msg.encode('utf-8'))
+
+        # these are fine because they're in the 7-bit character set
+        self.assertEqual(1, len(split(u'&' * 140)))
+        self.assertEqual(1, len(split(u'&' * 160)))
+        # ± is not in the 7-bit character set so it should utf-8 encode it
+        # which bumps it over the 140 bytes
+        self.assertEqual(2, len(split(u'±' + u'1' * 139)))

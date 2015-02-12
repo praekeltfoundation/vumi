@@ -3,26 +3,27 @@
 import fnmatch
 from functools import wraps
 from itertools import takewhile, dropwhile
+import os
+from zlib import crc32
 
-from twisted.internet.defer import Deferred
+from twisted.internet import reactor
+from twisted.internet.defer import Deferred, execute
 from twisted.internet.task import Clock
+
+
+FAKE_REDIS_WAIT = float(os.environ.get('VUMI_FAKE_REDIS_WAIT', '0.002'))
 
 
 def maybe_async(func):
     @wraps(func)
     def wrapper(self, *args, **kw):
-        result = func(self, *args, **kw)
-        if self._is_async:
-            d = Deferred()
-            # We fake a bit of a delay here.
-            self.clock.callLater(0.05, d.callback, result)
-            self.clock.advance(0.1)
-            return d
-        # Same delay in the sync case.
-        self.clock.advance(0.1)
-        return result
+        return self._delay_operation(func, args, kw)
     wrapper.sync = func
     return wrapper
+
+
+def call_to_deferred(deferred, func, *args, **kw):
+    execute(func, *args, **kw).chainDeferred(deferred)
 
 
 class FakeRedis(object):
@@ -39,14 +40,17 @@ class FakeRedis(object):
 
     def __init__(self, charset='utf-8', errors='strict', async=False):
         self._data = {}
+        self._known_key_existence = {}
         self._expiries = {}
         self._is_async = async
         self.clock = Clock()
         self._charset = charset
         self._charset_errors = errors
+        self._delayed_calls = []
 
     def teardown(self):
         self._clean_up_expires()
+        self._clean_up_delayed_calls()
 
     def _encode(self, value):
         # Replicated from
@@ -64,6 +68,47 @@ class FakeRedis(object):
             delayed = self._expiries.pop(key)
             if not (delayed.cancelled or delayed.called):
                 delayed.cancel()
+
+    def _clean_up_delayed_calls(self):
+        for delayed in self._delayed_calls:
+            if not (delayed.cancelled or delayed.called):
+                delayed.cancel()
+
+    def _delay_operation(self, func, args, kw):
+        """
+        Return the result with some fake delay. If we're in async mode, add
+        some real delay to catch code that doesn't properly wait for the
+        deferred to fire.
+        """
+        self.clock.advance(0.1)
+        if self._is_async:
+            # Add some latency to catch things that don't wait on deferreds. We
+            # can't use deferLater() here because we want to keep track of the
+            # delayed call object.
+            d = Deferred()
+            delayed = reactor.callLater(
+                FAKE_REDIS_WAIT, call_to_deferred, d, func, self, *args, **kw)
+            self._delayed_calls.append(delayed)
+            return d
+        else:
+            return func(self, *args, **kw)
+
+    def _set_key(self, key, value):
+        self._known_key_existence[key] = True
+        self._data[key] = value
+
+    def _setdefault_key(self, key, default):
+        self._known_key_existence[key] = True
+        return self._data.setdefault(key, default)
+
+    def _sort_keys_by_hash(self, keys):
+        """
+        Sort keys in a consistent but non-obvious way.
+
+        We sort by the crc32 of the key, that being cheap and good enough for
+        our purposes here.
+        """
+        return sorted(keys, key=crc32)
 
     # Global operations
 
@@ -92,8 +137,46 @@ class FakeRedis(object):
         return fnmatch.filter(self._data.keys(), pattern)
 
     @maybe_async
+    def scan(self, cursor, match=None, count=None):
+        if cursor is None:
+            start = 0
+        else:
+            start = int(cursor)
+        if match is None:
+            match = '*'
+        if count is None:
+            count = 10
+
+        output = []
+
+        # Start with all the keys we've ever seen, ordered in a consistent but
+        # non-obvious way.
+        keys = self._sort_keys_by_hash(self._known_key_existence.keys())
+
+        # Then throw away the number of keys our cursor has already walked.
+        # This means we may miss new keys that have been added since we started
+        # iterating and/or return duplicates, but that's what Redis does.
+        i = None
+        for i, key in enumerate(keys[start:]):
+            if not self._known_key_existence[key]:
+                # This key has been deleted.
+                continue
+            output.append(key)
+            if len(output) >= count:
+                break
+
+        # Update the cursor to reflect the new position in the key list.
+        if i is None or start + i + 1 >= len(keys):
+            cursor = None
+        else:
+            cursor = str(start + i + 1)
+
+        return cursor, fnmatch.filter(output, match)
+
+    @maybe_async
     def flushdb(self):
         self._data = {}
+        self._known_key_existence = {}
 
     # String operations
 
@@ -104,7 +187,7 @@ class FakeRedis(object):
     @maybe_async
     def set(self, key, value):
         value = self._encode(value)  # set() sets string value
-        self._data[key] = value
+        self._set_key(key, value)
 
     @maybe_async
     def setex(self, key, time, value):
@@ -116,7 +199,7 @@ class FakeRedis(object):
     def setnx(self, key, value):
         value = self._encode(value)  # set() sets string value
         if key not in self._data:
-            self._data[key] = value
+            self._set_key(key, value)
             return 1
         return 0
 
@@ -124,6 +207,8 @@ class FakeRedis(object):
     def delete(self, key):
         existed = (key in self._data)
         self._data.pop(key, None)
+        if existed:
+            self._known_key_existence[key] = False
         return existed
 
     # Integer operations
@@ -151,7 +236,7 @@ class FakeRedis(object):
 
     @maybe_async
     def hset(self, key, field, value):
-        mapping = self._data.setdefault(key, {})
+        mapping = self._setdefault_key(key, {})
         new_field = field not in mapping
         mapping[field] = value
         return int(new_field)
@@ -182,7 +267,7 @@ class FakeRedis(object):
 
     @maybe_async
     def hmset(self, key, mapping):
-        hval = self._data.setdefault(key, {})
+        hval = self._setdefault_key(key, {})
         hval.update(dict([(k, v) for k, v in mapping.items()]))
 
     @maybe_async
@@ -203,7 +288,7 @@ class FakeRedis(object):
         value = self._data.get(key, {}).get(field, "0")
         # the int(str(..)) coerces amount to an int but rejects floats
         value = int(value) + int(str(amount))
-        self._data.setdefault(key, {})[field] = str(value)
+        self._setdefault_key(key, {})[field] = str(value)
         return value
 
     @maybe_async
@@ -214,7 +299,7 @@ class FakeRedis(object):
 
     @maybe_async
     def sadd(self, key, *values):
-        sval = self._data.setdefault(key, set())
+        sval = self._setdefault_key(key, set())
         old_len = len(sval)
         sval.update(map(self._encode, values))
         return len(sval) - old_len
@@ -265,12 +350,12 @@ class FakeRedis(object):
 
     @maybe_async
     def zadd(self, key, **valscores):
-        zval = self._data.setdefault(key, Zset())
+        zval = self._setdefault_key(key, Zset())
         return zval.zadd(**valscores)
 
     @maybe_async
     def zrem(self, key, value):
-        zval = self._data.setdefault(key, Zset())
+        zval = self._setdefault_key(key, Zset())
         return zval.zrem(value)
 
     @maybe_async
@@ -311,7 +396,7 @@ class FakeRedis(object):
 
     @maybe_async
     def zremrangebyrank(self, key, start, stop):
-        zval = self._data.setdefault(key, Zset())
+        zval = self._setdefault_key(key, Zset())
         return zval.zremrangebyrank(start, stop)
 
     # List operations
@@ -331,11 +416,11 @@ class FakeRedis(object):
 
     @maybe_async
     def lpush(self, key, obj):
-        self._data.setdefault(key, []).insert(0, obj)
+        self._setdefault_key(key, []).insert(0, obj)
 
     @maybe_async
     def rpush(self, key, obj):
-        self._data.setdefault(key, []).append(obj)
+        self._setdefault_key(key, []).append(obj)
         return self.llen.sync(self, key) - 1
 
     @maybe_async
@@ -364,7 +449,7 @@ class FakeRedis(object):
             lval.reverse()
             lval = [v for v in lval if keep(v)]
             lval.reverse()
-        self._data[key] = lval
+        self._set_key(key, lval)
         return removed[0]
 
     @maybe_async
@@ -418,10 +503,9 @@ class Zset(object):
         self._zval = []
 
     def _redis_range_to_py_range(self, start, end):
-        if start < 0:
-            start = len(self._zval) + start
-        if end < 0:
-            end = len(self._zval) + end
+        end += 1  # redis start/end are element indexes
+        if end == 0:
+            end = None
         return start, end
 
     def zadd(self, **valscores):
@@ -443,9 +527,7 @@ class Zset(object):
         return len(self._zval)
 
     def zrange(self, start, stop, desc=False, score_cast_func=float):
-        stop += 1  # redis start/stop are element indexes
-        if stop == 0:
-            stop = None
+        start, stop = self._redis_range_to_py_range(start, stop)
 
         # copy before changing in place
         zval = self._zval[:]
@@ -492,6 +574,6 @@ class Zset(object):
 
     def zremrangebyrank(self, start, stop):
         start, stop = self._redis_range_to_py_range(start, stop)
-        deleted_keys = self._zval[start:stop + 1]
-        del self._zval[start:stop + 1]
+        deleted_keys = self._zval[start:stop]
+        del self._zval[start:stop]
         return len(deleted_keys)

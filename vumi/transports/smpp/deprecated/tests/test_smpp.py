@@ -25,7 +25,7 @@ class TestSmppTransportConfig(VumiTestCase):
     def required_config(self, config_params):
         config = {
             "transport_name": "my_transport",
-            "twisted_endpoint": "tcp:host=localhost:port=0",
+            "twisted_endpoint": "tcp:host=127.0.0.1:port=0",
             "system_id": "vumitest-vumitest-vumitest",
             "password": "password",
         }
@@ -70,7 +70,7 @@ class TestSmppTransport(VumiTestCase):
     def setUp(self):
         config = {
             "system_id": "vumitest-vumitest-vumitest",
-            "twisted_endpoint": "tcp:host=localhost:port=0",
+            "twisted_endpoint": "tcp:host=127.0.0.1:port=0",
             "password": "password",
             "smpp_bind_timeout": 12,
             "smpp_enquire_link_interval": 123,
@@ -251,7 +251,8 @@ class TestSmppTransport(VumiTestCase):
         clock.advance(0.05)
         yield self.transport.redis.exists('wait for redis')
         assert_throttled_status(True, ["Heimlich"], [])
-        yield self.tx_helper.make_dispatch_outbound("Other", message_id="448")
+        # Don't wait for this, because it won't be processed until later.
+        self.tx_helper.make_dispatch_outbound("Other", message_id="448")
         assert_throttled_status(True, ["Heimlich"], [])
         # Resent
         clock.advance(0.05)
@@ -291,7 +292,8 @@ class TestSmppTransport(VumiTestCase):
         clock.advance(0.05)
         yield self.transport.redis.exists('wait for redis')
         assert_throttled_status(True, ["Heimlich"], [])
-        yield self.tx_helper.make_dispatch_outbound("Other", message_id="448")
+        # Don't wait for this, because it won't be processed until later.
+        self.tx_helper.make_dispatch_outbound("Other", message_id="448")
         assert_throttled_status(True, ["Heimlich"], [])
         # Resent
         clock.advance(0.05)
@@ -835,11 +837,12 @@ class TestEsmeToSmscTx(VumiTestCase):
             "transport_name": self.tx_helper.transport_name,
             "system_id": "VumiTestSMSC",
             "password": "password",
-            "host": "localhost",
-            "port": 0,
+            "host": "127.0.0.1",
             "transport_type": "smpp",
         }
-        self.service = SmppService(None, config=self.config)
+        server_config = self.config.copy()
+        server_config["twisted_endpoint"] = "tcp:0"
+        self.service = SmppService(None, config=server_config)
         self.add_cleanup(self.cleanup_service)
         yield self.service.startWorker()
         self.service.factory.protocol = SmscTestServer
@@ -904,11 +907,12 @@ class TestEsmeToSmscRx(VumiTestCase):
             "transport_name": self.tx_helper.transport_name,
             "system_id": "VumiTestSMSC",
             "password": "password",
-            "host": "localhost",
-            "port": 0,
+            "host": "127.0.0.1",
             "transport_type": "smpp",
         }
-        self.service = SmppService(None, config=self.config)
+        server_config = self.config.copy()
+        server_config['twisted_endpoint'] = "tcp:0"
+        self.service = SmppService(None, config=server_config)
         self.add_cleanup(self.cleanup_service)
         yield self.service.startWorker()
         self.service.factory.protocol = SmscTestServer

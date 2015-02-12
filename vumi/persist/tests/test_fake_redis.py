@@ -14,6 +14,9 @@ class TestFakeRedis(VumiTestCase):
     def assert_redis_op(self, expected, op, *args, **kw):
         self.assertEqual(expected, getattr(self.redis, op)(*args, **kw))
 
+    def assert_error(self, func, *args, **kw):
+        self.assertRaises(Exception, func, *args, **kw)
+
     @inlineCallbacks
     def test_delete(self):
         yield self.redis.set("delete_me", 1)
@@ -82,10 +85,8 @@ class TestFakeRedis(VumiTestCase):
         yield self.assert_redis_op(0, 'zadd', 'set', one=2.0)
         yield self.assert_redis_op([('one', 2.0)], 'zrange', 'set', 0, -1,
                                    withscores=True)
-        self.assertRaises(
-            Exception, self.redis.zadd, "set", one='foo')
-        self.assertRaises(
-            Exception, self.redis.zadd, "set", one=None)
+        yield self.assert_error(self.redis.zadd, "set", one='foo')
+        yield self.assert_error(self.redis.zadd, "set", one=None)
 
     @inlineCallbacks
     def test_zrange(self):
@@ -163,6 +164,22 @@ class TestFakeRedis(VumiTestCase):
             [('three', 3)], 'zrange', 'set', 0, -1, withscores=True)
 
     @inlineCallbacks
+    def test_zremrangebyrank_empty_range(self):
+        yield self.redis.zadd('set', one=1, two=2, three=3)
+        yield self.assert_redis_op(0, 'zremrangebyrank', 'set', 10, 11)
+        yield self.assert_redis_op(
+            [('one', 1), ('two', 2), ('three', 3)],
+            'zrange', 'set', 0, -1, withscores=True)
+
+    @inlineCallbacks
+    def test_zremrangebyrank_negative_empty_range(self):
+        yield self.redis.zadd('set', one=1, two=2, three=3)
+        yield self.assert_redis_op(0, 'zremrangebyrank', 'set', -11, -10)
+        yield self.assert_redis_op(
+            [('one', 1), ('two', 2), ('three', 3)],
+            'zrange', 'set', 0, -1, withscores=True)
+
+    @inlineCallbacks
     def test_zremrangebyrank_negative_start(self):
         yield self.redis.zadd('set', one=1, two=2, three=3)
         yield self.assert_redis_op(2, 'zremrangebyrank', 'set', -2, 2)
@@ -170,11 +187,27 @@ class TestFakeRedis(VumiTestCase):
             [('one', 1)], 'zrange', 'set', 0, -1, withscores=True)
 
     @inlineCallbacks
+    def test_zremrangebyrank_negative_start_empty_range(self):
+        yield self.redis.zadd('set', one=1, two=2, three=3)
+        yield self.assert_redis_op(0, 'zremrangebyrank', 'set', -1, 1)
+        yield self.assert_redis_op(
+            [('one', 1), ('two', 2), ('three', 3)],
+            'zrange', 'set', 0, -1, withscores=True)
+
+    @inlineCallbacks
     def test_zremrangebyrank_negative_stop(self):
         yield self.redis.zadd('set', one=1, two=2, three=3)
         yield self.assert_redis_op(2, 'zremrangebyrank', 'set', 1, -1)
         yield self.assert_redis_op(
             [('one', 1)], 'zrange', 'set', 0, -1, withscores=True)
+
+    @inlineCallbacks
+    def test_zremrangebyrank_negative_stop_empty_range(self):
+        yield self.redis.zadd('set', one=1, two=2, three=3)
+        yield self.assert_redis_op(0, 'zremrangebyrank', 'set', 0, -5)
+        yield self.assert_redis_op(
+            [('one', 1), ('two', 2), ('three', 3)],
+            'zrange', 'set', 0, -1, withscores=True)
 
     @inlineCallbacks
     def test_zscore(self):
@@ -195,12 +228,11 @@ class TestFakeRedis(VumiTestCase):
         yield self.assert_redis_op(2, 'hincrby', "inc", "field1")
         yield self.assert_redis_op(5, 'hincrby', "inc", "field1", 3)
         yield self.assert_redis_op(7, 'hincrby', "inc", "field1", "2")
-        self.assertRaises(
-            Exception, self.redis.hincrby, "inc", "field1", "1.5")
+        yield self.assert_error(self.redis.hincrby, "inc", "field1", "1.5")
         yield self.redis.hset("inc", "field2", "a")
-        yield self.assertRaises(Exception, self.redis.hincrby, "inc", "field2")
+        yield self.assert_error(self.redis.hincrby, "inc", "field2")
         yield self.redis.set("key", "string")
-        yield self.assertRaises(Exception, self.redis.hincrby, "key", "field1")
+        yield self.assert_error(self.redis.hincrby, "key", "field1")
 
     @inlineCallbacks
     def test_hexists(self):
@@ -358,6 +390,61 @@ class TestFakeRedis(VumiTestCase):
         yield self.redis.hset("hash_key", "a", 1.0)
         yield self.assert_redis_op('hash', 'type', 'hash_key')
 
+    @inlineCallbacks
+    def test_scan_simple(self):
+        for i in range(20):
+            yield self.redis.set("key%02d" % i, str(i))
+        # Ordered the way FakeRedis.scan() returns them.
+        result_keys = self.redis._sort_keys_by_hash(
+            ["key%02d" % i for i in range(20)])
+
+        self.assertEqual(
+            (yield self.redis.scan(None)),
+            ('10', result_keys[:10]))
+        self.assertEqual(
+            (yield self.redis.scan(None, count=5)),
+            ('5', result_keys[:5]))
+        self.assertEqual(
+            (yield self.redis.scan('5', count=5)),
+            ('10', result_keys[5:10]))
+        self.assertEqual(
+            (yield self.redis.scan('15', count=5)),
+            (None, result_keys[15:]))
+        self.assertEqual(
+            (yield self.redis.scan(None, count=20)),
+            (None, result_keys))
+
+    @inlineCallbacks
+    def test_scan_interleaved_key_changes(self):
+        for i in range(20):
+            yield self.redis.set("key%02d" % i, str(i))
+        # Ordered the way FakeRedis.scan() returns them.
+        result_keys = self.redis._sort_keys_by_hash(
+            ["key%02d" % i for i in range(20)])
+
+        self.assertEqual(
+            (yield self.redis.scan(None)),
+            ('10', result_keys[:10]))
+
+        # Set and delete a bunch of keys to change some internal state. The
+        # next call to scan() will return duplicates.
+        for i in range(20):
+            yield self.redis.set("transient%02d" % i, str(i))
+            yield self.redis.delete("transient%02d" % i)
+
+        self.assertEqual(
+            (yield self.redis.scan('10')),
+            ('31', result_keys[5:15]))
+        self.assertEqual(
+            (yield self.redis.scan('31')),
+            (None, result_keys[15:]))
+
+    @inlineCallbacks
+    def test_scan_no_keys(self):
+        self.assertEqual(
+            (yield self.redis.scan(None)),
+            (None, []))
+
 
 class TestFakeRedisCharsetHandling(VumiTestCase):
 
@@ -399,3 +486,6 @@ class TestFakeRedisAsync(TestFakeRedis):
     def assert_redis_op(self, expected, op, *args, **kw):
         d = getattr(self.redis, op)(*args, **kw)
         return d.addCallback(lambda r: self.assertEqual(expected, r))
+
+    def assert_error(self, func, *args, **kw):
+        return self.assertFailure(func(*args, **kw), Exception)

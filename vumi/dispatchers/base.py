@@ -8,7 +8,7 @@ import functools
 from twisted.internet.defer import inlineCallbacks, returnValue, maybeDeferred
 
 from vumi.service import Worker
-from vumi.errors import ConfigError
+from vumi.errors import ConfigError, DispatcherError
 from vumi.message import TransportUserMessage, TransportEvent
 from vumi.utils import load_class_by_string, get_first_word
 from vumi.middleware import MiddlewareStack, setup_middlewares_from_config
@@ -27,6 +27,7 @@ class BaseDispatchWorker(Worker):
         log.msg('Starting a %s dispatcher with config: %s'
                 % (self.__class__.__name__, self.config))
 
+        self.amqp_prefetch_count = self.config.get('amqp_prefetch_count', 20)
         yield self.setup_endpoints()
         yield self.setup_middleware()
         yield self.setup_router()
@@ -34,9 +35,6 @@ class BaseDispatchWorker(Worker):
         yield self.setup_exposed_publishers()
         yield self.setup_transport_consumers()
         yield self.setup_exposed_consumers()
-        self.amqp_prefetch_count = self.config.get('amqp_prefetch_count', 20)
-        if self.amqp_prefetch_count is not None:
-            yield self.setup_amqp_qos()
 
         consumers = (self.exposed_consumer.values() +
                         self.transport_consumer.values() +
@@ -85,12 +83,14 @@ class BaseDispatchWorker(Worker):
                 '%s.inbound' % (transport_name,),
                 functools.partial(self.dispatch_inbound_message,
                                   transport_name),
-                message_class=TransportUserMessage, paused=True)
+                message_class=TransportUserMessage, paused=True,
+                prefetch_count=self.amqp_prefetch_count)
         for transport_name in self.transport_names:
             self.transport_event_consumer[transport_name] = yield self.consume(
                 '%s.event' % (transport_name,),
                 functools.partial(self.dispatch_inbound_event, transport_name),
-                message_class=TransportEvent, paused=True)
+                message_class=TransportEvent, paused=True,
+                prefetch_count=self.amqp_prefetch_count)
 
     @inlineCallbacks
     def setup_exposed_publishers(self):
@@ -111,16 +111,8 @@ class BaseDispatchWorker(Worker):
                 '%s.outbound' % (exposed_name,),
                 functools.partial(self.dispatch_outbound_message,
                                   exposed_name),
-                message_class=TransportUserMessage, paused=True)
-
-    @inlineCallbacks
-    def setup_amqp_qos(self):
-        consumers = (self.transport_consumer.values() +
-                        self.transport_event_consumer.values() +
-                        self.exposed_consumer.values())
-        for consumer in consumers:
-            yield consumer.channel.basic_qos(
-                0, int(self.amqp_prefetch_count), False)
+                message_class=TransportUserMessage, paused=True,
+                prefetch_count=self.amqp_prefetch_count)
 
     def dispatch_inbound_message(self, endpoint, msg):
         d = self._middlewares.apply_consume("inbound", msg, endpoint)
@@ -261,8 +253,9 @@ class SimpleDispatchRouter(BaseDispatchRouter):
         if name in self.dispatcher.transport_publisher:
             self.dispatcher.publish_outbound_message(name, msg)
         else:
-            log.error('Unknown transport_name: %s, discarding %r' % (
-                name, msg.payload))
+            log.error(DispatcherError(
+                'Unknown transport_name: %s, discarding %r' % (
+                    name, msg.payload)))
 
 
 class TransportToTransportRouter(BaseDispatchRouter):
@@ -544,7 +537,8 @@ class ContentKeywordRouter(SimpleDispatchRouter):
             if self.fallback_application is not None:
                 self.publish_exposed_inbound(self.fallback_application, msg)
             else:
-                log.error('Message could not be routed: %r' % (msg,))
+                log.error(DispatcherError(
+                    'Message could not be routed: %r' % (msg,)))
 
     @inlineCallbacks
     def dispatch_inbound_event(self, msg):
@@ -553,13 +547,14 @@ class ContentKeywordRouter(SimpleDispatchRouter):
         session = yield self.session_manager.load_session(message_key)
         name = session.get('name')
         if not name:
-            log.error("No transport_name for return route found in Redis"
-                      " while dispatching transport event for message %s"
-                      % (msg['user_message_id'],))
+            log.error(DispatcherError(
+                "No transport_name for return route found in Redis"
+                " while dispatching transport event for message %s"
+                % (msg['user_message_id'],)))
         try:
             self.publish_exposed_event(name, msg)
         except:
-            log.error("No publishing route for %s" % (name,))
+            log.error(DispatcherError("No publishing route for %s" % (name,)))
 
     @inlineCallbacks
     def dispatch_outbound_message(self, msg):
@@ -571,7 +566,8 @@ class ContentKeywordRouter(SimpleDispatchRouter):
             yield self.session_manager.create_session(
                 message_key, name=msg['transport_name'])
         else:
-            log.error("No transport for %s" % (msg['from_addr'],))
+            log.error(DispatcherError(
+                "No transport for %s" % (msg['from_addr'],)))
 
 
 class RedirectRouter(BaseDispatchRouter):
@@ -613,8 +609,9 @@ class RedirectRouter(BaseDispatchRouter):
         if redirect_to:
             self.dispatcher.publish_outbound_message(redirect_to, msg)
         else:
-            log.error('No redirect_outbound specified for %s' % (
-                transport_name,))
+            log.error(DispatcherError(
+                'No redirect_outbound specified for %s' % (
+                    transport_name,)))
 
 
 class RedirectOutboundRouter(RedirectRouter):

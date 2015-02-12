@@ -6,7 +6,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.tests.helpers import VumiTestCase
 from vumi.utils import http_request
-from vumi.transports.infobip.infobip import InfobipTransport
+from vumi.transports.infobip.infobip import InfobipTransport, InfobipError
 from vumi.message import TransportUserMessage
 from vumi.tests.utils import LogCatcher
 from vumi.transports.tests.helpers import TransportHelper
@@ -241,9 +241,10 @@ class TestInfobipUssdTransport(VumiTestCase):
 
         expected_error = ("Infobip transport cannot process outbound message"
                           " that is not a reply: %s" % (msg['message_id'],))
+        self.assertEqual(str(error['failure'].value), expected_error)
+        [f] = self.flushLoggedErrors(InfobipError)
+        self.assertEqual(f, error['failure'])
 
-        [errmsg] = error['message']
-        self.assertTrue(expected_error in errmsg)
         [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(nack['user_message_id'], msg['message_id'])
         self.assertEqual(nack['nack_reason'], expected_error)
@@ -271,9 +272,9 @@ class TestInfobipUssdTransport(VumiTestCase):
 
         expected_error = ("Infobip transport could not find original request"
                           " when attempting to reply.")
-
-        [errmsg] = error['message']
-        self.assertTrue(expected_error in errmsg)
+        self.assertEqual(str(error['failure'].value), expected_error)
+        [f] = self.flushLoggedErrors(InfobipError)
+        self.assertEqual(f, error['failure'])
 
         [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(nack['user_message_id'], reply['message_id'])

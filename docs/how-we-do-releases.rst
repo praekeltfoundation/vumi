@@ -25,7 +25,7 @@ also specify a commit to start from)::
 Set the version in the release branch::
 
     $ ./utils/bump-version.sh $VER
-    $ git add setup.py docs/conf.py
+    $ git add setup.py docs/conf.py vumi/__init__.py
     $ git commit -m "Set initial version for series $SERIES"
 
 Set the version number in the develop branch *if necessary*.
@@ -48,14 +48,14 @@ Bump version immediately prior to release and tag the commit::
 
     $ git checkout release/$SERIES
     $ ./utils/bump-version.sh $VER
-    $ git add setup.py docs/conf.py
+    $ git add setup.py docs/conf.py vumi/__init__.py
     $ git commit -m "Version $VER"
     $ git tag vumi-$VER
 
 Bump version number on release branch::
 
     $ ./utils/bump-version.sh $NEXTVER
-    $ git add setup.py docs/conf.py
+    $ git add setup.py docs/conf.py vumi/__init__.py
     $ git commit -m "Bump release series version."
 
 Merge to master *if this is a tag off the latest release series*::
@@ -67,5 +67,26 @@ Push your changes to Github (don't forget to push the new tag)::
 
     $ git push
     $ git push origin refs/tags/vumi-$VER
+
+
+Release to PyPI
+---------------
+
+Select the version number::
+
+    $ VER=0.1.0
+    $ git checkout vumi-$VER
+
+Register the release with PyPI::
+
+    $ python setup.py register
+
+Build the source distribution pacakge::
+
+    $ python setup.py sdist
+
+Upload the release to PyPI::
+
+    $ twine-upload dist/vumi-$VER.tar.gz
 
 Declare victory.

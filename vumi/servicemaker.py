@@ -1,5 +1,5 @@
 # -*- test-case-name: vumi.tests.test_servicemaker -*-
-
+import os
 import sys
 import warnings
 
@@ -14,6 +14,22 @@ from vumi.utils import (load_class_by_string,
                         generate_worker_id)
 from vumi.errors import VumiError
 from vumi.sentry import SentryLoggerService
+
+
+class SafeLoaderWithInclude(yaml.SafeLoader):
+    def __init__(self, *args, **kwargs):
+        super(SafeLoaderWithInclude, self).__init__(*args, **kwargs)
+        self.add_constructor('!include', self._include)
+        if isinstance(self.stream, file):
+            self._root = os.path.dirname(self.stream.name)
+        else:
+            self._root = os.path.curdir
+
+    def _include(self, loader, node):
+        filename = os.path.join(self._root, self.construct_scalar(node))
+        filename = os.path.normpath(filename)
+        with open(filename) as f:
+            return yaml.load(f, Loader=SafeLoaderWithInclude)
 
 
 def overlay_configs(*configs):
@@ -37,7 +53,7 @@ def read_yaml_config(config_file, optional=True):
         return {}
     with file(config_file, 'r') as stream:
         # Assume we get a dict out of this.
-        return yaml.safe_load(stream)
+        return yaml.load(stream, Loader=SafeLoaderWithInclude)
 
 
 class VumiOptions(usage.Options):

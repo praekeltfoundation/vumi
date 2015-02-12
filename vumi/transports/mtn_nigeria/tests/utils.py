@@ -49,7 +49,7 @@ class MockServerMixin(object):
         factory = MockServerFactory()
         factory.on_connection_lost = self.server_disconnected
         factory.protocol = self.server_protocol
-        self.server_port = reactor.listenTCP(0, factory)
+        self.server_port = reactor.listenTCP(0, factory, interface='127.0.0.1')
         self.server = yield factory.deferred_server
 
     def stop_server(self):

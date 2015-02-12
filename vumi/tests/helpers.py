@@ -1,8 +1,11 @@
+import json
 import os
 from functools import wraps
+from inspect import CO_GENERATOR
 
 from twisted.internet.defer import succeed, inlineCallbacks, Deferred
 from twisted.internet.error import ConnectionRefusedError
+from twisted.internet.task import deferLater
 from twisted.python.failure import Failure
 from twisted.python.monkey import MonkeyPatcher
 from twisted.trial.unittest import TestCase, SkipTest, FailTest
@@ -196,6 +199,8 @@ class VumiTestCase(TestCase):
     implements(IHelperEnabledTestCase)
 
     timeout = get_timeout()
+    reactor_check_interval = 0.01  # 10ms, no science behind this number.
+    reactor_check_iterations = 100  # No science behind this number either.
 
     _cleanup_funcs = None
 
@@ -210,6 +215,39 @@ class VumiTestCase(TestCase):
         if self._cleanup_funcs is not None:
             for cleanup, args, kw in reversed(self._cleanup_funcs):
                 yield cleanup(*args, **kw)
+        yield self._check_reactor_things()
+
+    @inlineCallbacks
+    def _check_reactor_things(self):
+        """
+        Poll the reactor for unclosed connections and wait for them to close.
+
+        Properly waiting for all connections to finish closing requires hooking
+        into :meth:`Protocol.connectionLost` in both client and server. Since
+        this isn't practical in all cases, we check the reactor for any open
+        connections and wait a bit for them to finish closing if we find any.
+
+        NOTE: This will only wait for connections that close on their own. Any
+              connections that have been left open will stay open (unless they
+              time out or something) and will leave the reactor dirty after we
+              stop waiting.
+        """
+        from twisted.internet import reactor
+        # Give the reactor a chance to get clean.
+        yield deferLater(reactor, 0, lambda: None)
+
+        for i in range(self.reactor_check_iterations):
+            # There are some internal readers that we want to ignore.
+            # Unfortunately they're private.
+            internal_readers = getattr(reactor, '_internalReaders', set())
+            selectables = set(reactor.getReaders() + reactor.getWriters())
+            if not (selectables - internal_readers):
+                # The reactor's clean, let's go home.
+                return
+
+            # We haven't gone home, so wait a bit for selectables to go away.
+            yield deferLater(
+                reactor, self.reactor_check_interval, lambda: None)
 
     def add_cleanup(self, func, *args, **kw):
         """
@@ -269,6 +307,25 @@ class VumiTestCase(TestCase):
         self.add_cleanup(helper_object.cleanup)
         return maybe_async_return(
             helper_object, helper_object.setup(*args, **kw))
+
+    def _runFixturesAndTest(self, result):
+        """
+        Override trial's ``_runFixturesAndTest()`` method to detect test
+        methods that are generator functions, indicating a missing
+        ``@inlineCallbacks`` decorator.
+
+        NOTE: This should probably be removed when
+              https://twistedmatrix.com/trac/ticket/3917 is merged and the next
+              Twisted version (probably 14.0) is released.
+        """
+        method = getattr(self, self._testMethodName)
+        if method.func_code.co_flags & CO_GENERATOR:
+            # We have a generator that isn't wrapped in @inlineCallbacks
+            e = ValueError(
+                "Test method is a generator. Missing @inlineCallbacks?")
+            result.addError(self, Failure(e))
+            return
+        return super(VumiTestCase, self)._runFixturesAndTest(result)
 
 
 class MessageHelper(object):
@@ -679,6 +736,7 @@ class WorkerHelper(object):
         Clear all dispatched messages from the broker.
         """
         self.broker.clear_messages('vumi')
+        self.broker.clear_messages('vumi.metrics')
 
     def _clear_dispatched(self, connector_name, name):
         rkey = self._rkey(connector_name, name)
@@ -921,6 +979,24 @@ class WorkerHelper(object):
         """
         return self.broker.kick_delivery()
 
+    @proxyable
+    def get_dispatched_metrics(self):
+        """
+        Get dispatched metrics.
+
+        The list of datapoints from each dispatched metrics message is
+        returned.
+        """
+        msgs = self.broker.get_dispatched('vumi.metrics', 'vumi.metrics')
+        return [json.loads(msg.body)['datapoints'] for msg in msgs]
+
+    @proxyable
+    def clear_dispatched_metrics(self):
+        """
+        Clear dispatched metrics messages from the broker.
+        """
+        self.broker.clear_messages('vumi.metrics')
+
 
 class MessageDispatchHelper(object):
     """
@@ -1061,6 +1137,13 @@ class RiakDisabledForTest(object):
             "Use of Riak has been disabled for this test. Please set "
             "'use_riak = True' on the test class to enable it.")
 
+    def __deepcopy__(self, memo):
+        """
+        We have no state, but ``deepcopy()`` triggers our :meth:`__getattr__`.
+        We return ``self`` so the copy compares equal.
+        """
+        return self
+
 
 def import_filter(exc, *expected):
     msg = exc.args[0]
@@ -1176,15 +1259,7 @@ class PersistenceHelper(object):
                     yield self._purge_riak(manager)
                 except ConnectionRefusedError:
                     pass
-
-        # Hackily close all connections left open by the non-tx riak client.
-        # There's no other way to explicitly close these connections and not
-        # doing it means we can hit server-side connection limits in the middle
-        # of large test runs.
-        for manager in self._riak_managers:
-            if hasattr(manager.client, '_cm'):
-                while manager.client._cm.conns:
-                    manager.client._cm.conns.pop().close()
+            yield manager.close_manager()
 
         for purge, manager in self._get_redis_managers_for_cleanup():
             if purge:
@@ -1267,7 +1342,7 @@ class PersistenceHelper(object):
         try:
             from vumi.persist.txriak_manager import TxRiakManager
         except ImportError, e:
-            import_filter(e, 'riakasaurus', 'riakasaurus.riak')
+            import_filter(e, 'riak')
             return
 
         orig_init = TxRiakManager.__init__
@@ -1350,7 +1425,7 @@ class PersistenceHelper(object):
         try:
             from vumi.persist.txriak_manager import TxRiakManager
         except ImportError, e:
-            import_skip(e, 'riakasaurus', 'riakasaurus.riak')
+            import_skip(e, 'riak')
 
         return TxRiakManager.from_config(config)
 

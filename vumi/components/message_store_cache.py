@@ -1,15 +1,16 @@
 # -*- test-case-name: vumi.components.tests.test_message_store_cache -*-
 # -*- coding: utf-8 -*-
-import time
+
+from datetime import datetime
 import hashlib
 import json
+import time
 
 from twisted.internet.defer import returnValue
 
 from vumi.persist.redis_base import Manager
-from vumi.message import TransportEvent
+from vumi.message import TransportEvent, VUMI_DATE_FORMAT
 from vumi.errors import VumiError
-from vumi import log
 
 
 class MessageStoreCacheException(VumiError):
@@ -29,6 +30,7 @@ class MessageStoreCache(object):
     TO_ADDR_KEY = 'to_addr'
     FROM_ADDR_KEY = 'from_addr'
     EVENT_KEY = 'event'
+    EVENT_COUNT_KEY = 'event_count'
     STATUS_KEY = 'status'
     SEARCH_TOKEN_KEY = 'search_token'
     SEARCH_RESULT_KEY = 'search_result'
@@ -72,6 +74,9 @@ class MessageStoreCache(object):
     def event_key(self, batch_id):
         return self.batch_key(self.EVENT_KEY, batch_id)
 
+    def event_count_key(self, batch_id):
+        return self.batch_key(self.EVENT_COUNT_KEY, batch_id)
+
     def search_token_key(self, batch_id):
         return self.batch_key(self.SEARCH_TOKEN_KEY, batch_id)
 
@@ -90,6 +95,17 @@ class MessageStoreCache(object):
         """
         return self.redis.exists(self.inbound_count_key(batch_id))
 
+    def uses_event_counters(self, batch_id):
+        """
+        Returns ``True`` if ``batch_id`` has moved to the new system of using
+        counters for events instead of assuming all keys are in Redis and doing
+        a `zcard` on that.
+
+        The test for this is to see if `inbound_count_key(batch_id)` exists. If
+        it is then we've moved to the new system and are using counters.
+        """
+        return self.redis.exists(self.event_count_key(batch_id))
+
     @Manager.calls_manager
     def switch_to_counters(self, batch_id):
         """
@@ -98,8 +114,6 @@ class MessageStoreCache(object):
         """
         uses_counters = yield self.uses_counters(batch_id)
         if uses_counters:
-            log.msg('Batch %r has already switched to counters.' % (
-                batch_id,))
             return
 
         # NOTE:     Under high load this may result in the counter being off
@@ -115,28 +129,31 @@ class MessageStoreCache(object):
         yield self.redis.set(self.outbound_count_key(batch_id),
                              outbound_count or 0)
 
+        yield self.truncate_inbound_message_keys(batch_id)
+        yield self.truncate_outbound_message_keys(batch_id)
+
     @Manager.calls_manager
+    def _truncate_keys(self, redis_key, truncate_at):
+        # Indexes are zero based
+        truncate_at = (truncate_at or self.TRUNCATE_MESSAGE_KEY_COUNT_AT) + 1
+        # NOTE: Doing this because ZCARD is O(1) where ZREMRANGEBYRANK is
+        #       O(log(N)+M)
+        current_size = yield self.redis.zcard(redis_key)
+        if current_size <= truncate_at:
+            returnValue(0)
+
+        keys_removed = yield self.redis.zremrangebyrank(
+            redis_key, 0, truncate_at * -1)
+        returnValue(keys_removed)
+
     def truncate_inbound_message_keys(self, batch_id, truncate_at=None):
-        # indexes are zero based
-        truncate_at = (truncate_at or self.TRUNCATE_MESSAGE_KEY_COUNT_AT)
-        if (yield self.inbound_message_keys_size(batch_id)) > truncate_at:
-            keys_removed = yield self.redis.zremrangebyrank(
-                self.inbound_key(batch_id), truncate_at, -1)
-            returnValue(keys_removed)
+        return self._truncate_keys(self.inbound_key(batch_id), truncate_at)
 
-        returnValue(0)
-
-    @Manager.calls_manager
     def truncate_outbound_message_keys(self, batch_id, truncate_at=None):
-        # indexes are zero based
-        truncate_at = (truncate_at or self.TRUNCATE_MESSAGE_KEY_COUNT_AT)
+        return self._truncate_keys(self.outbound_key(batch_id), truncate_at)
 
-        if (yield self.outbound_message_keys_size(batch_id)) > truncate_at:
-            keys_removed = yield self.redis.zremrangebyrank(
-                self.outbound_key(batch_id), truncate_at, -1)
-            returnValue(keys_removed)
-
-        returnValue(0)
+    def truncate_event_keys(self, batch_id, truncate_at=None):
+        return self._truncate_keys(self.event_key(batch_id), truncate_at)
 
     @Manager.calls_manager
     def batch_start(self, batch_id, use_counters=True):
@@ -160,10 +177,11 @@ class MessageStoreCache(object):
         if use_counters:
             yield self.redis.set(self.inbound_count_key(batch_id), 0)
             yield self.redis.set(self.outbound_count_key(batch_id), 0)
+            yield self.redis.set(self.event_count_key(batch_id), 0)
 
     @Manager.calls_manager
     def init_status(self, batch_id):
-        """"
+        """
         Setup the hash for event tracking on this batch, it primes the
         hash to have the bare minimum of expected keys and their values
         all set to 0. If there's already an existing value then it is
@@ -201,16 +219,19 @@ class MessageStoreCache(object):
         yield self.redis.delete(self.outbound_key(batch_id))
         yield self.redis.delete(self.outbound_count_key(batch_id))
         yield self.redis.delete(self.event_key(batch_id))
+        yield self.redis.delete(self.event_count_key(batch_id))
         yield self.redis.delete(self.status_key(batch_id))
         yield self.redis.delete(self.to_addr_key(batch_id))
         yield self.redis.delete(self.from_addr_key(batch_id))
         yield self.redis.srem(self.batch_key(), batch_id)
 
-    def get_timestamp(self, datetime):
+    def get_timestamp(self, timestamp):
         """
         Return a timestamp value for a datetime value.
         """
-        return time.mktime(datetime.timetuple())
+        if isinstance(timestamp, basestring):
+            timestamp = datetime.strptime(timestamp, VUMI_DATE_FORMAT)
+        return time.mktime(timestamp.timetuple())
 
     @Manager.calls_manager
     def add_outbound_message(self, batch_id, msg):
@@ -233,19 +254,35 @@ class MessageStoreCache(object):
         if new_entry:
             yield self.increment_event_status(batch_id, 'sent')
 
-        uses_counters = yield self.uses_counters(batch_id)
-        if uses_counters:
-            yield self.redis.incr(self.outbound_count_key(batch_id))
-            yield self.truncate_outbound_message_keys(batch_id)
+            uses_counters = yield self.uses_counters(batch_id)
+            if uses_counters:
+                yield self.redis.incr(self.outbound_count_key(batch_id))
+                yield self.truncate_outbound_message_keys(batch_id)
+
+    @Manager.calls_manager
+    def add_outbound_message_count(self, batch_id, count):
+        """
+        Add a count to all outbound message counters. (Used for recon.)
+        """
+        yield self.increment_event_status(batch_id, 'sent', count)
+        yield self.redis.incr(self.outbound_count_key(batch_id), count)
+
+    @Manager.calls_manager
+    def add_event_count(self, batch_id, status, count):
+        """
+        Add a count to all relevant event counters. (Used for recon.)
+        """
+        yield self.increment_event_status(batch_id, status, count)
+        yield self.redis.incr(self.event_count_key(batch_id), count)
 
     @Manager.calls_manager
     def add_event(self, batch_id, event):
         """
         Add an event to the cache for the given batch_id
         """
-
         event_id = event['event_id']
-        new_entry = yield self.add_event_key(batch_id, event_id)
+        timestamp = self.get_timestamp(event['timestamp'])
+        new_entry = yield self.add_event_key(batch_id, event_id, timestamp)
         if new_entry:
             event_type = event['event_type']
             yield self.increment_event_status(batch_id, event_type)
@@ -253,19 +290,37 @@ class MessageStoreCache(object):
                 yield self.increment_event_status(
                     batch_id, '%s.%s' % (event_type, event['delivery_status']))
 
-    def add_event_key(self, batch_id, event_key):
+    @Manager.calls_manager
+    def add_event_key(self, batch_id, event_key, timestamp):
         """
         Add the event key to the set of known event keys.
         Returns 0 if the key already exists in the set, 1 if it doesn't.
         """
-        return self.redis.sadd(self.event_key(batch_id), event_key)
+        uses_event_counters = yield self.uses_event_counters(batch_id)
+        if uses_event_counters:
+            new_entry = yield self.redis.zadd(self.event_key(batch_id), **{
+                event_key.encode('utf-8'): timestamp,
+            })
+            if new_entry:
+                yield self.redis.incr(self.event_count_key(batch_id))
+                yield self.truncate_event_keys(batch_id)
+            returnValue(new_entry)
+        else:
+            # HACK: Disabling this because of unbounded growth.
+            #       Please perform reconciliation on all batches that still use
+            #       SET-based event tracking.
+            # NOTE: Cheaper recon is coming Real Soon Now.
+            returnValue(False)
+            # This uses a set, not a sorted set.
+            new_entry = yield self.redis.sadd(
+                self.event_key(batch_id), event_key)
+            returnValue(new_entry)
 
-    def increment_event_status(self, batch_id, event_type):
+    def increment_event_status(self, batch_id, event_type, count=1):
         """
-        Increment the status for the given event_type by 1 for the given
-        batch_id
+        Increment the status for the given event_type for the given batch_id.
         """
-        return self.redis.hincrby(self.status_key(batch_id), event_type, 1)
+        return self.redis.hincrby(self.status_key(batch_id), event_type, count)
 
     @Manager.calls_manager
     def get_event_status(self, batch_id):
@@ -291,59 +346,91 @@ class MessageStoreCache(object):
         """
         Add a message key, weighted with the timestamp to the batch_id
         """
-        yield self.redis.zadd(self.inbound_key(batch_id), **{
+        new_entry = yield self.redis.zadd(self.inbound_key(batch_id), **{
             message_key.encode('utf-8'): timestamp,
         })
 
-        uses_counters = yield self.uses_counters(batch_id)
-        if uses_counters:
-            yield self.redis.incr(self.inbound_count_key(batch_id))
-            yield self.truncate_inbound_message_keys(batch_id)
+        if new_entry:
+            uses_counters = yield self.uses_counters(batch_id)
+            if uses_counters:
+                yield self.redis.incr(self.inbound_count_key(batch_id))
+                yield self.truncate_inbound_message_keys(batch_id)
+
+    @Manager.calls_manager
+    def add_inbound_message_count(self, batch_id, count):
+        """
+        Add a count to all inbound message counters. (Used for recon.)
+        """
+        yield self.redis.incr(self.inbound_count_key(batch_id), count)
 
     def add_from_addr(self, batch_id, from_addr, timestamp):
         """
         Add a from_addr to this batch_id, weighted by timestamp. Generally
         this information is retrieved when `add_inbound_message()` is called.
         """
-        return self.redis.zadd(self.from_addr_key(batch_id), **{
-            from_addr.encode('utf-8'): timestamp,
-        })
+        # NOTE: Disabled because this doesn't scale to large batches.
+        #       See https://github.com/praekelt/vumi/issues/877
+
+        # return self.redis.zadd(self.from_addr_key(batch_id), **{
+        #     from_addr.encode('utf-8'): timestamp,
+        # })
+        return
 
     def get_from_addrs(self, batch_id, asc=False):
         """
         Return a set of all known from_addrs sorted by timestamp.
         """
-        return self.redis.zrange(self.from_addr_key(batch_id), 0, -1,
-                                 desc=not asc)
+        # NOTE: Disabled because this doesn't scale to large batches.
+        #       See https://github.com/praekelt/vumi/issues/877
+
+        # return self.redis.zrange(self.from_addr_key(batch_id), 0, -1,
+        #                          desc=not asc)
+        return []
 
     def count_from_addrs(self, batch_id):
         """
         Return the number of from_addrs for this batch_id
         """
-        return self.redis.zcard(self.from_addr_key(batch_id))
+        # NOTE: Disabled because this doesn't scale to large batches.
+        #       See https://github.com/praekelt/vumi/issues/877
+
+        # return self.redis.zcard(self.from_addr_key(batch_id))
+        return 0
 
     def add_to_addr(self, batch_id, to_addr, timestamp):
         """
         Add a to-addr to this batch_id, weighted by timestamp. Generally
         this information is retrieved when `add_outbound_message()` is called.
         """
-        return self.redis.zadd(self.to_addr_key(batch_id), **{
-            to_addr.encode('utf-8'): timestamp,
-        })
+        # NOTE: Disabled because this doesn't scale to large batches.
+        #       See https://github.com/praekelt/vumi/issues/877
+
+        # return self.redis.zadd(self.to_addr_key(batch_id), **{
+        #     to_addr.encode('utf-8'): timestamp,
+        # })
+        return
 
     def get_to_addrs(self, batch_id, asc=False):
         """
         Return a set of unique to_addrs addressed in this batch ordered
         by the most recent timestamp.
         """
-        return self.redis.zrange(self.to_addr_key(batch_id), 0, -1,
-                                 desc=not asc)
+        # NOTE: Disabled because this doesn't scale to large batches.
+        #       See https://github.com/praekelt/vumi/issues/877
+
+        # return self.redis.zrange(self.to_addr_key(batch_id), 0, -1,
+        #                          desc=not asc)
+        return []
 
     def count_to_addrs(self, batch_id):
         """
         Return count of the unique to_addrs in this batch.
         """
-        return self.redis.zcard(self.to_addr_key(batch_id))
+        # NOTE: Disabled because this doesn't scale to large batches.
+        #       See https://github.com/praekelt/vumi/issues/877
+
+        # return self.redis.zcard(self.to_addr_key(batch_id))
+        return 0
 
     def get_inbound_message_keys(self, batch_id, start=0, stop=-1, asc=False,
                                  with_timestamp=False):
@@ -400,6 +487,24 @@ class MessageStoreCache(object):
 
         count = yield self.outbound_message_count(batch_id)
         returnValue(count)
+
+    @Manager.calls_manager
+    def event_count(self, batch_id):
+        count = yield self.redis.get(self.event_count_key(batch_id))
+        returnValue(0 if count is None else int(count))
+
+    @Manager.calls_manager
+    def count_event_keys(self, batch_id):
+        """
+        Return the count of the unique event keys for this batch_id
+        """
+        uses_event_counters = yield self.uses_event_counters(batch_id)
+        if uses_event_counters:
+            count = yield self.event_count(batch_id)
+            returnValue(count)
+        else:
+            count = yield self.redis.scard(self.event_key(batch_id))
+            returnValue(count)
 
     @Manager.calls_manager
     def count_inbound_throughput(self, batch_id, sample_time=300):

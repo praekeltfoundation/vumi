@@ -14,7 +14,6 @@ except ImportError:
 from twisted.internet import reactor
 from twisted.internet.defer import (
     inlineCallbacks, DeferredList, succeed, Deferred)
-from twisted.internet.error import ConnectionDone
 
 from vumi.persist.redis_base import Manager
 from vumi.persist.fake_redis import FakeRedis
@@ -35,11 +34,33 @@ class VumiRedis(txr.Redis):
     def __init__(self, *args, **kw):
         super(VumiRedis, self).__init__(*args, **kw)
         self.connected_d = Deferred()
+        self._disconnected_d = Deferred()
+        self._client_shutdown_called = False
 
     def connectionMade(self):
         d = super(VumiRedis, self).connectionMade()
         d.addCallback(lambda _: self)
         return d.chainDeferred(self.connected_d)
+
+    def connectionLost(self, reason):
+        super(VumiRedis, self).connectionLost(reason)
+        self._disconnected_d.callback(None)
+
+    def _client_shutdown(self):
+        """
+        Issue a ``QUIT`` command and wait for the connection to close.
+
+        A single client may be used by multiple manager instances, so we only
+        issue the ``QUIT`` once. This still leaves us with a potential race
+        condition if the connection is being used elsewhere, but we can't do
+        anything useful about that here.
+        """
+        self.factory.stopTrying()
+        d = succeed(None)
+        if not self._client_shutdown_called:
+            self._client_shutdown_called = True
+            d.addCallback(lambda _: self.quit())
+        return d.addCallback(lambda _: self._disconnected_d)
 
     def hget(self, key, field):
         d = super(VumiRedis, self).hget(key, field)
@@ -83,7 +104,7 @@ class VumiRedis(txr.Redis):
         deferreds = [orig_zadd(key, member, score) for member, score in pieces]
         d = DeferredList(deferreds, fireOnOneErrback=True)
         d.addCallback(lambda results: sum([result for success, result
-                                            in results if success]))
+                                           in results if success]))
         return d
 
     def zrange(self, key, start, end, desc=False, withscores=False):
@@ -92,16 +113,54 @@ class VumiRedis(txr.Redis):
                                              reverse=desc)
 
     def zrangebyscore(self, key, min, max, start=None, num=None,
-                     withscores=False, score_cast_func=float):
-        d = super(VumiRedis, self).zrangebyscore(key, min, max,
-                        offset=start, count=num, withscores=withscores)
+                      withscores=False, score_cast_func=float):
+        d = super(VumiRedis, self).zrangebyscore(
+            key, min, max, offset=start, count=num, withscores=withscores)
         if withscores:
             d.addCallback(lambda r: [(v, score_cast_func(s)) for v, s in r])
+        return d
+
+    def scan(self, cursor, match=None, count=None):
+        """
+        Scan through all the keys in the database returning those that
+        match the pattern ``match``. The ``cursor`` specifies where to
+        start a scan and ``count`` determines how much work to do looking
+        for keys on each scan. ``cursor`` may be ``None`` or ``'0'`` to
+        indicate a new scan. Any other value should be treated as an opaque
+        string.
+
+        .. note::
+
+           Requires redis server 2.8 or later.
+        """
+        args = []
+        if cursor is None:
+            cursor = '0'
+        if match is not None:
+            args.extend(("MATCH", match))
+        if count is not None:
+            args.extend(("COUNT", count))
+        self._send("SCAN", cursor, *args)
+        d = self.getResponse()
+        d.addCallback(
+            lambda r: ((None if r[0] == '0' or r[0] == 0 else r[0]), r[1]))
+        return d
+
+    def ttl(self, key):
+        # Synchronous redis returns None if -1 or -2 is returned but
+        # txredis doesn't. Older sync redis' return -2 if the key does not
+        # exist so we require redis >= 2.7.1 in setup.py (WAT).
+        d = super(VumiRedis, self).ttl(key)
+        d.addCallback(lambda r: (None if r < 0 else r))
         return d
 
 
 class VumiRedisClientFactory(txr.RedisClientFactory):
     protocol = VumiRedis
+
+    # Faster reconnecting.
+    maxDelay = 5.0
+    initialDelay = 0.01
 
     def buildProtocol(self, addr):
         self.client = self.protocol(*self._args, **self._kwargs)
@@ -115,6 +174,10 @@ class VumiRedisClientFactory(txr.RedisClientFactory):
 class TxRedisManager(Manager):
 
     call_decorator = staticmethod(inlineCallbacks)
+
+    def __init__(self, *args, **kwargs):
+        super(TxRedisManager, self).__init__(*args, **kwargs)
+        self._sub_managers = []
 
     @classmethod
     def _fake_manager(cls, fake_redis, manager_config):
@@ -136,7 +199,7 @@ class TxRedisManager(Manager):
             Key prefix for namespacing.
         """
 
-        host = client_config.pop('host', 'localhost')
+        host = client_config.pop('host', '127.0.0.1')
         port = client_config.pop('port', 6379)
 
         factory = VumiRedisClientFactory(**client_config)
@@ -152,11 +215,21 @@ class TxRedisManager(Manager):
         cls._attach_reconnector(manager)
         return manager
 
+    def sub_manager(self, sub_prefix):
+        sub_man = super(TxRedisManager, self).sub_manager(sub_prefix)
+        self._sub_managers.append(sub_man)
+        return sub_man
+
+    def set_client(self, client):
+        self._client = client
+        for sub_man in self._sub_managers:
+            sub_man.set_client(client)
+        return client
+
     @staticmethod
     def _attach_reconnector(manager):
         def set_client(client):
-            manager._client = client
-            return client
+            return manager.set_client(client)
 
         def reconnect(client):
             client.factory.deferred.addCallback(reconnect)
@@ -165,22 +238,11 @@ class TxRedisManager(Manager):
         manager._client.factory.deferred.addCallback(reconnect)
         return manager
 
-    @inlineCallbacks
     def _close(self):
-        """Close redis connection."""
-        yield self._client.factory.stopTrying()
-        try:
-            # This sends a Redis "QUIT" command, but it isn't implemented on
-            # our wrapper because it's about connection management rather than
-            # data.
-            yield self._client.quit()
-        except RuntimeError as e:
-            # Reraise errors that aren't caused by not being connected.
-            if e.args != ('Not connected',):
-                raise
-        except ConnectionDone:
-            # Swallow ConnectionDone here because we're closing anyway.
-            pass
+        """
+        Close redis connection.
+        """
+        return self._client._client_shutdown()
 
     @inlineCallbacks
     def _purge_all(self):

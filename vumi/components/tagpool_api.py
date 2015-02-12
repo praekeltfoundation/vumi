@@ -9,7 +9,9 @@ from twisted.application.internet import StreamServerEndpointService
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.worker import BaseWorker
-from vumi.config import ConfigDict, ConfigText, ConfigServerEndpoint
+from vumi.config import (
+    ConfigDict, ConfigText, ConfigServerEndpoint, ConfigInt,
+    ServerEndpointFallback)
 from vumi.persist.txredis_manager import TxRedisManager
 from vumi.components.tagpool import TagpoolManager
 from vumi.rpc import signature, Unicode, Tag, List, Dict
@@ -117,7 +119,8 @@ class TagpoolApiWorker(BaseWorker):
         worker_name = ConfigText(
             "Name of this tagpool API worker.", required=True, static=True)
         twisted_endpoint = ConfigServerEndpoint(
-            "Twisted endpoint to listen on.", required=True, static=True)
+            "Twisted endpoint to listen on.", required=True, static=True,
+            fallbacks=[ServerEndpointFallback()])
         web_path = ConfigText(
             "The path to serve this resource on.", required=True, static=True)
         health_path = ConfigText(
@@ -125,6 +128,14 @@ class TagpoolApiWorker(BaseWorker):
             static=True)
         redis_manager = ConfigDict(
             "Redis client configuration.", default={}, static=True)
+
+        # TODO: Deprecate these fields when confmodel#5 is done.
+        host = ConfigText(
+            "*DEPRECATED* 'host' and 'port' fields may be used in place of"
+            " the 'twisted_endpoint' field.", static=True)
+        port = ConfigInt(
+            "*DEPRECATED* 'host' and 'port' fields may be used in place of"
+            " the 'twisted_endpoint' field.", static=True)
 
     def get_health_response(self):
         return "OK"

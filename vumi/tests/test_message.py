@@ -16,6 +16,17 @@ class MessageTest(VumiTestCase):
         self.assertTrue('a' in Message(a=5))
         self.assertFalse('a' in Message(b=5))
 
+    def test_message_cache(self):
+        msg = Message(a=5)
+        self.assertEqual(msg.cache, {})
+        msg.cache["thing"] = "dont_store_me"
+        self.assertEqual(msg.cache, {
+            "thing": "dont_store_me",
+        })
+        self.assertEqual(msg[Message._CACHE_ATTRIBUTE], {
+            "thing": "dont_store_me",
+        })
+
 
 class TransportMessageTestMixin(object):
     def make_message(self, **fields):
@@ -95,6 +106,8 @@ class TransportUserMessageTest(TransportMessageTestMixin, VumiTestCase):
             transport_name='sphex',
             transport_type='sms',
             transport_metadata={},
+            from_addr_type='twitter_handle',
+            to_addr_type='gtalk_id',
             )
         self.assertEqual('user_message', msg['message_type'])
         self.assertEqual('sms', msg['transport_type'])
@@ -106,6 +119,8 @@ class TransportUserMessageTest(TransportMessageTestMixin, VumiTestCase):
         self.assertEqual(UTCNearNow(), msg['timestamp'])
         self.assertEqual('+27831234567', msg['to_addr'])
         self.assertEqual('12345', msg['from_addr'])
+        self.assertEqual('twitter_handle', msg['from_addr_type'])
+        self.assertEqual('gtalk_id', msg['to_addr_type'])
 
     def test_transport_user_message_defaults(self):
         msg = TransportUserMessage(
@@ -125,6 +140,8 @@ class TransportUserMessageTest(TransportMessageTestMixin, VumiTestCase):
         self.assertEqual(UTCNearNow(), msg['timestamp'])
         self.assertEqual('+27831234567', msg['to_addr'])
         self.assertEqual('12345', msg['from_addr'])
+        self.assertEqual(None, msg['to_addr_type'])
+        self.assertEqual(None, msg['from_addr_type'])
 
     def test_transport_user_message_reply_no_group(self):
         msg = TransportUserMessage(
@@ -146,6 +163,52 @@ class TransportUserMessageTest(TransportMessageTestMixin, VumiTestCase):
         self.assertEqual(reply['transport_metadata'],
                          msg['transport_metadata'])
         self.assertEqual(reply['helper_metadata'], msg['helper_metadata'])
+        self.assertEqual(reply['provider'], msg['provider'])
+
+    def test_transport_user_message_reply_no_provider(self):
+        msg = TransportUserMessage(
+            to_addr='123',
+            from_addr='456',
+            transport_name='sphex',
+            transport_type='sms',
+            transport_metadata={'foo': 'bar'},
+            helper_metadata={'otherfoo': 'otherbar'},
+            )
+        reply = msg.reply(content='Hi!')
+        self.assertEqual(reply['from_addr'], '123')
+        self.assertEqual(reply['to_addr'], '456')
+        self.assertEqual(reply['group'], None)
+        self.assertEqual(reply['session_event'], reply.SESSION_NONE)
+        self.assertEqual(reply['in_reply_to'], msg['message_id'])
+        self.assertEqual(reply['transport_name'], msg['transport_name'])
+        self.assertEqual(reply['transport_type'], msg['transport_type'])
+        self.assertEqual(reply['transport_metadata'],
+                         msg['transport_metadata'])
+        self.assertEqual(reply['helper_metadata'], msg['helper_metadata'])
+        self.assertEqual(reply['provider'], None)
+
+    def test_transport_user_message_reply_with_provider(self):
+        msg = TransportUserMessage(
+            to_addr='123',
+            from_addr='456',
+            transport_name='sphex',
+            transport_type='sms',
+            transport_metadata={'foo': 'bar'},
+            helper_metadata={'otherfoo': 'otherbar'},
+            provider='MNO',
+            )
+        reply = msg.reply(content='Hi!')
+        self.assertEqual(reply['from_addr'], '123')
+        self.assertEqual(reply['to_addr'], '456')
+        self.assertEqual(reply['group'], None)
+        self.assertEqual(reply['session_event'], reply.SESSION_NONE)
+        self.assertEqual(reply['in_reply_to'], msg['message_id'])
+        self.assertEqual(reply['transport_name'], msg['transport_name'])
+        self.assertEqual(reply['transport_type'], msg['transport_type'])
+        self.assertEqual(reply['transport_metadata'],
+                         msg['transport_metadata'])
+        self.assertEqual(reply['helper_metadata'], msg['helper_metadata'])
+        self.assertEqual(reply['provider'], msg['provider'])
 
     def test_transport_user_message_reply_undirected_group(self):
         msg = TransportUserMessage(

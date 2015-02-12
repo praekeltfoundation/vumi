@@ -2,6 +2,7 @@
 
 """An application for sandboxing message processing."""
 
+import base64
 import resource
 import os
 import json
@@ -9,6 +10,9 @@ import pkg_resources
 import logging
 import operator
 from uuid import uuid4
+from StringIO import StringIO
+
+from treq.client import HTTPClient
 
 from twisted.internet import reactor
 from twisted.internet.protocol import ProcessProtocol
@@ -17,17 +21,18 @@ from twisted.internet.defer import (
     succeed)
 from twisted.internet.error import ProcessDone
 from twisted.python.failure import Failure
-from twisted.web.client import WebClientContextFactory
+from twisted.web.client import WebClientContextFactory, Agent
 
 from OpenSSL.SSL import (
-    VERIFY_PEER, VERIFY_FAIL_IF_NO_PEER_CERT, VERIFY_CLIENT_ONCE, VERIFY_NONE)
+    VERIFY_PEER, VERIFY_FAIL_IF_NO_PEER_CERT, VERIFY_CLIENT_ONCE, VERIFY_NONE,
+    SSLv3_METHOD, SSLv23_METHOD, TLSv1_METHOD)
 
 from vumi.config import ConfigText, ConfigInt, ConfigList, ConfigDict
 from vumi.application.base import ApplicationWorker
 from vumi.message import Message
 from vumi.errors import ConfigError
 from vumi.persist.txredis_manager import TxRedisManager
-from vumi.utils import load_class_by_string, http_request_full
+from vumi.utils import load_class_by_string, HttpDataLimitError, to_kwargs
 from vumi import log
 from vumi.application.sandbox_rlimiter import SandboxRlimiter
 
@@ -257,6 +262,9 @@ class SandboxResource(object):
         return SandboxCommand(cmd=command['cmd'], reply=True,
                               cmd_id=command['cmd_id'], **kwargs)
 
+    def reply_error(self, command, reason):
+        return self.reply(command, success=False, reason=reason)
+
     def dispatch_request(self, api, command):
         handler_name = 'handle_%s' % (command['cmd'],)
         handler = getattr(self, handler_name, self.unknown_request)
@@ -271,7 +279,8 @@ class SandboxResource(object):
 
 
 class RedisResource(SandboxResource):
-    """Resource that provices access to a simple key-value store.
+    """
+    Resource that provides access to a simple key-value store.
 
     Configuration options:
 
@@ -287,6 +296,13 @@ class RedisResource(SandboxResource):
     :param int keys_per_user:
         Synonym for `keys_per_user_hard`. Deprecated.
     """
+
+    # FIXME:
+    #  - Currently we allow key expiry to be set. Keys that expire are
+    #    not decremented from the sandbox's key limit. This means that
+    #    some sandboxes might hit their key limit too soon. This is
+    #    better than not allowing expiry of keys and filling up Redis
+    #    though.
 
     @inlineCallbacks
     def setup(self):
@@ -328,8 +344,8 @@ class RedisResource(SandboxResource):
             else:
                 api.log('Redis hard limit of %s keys reached for sandbox %s. '
                         'No more keys can be written.' % (
-                            api.sandbox_id,
-                            self.keys_per_user_hard),
+                            self.keys_per_user_hard,
+                            api.sandbox_id),
                         logging.ERROR)
                 yield self.redis.incr(count_key, -1)
                 returnValue(False)
@@ -337,15 +353,72 @@ class RedisResource(SandboxResource):
 
     @inlineCallbacks
     def handle_set(self, api, command):
+        """
+        Set the value of a key.
+
+        Command fields:
+            - ``key``: The key whose value should be set.
+            - ``value``: The value to store. May be any JSON serializable
+              object.
+            - ``seconds``: Lifetime of the key in seconds. The default ``null``
+              indicates that the key should not expire.
+
+        Reply fields:
+            - ``success``: ``true`` if the operation was successful, otherwise
+              ``false``.
+
+        Example:
+
+        .. code-block:: javascript
+
+            api.request(
+                'kv.set',
+                {key: 'foo',
+                 value: {x: '42'}},
+                function(reply) { api.log_info('Value store: ' +
+                                               reply.success); });
+        """
         key = self._sandboxed_key(api.sandbox_id, command.get('key'))
+        seconds = command.get('seconds')
+        if not (seconds is None or isinstance(seconds, (int, long))):
+            returnValue(self.reply_error(
+                command, "seconds must be a number or null"))
         if not (yield self.check_keys(api, key)):
             returnValue(self._too_many_keys(command))
-        value = command.get('value')
-        yield self.redis.set(key, json.dumps(value))
+        json_value = json.dumps(command.get('value'))
+        if seconds is None:
+            yield self.redis.set(key, json_value)
+        else:
+            yield self.redis.setex(key, seconds, json_value)
         returnValue(self.reply(command, success=True))
 
     @inlineCallbacks
     def handle_get(self, api, command):
+        """
+        Retrieve the value of a key.
+
+        Command fields:
+            - ``key``: The key whose value should be retrieved.
+
+        Reply fields:
+            - ``success``: ``true`` if the operation was successful, otherwise
+              ``false``.
+            - ``value``: The value retrieved.
+
+        Example:
+
+        .. code-block:: javascript
+
+            api.request(
+                'kv.get',
+                {key: 'foo'},
+                function(reply) {
+                    api.log_info(
+                        'Value retrieved: ' +
+                        JSON.stringify(reply.value));
+                }
+            );
+        """
         key = self._sandboxed_key(api.sandbox_id, command.get('key'))
         raw_value = yield self.redis.get(key)
         value = json.loads(raw_value) if raw_value is not None else None
@@ -354,6 +427,29 @@ class RedisResource(SandboxResource):
 
     @inlineCallbacks
     def handle_delete(self, api, command):
+        """
+        Delete a key.
+
+        Command fields:
+            - ``key``: The key to delete.
+
+        Reply fields:
+            - ``success``: ``true`` if the operation was successful, otherwise
+              ``false``.
+
+        Example:
+
+        .. code-block:: javascript
+
+            api.request(
+                'kv.delete',
+                {key: 'foo'},
+                function(reply) {
+                    api.log_info('Value deleted: ' +
+                                 reply.success);
+                }
+            );
+        """
         key = self._sandboxed_key(api.sandbox_id, command.get('key'))
         existed = bool((yield self.redis.delete(key)))
         if existed:
@@ -364,6 +460,36 @@ class RedisResource(SandboxResource):
 
     @inlineCallbacks
     def handle_incr(self, api, command):
+        """
+        Atomically increment the value of an integer key.
+
+        The current value of the key must be an integer. If the key does not
+        exist, it is set to zero.
+
+        Command fields:
+            - ``key``: The key to delete.
+            - ``amount``: The integer amount to increment the key by. Defaults
+              to 1.
+
+        Reply fields:
+            - ``success``: ``true`` if the operation was successful, otherwise
+              ``false``.
+            - ``value``: The new value of the key.
+
+        Example:
+
+        .. code-block:: javascript
+
+            api.request(
+                'kv.incr',
+                {key: 'foo',
+                 amount: 3},
+                function(reply) {
+                    api.log_info('New value: ' +
+                                 reply.value);
+                }
+            );
+        """
         key = self._sandboxed_key(api.sandbox_id, command.get('key'))
         if not (yield self.check_keys(api, key)):
             returnValue(self._too_many_keys(command))
@@ -376,32 +502,118 @@ class RedisResource(SandboxResource):
 
 
 class OutboundResource(SandboxResource):
-    """Resource that provides the ability to send outbound messages.
+    """
+    Resource that provides the ability to send outbound messages.
+
+    Includes support for replying to the sender of the current message,
+    replying to the group the current message was from and sending messages
+    that aren't replies.
     """
 
     def handle_reply_to(self, api, command):
+        """
+        Sends a reply to the individual who sent a received message.
+
+        Command fields:
+            - ``content``: The body of the reply message.
+            - ``in_reply_to``: The ``message id`` of the message being replied
+              to.
+            - ``continue_session``: Whether to continue the session (if any).
+              Defaults to ``true``.
+
+        Reply fields:
+            - ``success``: ``true`` if the operation was successful, otherwise
+              ``false``.
+
+        Example:
+
+        .. code-block:: javascript
+
+            api.request(
+                'outbound.reply_to',
+                {content: 'Welcome!',
+                 in_reply_to: '06233d4eede945a3803bf9f3b78069ec'},
+                function(reply) { api.log_info('Reply sent: ' +
+                                               reply.success); });
+        """
         content = command['content']
         continue_session = command.get('continue_session', True)
         orig_msg = api.get_inbound_message(command['in_reply_to'])
-        self.app_worker.reply_to(orig_msg, content,
-                                 continue_session=continue_session)
+        d = self.app_worker.reply_to(orig_msg, content,
+                                     continue_session=continue_session)
+        d.addCallback(lambda r: self.reply(command, success=True))
+        return d
 
     def handle_reply_to_group(self, api, command):
+        """
+        Sends a reply to the group from which a received message was sent.
+
+        Command fields:
+            - ``content``: The body of the reply message.
+            - ``in_reply_to``: The ``message id`` of the message being replied
+              to.
+            - ``continue_session``: Whether to continue the session (if any).
+              Defaults to ``true``.
+
+        Reply fields:
+            - ``success``: ``true`` if the operation was successful, otherwise
+              ``false``.
+
+        Example:
+
+        .. code-block:: javascript
+
+            api.request(
+                'outbound.reply_to_group',
+                {content: 'Welcome!',
+                 in_reply_to: '06233d4eede945a3803bf9f3b78069ec'},
+                function(reply) { api.log_info('Reply to group sent: ' +
+                                               reply.success); });
+        """
         content = command['content']
         continue_session = command.get('continue_session', True)
         orig_msg = api.get_inbound_message(command['in_reply_to'])
-        self.app_worker.reply_to_group(orig_msg, content,
-                                       continue_session=continue_session)
+        d = self.app_worker.reply_to_group(orig_msg, content,
+                                           continue_session=continue_session)
+        d.addCallback(lambda r: self.reply(command, success=True))
+        return d
 
     def handle_send_to(self, api, command):
+        """
+        Sends a message to a specified address.
+
+        Command fields:
+            - ``content``: The body of the reply message.
+            - ``to_addr``: The address of the recipient (e.g. an MSISDN).
+            - ``endpoint``: The name of the endpoint to send the message via.
+              Optional (default is ``"default"``).
+
+        Reply fields:
+            - ``success``: ``true`` if the operation was successful, otherwise
+              ``false``.
+
+        Example:
+
+        .. code-block:: javascript
+
+            api.request(
+                'outbound.send_to',
+                {content: 'Welcome!', to_addr: '+27831234567',
+                 endpoint: 'default'},
+                function(reply) { api.log_info('Message sent: ' +
+                                               reply.success); });
+        """
         content = command['content']
         to_addr = command['to_addr']
         endpoint = command.get('endpoint', 'default')
-        self.app_worker.send_to(to_addr, content, endpoint=endpoint)
+        d = self.app_worker.send_to(to_addr, content, endpoint=endpoint)
+        d.addCallback(lambda r: self.reply(command, success=True))
+        return d
 
 
 class JsSandboxResource(SandboxResource):
-    """Resource that initializes a Javascript sandbox.
+    """
+    Resource that initializes a Javascript sandbox.
 
     Typically used alongside vumi/applicaiton/sandboxer.js which is
     a simple node.js based Javascript sandbox.
@@ -417,7 +629,8 @@ class JsSandboxResource(SandboxResource):
 
 
 class LoggingResource(SandboxResource):
-    """Resource that allows a sandbox to log messages via Twisted's
+    """
+    Resource that allows a sandbox to log messages via Twisted's
     logging framework.
     """
     def log(self, api, msg, level):
@@ -433,6 +646,35 @@ class LoggingResource(SandboxResource):
 
     @inlineCallbacks
     def handle_log(self, api, command, level=None):
+        """
+        Log a message at the specified severity level.
+
+        The other log commands are identical except that ``level`` need not
+        be specified. Using the log-level specific commands is preferred.
+
+        Command fields:
+            - ``level``: The severity level to log at. Must be an integer
+              log level. Default severity is the ``INFO`` log level.
+            - ``msg``: The message to log.
+
+        Reply fields:
+            - ``success``: ``true`` if the operation was successful, otherwise
+              ``false``.
+
+        Example:
+
+        .. code-block:: javascript
+
+            api.request(
+                'log.log',
+                {level: 20,
+                 msg: 'Abandon ship!'},
+                function(reply) {
+                    api.log_info('New value: ' +
+                                 reply.value);
+                }
+            );
+        """
         level = command.get('level', level)
         if level is None:
             level = logging.INFO
@@ -448,38 +690,119 @@ class LoggingResource(SandboxResource):
         returnValue(self.reply(command, success=True))
 
     def handle_debug(self, api, command):
+        """
+        Logs a message at the ``DEBUG`` log level.
+
+        See :func:`handle_log` for details.
+        """
         return self.handle_log(api, command, level=logging.DEBUG)
 
     def handle_info(self, api, command):
+        """
+        Logs a message at the ``INFO`` log level.
+
+        See :func:`handle_log` for details.
+        """
         return self.handle_log(api, command, level=logging.INFO)
 
     def handle_warning(self, api, command):
+        """
+        Logs a message at the ``WARNING`` log level.
+
+        See :func:`handle_log` for details.
+        """
         return self.handle_log(api, command, level=logging.WARNING)
 
     def handle_error(self, api, command):
+        """
+        Logs a message at the ``ERROR`` log level.
+
+        See :func:`handle_log` for details.
+        """
         return self.handle_log(api, command, level=logging.ERROR)
 
     def handle_critical(self, api, command):
+        """
+        Logs a message at the ``CRITICAL`` log level.
+
+        See :func:`handle_log` for details.
+        """
         return self.handle_log(api, command, level=logging.CRITICAL)
 
 
-class HttpClientContextFactory(WebClientContextFactory):
+try:
+    from twisted.web.client import BrowserLikePolicyForHTTPS
+    from twisted.internet.ssl import optionsForClientTLS
 
-    def __init__(self, verify_options=None):
+    class HttpClientPolicyForHTTPS(BrowserLikePolicyForHTTPS):
+        """
+        This client policy is used if we have Twisted 14.0.0 or newer and are
+        not explicitly disabling host verification.
+        """
+        def __init__(self, ssl_method=None):
+            super(HttpClientPolicyForHTTPS, self).__init__()
+            self.ssl_method = ssl_method
+
+        def creatorForNetloc(self, hostname, port):
+            options = {}
+            if self.ssl_method is not None:
+                options['method'] = self.ssl_method
+            return optionsForClientTLS(
+                hostname.decode("ascii"), extraCertificateOptions=options)
+
+except ImportError:
+    HttpClientPolicyForHTTPS = None
+
+
+class HttpClientContextFactory(object):
+    """
+    This context factory is used if we have a Twisted version older than 14.0.0
+    or if we are explicitly disabling host verification.
+    """
+    def __init__(self, verify_options=None, ssl_method=None):
         self.verify_options = verify_options
-
-    def verify_callback(self, conn, cert, errno, errdepth, ok):
-        return ok
+        self.ssl_method = ssl_method
 
     def getContext(self, hostname, port):
-        context = WebClientContextFactory.getContext(self, hostname, port)
+        context = self._get_noverify_context()
+
+        if self.verify_options in (None, VERIFY_NONE):
+            # We don't want to do anything with verification here.
+            return context
+
         if self.verify_options is not None:
-            context.set_verify(self.verify_options, self.verify_callback)
+            def verify_callback(conn, cert, errno, errdepth, ok):
+                return ok
+            context.set_verify(self.verify_options, verify_callback)
         return context
+
+    def _get_noverify_context(self):
+        """
+        Use ClientContextFactory directly and set the method if necessary.
+
+        This will perform no host verification at all.
+        """
+        from twisted.internet.ssl import ClientContextFactory
+        context_factory = ClientContextFactory()
+        if self.ssl_method is not None:
+            context_factory.method = self.ssl_method
+        return context_factory.getContext()
+
+
+def make_context_factory(ssl_method=None, verify_options=None):
+    if HttpClientPolicyForHTTPS is None or verify_options == VERIFY_NONE:
+        return HttpClientContextFactory(
+            verify_options=verify_options, ssl_method=ssl_method)
+    else:
+        return HttpClientPolicyForHTTPS(ssl_method=ssl_method)
 
 
 class HttpClientResource(SandboxResource):
-    """Resource that allows making HTTP calls to outside services.
+    """
+    Resource that allows making HTTP calls to outside services.
+
+    All command on this resource share a common set of command
+    and response fields:
 
     Command fields:
         - ``url``: The URL to request
@@ -492,6 +815,21 @@ class HttpClientResource(SandboxResource):
         - ``headers``: A dictionary of keys for the header name and a list
             of values to provide as header values.
         - ``data``: The payload to submit as part of the request.
+        - ``files``: A dictionary, submitted as multipart/form-data
+            in the request:
+
+            .. code-block:: javascript
+
+                [{
+                    "field name": {
+                        "file_name": "the file name",
+                        "content_type": "content-type",
+                        "data": "data to submit, encoded as base64",
+                    }
+                }, ...]
+
+            The ``data`` field in the dictionary will be base64 decoded
+            before the HTTP request is made.
 
     Success reply fields:
         - ``success``: Set to ``true``
@@ -515,6 +853,8 @@ class HttpClientResource(SandboxResource):
 
     DEFAULT_TIMEOUT = 30  # seconds
     DEFAULT_DATA_LIMIT = 128 * 1024  # 128 KB
+    agent_class = Agent
+    http_client_class = HTTPClient
 
     def setup(self):
         self.timeout = self.config.get('timeout', self.DEFAULT_TIMEOUT)
@@ -532,56 +872,147 @@ class HttpClientResource(SandboxResource):
             'VERIFY_NONE': VERIFY_NONE,
             'VERIFY_PEER': VERIFY_PEER,
             'VERIFY_CLIENT_ONCE': VERIFY_CLIENT_ONCE,
-            'VERIFY_FAIL_IF_NO_PEER_CERT': VERIFY_FAIL_IF_NO_PEER_CERT
+            'VERIFY_FAIL_IF_NO_PEER_CERT': VERIFY_FAIL_IF_NO_PEER_CERT,
+        }
+        method_map = {
+            'SSLv3': SSLv3_METHOD,
+            'SSLv23': SSLv23_METHOD,
+            'TLSv1': TLSv1_METHOD,
         }
 
         if 'verify_options' in command:
             verify_options = [verify_map[key] for key in
-                                command.get('verify_options', [])]
+                              command.get('verify_options', [])]
             verify_options = reduce(operator.or_, verify_options)
         else:
             verify_options = None
+        if 'ssl_method' in command:
+            # TODO: Fail better with unknown method.
+            ssl_method = method_map[command['ssl_method']]
+        else:
+            ssl_method = None
 
-        context_factory = HttpClientContextFactory(
-            verify_options=verify_options)
+        context_factory = make_context_factory(
+            verify_options=verify_options, ssl_method=ssl_method)
 
-        headers = command.get('headers', {})
-        headers = dict((k.encode("utf-8"), [x.encode("utf-8") for x in v])
-                       for k, v in headers.items())
+        headers = command.get('headers', None)
         data = command.get('data', None)
-        if data is not None:
-            data = data.encode("utf-8")
-        d = http_request_full(url, data=data, headers=headers,
-                              method=method, timeout=self.timeout,
-                              data_limit=self.data_limit,
-                              context_factory=context_factory)
+        files = command.get('files', None)
+
+        d = self._make_request(method, url, headers=headers, data=data,
+                               files=files, timeout=self.timeout,
+                               context_factory=context_factory,
+                               data_limit=self.data_limit)
         d.addCallback(self._make_success_reply, command)
         d.addErrback(self._make_failure_reply, command)
         return d
 
+    def _make_request(self, method, url, headers=None, data=None, files=None,
+                      timeout=None, context_factory=None,
+                      data_limit=None):
+        context_factory = (context_factory if context_factory is not None
+                           else WebClientContextFactory())
+
+        if headers is not None:
+            headers = dict((k.encode("utf-8"), [x.encode("utf-8") for x in v])
+                           for k, v in headers.items())
+
+        if data is not None:
+            data = data.encode("utf-8")
+
+        if files is not None:
+            files = dict([
+                (key,
+                    (value['file_name'],
+                     value['content_type'],
+                     StringIO(base64.b64decode(value['data']))))
+                for key, value in files.iteritems()])
+
+        agent = self.agent_class(reactor, contextFactory=context_factory)
+        http_client = self.http_client_class(agent)
+
+        d = http_client.request(method, url, headers=headers, data=data,
+                                files=files, timeout=timeout)
+
+        d.addCallback(self._ensure_data_limit, data_limit)
+        return d
+
+    def _ensure_data_limit(self, response, data_limit):
+        header = response.headers.getRawHeaders('Content-Length')
+
+        def data_limit_check(response, length):
+            if data_limit is not None and length > data_limit:
+                raise HttpDataLimitError(
+                    "Received %d bytes, maximum of %d bytes allowed."
+                    % (length, data_limit,))
+            return response
+
+        if header is None:
+            d = response.content()
+            d.addCallback(lambda body: data_limit_check(response, len(body)))
+            return d
+
+        content_length = header[0]
+        return maybeDeferred(data_limit_check, response, int(content_length))
+
     def _make_success_reply(self, response, command):
-        return self.reply(command, success=True,
-                          body=response.delivered_body,
-                          code=response.code)
+        d = response.content()
+        d.addCallback(
+            lambda body: self.reply(command, success=True, body=body,
+                                    code=response.code))
+        return d
 
     def _make_failure_reply(self, failure, command):
         return self.reply(command, success=False,
                           reason=failure.getErrorMessage())
 
     def handle_get(self, api, command):
+        """
+        Make an HTTP GET request.
+
+        See :class:`HttpResource` for details.
+        """
         return self._make_request_from_command('GET', command)
 
     def handle_put(self, api, command):
+        """
+        Make an HTTP PUT request.
+
+        See :class:`HttpResource` for details.
+        """
         return self._make_request_from_command('PUT', command)
 
     def handle_delete(self, api, command):
+        """
+        Make an HTTP DELETE request.
+
+        See :class:`HttpResource` for details.
+        """
         return self._make_request_from_command('DELETE', command)
 
     def handle_head(self, api, command):
+        """
+        Make an HTTP HEAD request.
+
+        See :class:`HttpResource` for details.
+        """
         return self._make_request_from_command('HEAD', command)
 
     def handle_post(self, api, command):
+        """
+        Make an HTTP POST request.
+
+        See :class:`HttpResource` for details.
+        """
         return self._make_request_from_command('POST', command)
+
+    def handle_patch(self, api, command):
+        """
+        Make an HTTP PATCH request.
+
+        See :class:`HttpResource` for details.
+        """
+        return self._make_request_from_command('PATCH', command)
 
 
 class SandboxApi(object):
@@ -697,6 +1128,11 @@ class SandboxCommand(Message):
             'reply',
         )
 
+    @classmethod
+    def from_json(cls, json_string):
+        # We override this to avoid the datetime conversions.
+        return cls(_process_fields=False, **to_kwargs(json.loads(json_string)))
+
 
 class SandboxConfig(ApplicationWorker.CONFIG_CLASS):
 
@@ -747,7 +1183,7 @@ class Sandbox(ApplicationWorker):
         resource.RLIMIT_CORE: (1 * MB, 1 * MB),
         resource.RLIMIT_CPU: (60, 60),
         resource.RLIMIT_FSIZE: (1 * MB, 1 * MB),
-        resource.RLIMIT_DATA: (32 * MB, 32 * MB),
+        resource.RLIMIT_DATA: (64 * MB, 64 * MB),
         resource.RLIMIT_STACK: (1 * MB, 1 * MB),
         resource.RLIMIT_RSS: (10 * MB, 10 * MB),
         resource.RLIMIT_NOFILE: (15, 15),

@@ -41,6 +41,22 @@ class TestService(VumiTestCase):
         self.assertEquals(log, [Message(key="value")])
 
     @inlineCallbacks
+    def test_consume_with_prefetch(self):
+        """The consume helper should direct all incoming messages matching the
+        specified routing_key, queue_name & exchange to the given callback"""
+
+        worker = yield self.worker_helper.get_worker(Worker, {}, start=False)
+
+        # buffer to check messages consumed
+        log = []
+        # consume all messages on the given routing key and append
+        # them to the log
+        consumer = yield worker.consume(
+            'test.routing.key', lambda msg: log.append(msg), prefetch_count=10)
+        self.assertEqual(10, consumer.channel._get_consumer_prefetch(
+            consumer._consumer_tag))
+
+    @inlineCallbacks
     def test_start_publisher(self):
         """The publisher should publish"""
         worker = WorkerHelper.get_worker_raw(Worker, {})
@@ -67,7 +83,7 @@ class NoQueueWorkerCreator(WorkerCreator):
 class TestWorkerCreator(VumiTestCase):
     def get_creator(self, **options):
         vumi_options = {
-            "hostname": "localhost",
+            "hostname": "127.0.0.1",
             "port": 5672,
             "username": "vumitest",
             "password": "vumitest",

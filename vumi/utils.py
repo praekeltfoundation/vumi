@@ -192,7 +192,7 @@ def normalize_msisdn(raw, country_code=''):
     if len(raw) <= 5:
         return raw
 
-    raw = ''.join([c for c in str(raw) if c.isdigit() or c == '+'])
+    raw = ''.join([c for c in raw if c.isdigit() or c == '+'])
     if raw.startswith('00'):
         return '+' + raw[2:]
     if raw.startswith('0'):
@@ -271,16 +271,32 @@ class LogFilterSite(Site):
         return Site.log(self, request)
 
 
-def vumi_resource_path(path):
+class PkgResources(object):
     """
-    Return an absolute path to a Vumi package resource.
+    A helper for accessing a packages data files.
 
-    Vumi package resources are found in the vumi.resources package.
-    If the path is already absolute, it is returned unmodified.
+    :param str modname:
+        The full dotted name of the module. E.g.
+        ``vumi.resources``.
     """
-    if os.path.isabs(path):
-        return path
-    return pkg_resources.resource_filename("vumi.resources", path)
+    def __init__(self, modname):
+        self.modname = modname
+
+    def path(self, path):
+        """
+        Return the absolute path to a package resource.
+
+        If path is already absolute, it is returned unmodified.
+
+        :param str path:
+            The relative or absolute path to the resource.
+        """
+        if os.path.isabs(path):
+            return path
+        return pkg_resources.resource_filename(self.modname, path)
+
+
+vumi_resource_path = PkgResources("vumi.resources").path
 
 
 def load_class(module_name, class_name):

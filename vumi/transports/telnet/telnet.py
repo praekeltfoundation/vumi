@@ -2,14 +2,14 @@
 
 """Transport that sends and receives to telnet clients."""
 
-from twisted.internet import reactor
 from twisted.internet.protocol import ServerFactory
 from twisted.internet.defer import inlineCallbacks, Deferred, gatherResults
-from twisted.conch.telnet import (TelnetTransport, TelnetProtocol,
-                                    StatefulTelnetProtocol)
-from twisted.python import log
+from twisted.conch.telnet import (
+    TelnetTransport, TelnetProtocol, StatefulTelnetProtocol)
 
-from vumi.config import ConfigServerEndpoint, ConfigText
+from vumi import log
+from vumi.config import (
+    ConfigServerEndpoint, ConfigText, ConfigInt, ServerEndpointFallback)
 from vumi.transports import Transport
 from vumi.message import TransportUserMessage
 
@@ -82,13 +82,16 @@ class AddressedTelnetTransportProtocol(StatefulTelnetProtocol):
             self.vumi_transport.deregister_client(self)
 
 
+fallback_format_str = "tcp:interface={telnet_host}:port={telnet_port}"
+
+
 class TelnetServerConfig(Transport.CONFIG_CLASS):
     """
     Telnet transport configuration.
     """
     twisted_endpoint = ConfigServerEndpoint(
         "The endpoint the Telnet server will listen on.",
-        fallbacks=('telnet_host', 'telnet_port'),
+        fallbacks=[ServerEndpointFallback('telnet_host', 'telnet_port')],
         required=True, static=True)
     to_addr = ConfigText(
         "The to_addr to use for inbound messages. The default is to use"
@@ -97,6 +100,14 @@ class TelnetServerConfig(Transport.CONFIG_CLASS):
     transport_type = ConfigText(
         "The transport_type to use for inbound messages.",
         default='telnet', static=True)
+
+    # TODO: Deprecate these fields when confmodel#5 is done.
+    telnet_host = ConfigText(
+        "*DEPRECATED* 'telnet_host' and 'telnet_port' fields may be used in"
+        "place of the 'twisted_endpoint' field.", static=True)
+    telnet_port = ConfigInt(
+        "*DEPRECATED* 'telnet_host' and 'telnet_port' fields may be used in"
+        " place of the 'twisted_endpoint' field.", static=True)
 
 
 class TelnetServerTransport(Transport):

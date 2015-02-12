@@ -1,9 +1,10 @@
 from vumi.config import (
     ConfigText, ConfigInt, ConfigBool, ConfigClientEndpoint, ConfigDict,
-    ConfigFloat, ConfigClassName)
+    ConfigFloat, ConfigClassName, ClientEndpointFallback)
 from vumi.transports.smpp.iprocessors import (
     IDeliveryReportProcessor, IDeliverShortMessageProcessor,
     ISubmitShortMessageProcessor)
+from vumi.codecs.ivumi_codecs import IVumiCodec
 from vumi.transports.base import Transport
 
 
@@ -11,13 +12,17 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
 
     twisted_endpoint = ConfigClientEndpoint(
         'The SMPP endpoint to connect to.',
-        required=True, static=True)
+        required=True, static=True,
+        fallbacks=[ClientEndpointFallback()])
     initial_reconnect_delay = ConfigInt(
         'How long (in seconds) to wait between reconnecting attempts. '
         'Defaults to 5 seconds.', default=5, static=True)
     throttle_delay = ConfigFloat(
         "Delay (in seconds) before retrying a message after receiving "
         "`ESME_RTHROTTLED` or `ESME_RMSGQFUL`.", default=0.1, static=True)
+    deliver_sm_decoding_error = ConfigText(
+        'The error to respond with when we were unable to decode all parts '
+        'of a PDU.', default='ESME_RDELIVERYFAILURE', static=True)
     submit_sm_expiry = ConfigInt(
         'How long (in seconds) to wait for the SMSC to return with a '
         '`submit_sm_resp`. Defaults to 24 hours.',
@@ -37,6 +42,11 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
         "the TX bind are handled by the RX bind and they need to share the "
         "same prefix for the lookup for message ids in delivery reports to "
         "work.", default='', static=True)
+    codec_class = ConfigClassName(
+        'Which class should be used to handle character encoding/decoding. '
+        'MUST implement `IVumiCodec`.',
+        default='vumi.codecs.VumiCodec',
+        static=True, implements=IVumiCodec)
     delivery_report_processor = ConfigClassName(
         'Which delivery report processor to use. '
         'MUST implement `IDeliveryReportProcessor`.',
@@ -75,6 +85,9 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
         default="34", static=True)
     service_type = ConfigText(
         'The SMPP service type.', default="", static=True)
+    address_range = ConfigText(
+        "Address range to receive. (SMSC-specific format, default empty.)",
+        default="", static=True)
     dest_addr_ton = ConfigInt(
         'Destination TON (type of number).', default=0, static=True)
     dest_addr_npi = ConfigInt(
@@ -96,3 +109,17 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
         "delay before reconnecting. In these cases a 45s "
         "`initial_reconnect_delay` is recommended. Default 55.",
         default=55, static=True)
+    mt_tps = ConfigInt(
+        'Mobile Terminated Transactions per Second. The Maximum Vumi '
+        'messages per second to attempt to put on the wire. '
+        'Defaults to 0 which means no throttling is applied. '
+        '(NOTE: 1 Vumi message may result in multiple PDUs)',
+        default=0, static=True, required=False)
+
+    # TODO: Deprecate these fields when confmodel#5 is done.
+    host = ConfigText(
+        "*DEPRECATED* 'host' and 'port' fields may be used in place of the"
+        " 'twisted_endpoint' field.", static=True)
+    port = ConfigInt(
+        "*DEPRECATED* 'host' and 'port' fields may be used in place of the"
+        " 'twisted_endpoint' field.", static=True)

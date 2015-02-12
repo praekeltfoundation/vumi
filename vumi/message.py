@@ -43,13 +43,16 @@ def to_json(obj):
 
 class Message(object):
     """
-    Start of a somewhat unified message object to be
-    used internally in Vumi and while being in transit
-    over AMQP
+    A unified message object used by Vumi when transmitting messages over AMQP
+    and occassionally as a standardised JSON format for use in external APIs.
 
-    scary transport format -> Vumi Tansport -> Unified Message -> Vumi Worker
-
+    The special ``.cache`` property stores a dictionary of data that is not
+    stored by the :class:`vumi.fields.VumiMessage` field and hence not stored
+    by Vumi's message store.
     """
+
+    # name of the special attribute that isn't stored by the message store
+    _CACHE_ATTRIBUTE = "__cache__"
 
     def __init__(self, _process_fields=True, **kwargs):
         if _process_fields:
@@ -108,6 +111,13 @@ class Message(object):
 
     def copy(self):
         return self.from_json(self.to_json())
+
+    @property
+    def cache(self):
+        """
+        A special payload attribute that isn't stored by the message store.
+        """
+        return self.payload.setdefault(self._CACHE_ATTRIBUTE, {})
 
 
 class TransportMessage(Message):
@@ -206,23 +216,40 @@ class TransportUserMessage(TransportMessage):
     TT_USSD = 'ussd'
     TT_XMPP = 'xmpp'
     TT_MXIT = 'mxit'
+    TT_WECHAT = 'wechat'
     TRANSPORT_TYPES = set([TT_HTTP_API, TT_IRC, TT_TELNET, TT_TWITTER, TT_SMS,
-                           TT_USSD, TT_XMPP, TT_MXIT])
+                           TT_USSD, TT_XMPP, TT_MXIT, TT_WECHAT])
+
+    AT_IRC_NICKNAME = 'irc_nickname'
+    AT_TWITTER_HANDLE = 'twitter_handle'
+    AT_MSISDN = 'msisdn'
+    AT_GTALK_ID = 'gtalk_id'
+    AT_JABBER_ID = 'jabber_id'
+    AT_MXIT_ID = 'mxit_id'
+    AT_WECHAT_ID = 'wechat_id'
+    ADDRESS_TYPES = set([
+        AT_IRC_NICKNAME, AT_TWITTER_HANDLE, AT_MSISDN, AT_GTALK_ID,
+        AT_JABBER_ID, AT_MXIT_ID, AT_WECHAT_ID])
 
     def process_fields(self, fields):
         fields = super(TransportUserMessage, self).process_fields(fields)
         fields.setdefault('message_id', self.generate_id())
         fields.setdefault('in_reply_to', None)
+        fields.setdefault('provider', None)
         fields.setdefault('session_event', None)
         fields.setdefault('content', None)
         fields.setdefault('transport_metadata', {})
         fields.setdefault('group', None)
+        fields.setdefault('to_addr_type', None)
+        fields.setdefault('from_addr_type', None)
         return fields
 
     def validate_fields(self):
         super(TransportUserMessage, self).validate_fields()
-        # We might get older message versions without the `group` field.
+        # We might get older message versions without the `group` or `provider`
+        # fields.
         self.payload.setdefault('group', None)
+        self.payload.setdefault('provider', None)
         self.assert_field_present(
             'message_id',
             'to_addr',
@@ -234,6 +261,7 @@ class TransportUserMessage(TransportMessage):
             'transport_type',
             'transport_metadata',
             'group',
+            'provider',
             )
         if self['session_event'] not in self.SESSION_EVENTS:
             raise InvalidMessageField("Invalid session_event %r"
@@ -261,7 +289,7 @@ class TransportUserMessage(TransportMessage):
               replied to and may not be overridden by this method:
 
               # If we're not using this addressing, we shouldn't be replying.
-              'to_addr', 'from_addr', 'group', 'in_reply_to',
+              'to_addr', 'from_addr', 'group', 'in_reply_to', 'provider'
               # These three belong together and are supposed to be opaque.
               'transport_name', 'transport_type', 'transport_metadata'
 
@@ -272,7 +300,7 @@ class TransportUserMessage(TransportMessage):
 
         for field in [
                 # If we're not using this addressing, we shouldn't be replying.
-                'to_addr', 'from_addr', 'group', 'in_reply_to',
+                'to_addr', 'from_addr', 'group', 'in_reply_to', 'provider'
                 # These three belong together and are supposed to be opaque.
                 'transport_name', 'transport_type', 'transport_metadata']:
             if field in kw:
@@ -286,6 +314,7 @@ class TransportUserMessage(TransportMessage):
             'from_addr': self['to_addr'],
             'group': self['group'],
             'in_reply_to': self['message_id'],
+            'provider': self['provider'],
             'transport_name': self['transport_name'],
             'transport_type': self['transport_type'],
             'transport_metadata': self['transport_metadata'],

@@ -73,7 +73,7 @@ class TestParlayXTransport(VumiTestCase):
             'remote_notification_uri': 'notification_uri',
         }
         self.tx_helper = self.add_helper(TransportHelper(ParlayXTransport))
-        self.uri = 'http://localhost:%s%s' % (
+        self.uri = 'http://127.0.0.1:%s%s' % (
             self.port, config['web_notification_path'])
 
         def _create_client(transport, config):

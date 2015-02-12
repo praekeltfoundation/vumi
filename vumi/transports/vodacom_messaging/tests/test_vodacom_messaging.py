@@ -19,7 +19,7 @@ class TestVodacomMessagingTransport(VumiTestCase):
             'transport_type': 'ussd',
             'ussd_string_prefix': '*120*666#',
             'web_path': "/foo",
-            'web_host': "localhost",
+            'web_host': "127.0.0.1",
             'web_port': 0,
             'username': 'testuser',
             'password': 'testpass',
@@ -56,7 +56,7 @@ class TestVodacomMessagingTransport(VumiTestCase):
         response = yield d
         correct_response = '<request>\n\t<headertext>OK</headertext>\n\t' \
                 '<options>\n\t\t<option command="1" order="1" ' \
-                'callback="http://localhost/foo" display="False" >' \
+                'callback="http://127.0.0.1/foo" display="False" >' \
                 '</option>\n\t</options>\n</request>'
         self.assertEqual(response, correct_response)
 
@@ -86,7 +86,7 @@ class TestVodacomMessagingTransport(VumiTestCase):
         response = yield d
         correct_response = '<request>\n\t<headertext>OK</headertext>\n\t' \
                 '<options>\n\t\t<option command="1" order="1" ' \
-                'callback="http://localhost/foo" display="False" >' \
+                'callback="http://127.0.0.1/foo" display="False" >' \
                 '</option>\n\t</options>\n</request>'
         self.assertEqual(response, correct_response)
 

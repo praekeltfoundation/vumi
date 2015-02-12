@@ -18,13 +18,19 @@ class InvalidMessageField(InvalidMessage):
     pass
 
 
-class ConfigError(VumiError):
-    pass
-
-
 class DuplicateConnectorError(VumiError):
     pass
 
 
 class InvalidEndpoint(VumiError):
     """Raised when attempting to send a message to an invalid endpoint."""
+
+
+class DispatcherError(VumiError):
+    """Raised when an error is encounter while dispatching a message."""
+
+
+# Re-export this for compatibility.
+from confmodel.errors import ConfigError
+
+ConfigError

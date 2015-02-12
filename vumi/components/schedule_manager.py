@@ -69,8 +69,8 @@ class ScheduleManager(object):
             else:
                 raise ValueError(
                     "Invalid value for 'recurring': %r" % (recurring_type,))
-        except Exception, e:
-            log.error("Error processing schedule.", e)
+        except Exception:
+            log.error(None, "Error processing schedule.")
 
     def get_next_daily(self, since_dt):
         timeofday = datetime.strptime(

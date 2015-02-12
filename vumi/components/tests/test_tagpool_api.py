@@ -22,7 +22,7 @@ class TestTagpoolApiServer(VumiTestCase):
         self.redis = yield self.persistence_helper.get_redis_manager()
         self.tagpool = TagpoolManager(self.redis)
         site = Site(TagpoolApiServer(self.tagpool))
-        self.server = yield reactor.listenTCP(0, site)
+        self.server = yield reactor.listenTCP(0, site, interface='127.0.0.1')
         self.add_cleanup(self.server.loseConnection)
         addr = self.server.getHost()
         self.proxy = Proxy("http://%s:%d/" % (addr.host, addr.port))

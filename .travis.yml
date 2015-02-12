@@ -5,15 +5,39 @@ python:
   - "pypy"
 node_js:
   - "0.10"
+env:
+  # Test against the latest version of Twisted.
+  - TWISTED_VERSION="Twisted"
+matrix:
+  include:
+    # Test against the oldest version of Twisted that we claim to support.
+    # This is a separate matrix inclusion to avoid spawning unnecessary builds.
+    - python: "2.7"
+      env: TWISTED_VERSION="Twisted==13.1.0"
 services:
-  - riak
   - redis-server
+before_install:
+  # We need Riak 1.4, so we add Basho's repo and install from there.
+  # Additionally, we remove existing Riak data and replace the config with ours.
+  - sudo service riak stop
+  - "curl http://apt.basho.com/gpg/basho.apt.key | sudo apt-key add -"
+  - sudo bash -c "echo deb http://apt.basho.com $(lsb_release -sc) main > /etc/apt/sources.list.d/basho.list"
+  - sudo apt-get -qq update
+  - sudo apt-get install -qq -y --force-yes riak=1.4.12-1
+  - sudo rm -rf /var/lib/riak/*
+  - sudo cp utils/app.config /etc/riak/app.config
+  - sudo service riak start
+  # We need the protobuf-compiler so we can install Riak client libraries.
+  - sudo apt-get install -qq protobuf-compiler
 install:
-  # We easy_install a binary riak_pb package because pip install needs `protoc'.
-  - "easy_install 'riak_pb<1.3.0'"
+  - "pip install ${TWISTED_VERSION}"
   - "pip install -r requirements.pip --use-wheel"
   - "pip install coveralls --use-wheel"
+before_script:
+  # To see what version of Riak we're running and check that it's happy.
+  - riak version
+  - riak-admin member-status
 script:
-  - VUMITEST_REDIS_DB=1 coverage run --source=vumi `which trial` vumi
+  - VUMITEST_REDIS_DB=1 VUMI_TEST_NODE_PATH="$(which node)" coverage run --source=vumi `which trial` vumi
 after_success:
   - coveralls

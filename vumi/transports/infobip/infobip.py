@@ -8,9 +8,14 @@ import json
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi import log
+from vumi.errors import VumiError
 from vumi.message import TransportUserMessage
 from vumi.transports.httprpc import HttpRpcTransport
 from vumi.components.session import SessionManager
+
+
+class InfobipError(VumiError):
+    """Used to log errors specific to the Infobip transport."""
 
 
 class InfobipTransport(HttpRpcTransport):
@@ -244,7 +249,7 @@ class InfobipTransport(HttpRpcTransport):
             if response_id is None:
                 err_msg = ("Infobip transport could not find original request"
                             " when attempting to reply.")
-                log.error(err_msg)
+                log.error(InfobipError(err_msg))
                 return self.publish_nack(user_message_id=message['message_id'],
                     reason=err_msg)
             else:
@@ -253,6 +258,6 @@ class InfobipTransport(HttpRpcTransport):
         else:
             err_msg = ("Infobip transport cannot process outbound message that"
                         " is not a reply: %s" % (message['message_id'],))
-            log.error(err_msg)
+            log.error(InfobipError(err_msg))
             return self.publish_nack(user_message_id=message['message_id'],
                 reason=err_msg)

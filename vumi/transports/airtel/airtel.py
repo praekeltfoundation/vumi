@@ -227,14 +227,16 @@ class AirtelUSSDTransport(HttpRpcTransport):
             'amount': [str(config.airtel_charge_amount)],
         }
 
+        content = message['content'].encode(self.ENCODING).lstrip()
+
         if self.noisy:
             log.debug('in_reply_to: %s' % (message['in_reply_to'],))
-            log.debug('content: %r' % (message['content'],))
+            log.debug('content: %r' % (content,))
             log.debug('Response headers: %r' % (headers,))
 
         self.finish_request(
             message['in_reply_to'],
-            message['content'].encode(self.ENCODING),
+            content,
             code=http.OK,
             headers=headers)
         return self.publish_ack(

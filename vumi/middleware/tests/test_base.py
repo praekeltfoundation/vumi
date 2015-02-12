@@ -85,7 +85,18 @@ class TestMiddlewareStack(VumiTestCase):
 
     @inlineCallbacks
     def mkmiddleware(self, name, mw_class):
-        mw = mw_class(name, {}, self)
+        mw = mw_class(
+            name, {'consume_priority': 0, 'publish_priority': 0}, self)
+        yield mw.setup_middleware()
+        returnValue(mw)
+
+    @inlineCallbacks
+    def mk_priority_middleware(self, name, mw_class, consume_pri, publish_pri):
+        mw = mw_class(
+            name, {
+                'consume_priority': consume_pri,
+                'publish_priority': publish_pri,
+                }, self)
         yield mw.setup_middleware()
         returnValue(mw)
 
@@ -160,15 +171,45 @@ class TestMiddlewareStack(VumiTestCase):
     def test_teardown_in_reverse_order(self):
 
         def get_teardown_timestamps():
-            return [mw._teardown_done for mw in self.stack.middlewares]
+            return [mw._teardown_done for mw in self.stack.consume_middlewares]
 
         self.assertFalse(any(get_teardown_timestamps()))
         yield self.stack.teardown()
         self.assertTrue(all(get_teardown_timestamps()))
-        teardown_order = sorted(self.stack.middlewares,
+        teardown_order = sorted(self.stack.consume_middlewares,
             key=lambda mw: mw._teardown_done)
         self.assertEqual([mw.name for mw in teardown_order],
             ['mw3', 'mw2', 'mw1'])
+
+    @inlineCallbacks
+    def test_middleware_priority_ordering(self):
+        self.stack = MiddlewareStack([
+            (yield self.mk_priority_middleware('p2', ToyMiddleware, 3, 3)),
+            (yield self.mkmiddleware('pn', ToyMiddleware)),
+            (yield self.mk_priority_middleware('p1_1', ToyMiddleware, 2, 2)),
+            (yield self.mk_priority_middleware('p1_2', ToyMiddleware, 2, 2)),
+            (yield self.mk_priority_middleware('pasym', ToyMiddleware, 1, 4)),
+            ])
+        # test consume
+        self.assert_processed([])
+        yield self.stack.apply_consume('event', 'dummy_msg', 'end_foo')
+        self.assert_processed([
+            ('pn', 'event', 'dummy_msg.pn', 'end_foo'),
+            ('pasym', 'event', 'dummy_msg.pn.pasym', 'end_foo'),
+            ('p1_1', 'event', 'dummy_msg.pn.pasym.p1_1', 'end_foo'),
+            ('p1_2', 'event', 'dummy_msg.pn.pasym.p1_1.p1_2', 'end_foo'),
+            ('p2', 'event', 'dummy_msg.pn.pasym.p1_1.p1_2.p2', 'end_foo'),
+        ])
+        # test publish
+        self.processed_messages = []
+        yield self.stack.apply_publish('event', 'dummy_msg', 'end_foo')
+        self.assert_processed([
+            ('pn', 'event', 'dummy_msg.pn', 'end_foo'),
+            ('p1_2', 'event', 'dummy_msg.pn.p1_2', 'end_foo'),
+            ('p1_1', 'event', 'dummy_msg.pn.p1_2.p1_1', 'end_foo'),
+            ('p2', 'event', 'dummy_msg.pn.p1_2.p1_1.p2', 'end_foo'),
+            ('pasym', 'event', 'dummy_msg.pn.p1_2.p1_1.p2.pasym', 'end_foo'),
+        ])
 
 
 class TestUtilityFunctions(VumiTestCase):
@@ -176,8 +217,11 @@ class TestUtilityFunctions(VumiTestCase):
     TEST_CONFIG_1 = {
         "middleware": [
             {"mw1": "vumi.middleware.tests.test_base.ToyMiddleware"},
-            {"mw2": "vumi.middleware.tests.test_base.ToyMiddleware"},
-            ],
+            {"mw2": {
+                'class': "vumi.middleware.tests.test_base.ToyMiddleware",
+                'consume_priority': 1,
+                'publish_priority': -1}},
+        ],
         "mw1": {
             "param_foo": 1,
             "param_bar": 2,
@@ -198,10 +242,15 @@ class TestUtilityFunctions(VumiTestCase):
                          [ToyMiddleware, ToyMiddleware])
         self.assertEqual([mw._setup_done for mw in middlewares],
                          [False, False])
-        self.assertEqual(middlewares[0].config,
-                         {"param_foo": 1, "param_bar": 2})
-        self.assertEqual(middlewares[1].config, {})
+        self.assertEqual(
+            middlewares[0].config, {
+                "param_foo": 1, "param_bar": 2,
+                'consume_priority': 0, 'publish_priority': 0})
+        self.assertEqual(
+            middlewares[1].config,
+            {'consume_priority': 1, 'publish_priority': -1})
 
+    @inlineCallbacks
     def test_setup_middleware_from_config(self):
         worker = object()
         middlewares = yield setup_middlewares_from_config(worker,
@@ -210,9 +259,13 @@ class TestUtilityFunctions(VumiTestCase):
                          [ToyMiddleware, ToyMiddleware])
         self.assertEqual([mw._setup_done for mw in middlewares],
                          [True, True])
-        self.assertEqual(middlewares[0].config,
-                         {"param_foo": 1, "param_bar": 2})
-        self.assertEqual(middlewares[1].config, {})
+        self.assertEqual(
+            middlewares[0].config, {
+                "param_foo": 1, "param_bar": 2,
+                'consume_priority': 0, 'publish_priority': 0})
+        self.assertEqual(
+            middlewares[1].config,
+            {'consume_priority': 1, 'publish_priority': -1})
 
     def test_parse_yaml(self):
         # this test is here to ensure the YAML one has to
@@ -224,3 +277,15 @@ class TestUtilityFunctions(VumiTestCase):
                          [ToyMiddleware, ToyMiddleware])
         self.assertEqual([mw._setup_done for mw in middlewares],
                          [False, False])
+
+    @inlineCallbacks
+    def test_sort_by_priority(self):
+        priority2 = ToyMiddleware('priority2', {"priority": 2}, self)
+        priority1_1 = ToyMiddleware('priority1_1', {"priority": 1}, self)
+        priority1_2 = ToyMiddleware('priority1_2', {"priority": 1}, self)
+        middlewares = [priority2, priority1_1, priority1_2]
+        for mw in middlewares:
+            yield mw.setup_middleware()
+        mw_sorted = MiddlewareStack._sort_by_priority(middlewares, 'priority')
+        self.assertEqual(
+            mw_sorted, [priority1_1, priority1_2, priority2])

@@ -1,5 +1,6 @@
 """Tests for vumi.application.sandbox."""
 
+import base64
 import os
 import sys
 import json
@@ -7,21 +8,24 @@ import resource
 import pkg_resources
 import logging
 from collections import defaultdict
+from datetime import datetime
 
 from OpenSSL.SSL import (
-    VERIFY_PEER, VERIFY_FAIL_IF_NO_PEER_CERT, VERIFY_NONE)
+    VERIFY_PEER, VERIFY_FAIL_IF_NO_PEER_CERT, VERIFY_NONE,
+    SSLv3_METHOD, SSLv23_METHOD, TLSv1_METHOD)
 
 from twisted.internet.defer import (
     inlineCallbacks, fail, succeed, DeferredQueue)
 from twisted.internet.error import ProcessTerminated
-from twisted.trial.unittest import SkipTest
+from twisted.web.http_headers import Headers
 
 from vumi.application.sandbox import (
     Sandbox, SandboxApi, SandboxCommand, SandboxResources,
     SandboxResource, RedisResource, OutboundResource, JsSandboxResource,
     LoggingResource, HttpClientResource, JsSandbox, JsFileSandbox,
-    HttpClientContextFactory)
-from vumi.application.tests.helpers import ApplicationHelper
+    HttpClientContextFactory, HttpClientPolicyForHTTPS, make_context_factory)
+from vumi.application.tests.helpers import (
+    ApplicationHelper, find_nodejs_or_skip_test)
 from vumi.tests.utils import LogCatcher
 from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 
@@ -377,6 +381,14 @@ class TestSandbox(SandboxTestCaseBase):
         ack.set_routing_endpoint('foo')
         return self.event_dispatch_check(ack)
 
+    def test_sandbox_command_does_not_parse_timestamps(self):
+        # We should serialise datetime objects correctly.
+        timestamp = datetime(2014, 07, 18, 15, 0, 0)
+        json_cmd = SandboxCommand(cmd='foo', timestamp=timestamp).to_json()
+        # We should not parse timestamp-like strings into datetime objects.
+        cmd = SandboxCommand.from_json(json_cmd)
+        self.assertEqual(cmd['timestamp'], "2014-07-18 15:00:00.000000")
+
 
 class JsSandboxTestMixin(object):
 
@@ -427,20 +439,45 @@ class JsSandboxTestMixin(object):
             'Done.',
         ])
 
+    @inlineCallbacks
+    def test_js_sandboxer_with_delayed_requests(self):
+        app_js = pkg_resources.resource_filename('vumi.application.tests',
+                                                 'app_delayed_requests.js')
+        javascript = file(app_js).read()
+        app = yield self.setup_app(javascript, extra_config={
+            "app_context": "{setImmediate: setImmediate}",
+        })
+
+        with LogCatcher() as lc:
+            status = yield app.process_message_in_sandbox(
+                self.app_helper.make_inbound("foo", sandbox_id='sandbox1'))
+            failures = [log['failure'].value for log in lc.errors]
+            msgs = lc.messages()
+        self.assertEqual(failures, [])
+        self.assertEqual(status, 0)
+        self.assertEqual(msgs, [
+            'Starting sandbox ...',
+            'Loading sandboxed code ...',
+            'From init!',
+            'From command: inbound-message',
+            'Log successful: true',
+            'Done.',
+        ])
+
 
 class TestJsSandbox(SandboxTestCaseBase, JsSandboxTestMixin):
 
     application_class = JsSandbox
 
     def setUp(self):
-        if JsSandbox.find_nodejs() is None:
-            raise SkipTest("No node.js executable found.")
+        self._node_path = find_nodejs_or_skip_test(self.application_class)
         super(TestJsSandbox, self).setUp()
 
     def setup_app(self, javascript_code, extra_config=None):
         extra_config = extra_config or {}
         extra_config.update({
             'javascript': javascript_code,
+            'executable': self._node_path,
         })
         return super(TestJsSandbox, self).setup_app(
             extra_config=extra_config)
@@ -451,8 +488,7 @@ class TestJsFileSandbox(SandboxTestCaseBase, JsSandboxTestMixin):
     application_class = JsFileSandbox
 
     def setUp(self):
-        if JsSandbox.find_nodejs() is None:
-            raise SkipTest("No node.js executable found.")
+        self._node_path = find_nodejs_or_skip_test(self.application_class)
         super(TestJsFileSandbox, self).setUp()
 
     def setup_app(self, javascript, extra_config=None):
@@ -464,6 +500,7 @@ class TestJsFileSandbox(SandboxTestCaseBase, JsSandboxTestMixin):
         extra_config = extra_config or {}
         extra_config.update({
             'javascript_file': tmp_file_name,
+            'executable': self._node_path,
         })
 
         return super(TestJsFileSandbox, self).setup_app(
@@ -494,6 +531,7 @@ class DummyAppWorker(object):
 
     def __init__(self):
         self.mock_calls = defaultdict(list)
+        self.mock_returns = {}
 
     def create_sandbox_api(self):
         return self.sandbox_api_cls()
@@ -504,6 +542,7 @@ class DummyAppWorker(object):
     def __getattr__(self, name):
         def mock_method(*args, **kw):
             self.mock_calls[name].append((args, kw))
+            return self.mock_returns.get(name)
         return mock_method
 
 
@@ -553,6 +592,11 @@ class ResourceTestCaseBase(VumiTestCase):
         self.sandbox = self.app_worker.create_sandbox_protocol(self.sandbox_id,
                                                                self.api)
 
+    def check_reply(self, reply, success=True, **kw):
+        self.assertEqual(reply['success'], success)
+        for key, expected_value in kw.iteritems():
+            self.assertEqual(reply[key], expected_value)
+
     @inlineCallbacks
     def create_resource(self, config):
         if self.resource is not None:
@@ -596,11 +640,6 @@ class TestRedisResource(ResourceTestCaseBase):
         })
         return super(TestRedisResource, self).create_resource(config)
 
-    def check_reply(self, reply, success=True, **kw):
-        self.assertEqual(reply['success'], success)
-        for key, expected_value in kw.iteritems():
-            self.assertEqual(reply[key], expected_value)
-
     @inlineCallbacks
     def create_metric(self, metric, value, total_count=1):
         metric_key = 'sandboxes#test_id#' + metric
@@ -609,12 +648,18 @@ class TestRedisResource(ResourceTestCaseBase):
         yield self.r_server.set(count_key, total_count)
 
     @inlineCallbacks
-    def check_metric(self, metric, value, total_count):
+    def check_metric(self, metric, value, total_count, seconds=None):
         metric_key = 'sandboxes#test_id#' + metric
         count_key = 'count#test_id'
         self.assertEqual((yield self.r_server.get(metric_key)), value)
         self.assertEqual((yield self.r_server.get(count_key)),
-                         str(total_count))
+                         str(total_count) if total_count is not None else None)
+        ttl = yield self.r_server.ttl(metric_key)
+        if seconds is None:
+            self.assertEqual(ttl, None)
+        else:
+            self.assertNotEqual(ttl, None)
+            self.assertTrue(0 < ttl <= seconds)
 
     def assert_api_log(self, expected_level, expected_message):
         [log_entry] = self.api.logs
@@ -627,6 +672,22 @@ class TestRedisResource(ResourceTestCaseBase):
         reply = yield self.dispatch_command('set', key='foo', value='bar')
         self.check_reply(reply, success=True)
         yield self.check_metric('foo', json.dumps('bar'), 1)
+
+    @inlineCallbacks
+    def test_handle_set_with_expiry(self):
+        reply = yield self.dispatch_command(
+            'set', key='foo', value='bar', seconds=5)
+        self.check_reply(reply, success=True)
+        yield self.check_metric('foo', json.dumps('bar'), 1, seconds=5)
+
+    @inlineCallbacks
+    def test_handle_set_with_bad_seconds(self):
+        reply = yield self.dispatch_command(
+            'set', key='foo', value='bar', seconds='foo')
+        self.check_reply(
+            reply, success=False,
+            reason="seconds must be a number or null")
+        yield self.check_metric('foo', None, None)
 
     @inlineCallbacks
     def test_handle_set_soft_limit_reached(self):
@@ -648,7 +709,7 @@ class TestRedisResource(ResourceTestCaseBase):
         yield self.check_metric('bar', None, 100)
         self.assert_api_log(
             logging.ERROR,
-            'Redis hard limit of test_id keys reached for sandbox 100. '
+            'Redis hard limit of 100 keys reached for sandbox test_id. '
             'No more keys can be written.'
         )
 
@@ -662,7 +723,7 @@ class TestRedisResource(ResourceTestCaseBase):
         self.check_reply(reply, success=False, reason='Too many keys')
         self.assert_api_log(
             logging.ERROR,
-            'Redis hard limit of test_id keys reached for sandbox 10. '
+            'Redis hard limit of 10 keys reached for sandbox test_id. '
             'No more keys can be written.'
         )
 
@@ -752,7 +813,7 @@ class TestRedisResource(ResourceTestCaseBase):
         self.assertEqual(level, logging.ERROR)
         self.assertEqual(
             message,
-            'Redis hard limit of test_id keys reached for sandbox 100. '
+            'Redis hard limit of 100 keys reached for sandbox test_id. '
             'No more keys can be written.')
 
 
@@ -767,30 +828,33 @@ class TestOutboundResource(ResourceTestCaseBase):
 
     @inlineCallbacks
     def test_handle_reply_to(self):
+        self.app_worker.mock_returns['reply_to'] = succeed(None)
         self.api.get_inbound_message = lambda msg_id: msg_id
         reply = yield self.dispatch_command('reply_to', content='hello',
                                             continue_session=True,
                                             in_reply_to='msg1')
-        self.assertEqual(reply, None)
+        self.check_reply(reply, success=True)
         self.assertEqual(self.app_worker.mock_calls['reply_to'],
                          [(('msg1', 'hello'), {'continue_session': True})])
 
     @inlineCallbacks
     def test_handle_reply_to_group(self):
+        self.app_worker.mock_returns['reply_to_group'] = succeed(None)
         self.api.get_inbound_message = lambda msg_id: msg_id
         reply = yield self.dispatch_command('reply_to_group', content='hello',
                                             continue_session=True,
                                             in_reply_to='msg1')
-        self.assertEqual(reply, None)
+        self.check_reply(reply, success=True)
         self.assertEqual(self.app_worker.mock_calls['reply_to_group'],
                          [(('msg1', 'hello'), {'continue_session': True})])
 
     @inlineCallbacks
     def test_handle_send_to(self):
+        self.app_worker.mock_returns['send_to'] = succeed(None)
         reply = yield self.dispatch_command('send_to', content='hello',
                                             to_addr='1234',
                                             tag='default')
-        self.assertEqual(reply, None)
+        self.check_reply(reply, success=True)
         self.assertEqual(self.app_worker.mock_calls['send_to'],
                          [(('1234', 'hello'), {'endpoint': 'default'})])
 
@@ -863,6 +927,7 @@ class TestLoggingResource(ResourceTestCaseBase):
     def test_handle_log_defaults_to_info(self):
         return self.check_logs('log', 'foo', logging.INFO)
 
+    @inlineCallbacks
     def test_with_unicode(self):
         with LogCatcher() as lc:
             reply = yield self.dispatch_command('log', msg=u'Zo\u00eb')
@@ -871,63 +936,215 @@ class TestLoggingResource(ResourceTestCaseBase):
         self.assertEqual(msgs, ['Zo\xc3\xab'])
 
 
+class DummyResponse(object):
+
+    def __init__(self):
+        self.headers = Headers({})
+
+
+class DummyHTTPClient(object):
+
+    def __init__(self):
+        self._next_http_request_result = None
+        self.http_requests = []
+
+    def set_agent(self, agent):
+        self.agent = agent
+
+    def get_context_factory(self):
+        # We need to dig around inside our Agent to find the context factory.
+        # Since this involves private attributes that have changed a few times
+        # recently, we need to try various options.
+        if hasattr(self.agent, "_contextFactory"):
+            # For Twisted 13.x
+            return self.agent._contextFactory
+        elif hasattr(self.agent, "_policyForHTTPS"):
+            # For Twisted 14.x
+            return self.agent._policyForHTTPS
+        elif hasattr(self.agent, "_endpointFactory"):
+            # For Twisted 15.0.0 (and possibly newer)
+            return self.agent._endpointFactory._policyForHTTPS
+        else:
+            raise NotImplementedError(
+                "I can't find the context factory on this Agent. This seems"
+                " to change every few versions of Twisted.")
+
+    def fail_next(self, error):
+        self._next_http_request_result = fail(error)
+
+    def succeed_next(self, body, code=200, headers={}):
+
+        default_headers = {
+            'Content-Length': len(body),
+        }
+        default_headers.update(headers)
+
+        response = DummyResponse()
+        response.code = code
+        for header, value in default_headers.items():
+            response.headers.addRawHeader(header, value)
+        response.content = lambda: succeed(body)
+        self._next_http_request_result = succeed(response)
+
+    def request(self, *args, **kw):
+        self.http_requests.append((args, kw))
+        return self._next_http_request_result
+
+
 class TestHttpClientResource(ResourceTestCaseBase):
 
     resource_cls = HttpClientResource
-
-    class DummyResponse(object):
-        pass
 
     @inlineCallbacks
     def setUp(self):
         super(TestHttpClientResource, self).setUp()
         yield self.create_resource({})
-        import vumi.application.sandbox
-        self.patch(vumi.application.sandbox,
-                   'http_request_full', self.dummy_http_request)
-        self._next_http_request_result = None
-        self._http_requests = []
 
-    def dummy_http_request(self, *args, **kw):
-        self._http_requests.append((args, kw))
-        return self._next_http_request_result
+        self.dummy_client = DummyHTTPClient()
+
+        self.patch(self.resource_cls,
+                   'http_client_class', self.get_dummy_client)
+
+    def get_dummy_client(self, agent):
+        self.dummy_client.set_agent(agent)
+        return self.dummy_client
 
     def http_request_fail(self, error):
-        self._next_http_request_result = fail(error)
+        self.dummy_client.fail_next(error)
 
-    def http_request_succeed(self, body, code=200):
-        response = self.DummyResponse()
-        response.delivered_body = body
-        response.code = code
-        self._next_http_request_result = succeed(response)
+    def http_request_succeed(self, body, code=200, headers={}):
+        self.dummy_client.succeed_next(body, code, headers)
 
     def assert_not_unicode(self, arg):
         self.assertFalse(isinstance(arg, unicode))
 
     def get_context_factory(self):
-        return self._context_factory
+        return self.dummy_client.get_context_factory()
 
-    def assert_http_request(self, url, method='GET', headers={}, data=None,
-                            timeout=None, data_limit=None):
+    def get_context(self, context_factory=None):
+        if context_factory is None:
+            context_factory = self.get_context_factory()
+        if hasattr(context_factory, 'creatorForNetloc'):
+            # This context_factory is a new-style IPolicyForHTTPS
+            # implementation, so we need to get a context from through its
+            # client connection creator. The creator could either be a wrapper
+            # around a ClientContextFactory (in which case we treat it like
+            # one) or a ClientTLSOptions object (which means we have to grab
+            # the context from a private attribute).
+            creator = context_factory.creatorForNetloc('example.com', 80)
+            if hasattr(creator, 'getContext'):
+                return creator.getContext()
+            else:
+                return creator._ctx
+        else:
+            # This context_factory is an old-style WebClientContextFactory and
+            # will build us a context object if we ask nicely.
+            return context_factory.getContext('example.com', 80)
+
+    def assert_http_request(self, url, method='GET', headers=None, data=None,
+                            timeout=None, files=None):
         timeout = (timeout if timeout is not None
                    else self.resource.timeout)
-        data_limit = (data_limit if data_limit is not None
-                      else self.resource.data_limit)
-        args = (url,)
-        kw = dict(method=method, headers=headers, data=data,
-                  timeout=timeout, data_limit=data_limit)
-        [(actual_args, actual_kw)] = self._http_requests
-        self._context_factory = actual_kw.pop('context_factory')
-        self.assertTrue(isinstance(self._context_factory,
-                                   HttpClientContextFactory))
+        args = (method, url,)
+        kw = dict(headers=headers, data=data,
+                  timeout=timeout, files=files)
+        [(actual_args, actual_kw)] = self.dummy_client.http_requests
+
+        # NOTE: Files are handed over to treq as file pointer-ish things
+        #       which in our case are `StringIO` instances.
+        actual_kw_files = actual_kw.get('files')
+        if actual_kw_files is not None:
+            actual_kw_files = actual_kw.pop('files', None)
+            kw_files = kw.pop('files', {})
+            for name, file_data in actual_kw_files.items():
+                kw_file_data = kw_files[name]
+                file_name, content_type, sio = file_data
+                self.assertEqual(
+                    (file_name, content_type, sio.getvalue()),
+                    kw_file_data)
+
         self.assertEqual((actual_args, actual_kw), (args, kw))
 
         self.assert_not_unicode(actual_args[0])
         self.assert_not_unicode(actual_kw.get('data'))
-        for key, values in actual_kw.get('headers', {}).items():
-            self.assert_not_unicode(key)
-            for value in values:
-                self.assert_not_unicode(value)
+        headers = actual_kw.get('headers')
+        if headers is not None:
+            for key, values in headers.items():
+                self.assert_not_unicode(key)
+                for value in values:
+                    self.assert_not_unicode(value)
+
+    def test_make_context_factory_no_method_verify_none(self):
+        context_factory = make_context_factory(verify_options=VERIFY_NONE)
+        self.assertIsInstance(context_factory, HttpClientContextFactory)
+        self.assertEqual(context_factory.verify_options, VERIFY_NONE)
+        self.assertEqual(context_factory.ssl_method, None)
+        self.assertEqual(
+            self.get_context(context_factory).get_verify_mode(), VERIFY_NONE)
+
+    def test_make_context_factory_sslv3_verify_none(self):
+        context_factory = make_context_factory(
+            verify_options=VERIFY_NONE, ssl_method=SSLv3_METHOD)
+        self.assertIsInstance(context_factory, HttpClientContextFactory)
+        self.assertEqual(context_factory.verify_options, VERIFY_NONE)
+        self.assertEqual(context_factory.ssl_method, SSLv3_METHOD)
+        self.assertEqual(
+            self.get_context(context_factory).get_verify_mode(), VERIFY_NONE)
+
+    def test_make_context_factory_no_method_verify_peer(self):
+        # This test's behaviour depends on the version of Twisted being used.
+        context_factory = make_context_factory(verify_options=VERIFY_PEER)
+        context = self.get_context(context_factory)
+        self.assertEqual(context_factory.ssl_method, None)
+        self.assertNotEqual(context.get_verify_mode(), VERIFY_NONE)
+        if HttpClientPolicyForHTTPS is None:
+            # We have Twisted<14.0.0
+            self.assertIsInstance(context_factory, HttpClientContextFactory)
+            self.assertEqual(context_factory.verify_options, VERIFY_PEER)
+            self.assertEqual(context.get_verify_mode(), VERIFY_PEER)
+        else:
+            self.assertIsInstance(context_factory, HttpClientPolicyForHTTPS)
+
+    def test_make_context_factory_no_method_verify_peer_or_fail(self):
+        # This test's behaviour depends on the version of Twisted being used.
+        context_factory = make_context_factory(
+            verify_options=(VERIFY_PEER | VERIFY_FAIL_IF_NO_PEER_CERT))
+        context = self.get_context(context_factory)
+        self.assertEqual(context_factory.ssl_method, None)
+        self.assertNotEqual(context.get_verify_mode(), VERIFY_NONE)
+        if HttpClientPolicyForHTTPS is None:
+            # We have Twisted<14.0.0
+            self.assertIsInstance(context_factory, HttpClientContextFactory)
+            self.assertEqual(
+                context_factory.verify_options,
+                VERIFY_PEER | VERIFY_FAIL_IF_NO_PEER_CERT)
+            self.assertEqual(
+                context.get_verify_mode(),
+                VERIFY_PEER | VERIFY_FAIL_IF_NO_PEER_CERT)
+        else:
+            self.assertIsInstance(context_factory, HttpClientPolicyForHTTPS)
+
+    def test_make_context_factory_no_method_no_verify(self):
+        # This test's behaviour depends on the version of Twisted being used.
+        context_factory = make_context_factory()
+        self.assertEqual(context_factory.ssl_method, None)
+        if HttpClientPolicyForHTTPS is None:
+            # We have Twisted<14.0.0
+            self.assertIsInstance(context_factory, HttpClientContextFactory)
+            self.assertEqual(context_factory.verify_options, None)
+        else:
+            self.assertIsInstance(context_factory, HttpClientPolicyForHTTPS)
+
+    def test_make_context_factory_sslv3_no_verify(self):
+        # This test's behaviour depends on the version of Twisted being used.
+        context_factory = make_context_factory(ssl_method=SSLv3_METHOD)
+        self.assertEqual(context_factory.ssl_method, SSLv3_METHOD)
+        if HttpClientPolicyForHTTPS is None:
+            # We have Twisted<14.0.0
+            self.assertIsInstance(context_factory, HttpClientContextFactory)
+            self.assertEqual(context_factory.verify_options, None)
+        else:
+            self.assertIsInstance(context_factory, HttpClientPolicyForHTTPS)
 
     @inlineCallbacks
     def test_handle_get(self):
@@ -946,6 +1163,15 @@ class TestHttpClientResource(ResourceTestCaseBase):
         self.assertTrue(reply['success'])
         self.assertEqual(reply['body'], "foo")
         self.assert_http_request('http://www.example.com', method='POST')
+
+    @inlineCallbacks
+    def test_handle_patch(self):
+        self.http_request_succeed("foo")
+        reply = yield self.dispatch_command('patch',
+                                            url='http://www.example.com')
+        self.assertTrue(reply['success'])
+        self.assertEqual(reply['body'], "foo")
+        self.assert_http_request('http://www.example.com', method='PATCH')
 
     @inlineCallbacks
     def test_handle_head(self):
@@ -991,6 +1217,7 @@ class TestHttpClientResource(ResourceTestCaseBase):
 
     @inlineCallbacks
     def test_https_request(self):
+        # This test's behaviour depends on the version of Twisted being used.
         self.http_request_succeed("foo")
         reply = yield self.dispatch_command('get',
                                             url='https://www.example.com')
@@ -998,8 +1225,13 @@ class TestHttpClientResource(ResourceTestCaseBase):
         self.assertEqual(reply['body'], "foo")
         self.assert_http_request('https://www.example.com', method='GET')
 
-        ctxt = self.get_context_factory()
-        self.assertEqual(ctxt.verify_options, None)
+        context_factory = self.get_context_factory()
+        self.assertEqual(context_factory.ssl_method, None)
+        if HttpClientPolicyForHTTPS is None:
+            self.assertIsInstance(context_factory, HttpClientContextFactory)
+            self.assertEqual(context_factory.verify_options, None)
+        else:
+            self.assertIsInstance(context_factory, HttpClientPolicyForHTTPS)
 
     @inlineCallbacks
     def test_https_request_verify_none(self):
@@ -1011,11 +1243,12 @@ class TestHttpClientResource(ResourceTestCaseBase):
         self.assertEqual(reply['body'], "foo")
         self.assert_http_request('https://www.example.com', method='GET')
 
-        ctxt = self.get_context_factory()
-        self.assertEqual(ctxt.verify_options, VERIFY_NONE)
+        context = self.get_context()
+        self.assertEqual(context.get_verify_mode(), VERIFY_NONE)
 
     @inlineCallbacks
     def test_https_request_verify_peer_or_fail(self):
+        # This test's behaviour depends on the version of Twisted being used.
         self.http_request_succeed("foo")
         reply = yield self.dispatch_command(
             'get', url='https://www.example.com',
@@ -1024,7 +1257,103 @@ class TestHttpClientResource(ResourceTestCaseBase):
         self.assertEqual(reply['body'], "foo")
         self.assert_http_request('https://www.example.com', method='GET')
 
-        ctxt = self.get_context_factory()
+        context = self.get_context()
+        # We don't control verify mode in newer Twisted.
+        self.assertNotEqual(context.get_verify_mode(), VERIFY_NONE)
+        if HttpClientPolicyForHTTPS is None:
+            self.assertEqual(
+                context.get_verify_mode(),
+                VERIFY_PEER | VERIFY_FAIL_IF_NO_PEER_CERT)
+
+    @inlineCallbacks
+    def test_handle_post_files(self):
+        self.http_request_succeed('')
+        reply = yield self.dispatch_command(
+            'post', url='https://www.example.com', files={
+                'foo': {
+                    'file_name': 'foo.json',
+                    'content_type': 'application/json',
+                    'data': base64.b64encode(json.dumps({'foo': 'bar'})),
+                }
+            })
+
+        self.assertTrue(reply['success'])
+        self.assert_http_request(
+            'https://www.example.com', method='POST', files={
+                'foo': ('foo.json', 'application/json',
+                        json.dumps({'foo': 'bar'})),
+            })
+
+    @inlineCallbacks
+    def test_data_limit_exceeded_using_header(self):
+        self.http_request_succeed('', headers={
+            'Content-Length': self.resource.DEFAULT_DATA_LIMIT + 1,
+        })
+        reply = yield self.dispatch_command(
+            'get', url='https://www.example.com',)
+        self.assertFalse(reply['success'])
         self.assertEqual(
-            ctxt.verify_options,
-            VERIFY_PEER | VERIFY_FAIL_IF_NO_PEER_CERT)
+            reply['reason'],
+            'Received %d bytes, maximum of %s bytes allowed.' % (
+                self.resource.DEFAULT_DATA_LIMIT + 1,
+                self.resource.DEFAULT_DATA_LIMIT,))
+
+    @inlineCallbacks
+    def test_data_limit_exceeded_inferred_from_body(self):
+        self.http_request_succeed('1' * (self.resource.DEFAULT_DATA_LIMIT + 1))
+        reply = yield self.dispatch_command(
+            'get', url='https://www.example.com',)
+        self.assertFalse(reply['success'])
+        self.assertEqual(
+            reply['reason'],
+            'Received %d bytes, maximum of %s bytes allowed.' % (
+                self.resource.DEFAULT_DATA_LIMIT + 1,
+                self.resource.DEFAULT_DATA_LIMIT,))
+
+    @inlineCallbacks
+    def test_https_request_method_default(self):
+        self.http_request_succeed("foo")
+        reply = yield self.dispatch_command(
+            'get', url='https://www.example.com')
+        self.assertTrue(reply['success'])
+        self.assertEqual(reply['body'], "foo")
+        self.assert_http_request('https://www.example.com', method='GET')
+
+        context_factory = self.get_context_factory()
+        self.assertEqual(context_factory.ssl_method, None)
+
+    @inlineCallbacks
+    def test_https_request_method_SSLv3(self):
+        self.http_request_succeed("foo")
+        reply = yield self.dispatch_command(
+            'get', url='https://www.example.com', ssl_method='SSLv3')
+        self.assertTrue(reply['success'])
+        self.assertEqual(reply['body'], "foo")
+        self.assert_http_request('https://www.example.com', method='GET')
+
+        context_factory = self.get_context_factory()
+        self.assertEqual(context_factory.ssl_method, SSLv3_METHOD)
+
+    @inlineCallbacks
+    def test_https_request_method_SSLv23(self):
+        self.http_request_succeed("foo")
+        reply = yield self.dispatch_command(
+            'get', url='https://www.example.com', ssl_method='SSLv23')
+        self.assertTrue(reply['success'])
+        self.assertEqual(reply['body'], "foo")
+        self.assert_http_request('https://www.example.com', method='GET')
+
+        context_factory = self.get_context_factory()
+        self.assertEqual(context_factory.ssl_method, SSLv23_METHOD)
+
+    @inlineCallbacks
+    def test_https_request_method_TLSv1(self):
+        self.http_request_succeed("foo")
+        reply = yield self.dispatch_command(
+            'get', url='https://www.example.com', ssl_method='TLSv1')
+        self.assertTrue(reply['success'])
+        self.assertEqual(reply['body'], "foo")
+        self.assert_http_request('https://www.example.com', method='GET')
+
+        context_factory = self.get_context_factory()
+        self.assertEqual(context_factory.ssl_method, TLSv1_METHOD)

@@ -37,7 +37,6 @@ class MessageInjector(Worker):
         self.direction = self.config['direction']
         self.publisher = yield self.publish_to(
             '%s.%s' % (self.transport_name, self.direction))
-        self.publisher.require_bind = False
         self.WORKER_QUEUE.put(self)
 
     def process_file(self, in_file, out_file=None):
@@ -69,8 +68,9 @@ def main(options):
     verbose = options['verbose']
 
     worker_creator = WorkerCreator(options.vumi_options)
-    worker_creator.create_worker_by_class(
+    service = worker_creator.create_worker_by_class(
         MessageInjector, options)
+    yield service.startService()
 
     in_file = sys.stdin
     out_file = sys.stdout if verbose else None

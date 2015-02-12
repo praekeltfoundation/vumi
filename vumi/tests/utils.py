@@ -171,7 +171,8 @@ class MockHttpServer(object):
     def start(self):
         root = MockResource(self._handler)
         site_factory = LogFilterSite(root)
-        self._webserver = yield reactor.listenTCP(0, site_factory)
+        self._webserver = yield reactor.listenTCP(
+            0, site_factory, interface='127.0.0.1')
         self.addr = self._webserver.getHost()
         self.url = "http://%s:%s/" % (self.addr.host, self.addr.port)
 
@@ -341,7 +342,7 @@ class PersistenceMixin(object):
         try:
             from vumi.persist.txriak_manager import TxRiakManager
         except ImportError, e:
-            import_filter(e, 'riakasaurus', 'riakasaurus.riak')
+            import_filter(e, 'riak')
             return
 
         orig_init = TxRiakManager.__init__
@@ -405,7 +406,7 @@ class PersistenceMixin(object):
         try:
             from vumi.persist.txriak_manager import TxRiakManager
         except ImportError, e:
-            import_skip(e, 'riakasaurus', 'riakasaurus.riak')
+            import_skip(e, 'riak')
 
         return TxRiakManager.from_config(config)
 

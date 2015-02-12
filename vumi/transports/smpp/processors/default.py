@@ -1,31 +1,30 @@
 import json
 
-from smpp.pdu_inspector import (detect_multipart, multipart_key,
-                                MultipartMessage)
+from smpp.pdu_inspector import (
+    detect_multipart, multipart_key, MultipartMessage)
 from twisted.internet.defer import inlineCallbacks, returnValue, succeed
 from zope.interface import implements
 
 from vumi import log
-from vumi.config import (Config, ConfigDict, ConfigRegex, ConfigText,
-                         ConfigInt, ConfigBool)
+from vumi.config import (
+    Config, ConfigDict, ConfigRegex, ConfigText, ConfigInt, ConfigBool)
 from vumi.message import TransportUserMessage
 from vumi.transports.smpp.iprocessors import (
     IDeliveryReportProcessor, IDeliverShortMessageProcessor,
     ISubmitShortMessageProcessor)
-from vumi.transports.smpp.smpp_utils import (
-    unpacked_pdu_opts, detect_ussd, decode_message, decode_pdus)
+from vumi.transports.smpp.smpp_utils import unpacked_pdu_opts, detect_ussd
 
 
 class DeliveryReportProcessorConfig(Config):
 
     DELIVERY_REPORT_REGEX = (
-        'id:(?P<id>\S{,65})'
-        ' +sub:(?P<sub>...)'
-        ' +dlvrd:(?P<dlvrd>...)'
-        ' +submit date:(?P<submit_date>\d*)'
-        ' +done date:(?P<done_date>\d*)'
-        ' +stat:(?P<stat>[A-Z]{7})'
-        ' +err:(?P<err>...)'
+        'id:(?P<id>[^ ]{,65})'
+        '(?: +sub:(?P<sub>[^ ]+))?'
+        '(?: +dlvrd:(?P<dlvrd>[^ ]+))?'
+        '(?: +submit date:(?P<submit_date>\d*))?'
+        '(?: +done date:(?P<done_date>\d*))?'
+        ' +stat:(?P<stat>[A-Z]{5,7})'
+        '(?: +err:(?P<err>[^ ]+))?'
         ' +[Tt]ext:(?P<text>.{,20})'
         '.*'
     )
@@ -47,6 +46,7 @@ class DeliveryReportProcessorConfig(Config):
         # From the most common regex-extracted format:
         'DELIVRD': 'delivered',
         'REJECTD': 'failed',
+        'FAILED': 'failed',
         # Currently we will accept this for Yo! TODO: investigate
         '0': 'delivered',
     }
@@ -55,9 +55,13 @@ class DeliveryReportProcessorConfig(Config):
         'Regex to use for matching delivery reports',
         default=DELIVERY_REPORT_REGEX, static=True)
     delivery_report_status_mapping = ConfigDict(
-        "Mapping from delivery report message state to "
-        "(`delivered`, `failed`, `pending`)",
-        static=True, default=DELIVERY_REPORT_STATUS_MAPPING)
+        "Mapping from delivery report message state to"
+        " (`delivered`, `failed`, `pending`)",
+        default=DELIVERY_REPORT_STATUS_MAPPING, static=True)
+    delivery_report_use_esm_class = ConfigBool(
+        "Use `esm_class` PDU parameter to determine whether a message is a"
+        " delivery report.",
+        default=True, static=True)
 
 
 class DeliveryReportProcessor(object):
@@ -75,18 +79,18 @@ class DeliveryReportProcessor(object):
         8: 'REJECTED',
     }
 
+    ESM_CLASS_MASK = 0b00111100  # If any of bits 5-2 are set, assume DR.
+
     def __init__(self, transport, config):
         self.transport = transport
         self.config = self.CONFIG_CLASS(config, static=True)
 
-    def handle_delivery_report_pdu(self, pdu):
+    def _handle_delivery_report_optional_params(self, pdu):
         """
-        Check if this might be a delivery receipt with PDU parameters.
+        Check if this might be a delivery report with optional PDU parameters.
 
-        There's a chance we'll get a delivery receipt without these
-        parameters, if that happens we'll try a regex match in
-        ``inspect_delivery_report_content`` once the message
-        has (potentially) been reassembled and decoded.
+        If so, handle it and return a deferred ``True``, otherwise return a
+        deferred ``False``.
         """
         pdu_opts = unpacked_pdu_opts(pdu)
         receipted_message_id = pdu_opts.get('receipted_message_id', None)
@@ -102,20 +106,93 @@ class DeliveryReportProcessor(object):
         d.addCallback(lambda _: True)
         return d
 
-    def handle_delivery_report_content(self, content):
-        delivery_report = self.config.delivery_report_regex.search(
-            content or '')
+    def _process_delivery_report_content_fields(self, content_fields):
+        """
+        Construct and dispatch a delivery report based on content fields as
+        matched by our regex.
+        """
+        receipted_message_id = content_fields['id']
+        message_state = content_fields['stat']
+        return self.transport.handle_delivery_report(
+            receipted_message_id=receipted_message_id,
+            delivery_status=self.delivery_status(message_state))
 
-        if not delivery_report:
+    def _handle_delivery_report_esm_class(self, pdu):
+        """
+        Check if the ``esm_class`` indicates that this is a delivery report.
+
+        If so, handle it and return a deferred ``True``, otherwise return a
+        deferred ``False``.
+
+        NOTE: We assume the message content is a string that matches our regex.
+              We can't use the usual decoding process here because it lives
+              elsewhere and the content should be plain ASCII generated by the
+              SMSC anyway.
+        """
+        if not self.config.delivery_report_use_esm_class:
+            # We're not configured to check the ``esm_class``, so do nothing.
+            return succeed(False)
+
+        esm_class = pdu["body"]["mandatory_parameters"]["esm_class"]
+        if not (esm_class & self.ESM_CLASS_MASK):
+            # Delivery report flags in esm_class are not set.
+            return succeed(False)
+
+        content = pdu["body"]["mandatory_parameters"]["short_message"]
+        match = self.config.delivery_report_regex.search(content or '')
+        if not match:
+            log.warning(
+                ("esm_class %s indicates delivery report, but content"
+                 " does not match regex: %r") % (esm_class, content))
+            # Even though this doesn't match the regex, the esm_class indicates
+            # that it's a DR and we therefore don't want to treat it as a
+            # normal message.
+            return succeed(True)
+
+        fields = match.groupdict()
+        d = self._process_delivery_report_content_fields(fields)
+        d.addCallback(lambda _: True)
+        return d
+
+    @inlineCallbacks
+    def handle_delivery_report_pdu(self, pdu):
+        """
+        Check PDU optional params and ``esm_class`` to detect and handle
+        delivery reports.
+
+        Return a deferred ``True`` if a delivery report was detected and
+        handled, otherwise return a deferred ``False``. In the latter case, the
+        content may be examined in ``handle_delivery_report_content`` later.
+        """
+        # Check for optional params indicating a DR.
+        if (yield self._handle_delivery_report_optional_params(pdu)):
+            returnValue(True)
+
+        if (yield self._handle_delivery_report_esm_class(pdu)):
+            returnValue(True)
+
+        returnValue(False)
+
+    def handle_delivery_report_content(self, content):
+        """
+        Check the content against our delivery report regex and treat it as a
+        delivery report if it matches.
+
+        If we are configured to check the PDU ``esm_class``, we skip this check
+        because any delivery reports will already have been handled by
+        ``handle_delivery_report_pdu``.
+        """
+        if self.config.delivery_report_use_esm_class:
+            # We're configured to check ``esm_class``, so we don't check
+            # content here.
+            return succeed(False)
+
+        match = self.config.delivery_report_regex.search(content or '')
+        if not match:
             return succeed(False)
 
         # We have a delivery report.
-        fields = delivery_report.groupdict()
-        receipted_message_id = fields['id']
-        message_state = fields['stat']
-        d = self.transport.handle_delivery_report(
-            receipted_message_id=receipted_message_id,
-            delivery_status=self.delivery_status(message_state))
+        d = self._process_delivery_report_content_fields(match.groupdict())
         d.addCallback(lambda _: True)
         return d
 
@@ -134,13 +211,92 @@ class DeliverShortMessageProcessorConfig(Config):
 
 
 class DeliverShortMessageProcessor(object):
+    """
+    Messages can arrive with one of a number of specified
+    encodings. We only handle a subset of these.
+
+    From the SMPP spec:
+
+    00000000 (0) SMSC Default Alphabet
+    00000001 (1) IA5(CCITTT.50)/ASCII(ANSIX3.4)
+    00000010 (2) Octet unspecified (8-bit binary)
+    00000011 (3) Latin1(ISO-8859-1)
+    00000100 (4) Octet unspecified (8-bit binary)
+    00000101 (5) JIS(X0208-1990)
+    00000110 (6) Cyrllic(ISO-8859-5)
+    00000111 (7) Latin/Hebrew (ISO-8859-8)
+    00001000 (8) UCS2(ISO/IEC-10646)
+    00001001 (9) PictogramEncoding
+    00001010 (10) ISO-2022-JP(MusicCodes)
+    00001011 (11) reserved
+    00001100 (12) reserved
+    00001101 (13) Extended Kanji JIS(X 0212-1990)
+    00001110 (14) KSC5601
+    00001111 (15) reserved
+
+    Particularly problematic are the "Octet unspecified" encodings.
+    """
+
     implements(IDeliverShortMessageProcessor)
     CONFIG_CLASS = DeliverShortMessageProcessorConfig
 
     def __init__(self, transport, config):
         self.transport = transport
         self.redis = transport.redis
+        self.codec = transport.get_static_config().codec_class()
         self.config = self.CONFIG_CLASS(config, static=True)
+
+        self.data_coding_map = {
+            1: 'ascii',
+            3: 'latin1',
+            # http://www.herongyang.com/Unicode/JIS-ISO-2022-JP-Encoding.html
+            5: 'iso2022_jp',
+            6: 'iso8859_5',
+            7: 'iso8859_8',
+            # Actually UCS-2, but close enough.
+            8: 'utf-16be',
+            # http://en.wikipedia.org/wiki/Short_Message_Peer-to-Peer
+            9: 'shift_jis',
+            10: 'iso2022_jp'
+        }
+        self.data_coding_map.update(self.config.data_coding_overrides)
+
+    def dcs_decode(self, obj, data_coding):
+        codec_name = self.data_coding_map.get(data_coding, None)
+        if codec_name is None:
+            log.msg("WARNING: Not decoding message with data_coding=%s" % (
+                    data_coding,))
+            return obj
+        elif obj is None:
+            log.msg(
+                "WARNING: Not decoding `None` message with data_coding=%s" % (
+                    data_coding,))
+            return obj
+
+        try:
+            return self.codec.decode(obj, codec_name)
+        except UnicodeDecodeError, e:
+            log.msg("Error decoding message with data_coding=%s" % (
+                data_coding,))
+            log.err(e)
+        return obj
+
+    def decode_pdus(self, pdus):
+        content = []
+        for pdu in pdus:
+            pdu_params = pdu['body']['mandatory_parameters']
+            pdu_opts = unpacked_pdu_opts(pdu)
+
+            # We might have a `message_payload` optional field to worry about.
+            message_payload = pdu_opts.get('message_payload', None)
+            if message_payload is not None:
+                short_message = message_payload.decode('hex')
+            else:
+                short_message = pdu_params['short_message']
+
+            content.append(
+                self.dcs_decode(short_message, pdu_params['data_coding']))
+        return content
 
     def handle_short_message_content(self, source_addr, destination_addr,
                                      short_message, **kw):
@@ -185,8 +341,8 @@ class DeliverShortMessageProcessor(object):
             log.msg("Reassembled Message: %s" % (completed['message']))
             # We assume that all parts have the same data_coding here, because
             # otherwise there's nothing sensible we can do.
-            decoded_msg = self.decode_message(completed['message'],
-                                              pdu_params['data_coding'])
+            decoded_msg = self.dcs_decode(completed['message'],
+                                          pdu_params['data_coding'])
             # and we can finally pass the whole message on
             yield self.handle_short_message_content(
                 source_addr=completed['from_msisdn'],
@@ -239,8 +395,8 @@ class DeliverShortMessageProcessor(object):
             # We have an explicit "end session" flag.
             session_event = 'close'
 
-        decoded_msg = self.decode_message(pdu_params['short_message'],
-                                          pdu_params['data_coding'])
+        decoded_msg = self.dcs_decode(pdu_params['short_message'],
+                                      pdu_params['data_coding'])
         return self.handle_short_message_content(
             source_addr=pdu_params['source_addr'],
             destination_addr=pdu_params['destination_addr'],
@@ -248,13 +404,6 @@ class DeliverShortMessageProcessor(object):
             message_type='ussd',
             session_event=session_event,
             session_info=session_info)
-
-    def decode_pdus(self, pdus):
-        return decode_pdus(pdus, self.config.data_coding_overrides)
-
-    def decode_message(self, message, data_coding):
-        return decode_message(
-            message, data_coding, self.config.data_coding_overrides)
 
     def _hex_for_redis(self, data_dict):
         for index, part in data_dict.items():
@@ -321,6 +470,9 @@ class SubmitShortMessageProcessor(object):
         to_addr = message['to_addr']
         from_addr = message['from_addr']
         text = message['content']
+        if text is None:
+            text = u""
+        vumi_message_id = message['message_id']
 
         # TODO: this should probably be handled by a processor as these
         #       USSD fields & params are TATA (India) specific
@@ -341,6 +493,7 @@ class SubmitShortMessageProcessor(object):
 
         if self.config.send_long_messages:
             return protocol.submit_sm_long(
+                vumi_message_id,
                 to_addr.encode('ascii'),
                 long_message=text.encode(self.config.submit_sm_encoding),
                 data_coding=self.config.submit_sm_data_coding,
@@ -350,6 +503,7 @@ class SubmitShortMessageProcessor(object):
 
         elif self.config.send_multipart_sar:
             return protocol.submit_csm_sar(
+                vumi_message_id,
                 to_addr.encode('ascii'),
                 short_message=text.encode(self.config.submit_sm_encoding),
                 data_coding=self.config.submit_sm_data_coding,
@@ -359,6 +513,7 @@ class SubmitShortMessageProcessor(object):
 
         elif self.config.send_multipart_udh:
             return protocol.submit_csm_udh(
+                vumi_message_id,
                 to_addr.encode('ascii'),
                 short_message=text.encode(self.config.submit_sm_encoding),
                 data_coding=self.config.submit_sm_data_coding,
@@ -367,6 +522,7 @@ class SubmitShortMessageProcessor(object):
             )
 
         return protocol.submit_sm(
+            vumi_message_id,
             to_addr.encode('ascii'),
             short_message=text.encode(self.config.submit_sm_encoding),
             data_coding=self.config.submit_sm_data_coding,
