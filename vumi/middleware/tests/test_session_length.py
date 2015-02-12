@@ -34,17 +34,45 @@ class TestStaticProviderSettingMiddleware(VumiTestCase):
         return msg
 
     @inlineCallbacks
-    def test_incoming_message_session_length(self):
+    def test_incoming_message_session_start(self):
         mw = yield self.mk_middleware()
-        msg_start = self.mk_msg('+12345', '+54231')
-        msg_end = self.mk_msg('+12345', '+54231', session_event=SESSION_CLOSE)
+        msg_start = self.mk_msg('+12345', '+54321')
+
+        msg = yield mw.handle_inbound(msg_start, "dummy_connector")
+        value = yield self.redis.get('+54321:session_created')
+        self.assertTrue(value is not None)
+        self.assertTrue(isinstance(
+                msg['helper_metadata']['billing']['session_start'], float))
+
+    @inlineCallbacks
+    def test_incoming_message_session_end(self):
+        mw = yield self.mk_middleware()
+        msg_end = self.mk_msg('+12345', '+54321', session_event=SESSION_CLOSE)
+
+        yield mw.handle_inbound(msg_end, "dummy_connector")
+        msg = yield mw.handle_inbound(msg_end, "dummy_connector")
+        self.assertTrue(isinstance(
+                msg['helper_metadata']['billing']['session_end'], float))
+
+    @inlineCallbacks
+    def test_incoming_message_session_start_end(self):
+        mw = yield self.mk_middleware()
+        msg_start = self.mk_msg('+12345', '+54321')
+        msg_end = self.mk_msg('+12345', '+54321', session_event=SESSION_CLOSE)
 
         yield mw.handle_inbound(msg_start, "dummy_connector")
-        keys = yield self.redis.keys()
-        print keys
         value = yield self.redis.get('+54321:session_created')
-        print value
         self.assertTrue(value is not None)
         msg = yield mw.handle_inbound(msg_end, "dummy_connector")
         self.assertTrue(isinstance(
-                msg['helper_metadata']['billing']['session_length'], float))
+                msg['helper_metadata']['billing']['session_start'], float))
+
+        yield mw.handle_inbound(msg_end, "dummy_connector")
+        value = yield self.redis.get('+54321:session_created')
+        self.assertTrue(value is None)
+        msg = yield mw.handle_inbound(msg_end, "dummy_connector")
+        self.assertTrue(isinstance(
+                msg['helper_metadata']['billing']['session_start'], float))
+        msg = yield mw.handle_inbound(msg_end, "dummy_connector")
+        self.assertTrue(isinstance(
+            msg['helper_metadata']['billing']['session_end'], float))
