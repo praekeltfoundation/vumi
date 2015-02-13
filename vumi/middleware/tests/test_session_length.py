@@ -112,3 +112,21 @@ class TestStaticProviderSettingMiddleware(VumiTestCase):
                 msg['helper_metadata']['billing']['session_start'], float))
         self.assertTrue(isinstance(
             msg['helper_metadata']['billing']['session_end'], float))
+
+    @inlineCallbacks
+    def test_redis_key_timeout(self):
+        mw = yield self.mk_middleware()
+        msg_start = self.mk_msg('+12345', '+54321')
+
+        yield mw.handle_inbound(msg_start, "dummy_connector")
+        ttl = yield self.redis.ttl('+54321:session_created')
+        self.assertTrue(ttl <= 120)
+
+    @inlineCallbacks
+    def test_redis_key_custom_timeout(self):
+        mw = yield self.mk_middleware({'timeout': 20})
+        msg_start = self.mk_msg('+12345', '+54321')
+
+        yield mw.handle_inbound(msg_start, "dummy_connector")
+        ttl = yield self.redis.ttl('+54321:session_created')
+        self.assertTrue(ttl <= 20)
