@@ -19,7 +19,7 @@ class TestStaticProviderSettingMiddleware(VumiTestCase):
         dummy_worker = object()
         config = self.persistence_helper.mk_config(config)
         mw = SessionLengthMiddleware(
-            "static_provider_setter", config, dummy_worker)
+            "session_length", config, dummy_worker)
         yield mw.setup_middleware()
         self.redis = mw.redis
         self.add_cleanup(mw.teardown_middleware)
@@ -39,7 +39,7 @@ class TestStaticProviderSettingMiddleware(VumiTestCase):
         msg_start = self.mk_msg('+12345', '+54321')
 
         msg = yield mw.handle_inbound(msg_start, "dummy_connector")
-        value = yield self.redis.get('+54321:session_created')
+        value = yield self.redis.get('dummy_connector:+54321:session_created')
         self.assertTrue(value is not None)
         self.assertTrue(isinstance(
                 msg['helper_metadata']['session']['session_start'], float))
@@ -60,13 +60,13 @@ class TestStaticProviderSettingMiddleware(VumiTestCase):
         msg_end = self.mk_msg('+12345', '+54321', session_event=SESSION_CLOSE)
 
         msg = yield mw.handle_inbound(msg_start, "dummy_connector")
-        value = yield self.redis.get('+54321:session_created')
+        value = yield self.redis.get('dummy_connector:+54321:session_created')
         self.assertTrue(value is not None)
         self.assertTrue(isinstance(
                 msg['helper_metadata']['session']['session_start'], float))
 
         msg = yield mw.handle_inbound(msg_end, "dummy_connector")
-        value = yield self.redis.get('+54321:session_created')
+        value = yield self.redis.get('dummy_connector:+54321:session_created')
         self.assertTrue(value is None)
         self.assertTrue(isinstance(
                 msg['helper_metadata']['session']['session_start'], float))
@@ -79,7 +79,7 @@ class TestStaticProviderSettingMiddleware(VumiTestCase):
         msg_start = self.mk_msg('+12345', '+54321')
 
         msg = yield mw.handle_outbound(msg_start, "dummy_connector")
-        value = yield self.redis.get('+12345:session_created')
+        value = yield self.redis.get('dummy_connector:+12345:session_created')
         self.assertTrue(value is not None)
         self.assertTrue(isinstance(
                 msg['helper_metadata']['session']['session_start'], float))
@@ -100,13 +100,13 @@ class TestStaticProviderSettingMiddleware(VumiTestCase):
         msg_end = self.mk_msg('+12345', '+54321', session_event=SESSION_CLOSE)
 
         msg = yield mw.handle_outbound(msg_start, "dummy_connector")
-        value = yield self.redis.get('+12345:session_created')
+        value = yield self.redis.get('dummy_connector:+12345:session_created')
         self.assertTrue(value is not None)
         self.assertTrue(isinstance(
                 msg['helper_metadata']['session']['session_start'], float))
 
         msg = yield mw.handle_outbound(msg_end, "dummy_connector")
-        value = yield self.redis.get('+54321:session_created')
+        value = yield self.redis.get('dummy_connector:+54321:session_created')
         self.assertTrue(value is None)
         self.assertTrue(isinstance(
                 msg['helper_metadata']['session']['session_start'], float))
@@ -119,7 +119,7 @@ class TestStaticProviderSettingMiddleware(VumiTestCase):
         msg_start = self.mk_msg('+12345', '+54321')
 
         yield mw.handle_inbound(msg_start, "dummy_connector")
-        ttl = yield self.redis.ttl('+54321:session_created')
+        ttl = yield self.redis.ttl('dummy_connector::+54321:session_created')
         self.assertTrue(ttl <= 120)
 
     @inlineCallbacks
@@ -128,7 +128,7 @@ class TestStaticProviderSettingMiddleware(VumiTestCase):
         msg_start = self.mk_msg('+12345', '+54321')
 
         yield mw.handle_inbound(msg_start, "dummy_connector")
-        ttl = yield self.redis.ttl('+54321:session_created')
+        ttl = yield self.redis.ttl('dummy_connector:+54321:session_created')
         self.assertTrue(ttl <= 20)
 
     @inlineCallbacks
