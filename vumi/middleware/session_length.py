@@ -1,8 +1,7 @@
 # -*- test-case-name: vumi.middleware.tests.test_session_length -*-
 
-import time
-
 from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet import reactor
 
 from vumi.message import TransportUserMessage
 from vumi.middleware.base import BaseMiddleware
@@ -37,6 +36,7 @@ class SessionLengthMiddleware(BaseMiddleware):
         self.redis = yield TxRedisManager.from_config(r_config)
         self.timeout = self.config.get('timeout', 120)
         self.field_name = self.config.get('field_name', 'session')
+        self.clock = reactor
 
     @inlineCallbacks
     def teardown_middleware(self):
@@ -56,11 +56,11 @@ class SessionLengthMiddleware(BaseMiddleware):
     @inlineCallbacks
     def _process_message(self, message, redis_key):
         if message.get('session_event') == self.SESSION_NEW:
-            start_time = time.time()
+            start_time = self.clock.seconds()
             yield self.redis.setex(redis_key,  self.timeout, str(start_time))
             self._set_session_start_time(message, start_time)
         elif message.get('session_event') == self.SESSION_CLOSE:
-            self._set_session_end_time(message, time.time())
+            self._set_session_end_time(message, self.clock.seconds())
             created_time = yield self.redis.get(redis_key)
             if created_time:
                 self._set_session_start_time(message, float(created_time))
