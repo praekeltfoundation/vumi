@@ -18,6 +18,8 @@ class SessionLengthMiddleware(BaseMiddleware):
 
     :param dict redis:
         Redis configuration parameters.
+    :param int timeout:
+        Redis key timeout (in seconds). Defaults to 120.
     """
     SESSION_NEW, SESSION_CLOSE = (
         TransportUserMessage.SESSION_NEW, TransportUserMessage.SESSION_CLOSE)
@@ -26,6 +28,7 @@ class SessionLengthMiddleware(BaseMiddleware):
     def setup_middleware(self):
         r_config = self.config.get('redis_manager', {})
         self.redis = yield TxRedisManager.from_config(r_config)
+        self.timeout = self.config.get('timeout', 120)
 
     @inlineCallbacks
     def teardown_middleware(self):
@@ -46,7 +49,7 @@ class SessionLengthMiddleware(BaseMiddleware):
     def _process_message(self, message, redis_key):
         if message.get('event_type') == self.SESSION_NEW:
             start_time = time.time()
-            yield self.redis.set(redis_key, str(start_time))
+            yield self.redis.setex(redis_key,  self.timeout, str(start_time))
             self._set_session_start_time(message, start_time)
         elif message.get('event_type') == self.SESSION_CLOSE:
             self._set_session_end_time(message, time.time())
