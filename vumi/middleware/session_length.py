@@ -12,7 +12,11 @@ from vumi.persist.txredis_manager import TxRedisManager
 class SessionLengthMiddleware(BaseMiddleware):
     """ Middleware for storing the session length in the message.
 
-    Session length is stored if the end of the session is reached.
+    Stores the start timestamp of a session in the message payload in
+    message['helper_metadata'][field_name]['session_start'] for all messages
+    in the session, as well as the end timestamp if the session in
+    message['helper_metadata'][field_name]['session_end'] if the message
+    marks the end of the session.
 
     Configuration option:
 
@@ -20,6 +24,9 @@ class SessionLengthMiddleware(BaseMiddleware):
         Redis configuration parameters.
     :param int timeout:
         Redis key timeout (in seconds). Defaults to 120.
+    :param str field_name:
+        The field name to use when storing the timestamps in the message
+        helper_metadata. Defaults to 'session'.
     """
     SESSION_NEW, SESSION_CLOSE = (
         TransportUserMessage.SESSION_NEW, TransportUserMessage.SESSION_CLOSE)
@@ -29,15 +36,16 @@ class SessionLengthMiddleware(BaseMiddleware):
         r_config = self.config.get('redis_manager', {})
         self.redis = yield TxRedisManager.from_config(r_config)
         self.timeout = self.config.get('timeout', 120)
+        self.field_name = self.config.get('field_name', 'session')
 
     @inlineCallbacks
     def teardown_middleware(self):
         yield self.redis.close_manager()
 
     def _set_message_billing_metadata(self, message, field, value):
-        if not message['helper_metadata'].get('billing'):
-            message['helper_metadata']['billing'] = {}
-        message['helper_metadata']['billing'][field] = value
+        if not message['helper_metadata'].get(self.field_name):
+            message['helper_metadata'][self.field_name] = {}
+        message['helper_metadata'][self.field_name][field] = value
 
     def _set_session_start_time(self, message, time):
         self._set_message_billing_metadata(message, 'session_start', time)
