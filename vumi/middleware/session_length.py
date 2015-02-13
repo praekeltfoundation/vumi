@@ -70,14 +70,18 @@ class SessionLengthMiddleware(BaseMiddleware):
             if created_time:
                 self._set_session_start_time(message, float(created_time))
 
+    def _generate_redis_key(self, message, address):
+        return '%s:%s:%s' % (
+            message.get('transport_name'), address, 'session_created')
+
     @inlineCallbacks
     def handle_inbound(self, message, connector_name):
-        redis_key = '%s:%s' % (message.get('from_addr'), 'session_created')
+        redis_key = self._generate_redis_key(message, message.get('from_addr'))
         yield self._process_message(message, redis_key)
         returnValue(message)
 
     @inlineCallbacks
     def handle_outbound(self, message, connector_name):
-        redis_key = '%s:%s' % (message.get('to_addr'), 'session_created')
+        redis_key = self._generate_redis_key(message, message.get('to_addr'))
         yield self._process_message(message, redis_key)
         returnValue(message)
