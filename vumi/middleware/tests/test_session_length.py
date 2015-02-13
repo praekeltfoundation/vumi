@@ -30,7 +30,7 @@ class TestStaticProviderSettingMiddleware(VumiTestCase):
             to_addr=to_addr, from_addr=from_addr,
             transport_name="dummy_connector",
             transport_type="dummy_transport_type",
-            event_type=session_event)
+            session_event=session_event)
         return msg
 
     @inlineCallbacks

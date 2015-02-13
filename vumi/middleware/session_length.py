@@ -55,11 +55,11 @@ class SessionLengthMiddleware(BaseMiddleware):
 
     @inlineCallbacks
     def _process_message(self, message, redis_key):
-        if message.get('event_type') == self.SESSION_NEW:
+        if message.get('session_event') == self.SESSION_NEW:
             start_time = time.time()
             yield self.redis.setex(redis_key,  self.timeout, str(start_time))
             self._set_session_start_time(message, start_time)
-        elif message.get('event_type') == self.SESSION_CLOSE:
+        elif message.get('session_event') == self.SESSION_CLOSE:
             self._set_session_end_time(message, time.time())
             created_time = yield self.redis.get(redis_key)
             if created_time:
