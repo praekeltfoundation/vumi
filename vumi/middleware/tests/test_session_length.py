@@ -130,3 +130,12 @@ class TestStaticProviderSettingMiddleware(VumiTestCase):
         yield mw.handle_inbound(msg_start, "dummy_connector")
         ttl = yield self.redis.ttl('+54321:session_created')
         self.assertTrue(ttl <= 20)
+
+    @inlineCallbacks
+    def test_custom_message_field_name(self):
+        mw = yield self.mk_middleware({'field_name': 'foobar'})
+        msg_start = self.mk_msg('+12345', '+54321')
+
+        msg = yield mw.handle_inbound(msg_start, "dummy_connector")
+        self.assertTrue(
+            msg['helper_metadata']['foobar']['session_start'] is not None)
