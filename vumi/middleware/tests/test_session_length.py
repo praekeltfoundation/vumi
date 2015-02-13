@@ -1,5 +1,7 @@
 """Tests for vumi.middleware.session_length."""
 
+import time
+
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.message import TransportUserMessage
@@ -35,26 +37,32 @@ class TestStaticProviderSettingMiddleware(VumiTestCase):
 
     @inlineCallbacks
     def test_incoming_message_session_start(self):
+        times = [0.0]
+        self.patch(time, 'time', times.pop)
         mw = yield self.mk_middleware()
         msg_start = self.mk_msg('+12345', '+54321')
 
         msg = yield mw.handle_inbound(msg_start, "dummy_connector")
         value = yield self.redis.get('dummy_connector:+54321:session_created')
         self.assertTrue(value is not None)
-        self.assertTrue(isinstance(
-                msg['helper_metadata']['session']['session_start'], float))
+        self.assertEqual(
+                msg['helper_metadata']['session']['session_start'], 0.0)
 
     @inlineCallbacks
     def test_incoming_message_session_end(self):
+        times = [0.0]
+        self.patch(time, 'time', times.pop)
         mw = yield self.mk_middleware()
         msg_end = self.mk_msg('+12345', '+54321', session_event=SESSION_CLOSE)
 
         msg = yield mw.handle_inbound(msg_end, "dummy_connector")
-        self.assertTrue(isinstance(
-                msg['helper_metadata']['session']['session_end'], float))
+        self.assertEqual(
+                msg['helper_metadata']['session']['session_end'], 0.0)
 
     @inlineCallbacks
     def test_incoming_message_session_start_end(self):
+        times = [1.0, 0.0]
+        self.patch(time, 'time', times.pop)
         mw = yield self.mk_middleware()
         msg_start = self.mk_msg('+12345', '+54321')
         msg_end = self.mk_msg('+12345', '+54321', session_event=SESSION_CLOSE)
@@ -62,39 +70,45 @@ class TestStaticProviderSettingMiddleware(VumiTestCase):
         msg = yield mw.handle_inbound(msg_start, "dummy_connector")
         value = yield self.redis.get('dummy_connector:+54321:session_created')
         self.assertTrue(value is not None)
-        self.assertTrue(isinstance(
-                msg['helper_metadata']['session']['session_start'], float))
+        self.assertEqual(
+                msg['helper_metadata']['session']['session_start'], 0.0)
 
         msg = yield mw.handle_inbound(msg_end, "dummy_connector")
         value = yield self.redis.get('dummy_connector:+54321:session_created')
         self.assertTrue(value is None)
-        self.assertTrue(isinstance(
-                msg['helper_metadata']['session']['session_start'], float))
-        self.assertTrue(isinstance(
-            msg['helper_metadata']['session']['session_end'], float))
+        self.assertEqual(
+                msg['helper_metadata']['session']['session_start'], 0.0)
+        self.assertEqual(
+            msg['helper_metadata']['session']['session_end'], 1.0)
 
     @inlineCallbacks
     def test_outgoing_message_session_start(self):
+        times = [0.0]
+        self.patch(time, 'time', times.pop)
         mw = yield self.mk_middleware()
         msg_start = self.mk_msg('+12345', '+54321')
 
         msg = yield mw.handle_outbound(msg_start, "dummy_connector")
         value = yield self.redis.get('dummy_connector:+12345:session_created')
         self.assertTrue(value is not None)
-        self.assertTrue(isinstance(
-                msg['helper_metadata']['session']['session_start'], float))
+        self.assertEqual(
+                msg['helper_metadata']['session']['session_start'], 0.0)
 
     @inlineCallbacks
     def test_outgoing_message_session_end(self):
+        times = [0.0]
+        self.patch(time, 'time', times.pop)
         mw = yield self.mk_middleware()
         msg_end = self.mk_msg('+12345', '+54321', session_event=SESSION_CLOSE)
 
         msg = yield mw.handle_outbound(msg_end, "dummy_connector")
-        self.assertTrue(isinstance(
-                msg['helper_metadata']['session']['session_end'], float))
+        self.assertEqual(
+                msg['helper_metadata']['session']['session_end'], 0.0)
 
     @inlineCallbacks
     def test_outgoing_message_session_start_end(self):
+        times = [1.0, 0.0]
+        self.patch(time, 'time', times.pop)
         mw = yield self.mk_middleware()
         msg_start = self.mk_msg('+12345', '+54321')
         msg_end = self.mk_msg('+12345', '+54321', session_event=SESSION_CLOSE)
@@ -102,16 +116,16 @@ class TestStaticProviderSettingMiddleware(VumiTestCase):
         msg = yield mw.handle_outbound(msg_start, "dummy_connector")
         value = yield self.redis.get('dummy_connector:+12345:session_created')
         self.assertTrue(value is not None)
-        self.assertTrue(isinstance(
-                msg['helper_metadata']['session']['session_start'], float))
+        self.assertEqual(
+                msg['helper_metadata']['session']['session_start'], 0.0)
 
         msg = yield mw.handle_outbound(msg_end, "dummy_connector")
         value = yield self.redis.get('dummy_connector:+54321:session_created')
         self.assertTrue(value is None)
-        self.assertTrue(isinstance(
-                msg['helper_metadata']['session']['session_start'], float))
-        self.assertTrue(isinstance(
-            msg['helper_metadata']['session']['session_end'], float))
+        self.assertEqual(
+                msg['helper_metadata']['session']['session_start'], 0.0)
+        self.assertEqual(
+            msg['helper_metadata']['session']['session_end'], 1.0)
 
     @inlineCallbacks
     def test_redis_key_timeout(self):
