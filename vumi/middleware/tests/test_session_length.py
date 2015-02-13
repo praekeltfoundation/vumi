@@ -1,8 +1,7 @@
 """Tests for vumi.middleware.session_length."""
 
-import time
-
 from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.task import Clock
 
 from vumi.message import TransportUserMessage
 from vumi.middleware.session_length import SessionLengthMiddleware
@@ -15,6 +14,7 @@ SESSION_NEW, SESSION_CLOSE = (
 class TestStaticProviderSettingMiddleware(VumiTestCase):
     def setUp(self):
         self.persistence_helper = self.add_helper(PersistenceHelper())
+        self.clock = Clock()
 
     @inlineCallbacks
     def mk_middleware(self, config={}):
@@ -23,6 +23,7 @@ class TestStaticProviderSettingMiddleware(VumiTestCase):
         mw = SessionLengthMiddleware(
             "session_length", config, dummy_worker)
         yield mw.setup_middleware()
+        self.patch(mw, 'clock', self.clock)
         self.redis = mw.redis
         self.add_cleanup(mw.teardown_middleware)
         returnValue(mw)
@@ -37,8 +38,6 @@ class TestStaticProviderSettingMiddleware(VumiTestCase):
 
     @inlineCallbacks
     def test_incoming_message_session_start(self):
-        times = [0.0]
-        self.patch(time, 'time', times.pop)
         mw = yield self.mk_middleware()
         msg_start = self.mk_msg('+12345', '+54321')
 
@@ -50,8 +49,6 @@ class TestStaticProviderSettingMiddleware(VumiTestCase):
 
     @inlineCallbacks
     def test_incoming_message_session_end(self):
-        times = [0.0]
-        self.patch(time, 'time', times.pop)
         mw = yield self.mk_middleware()
         msg_end = self.mk_msg('+12345', '+54321', session_event=SESSION_CLOSE)
 
@@ -61,8 +58,6 @@ class TestStaticProviderSettingMiddleware(VumiTestCase):
 
     @inlineCallbacks
     def test_incoming_message_session_start_end(self):
-        times = [1.0, 0.0]
-        self.patch(time, 'time', times.pop)
         mw = yield self.mk_middleware()
         msg_start = self.mk_msg('+12345', '+54321')
         msg_end = self.mk_msg('+12345', '+54321', session_event=SESSION_CLOSE)
@@ -73,6 +68,7 @@ class TestStaticProviderSettingMiddleware(VumiTestCase):
         self.assertEqual(
                 msg['helper_metadata']['session']['session_start'], 0.0)
 
+        self.clock.advance(1.0)
         msg = yield mw.handle_inbound(msg_end, "dummy_connector")
         value = yield self.redis.get('dummy_connector:+54321:session_created')
         self.assertTrue(value is None)
@@ -83,8 +79,6 @@ class TestStaticProviderSettingMiddleware(VumiTestCase):
 
     @inlineCallbacks
     def test_outgoing_message_session_start(self):
-        times = [0.0]
-        self.patch(time, 'time', times.pop)
         mw = yield self.mk_middleware()
         msg_start = self.mk_msg('+12345', '+54321')
 
@@ -96,8 +90,6 @@ class TestStaticProviderSettingMiddleware(VumiTestCase):
 
     @inlineCallbacks
     def test_outgoing_message_session_end(self):
-        times = [0.0]
-        self.patch(time, 'time', times.pop)
         mw = yield self.mk_middleware()
         msg_end = self.mk_msg('+12345', '+54321', session_event=SESSION_CLOSE)
 
@@ -107,8 +99,6 @@ class TestStaticProviderSettingMiddleware(VumiTestCase):
 
     @inlineCallbacks
     def test_outgoing_message_session_start_end(self):
-        times = [1.0, 0.0]
-        self.patch(time, 'time', times.pop)
         mw = yield self.mk_middleware()
         msg_start = self.mk_msg('+12345', '+54321')
         msg_end = self.mk_msg('+12345', '+54321', session_event=SESSION_CLOSE)
@@ -119,6 +109,7 @@ class TestStaticProviderSettingMiddleware(VumiTestCase):
         self.assertEqual(
                 msg['helper_metadata']['session']['session_start'], 0.0)
 
+        self.clock.advance(1.0)
         msg = yield mw.handle_outbound(msg_end, "dummy_connector")
         value = yield self.redis.get('dummy_connector:+54321:session_created')
         self.assertTrue(value is None)
