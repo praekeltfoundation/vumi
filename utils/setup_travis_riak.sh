@@ -20,19 +20,19 @@ function install_riak() {
 
 
 case "${RIAK_VERSION}" in
-    "current")
+    current)
         # We want to use the existing Riak (2.0.something at time of writing).
         # We need to copy over our own advanced config to enable legacy search.
         echo "Using installed Riak with v2.0 extra config for legacy search..."
         cp utils/advanced.config /etc/riak/advanced.config
         ;;
-    "1.4.*")
+    1.4.*)
         # We want Riak 1.4.x, so install it and copy over a suitable config.
         echo "Installing Riak ${RIAK_VERSION} with v1.4 config..."
         install_riak
         cp utils/app.config /etc/riak/app.config
         ;;
-    "*")
+    *)
         # Unexpected version.
         echo "I don't know how to set up Riak ${RIAK_VERSION}, sorry."
         exit 1
