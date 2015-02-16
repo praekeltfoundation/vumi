@@ -19,8 +19,8 @@ class StoringMiddlewareConfig(Config):
     store_prefix = ConfigText(
         "Prefix for message store keys in key-value store.",
         default='message_store')
-    redis = ConfigDict("Redis configuration parameters", default={})
-    riak = ConfigDict(
+    redis_manager = ConfigDict("Redis configuration parameters", default={})
+    riak_manager = ConfigDict(
         "Riak configuration parameters. Must contain at least a bucket_prefix"
         " key", required=True)
     store_on_consume = ConfigBool(
@@ -48,9 +48,9 @@ class StoringMiddleware(BaseMiddleware):
     :param string store_prefix:
         Prefix for message store keys in key-value store.
         Default is 'message_store'.
-    :param dict redis:
+    :param dict redis_manager:
         Redis configuration parameters.
-    :param dict riak:
+    :param dict riak_manager:
         Riak configuration parameters. Must contain at least
         a bucket_prefix key.
     :param bool store_on_consume:
@@ -65,7 +65,7 @@ class StoringMiddleware(BaseMiddleware):
         store_prefix = config.store_prefix
         r_config = config.redis_manager
         self.redis = yield TxRedisManager.from_config(r_config)
-        manager = TxRiakManager.from_config(config.redis_manager)
+        manager = TxRiakManager.from_config(config.riak_manager)
         self.store = MessageStore(manager,
                                   self.redis.sub_manager(store_prefix))
         self.store_on_consume = config.store_on_consume
