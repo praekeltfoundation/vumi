@@ -67,16 +67,17 @@ class StoringMiddleware(BaseMiddleware):
         Default is ``True``.
     """
 
+    config_class = StoringMiddlewareConfig
+
     @inlineCallbacks
     def setup_middleware(self):
-        config = StoringMiddlewareConfig(self.config)
-        store_prefix = config.store_prefix
-        r_config = config.redis_manager
+        store_prefix = self.config.store_prefix
+        r_config = self.config.redis_manager
         self.redis = yield TxRedisManager.from_config(r_config)
-        manager = TxRiakManager.from_config(config.riak_manager)
+        manager = TxRiakManager.from_config(self.config.riak_manager)
         self.store = MessageStore(manager,
                                   self.redis.sub_manager(store_prefix))
-        self.store_on_consume = config.store_on_consume
+        self.store_on_consume = self.config.store_on_consume
 
     @inlineCallbacks
     def teardown_middleware(self):

@@ -32,12 +32,12 @@ class LoggingMiddleware(BaseMiddleware):
         Log level from :mod:`vumi.log` to log failure messages at.
         Default is `error`.
     """
+    config_class = LoggingMiddlewareConfig
 
     def setup_middleware(self):
-        config = LoggingMiddlewareConfig(self.config)
-        log_level = config.log_level
+        log_level = self.config.log_level
         self.message_logger = getattr(log, log_level)
-        failure_log_level = config.failure_log_level
+        failure_log_level = self.config.failure_log_level
         self.failure_logger = getattr(log, failure_log_level)
 
     def _log(self, direction, logger, msg, connector_name):

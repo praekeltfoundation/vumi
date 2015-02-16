@@ -36,10 +36,10 @@ class AddressTranslationMiddleware(BaseMiddleware):
         applied to `from_addr` values. Addresses not in this dictionary
         are not affected.
     """
+    config_class = AddressTranslatorMiddlewareConfig
 
     def setup_middleware(self):
-        config = AddressTranslatorMiddlewareConfig(self.config)
-        self.outbound_map = config.outbound_map
+        self.outbound_map = self.config.outbound_map
         self.inbound_map = dict((v, k) for k, v in self.outbound_map.items())
 
     def handle_outbound(self, message, connector_name):

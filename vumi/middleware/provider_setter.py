@@ -31,9 +31,10 @@ class StaticProviderSettingMiddleware(TransportMiddleware):
        provider for both inbound and outbound messages, you might need two
        copies of this middleware (one on either side of the other middleware).
     """
+    config_class = StaticProviderSetterMiddlewareConfig
+
     def setup_middleware(self):
-        config = StaticProviderSetterMiddlewareConfig(self.config)
-        self.provider_value = config.provider
+        self.provider_value = self.config.provider
 
     def handle_inbound(self, message, connector_name):
         message["provider"] = self.provider_value
@@ -100,12 +101,13 @@ class AddressPrefixProviderSettingMiddleware(TransportMiddleware):
        provider for both inbound and outbound messages, you might need two
        copies of this middleware (one on either side of the other middleware).
     """
+    config_class = AddressPrefixProviderSettingMiddlewareConfig
+
     def setup_middleware(self):
-        config = AddressPrefixProviderSettingMiddlewareConfig(self.config)
-        prefixes = config.provider_prefixes.items()
+        prefixes = self.config.provider_prefixes.items()
         self.provider_prefixes = sorted(
             prefixes, key=lambda item: -len(item[0]))
-        self.normalize_config = config.normalize_msisdn
+        self.normalize_config = self.config.normalize_msisdn
 
     def normalize_addr(self, addr):
         if self.normalize_config:

@@ -56,10 +56,11 @@ class ManholeMiddleware(BaseMiddleware):
         List of absolute paths to `authorized_keys` files containing SSH public
         keys that are allowed access.
     """
+    config_class = ManholeMiddlewareConfig
+
     def validate_config(self):
-        config = ManholeMiddlewareConfig(self.config)
-        self.twisted_endpoint = config.twisted_endpoint
-        self.authorized_keys = config.authorized_keys
+        self.twisted_endpoint = self.config.twisted_endpoint
+        self.authorized_keys = self.config.authorized_keys
 
     @inlineCallbacks
     def setup_middleware(self):

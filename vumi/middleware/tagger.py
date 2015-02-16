@@ -118,10 +118,11 @@ class TaggingMiddleware(TransportMiddleware):
           dicts are recursed into. Values which are neither are left
           as is.
     """
+    config_class = TaggingMiddlewareConfig
+
     def setup_middleware(self):
-        config = TaggingMiddlewareConfig(self.config)
-        config_incoming = config.incoming
-        config_outgoing = config.outgoing
+        config_incoming = self.config.incoming
+        config_outgoing = self.config.outgoing
 
         self.to_addr_re = re.compile(config_incoming['addr_pattern'])
         self.tagpool_template = config_incoming['tagpool_template']

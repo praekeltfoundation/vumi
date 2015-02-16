@@ -42,15 +42,15 @@ class SessionLengthMiddleware(BaseMiddleware):
         The field name to use when storing the timestamps in the message
         helper_metadata. Defaults to 'session'.
     """
+    config_class = SessionLengthMiddlewareConfig
     SESSION_NEW, SESSION_CLOSE = (
         TransportUserMessage.SESSION_NEW, TransportUserMessage.SESSION_CLOSE)
 
     @inlineCallbacks
     def setup_middleware(self):
-        config = SessionLengthMiddlewareConfig(self.config, static=True)
-        self.redis = yield TxRedisManager.from_config(config.redis)
-        self.timeout = config.timeout
-        self.field_name = config.field_name
+        self.redis = yield TxRedisManager.from_config(self.config.redis)
+        self.timeout = self.config.timeout
+        self.field_name = self.config.field_name
         self.clock = reactor
 
     @inlineCallbacks
