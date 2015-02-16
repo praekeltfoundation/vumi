@@ -1,5 +1,8 @@
 # -*- test-case-name: vumi.middleware.tests.test_manhole -*-
 
+from confmodel import Config
+from confmodel.fields import ConfigList, ConfigText
+
 from vumi.middleware import BaseMiddleware
 
 from twisted.internet import reactor
@@ -9,6 +12,14 @@ from twisted.conch import manhole_ssh, manhole_tap
 from twisted.conch.checkers import SSHPublicKeyDatabase
 from twisted.python.filepath import FilePath
 from twisted.internet.endpoints import serverFromString
+
+
+class ManholeMiddlewareConfig(Config):
+    twisted_enpoint = ConfigText(
+        "Twisted enpoint to listen on", default="tcp:0")
+    autorized_keys = ConfigList(
+        "List of absolute paths to `authorized_keys` files containing SSH "
+        "public keys that are allowed access.", default=None)
 
 
 class SSHPubKeyDatabase(SSHPublicKeyDatabase):
@@ -46,8 +57,9 @@ class ManholeMiddleware(BaseMiddleware):
         keys that are allowed access.
     """
     def validate_config(self):
-        self.twisted_endpoint = self.config.get('twisted_endpoint', 'tcp:0')
-        self.authorized_keys = self.config.get('authorized_keys', None)
+        config = ManholeMiddlewareConfig(self.config)
+        self.twisted_endpoint = config.twisted_endpoint
+        self.authorized_keys = config.authorized_keys
 
     @inlineCallbacks
     def setup_middleware(self):
