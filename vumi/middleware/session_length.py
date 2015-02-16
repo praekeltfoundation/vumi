@@ -16,10 +16,11 @@ class SessionLengthMiddlewareConfig(Config):
     Configuration class for the session length middleware.
     """
 
-    redis = ConfigDict("Redis config", default={})
-    timeout = ConfigInt("Redis key timeout (secs)", default=600)
+    redis = ConfigDict("Redis config", default={}, static=True)
+    timeout = ConfigInt("Redis key timeout (secs)", default=600, static=True)
     field_name = ConfigText(
-        "Field name in message helper_metadata", default="session")
+        "Field name in message helper_metadata", default="session",
+        static=True)
 
 
 class SessionLengthMiddleware(BaseMiddleware):
@@ -46,7 +47,7 @@ class SessionLengthMiddleware(BaseMiddleware):
 
     @inlineCallbacks
     def setup_middleware(self):
-        config = SessionLengthMiddlewareConfig(self.config)
+        config = SessionLengthMiddlewareConfig(self.config, static=True)
         self.redis = yield TxRedisManager.from_config(config.redis)
         self.timeout = config.timeout
         self.field_name = config.field_name
