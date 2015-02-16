@@ -46,10 +46,10 @@ class SessionLengthMiddleware(BaseMiddleware):
 
     @inlineCallbacks
     def setup_middleware(self):
-        r_config = self.config.get('redis_manager', {})
-        self.redis = yield TxRedisManager.from_config(r_config)
-        self.timeout = self.config.get('timeout', 600)
-        self.field_name = self.config.get('field_name', 'session')
+        config = SessionLengthMiddlewareConfig(self.config)
+        self.redis = yield TxRedisManager.from_config(config.redis)
+        self.timeout = config.timeout
+        self.field_name = config.field_name
         self.clock = reactor
 
     @inlineCallbacks
