@@ -1,6 +1,18 @@
 # -*- test-case-name: vumi.middleware.tests.test_address_translator -*-
 
+from confmodel import Config
+from confmodel.fields import ConfigDict
+
 from vumi.middleware import BaseMiddleware
+
+
+class AddressTranslatorMiddlewareConfig(Config):
+    """
+    Configuration class for the address translator middleware.
+    """
+    outbound_map = ConfigDict(
+        "Mapping of old ``to_addr`` values to new ``to_addr`` values",
+        required=True)
 
 
 class AddressTranslationMiddleware(BaseMiddleware):
