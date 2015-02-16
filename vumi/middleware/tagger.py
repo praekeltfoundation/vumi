@@ -1,8 +1,80 @@
 # -*- test-case-name: vumi.middleware.tests.test_tagger -*-
 
+from confmodel import Config
+from confmodel.fields import ConfigDict
 import re
 
 from vumi.middleware.base import TransportMiddleware
+
+
+class TaggingMiddlewareConfig(Config):
+
+    class ConfigIncoming(ConfigDict):
+        def clean(self, value):
+            if 'addr_pattern' not in value:
+                self.raise_config_error(
+                    "does not contain the `addr_pattern` key.")
+            if not isinstance(value['addr_pattern'], basestring):
+                self.raise_config_error(
+                    "does not have an `addr_pattern` key with type `string`.")
+            if 'tagpool_template' not in value:
+                self.raise_config_error(
+                    "does not contain the `tagpool_template` key.")
+            if not isinstance(value['tagpool_template'], basestring):
+                self.raise_config_error(
+                    "does not have an `tagpool_template` key with type "
+                    "`string`.")
+            if 'tagname_template' not in value:
+                self.raise_config_error(
+                    "does not contain the `tagname_template` key.")
+            if not isinstance(value['tagname_template'], basestring):
+                self.raise_config_error(
+                    "does not have an `tagname_template` key with type "
+                    "`string`.")
+            return super(self.__class__, self).clean(value)
+
+    class ConfigOutgoing(ConfigDict):
+        def clean(self, value):
+            if 'tagname_pattern' not in value:
+                self.raise_config_error(
+                    "does not contain the `tagname_pattern` key.")
+            if not isinstance(value['tagname_pattern'], basestring):
+                self.raise_config_error(
+                    "does not have an `tagname_pattern` key with type "
+                    "`string`.")
+            if 'msg_template' not in value:
+                self.raise_config_error(
+                    "does not contain the `msg_template` key.")
+            if not isinstance(value['msg_template'], dict):
+                self.raise_config_error(
+                    "does not have an `msg_template` key with type `string`.")
+            return super(self.__class__, self).clean(value)
+
+    incoming = ConfigIncoming(
+        "Dict containing "
+        """* **addr_pattern** (*string*): Regular expression matching the
+          to_addr of incoming messages. Incoming messages with to_addr
+          values that don't match the pattern are not modified.
+        * **tagpool_template** (*string*): Template for producing tag pool
+          from successful matches of `addr_pattern`. The string is
+          expanded using `match.expand(tagpool_template)`.
+        * **tagname_template** (*string*): Template for producing tag name
+          from successful matches of `addr_pattern`. The string is
+          expanded using `match.expand(tagname_template)`.""", required=True)
+    outgoing = ConfigOutgoing(
+        "Dict containing "
+        """* **tagname_pattern** (*string*): Regular expression matching
+          the tag name of outgoing messages. Outgoing messages with
+          tag names that don't match the pattern are not
+          modified. Note: The tag pool the tag belongs to is not
+          examined.
+        * **msg_template** (*dict*): A dictionary of additional key-value
+          pairs to add to the outgoing message payloads whose tag
+          matches `tag_pattern`.  Values which are strings are
+          expanded using `match.expand(value)`.  Values which are
+          dicts are recursed into. Values which are neither are left
+          as is.""",
+        required=True)
 
 
 class TaggingMiddleware(TransportMiddleware):
@@ -47,8 +119,9 @@ class TaggingMiddleware(TransportMiddleware):
           as is.
     """
     def setup_middleware(self):
-        config_incoming = self.config['incoming']
-        config_outgoing = self.config['outgoing']
+        config = TaggingMiddlewareConfig(self.config)
+        config_incoming = config.incoming
+        config_outgoing = config.outgoing
 
         self.to_addr_re = re.compile(config_incoming['addr_pattern'])
         self.tagpool_template = config_incoming['tagpool_template']
