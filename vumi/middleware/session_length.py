@@ -22,7 +22,7 @@ class SessionLengthMiddleware(BaseMiddleware):
     :param dict redis:
         Redis configuration parameters.
     :param int timeout:
-        Redis key timeout (in seconds). Defaults to 120.
+        Redis key timeout (in seconds). Defaults to 600.
     :param str field_name:
         The field name to use when storing the timestamps in the message
         helper_metadata. Defaults to 'session'.
@@ -34,7 +34,7 @@ class SessionLengthMiddleware(BaseMiddleware):
     def setup_middleware(self):
         r_config = self.config.get('redis_manager', {})
         self.redis = yield TxRedisManager.from_config(r_config)
-        self.timeout = self.config.get('timeout', 120)
+        self.timeout = self.config.get('timeout', 600)
         self.field_name = self.config.get('field_name', 'session')
         self.clock = reactor
 
