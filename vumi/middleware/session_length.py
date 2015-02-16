@@ -1,11 +1,25 @@
 # -*- test-case-name: vumi.middleware.tests.test_session_length -*-
 
+from confmodel import Config
+from confmodel.fields import ConfigDict, ConfigInt, ConfigText
+
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet import reactor
 
 from vumi.message import TransportUserMessage
 from vumi.middleware.base import BaseMiddleware
 from vumi.persist.txredis_manager import TxRedisManager
+
+
+class SessionLengthMiddlewareConfig(Config):
+    """
+    Configuration class for the session length middleware.
+    """
+
+    redis = ConfigDict("Redis config", default={})
+    timeout = ConfigInt("Redis key timeout (secs)", default=600)
+    field_name = ConfigText(
+        "Field name in message helper_metadata", default="session")
 
 
 class SessionLengthMiddleware(BaseMiddleware):
@@ -17,7 +31,7 @@ class SessionLengthMiddleware(BaseMiddleware):
     message['helper_metadata'][field_name]['session_end'] if the message
     marks the end of the session.
 
-    Configuration option:
+    Configuration options:
 
     :param dict redis:
         Redis configuration parameters.
