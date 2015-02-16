@@ -85,9 +85,11 @@ class AddressPrefixProviderSettingMiddleware(TransportMiddleware):
         return None
 
     def handle_inbound(self, message, connector_name):
-        message["provider"] = self.get_provider(message["from_addr"])
+        if message.get("provider") is None:
+            message["provider"] = self.get_provider(message["from_addr"])
         return message
 
     def handle_outbound(self, message, connector_name):
-        message["provider"] = self.get_provider(message["to_addr"])
+        if message.get("provider") is None:
+            message["provider"] = self.get_provider(message["to_addr"])
         return message
