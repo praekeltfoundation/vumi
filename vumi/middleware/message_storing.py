@@ -1,5 +1,8 @@
 # -*- test-case-name: vumi.middleware.tests.test_message_storing -*-
 
+from confmodel import Config
+from confmodel.fields import ConfigBool, ConfigDict, ConfigText
+
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.middleware.base import BaseMiddleware
@@ -7,6 +10,22 @@ from vumi.middleware.tagger import TaggingMiddleware
 from vumi.components.message_store import MessageStore
 from vumi.persist.txriak_manager import TxRiakManager
 from vumi.persist.txredis_manager import TxRedisManager
+
+
+class StoringMiddlewareConfig(Config):
+    """
+    Config class for the storing middleware.
+    """
+    store_prefix = ConfigText(
+        "Prefix for message store keys in key-value store.",
+        default='message_store')
+    redis = ConfigDict("Redis configuration parameters", default={})
+    riak = ConfigDict(
+        "Riak configuration parameters. Must contain at least a bucket_prefix"
+        " key", required=True)
+    store_on_consume = ConfigBool(
+        "``True`` to store consumed messages as well as published ones, "
+        "``False`` to store only published messages.", default=True)
 
 
 class StoringMiddleware(BaseMiddleware):
@@ -42,13 +61,14 @@ class StoringMiddleware(BaseMiddleware):
 
     @inlineCallbacks
     def setup_middleware(self):
-        store_prefix = self.config.get('store_prefix', 'message_store')
-        r_config = self.config.get('redis_manager', {})
+        config = StoringMiddlewareConfig(self.config)
+        store_prefix = config.store_prefix
+        r_config = config.redis_manager
         self.redis = yield TxRedisManager.from_config(r_config)
-        manager = TxRiakManager.from_config(self.config.get('riak_manager'))
+        manager = TxRiakManager.from_config(config.redis_manager)
         self.store = MessageStore(manager,
                                   self.redis.sub_manager(store_prefix))
-        self.store_on_consume = self.config.get('store_on_consume', True)
+        self.store_on_consume = config.store_on_consume
 
     @inlineCallbacks
     def teardown_middleware(self):
