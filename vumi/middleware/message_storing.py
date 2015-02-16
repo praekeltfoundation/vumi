@@ -16,11 +16,19 @@ class StoringMiddlewareConfig(Config):
     """
     Config class for the storing middleware.
     """
+
+    class ConfigRiak(ConfigDict):
+        def clean(self, value):
+            if "bucket_prefix" not in value:
+                self.raise_config_error(
+                    "does not contain the `bucket_prefix` key.")
+            return super(self.__class__, self).clean(value)
+
     store_prefix = ConfigText(
         "Prefix for message store keys in key-value store.",
         default='message_store')
     redis_manager = ConfigDict("Redis configuration parameters", default={})
-    riak_manager = ConfigDict(
+    riak_manager = ConfigRiak(
         "Riak configuration parameters. Must contain at least a bucket_prefix"
         " key", required=True)
     store_on_consume = ConfigBool(
