@@ -10,7 +10,7 @@ service riak stop
 
 function install_riak() {
     # We're installing our own Riak version, so we add Basho's repo.
-    curl http://apt.basho.com/gpg/basho.apt.key | sudo apt-key add -
+    curl http://apt.basho.com/gpg/basho.apt.key | apt-key add -
     bash -c "echo deb http://apt.basho.com $(lsb_release -sc) main > /etc/apt/sources.list.d/basho.list"
     apt-get -qq update
     apt-get install -qq -y --force-yes riak="${RIAK_VERSION}"
@@ -38,4 +38,4 @@ esac
 
 # Get rid of all the existing Riak data so we start fresh and then start fresh.
 rm -rf /var/lib/riak/*
-sudo service riak start
+service riak start
