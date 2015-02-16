@@ -4,6 +4,7 @@ from confmodel import Config
 from confmodel.fields import ConfigList, ConfigText
 
 from vumi.middleware import BaseMiddleware
+from vumi.config import ConfigServerEndpoint
 
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks
@@ -15,7 +16,7 @@ from twisted.internet.endpoints import serverFromString
 
 
 class ManholeMiddlewareConfig(Config):
-    twisted_endpoint = ConfigText(
+    twisted_endpoint = ConfigServerEndpoint(
         "Twisted endpoint to listen on", default="tcp:0")
     autorized_keys = ConfigList(
         "List of absolute paths to `authorized_keys` files containing SSH "
