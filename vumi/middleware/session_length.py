@@ -42,37 +42,43 @@ class SessionLengthMiddleware(BaseMiddleware):
     def teardown_middleware(self):
         yield self.redis.close_manager()
 
+    def _generate_redis_key(self, message, address):
+        return '%s:%s:%s' % (
+            message.get('transport_name'), address, 'session_created')
+
+    @inlineCallbacks
+    def _set_redis_time(self, redis_key, time):
+        if (yield self.redis.get(redis_key)) is None:
+            yield self.redis.setex(redis_key,  self.timeout, str(time))
+
     def _set_message_session_metadata(self, message, field, value):
-        if not message['helper_metadata'].get(self.field_name):
-            message['helper_metadata'][self.field_name] = {}
-        message['helper_metadata'][self.field_name][field] = value
+        metadata = message['helper_metadata'].setdefault(self.field_name, {})
+        metadata.setdefault(field, value)
 
     def _set_session_start_time(self, message, time):
+        time = float(time)
         self._set_message_session_metadata(message, 'session_start', time)
 
     def _set_session_end_time(self, message, time):
+        time = float(time)
         self._set_message_session_metadata(message, 'session_end', time)
 
     @inlineCallbacks
     def _process_message(self, message, redis_key):
         if message.get('session_event') == self.SESSION_NEW:
             start_time = self.clock.seconds()
-            yield self.redis.setex(redis_key,  self.timeout, str(start_time))
+            yield self._set_redis_time(redis_key, start_time)
             self._set_session_start_time(message, start_time)
         elif message.get('session_event') == self.SESSION_CLOSE:
             self._set_session_end_time(message, self.clock.seconds())
             created_time = yield self.redis.get(redis_key)
             if created_time:
-                self._set_session_start_time(message, float(created_time))
+                self._set_session_start_time(message, created_time)
                 yield self.redis.delete(redis_key)
         else:
             created_time = yield self.redis.get(redis_key)
             if created_time:
-                self._set_session_start_time(message, float(created_time))
-
-    def _generate_redis_key(self, message, address):
-        return '%s:%s:%s' % (
-            message.get('transport_name'), address, 'session_created')
+                self._set_session_start_time(message, created_time)
 
     @inlineCallbacks
     def handle_inbound(self, message, connector_name):
