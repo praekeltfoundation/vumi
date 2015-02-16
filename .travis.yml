@@ -10,13 +10,13 @@ env:
 matrix:
   include:
     # Test against the oldest version of Twisted that we claim to support.
+    # Also test against the Travis-provided version of Riak (currently 2.0.x).
     # This is a separate matrix inclusion to avoid spawning unnecessary builds.
+    # Although there are two different things we're testing against here, they
+    # are orthogonal and any failures should be easily attributable to either
+    # Twisted version or Riak version without adding an additional build job.
     - python: "2.7"
-      env: TWISTED_VERSION="Twisted==13.1.0" RIAK_VERSION="1.4.12-1"
-    # Test against the currently installed version of Riak in Travis.
-    # This is a separate matrix inclusion to avoid spawning unnecessary builds.
-    - python: "2.7"
-      env: TWISTED_VERSION="Twisted" RIAK_VERSION="current"
+      env: TWISTED_VERSION="Twisted==13.1.0" RIAK_VERSION="current"
 services:
   - redis-server
 before_install:
