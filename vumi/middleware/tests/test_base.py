@@ -1,6 +1,8 @@
 import yaml
 import itertools
 
+from confmodel import Config
+from confmodel.fields import ConfigInt
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.middleware.base import (BaseMiddleware, MiddlewareStack,
@@ -9,8 +11,16 @@ from vumi.middleware.base import (BaseMiddleware, MiddlewareStack,
 from vumi.tests.helpers import VumiTestCase
 
 
-class ToyMiddleware(BaseMiddleware):
+class ToyMiddlewareConfig(Config):
+    """
+    Config for the toy middleware.
+    """
+    param_foo = ConfigInt("Foo parameter")
+    param_bar = ConfigInt("Bar parameter")
 
+
+class ToyMiddleware(BaseMiddleware):
+    config_class = ToyMiddlewareConfig
     # simple attribute to check that setup_middleware is called
     _setup_done = False
     _teardown_count = itertools.count(1)
@@ -242,13 +252,12 @@ class TestUtilityFunctions(VumiTestCase):
                          [ToyMiddleware, ToyMiddleware])
         self.assertEqual([mw._setup_done for mw in middlewares],
                          [False, False])
-        self.assertEqual(
-            middlewares[0].config, {
-                "param_foo": 1, "param_bar": 2,
-                'consume_priority': 0, 'publish_priority': 0})
-        self.assertEqual(
-            middlewares[1].config,
-            {'consume_priority': 1, 'publish_priority': -1})
+        self.assertEqual(middlewares[0].config.param_foo, 1)
+        self.assertEqual(middlewares[0].config.param_bar, 2)
+        self.assertEqual(middlewares[0].consume_priority, 0)
+        self.assertEqual(middlewares[0].publish_priority, 0)
+        self.assertEqual(middlewares[1].consume_priority, 1)
+        self.assertEqual(middlewares[1].publish_priority, -1)
 
     @inlineCallbacks
     def test_setup_middleware_from_config(self):
@@ -259,13 +268,12 @@ class TestUtilityFunctions(VumiTestCase):
                          [ToyMiddleware, ToyMiddleware])
         self.assertEqual([mw._setup_done for mw in middlewares],
                          [True, True])
-        self.assertEqual(
-            middlewares[0].config, {
-                "param_foo": 1, "param_bar": 2,
-                'consume_priority': 0, 'publish_priority': 0})
-        self.assertEqual(
-            middlewares[1].config,
-            {'consume_priority': 1, 'publish_priority': -1})
+        self.assertEqual(middlewares[0].config.param_foo, 1)
+        self.assertEqual(middlewares[0].config.param_bar, 2)
+        self.assertEqual(middlewares[0].consume_priority, 0)
+        self.assertEqual(middlewares[0].publish_priority, 0)
+        self.assertEqual(middlewares[1].consume_priority, 1)
+        self.assertEqual(middlewares[1].publish_priority, -1)
 
     def test_parse_yaml(self):
         # this test is here to ensure the YAML one has to
@@ -280,9 +288,12 @@ class TestUtilityFunctions(VumiTestCase):
 
     @inlineCallbacks
     def test_sort_by_priority(self):
-        priority2 = ToyMiddleware('priority2', {"priority": 2}, self)
-        priority1_1 = ToyMiddleware('priority1_1', {"priority": 1}, self)
-        priority1_2 = ToyMiddleware('priority1_2', {"priority": 1}, self)
+        priority2 = ToyMiddleware('priority2', {}, self)
+        priority2.priority = 2
+        priority1_1 = ToyMiddleware('priority1_1', {}, self)
+        priority1_1.priority = 1
+        priority1_2 = ToyMiddleware('priority1_2', {}, self)
+        priority1_2.priority = 1
         middlewares = [priority2, priority1_1, priority1_2]
         for mw in middlewares:
             yield mw.setup_middleware()
