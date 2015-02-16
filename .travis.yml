@@ -12,16 +12,16 @@ matrix:
     # Test against the oldest version of Twisted that we claim to support.
     # This is a separate matrix inclusion to avoid spawning unnecessary builds.
     - python: "2.7"
-      env: TWISTED_VERSION="Twisted==13.1.0"
+      env: TWISTED_VERSION="Twisted==13.1.0" RIAK_VERSION="1.4.12-1"
     # Test against the currently installed version of Riak in Travis.
     # This is a separate matrix inclusion to avoid spawning unnecessary builds.
     - python: "2.7"
-      env: RIAK_VERSION="current"
+      env: TWISTED_VERSION="Twisted" RIAK_VERSION="current"
 services:
   - redis-server
 before_install:
   # Set up an appropriate version of Riak.
-  - sudo utils/setup_travis_riak.sh
+  - sudo utils/setup_travis_riak.sh "${RIAK_VERSION}"
   # We need the protobuf-compiler so we can install Riak client libraries.
   - sudo apt-get -qq update
   - sudo apt-get install -qq protobuf-compiler
