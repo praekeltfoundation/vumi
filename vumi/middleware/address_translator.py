@@ -38,7 +38,8 @@ class AddressTranslationMiddleware(BaseMiddleware):
     """
 
     def setup_middleware(self):
-        self.outbound_map = self.config.get('outbound_map')
+        config = AddressTranslatorMiddlewareConfig(self.config)
+        self.outbound_map = config.outbound_map
         self.inbound_map = dict((v, k) for k, v in self.outbound_map.items())
 
     def handle_outbound(self, message, connector_name):
