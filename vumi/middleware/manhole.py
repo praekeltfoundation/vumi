@@ -15,8 +15,8 @@ from twisted.internet.endpoints import serverFromString
 
 
 class ManholeMiddlewareConfig(Config):
-    twisted_enpoint = ConfigText(
-        "Twisted enpoint to listen on", default="tcp:0")
+    twisted_endpoint = ConfigText(
+        "Twisted endpoint to listen on", default="tcp:0")
     autorized_keys = ConfigList(
         "List of absolute paths to `authorized_keys` files containing SSH "
         "public keys that are allowed access.", default=None)
