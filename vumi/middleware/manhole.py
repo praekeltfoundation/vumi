@@ -1,7 +1,7 @@
 # -*- test-case-name: vumi.middleware.tests.test_manhole -*-
 
 from confmodel import Config
-from confmodel.fields import ConfigList, ConfigText
+from confmodel.fields import ConfigList
 
 from vumi.middleware import BaseMiddleware
 from vumi.config import ConfigServerEndpoint
