@@ -42,16 +42,16 @@ class SessionLengthMiddleware(BaseMiddleware):
     def teardown_middleware(self):
         yield self.redis.close_manager()
 
-    def _set_message_billing_metadata(self, message, field, value):
+    def _set_message_session_metadata(self, message, field, value):
         if not message['helper_metadata'].get(self.field_name):
             message['helper_metadata'][self.field_name] = {}
         message['helper_metadata'][self.field_name][field] = value
 
     def _set_session_start_time(self, message, time):
-        self._set_message_billing_metadata(message, 'session_start', time)
+        self._set_message_session_metadata(message, 'session_start', time)
 
     def _set_session_end_time(self, message, time):
-        self._set_message_billing_metadata(message, 'session_end', time)
+        self._set_message_session_metadata(message, 'session_end', time)
 
     @inlineCallbacks
     def _process_message(self, message, redis_key):
