@@ -1,7 +1,22 @@
 # -*- test-case-name: vumi.middleware.tests.test_logging -*-
 
+from confmodel import Config
+from confmodel.fields import ConfigText
+
 from vumi.middleware import BaseMiddleware
 from vumi import log
+
+
+class LoggingMiddlewareConfig(Config):
+    """
+    Configuration class for the logging middleware.
+    """
+    log_level = ConfigText(
+        "Log level from :mod:`vumi.log` to log inbound and outbound messages "
+        "and events at", default='info')
+    failure_log_level = ConfigText(
+        "Log level from :mod:`vumi.log` to log failure messages at",
+        default='error')
 
 
 class LoggingMiddleware(BaseMiddleware):
@@ -19,9 +34,10 @@ class LoggingMiddleware(BaseMiddleware):
     """
 
     def setup_middleware(self):
-        log_level = self.config.get('log_level', 'info')
+        config = LoggingMiddlewareConfig(self.config)
+        log_level = config.log_level
         self.message_logger = getattr(log, log_level)
-        failure_log_level = self.config.get('failure_log_level', 'error')
+        failure_log_level = config.failure_log_level
         self.failure_logger = getattr(log, failure_log_level)
 
     def _log(self, direction, logger, msg, connector_name):
