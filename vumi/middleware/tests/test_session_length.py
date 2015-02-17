@@ -7,8 +7,10 @@ from vumi.message import TransportUserMessage
 from vumi.middleware.session_length import SessionLengthMiddleware
 from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 
-SESSION_NEW, SESSION_CLOSE = (
-    TransportUserMessage.SESSION_NEW, TransportUserMessage.SESSION_CLOSE)
+SESSION_NEW, SESSION_CLOSE, SESSION_NONE = (
+    TransportUserMessage.SESSION_NEW,
+    TransportUserMessage.SESSION_CLOSE,
+    TransportUserMessage.SESSION_NONE)
 
 
 class TestStaticProviderSettingMiddleware(VumiTestCase):
@@ -28,13 +30,25 @@ class TestStaticProviderSettingMiddleware(VumiTestCase):
         self.add_cleanup(mw.teardown_middleware)
         returnValue(mw)
 
-    def mk_msg(self, to_addr, from_addr, session_event=SESSION_NEW):
+    def mk_msg(self, to_addr, from_addr, session_event=SESSION_NEW,
+               session_start=None, session_end=None):
         msg = TransportUserMessage(
             to_addr=to_addr, from_addr=from_addr,
             transport_name="dummy_connector",
             transport_type="dummy_transport_type",
             session_event=session_event)
+
+        if session_start is not None:
+            self._set_metadata(msg, 'session_start', session_start)
+
+        if session_end is not None:
+            self._set_metadata(msg, 'session_end', session_end)
+
         return msg
+
+    def _set_metadata(self, msg, name, value, metadata_field_name='session'):
+        metadata = msg['helper_metadata'].setdefault(metadata_field_name, {})
+        metadata[name] = value
 
     @inlineCallbacks
     def test_incoming_message_session_start(self):
@@ -78,6 +92,59 @@ class TestStaticProviderSettingMiddleware(VumiTestCase):
             msg['helper_metadata']['session']['session_end'], 1.0)
 
     @inlineCallbacks
+    def test_incoming_message_session_start_no_overwrite(self):
+        mw = yield self.mk_middleware()
+
+        msg_start = self.mk_msg(
+            '+12345',
+            '+54321',
+            session_start=23,
+            session_event=SESSION_NEW)
+
+        yield self.redis.set('dummy_connector:+12345:session_created', '23')
+
+        msg = yield mw.handle_inbound(msg_start, "dummy_connector")
+        value = yield self.redis.get('dummy_connector:+12345:session_created')
+        self.assertEqual(value, '23')
+
+        self.assertEqual(
+            msg['helper_metadata']['session']['session_start'], 23)
+
+    @inlineCallbacks
+    def test_incoming_message_session_end_no_overwrite(self):
+        mw = yield self.mk_middleware()
+
+        msg_start = self.mk_msg(
+            '+12345',
+            '+54321',
+            session_start=23,
+            session_end=32,
+            session_event=SESSION_CLOSE)
+
+        msg = yield mw.handle_inbound(msg_start, "dummy_connector")
+
+        self.assertEqual(
+            msg['helper_metadata']['session']['session_start'], 23)
+
+        self.assertEqual(
+            msg['helper_metadata']['session']['session_end'], 32)
+
+    @inlineCallbacks
+    def test_incoming_message_session_none_no_overwrite(self):
+        mw = yield self.mk_middleware()
+
+        msg_start = self.mk_msg(
+            '+12345',
+            '+54321',
+            session_start=23,
+            session_event=SESSION_NONE)
+
+        msg = yield mw.handle_inbound(msg_start, "dummy_connector")
+
+        self.assertEqual(
+            msg['helper_metadata']['session']['session_start'], 23)
+
+    @inlineCallbacks
     def test_outgoing_message_session_start(self):
         mw = yield self.mk_middleware()
         msg_start = self.mk_msg('+12345', '+54321')
@@ -117,6 +184,59 @@ class TestStaticProviderSettingMiddleware(VumiTestCase):
                 msg['helper_metadata']['session']['session_start'], 0.0)
         self.assertEqual(
             msg['helper_metadata']['session']['session_end'], 1.0)
+
+    @inlineCallbacks
+    def test_outgoing_message_session_start_no_overwrite(self):
+        mw = yield self.mk_middleware()
+
+        msg_start = self.mk_msg(
+            '+12345',
+            '+54321',
+            session_start=23,
+            session_event=SESSION_NEW)
+
+        yield self.redis.set('dummy_connector:+12345:session_created', '23')
+
+        msg = yield mw.handle_outbound(msg_start, "dummy_connector")
+        value = yield self.redis.get('dummy_connector:+12345:session_created')
+        self.assertEqual(value, '23')
+
+        self.assertEqual(
+            msg['helper_metadata']['session']['session_start'], 23)
+
+    @inlineCallbacks
+    def test_outgoing_message_session_end_no_overwrite(self):
+        mw = yield self.mk_middleware()
+
+        msg_start = self.mk_msg(
+            '+12345',
+            '+54321',
+            session_start=23,
+            session_end=32,
+            session_event=SESSION_CLOSE)
+
+        msg = yield mw.handle_outbound(msg_start, "dummy_connector")
+
+        self.assertEqual(
+            msg['helper_metadata']['session']['session_start'], 23)
+
+        self.assertEqual(
+            msg['helper_metadata']['session']['session_end'], 32)
+
+    @inlineCallbacks
+    def test_outgoing_message_session_none_no_overwrite(self):
+        mw = yield self.mk_middleware()
+
+        msg_start = self.mk_msg(
+            '+12345',
+            '+54321',
+            session_start=23,
+            session_event=SESSION_NONE)
+
+        msg = yield mw.handle_outbound(msg_start, "dummy_connector")
+
+        self.assertEqual(
+            msg['helper_metadata']['session']['session_start'], 23)
 
     @inlineCallbacks
     def test_redis_key_timeout(self):
