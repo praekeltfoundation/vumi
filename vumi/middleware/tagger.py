@@ -47,7 +47,7 @@ class TaggingMiddlewareConfig(BaseMiddlewareConfig):
                     "does not contain the `msg_template` key.")
             if not isinstance(value['msg_template'], dict):
                 self.raise_config_error(
-                    "does not have an `msg_template` key with type `string`.")
+                    "does not have an `msg_template` key with type `dict`.")
             return super(self.__class__, self).clean(value)
 
     incoming = ConfigIncoming(

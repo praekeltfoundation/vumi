@@ -7,6 +7,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from vumi.middleware.base import BaseMiddleware, BaseMiddlewareConfig
 from vumi.middleware.tagger import TaggingMiddleware
 from vumi.components.message_store import MessageStore
+from vumi.config import ConfigRiak
 from vumi.persist.txriak_manager import TxRiakManager
 from vumi.persist.txredis_manager import TxRedisManager
 
@@ -15,14 +16,6 @@ class StoringMiddlewareConfig(BaseMiddlewareConfig):
     """
     Config class for the storing middleware.
     """
-
-    class ConfigRiak(ConfigDict):
-        def clean(self, value):
-            if "bucket_prefix" not in value:
-                self.raise_config_error(
-                    "does not contain the `bucket_prefix` key.")
-            return super(self.__class__, self).clean(value)
-
     store_prefix = ConfigText(
         "Prefix for message store keys in key-value store.",
         default='message_store', static=True)
