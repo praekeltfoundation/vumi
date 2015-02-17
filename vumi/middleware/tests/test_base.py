@@ -1,17 +1,16 @@
 import yaml
 import itertools
 
-from confmodel import Config
 from confmodel.fields import ConfigInt
 from twisted.internet.defer import inlineCallbacks, returnValue
 
-from vumi.middleware.base import (BaseMiddleware, MiddlewareStack,
-                                  create_middlewares_from_config,
-                                  setup_middlewares_from_config)
+from vumi.middleware.base import (
+    BaseMiddleware, MiddlewareStack, create_middlewares_from_config,
+    setup_middlewares_from_config, BaseMiddlewareConfig)
 from vumi.tests.helpers import VumiTestCase
 
 
-class ToyMiddlewareConfig(Config):
+class ToyMiddlewareConfig(BaseMiddlewareConfig):
     """
     Config for the toy middleware.
     """
