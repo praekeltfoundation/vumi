@@ -66,7 +66,7 @@ class StoringMiddleware(BaseMiddleware):
         Default is ``True``.
     """
 
-    config_class = StoringMiddlewareConfig
+    CONFIG_CLASS = StoringMiddlewareConfig
 
     @inlineCallbacks
     def setup_middleware(self):

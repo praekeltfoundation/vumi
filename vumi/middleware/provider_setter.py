@@ -31,7 +31,7 @@ class StaticProviderSettingMiddleware(TransportMiddleware):
        provider for both inbound and outbound messages, you might need two
        copies of this middleware (one on either side of the other middleware).
     """
-    config_class = StaticProviderSetterMiddlewareConfig
+    CONFIG_CLASS = StaticProviderSetterMiddlewareConfig
 
     def setup_middleware(self):
         self.provider_value = self.config.provider
@@ -101,7 +101,7 @@ class AddressPrefixProviderSettingMiddleware(TransportMiddleware):
        provider for both inbound and outbound messages, you might need two
        copies of this middleware (one on either side of the other middleware).
     """
-    config_class = AddressPrefixProviderSettingMiddlewareConfig
+    CONFIG_CLASS = AddressPrefixProviderSettingMiddlewareConfig
 
     def setup_middleware(self):
         prefixes = self.config.provider_prefixes.items()

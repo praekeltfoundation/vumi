@@ -118,7 +118,7 @@ class TaggingMiddleware(TransportMiddleware):
           dicts are recursed into. Values which are neither are left
           as is.
     """
-    config_class = TaggingMiddlewareConfig
+    CONFIG_CLASS = TaggingMiddlewareConfig
 
     def setup_middleware(self):
         config_incoming = self.config.incoming

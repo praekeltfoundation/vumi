@@ -40,11 +40,11 @@ class BaseMiddleware(object):
     :meth:`setup_middleware` instead. The config class can be overidden by
     replacing the ``config_class`` class variable.
     """
-    config_class = BaseMiddlewareConfig
+    CONFIG_CLASS = BaseMiddlewareConfig
 
     def __init__(self, name, config, worker):
         self.name = name
-        self.config = self.config_class(config)
+        self.config = self.CONFIG_CLASS(config, static=True)
         self.consume_priority = config.get('consume_priority')
         self.publish_priority = config.get('publish_priority')
         self.worker = worker

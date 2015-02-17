@@ -36,7 +36,7 @@ class AddressTranslationMiddleware(BaseMiddleware):
         applied to `from_addr` values. Addresses not in this dictionary
         are not affected.
     """
-    config_class = AddressTranslatorMiddlewareConfig
+    CONFIG_CLASS = AddressTranslatorMiddlewareConfig
 
     def setup_middleware(self):
         self.outbound_map = self.config.outbound_map

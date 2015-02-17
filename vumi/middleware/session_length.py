@@ -42,7 +42,7 @@ class SessionLengthMiddleware(BaseMiddleware):
         The field name to use when storing the timestamps in the message
         helper_metadata. Defaults to 'session'.
     """
-    config_class = SessionLengthMiddlewareConfig
+    CONFIG_CLASS = SessionLengthMiddlewareConfig
     SESSION_NEW, SESSION_CLOSE = (
         TransportUserMessage.SESSION_NEW, TransportUserMessage.SESSION_CLOSE)
 
