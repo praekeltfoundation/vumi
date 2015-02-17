@@ -12,7 +12,7 @@ class StaticProviderSetterMiddlewareConfig(BaseMiddlewareConfig):
     Config class for the static provider setting middleware.
     """
     provider = ConfigText(
-        "Value to set the ``provider`` field to", required=True)
+        "Value to set the ``provider`` field to", required=True, static=True)
 
 
 class StaticProviderSettingMiddleware(TransportMiddleware):
@@ -62,14 +62,14 @@ class AddressPrefixProviderSettingMiddlewareConfig(BaseMiddlewareConfig):
     provider_prefixes = ConfigDict(
         "Mapping from address prefix to provider value. Longer prefixes are "
         "checked first to avoid ambiguity. If no prefix matches, the provider"
-        " value will be set to ``None``.", required=True)
+        " value will be set to ``None``.", required=True, static=True)
     normalize_msisdn = ConfigNormalizeMsisdn(
         "Optional MSISDN normalization config. If present, this dict should "
         "contain a (mandatory) ``country_code`` field and an optional boolean "
         "``strip_plus`` field (default ``False``). If absent, the "
         "``from_addr`` field will not be normalized prior to the prefix check."
         " (This normalization is only used for the prefix check. The "
-        "``from_addr`` field on the message is not modified.)")
+        "``from_addr`` field on the message is not modified.)", static=True)
 
 
 class AddressPrefixProviderSettingMiddleware(TransportMiddleware):

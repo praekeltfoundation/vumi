@@ -15,12 +15,12 @@ class ToyMiddlewareConfig(Config):
     """
     Config for the toy middleware.
     """
-    param_foo = ConfigInt("Foo parameter")
-    param_bar = ConfigInt("Bar parameter")
+    param_foo = ConfigInt("Foo parameter", static=True)
+    param_bar = ConfigInt("Bar parameter", static=True)
 
 
 class ToyMiddleware(BaseMiddleware):
-    config_class = ToyMiddlewareConfig
+    CONFIG_CLASS = ToyMiddlewareConfig
     # simple attribute to check that setup_middleware is called
     _setup_done = False
     _teardown_count = itertools.count(1)

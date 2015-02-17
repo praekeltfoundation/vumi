@@ -60,7 +60,8 @@ class TaggingMiddlewareConfig(BaseMiddlewareConfig):
           expanded using `match.expand(tagpool_template)`.
         * **tagname_template** (*string*): Template for producing tag name
           from successful matches of `addr_pattern`. The string is
-          expanded using `match.expand(tagname_template)`.""", required=True)
+          expanded using `match.expand(tagname_template)`.""",
+        required=True, static=True)
     outgoing = ConfigOutgoing(
         "Dict containing "
         """* **tagname_pattern** (*string*): Regular expression matching
@@ -74,7 +75,7 @@ class TaggingMiddlewareConfig(BaseMiddlewareConfig):
           expanded using `match.expand(value)`.  Values which are
           dicts are recursed into. Values which are neither are left
           as is.""",
-        required=True)
+        required=True, static=True)
 
 
 class TaggingMiddleware(TransportMiddleware):

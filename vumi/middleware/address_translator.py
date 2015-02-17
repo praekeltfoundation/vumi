@@ -12,7 +12,7 @@ class AddressTranslatorMiddlewareConfig(BaseMiddlewareConfig):
     """
     outbound_map = ConfigDict(
         "Mapping of old ``to_addr`` values to new ``to_addr`` values",
-        required=True)
+        required=True, static=True)
 
 
 class AddressTranslationMiddleware(BaseMiddleware):

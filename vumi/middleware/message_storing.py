@@ -25,14 +25,16 @@ class StoringMiddlewareConfig(BaseMiddlewareConfig):
 
     store_prefix = ConfigText(
         "Prefix for message store keys in key-value store.",
-        default='message_store')
-    redis_manager = ConfigDict("Redis configuration parameters", default={})
+        default='message_store', static=True)
+    redis_manager = ConfigDict(
+        "Redis configuration parameters", default={}, static=True)
     riak_manager = ConfigRiak(
         "Riak configuration parameters. Must contain at least a bucket_prefix"
-        " key", required=True)
+        " key", required=True, static=True)
     store_on_consume = ConfigBool(
         "``True`` to store consumed messages as well as published ones, "
-        "``False`` to store only published messages.", default=True)
+        "``False`` to store only published messages.", default=True,
+        static=True)
 
 
 class StoringMiddleware(BaseMiddleware):

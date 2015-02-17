@@ -17,10 +17,10 @@ from twisted.internet.endpoints import serverFromString
 
 class ManholeMiddlewareConfig(BaseMiddlewareConfig):
     twisted_endpoint = ConfigServerEndpoint(
-        "Twisted endpoint to listen on", default="tcp:0")
+        "Twisted endpoint to listen on", default="tcp:0", static=True)
     autorized_keys = ConfigList(
         "List of absolute paths to `authorized_keys` files containing SSH "
-        "public keys that are allowed access.", default=None)
+        "public keys that are allowed access.", default=None, static=True)
 
 
 class SSHPubKeyDatabase(SSHPublicKeyDatabase):

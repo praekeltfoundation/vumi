@@ -13,10 +13,10 @@ class LoggingMiddlewareConfig(BaseMiddlewareConfig):
     """
     log_level = ConfigText(
         "Log level from :mod:`vumi.log` to log inbound and outbound messages "
-        "and events at", default='info')
+        "and events at", default='info', static=True)
     failure_log_level = ConfigText(
         "Log level from :mod:`vumi.log` to log failure messages at",
-        default='error')
+        default='error', static=True)
 
 
 class LoggingMiddleware(BaseMiddleware):
