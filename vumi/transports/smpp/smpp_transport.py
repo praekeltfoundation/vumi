@@ -135,6 +135,11 @@ class SmppService(ReconnectingClientService):
             self.wait_on_protocol_deferreds.append(d)
             return d
 
+    def is_bound(self):
+        if self._protocol is not None:
+            return self._protocol.is_bound()
+        return False
+
     def stopService(self):
         if self._protocol is not None:
             d = self._protocol.disconnect()
@@ -498,6 +503,12 @@ class SmppTransceiverTransport(Transport):
         throttling.
         """
         self._unthrottle_delayedCall = None
+
+        if not self.service.is_bound():
+            # We don't have a bound SMPP connection, so try again later.
+            log.msg("Can't check throttling while unbound, trying later.")
+            self.check_stop_throttling(self.get_static_config().throttle_delay)
+            return
 
         if not self._throttled_message_ids:
             # We have no throttled messages waiting, so stop throttling.

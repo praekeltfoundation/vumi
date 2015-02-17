@@ -40,8 +40,9 @@ def connect_transport(protocol, system_id='', password='', system_type=''):
 
 
 @inlineCallbacks
-def bind_protocol(transport, protocol, clear=True):
-    [bind_pdu] = yield wait_for_pdus(transport, 1)
+def bind_protocol(transport, protocol, clear=True, bind_pdu=None):
+    if bind_pdu is None:
+        [bind_pdu] = yield wait_for_pdus(transport, 1)
     resp_pdu_class = {
         BindTransceiver: BindTransceiverResp,
         BindReceiver: BindReceiverResp,
