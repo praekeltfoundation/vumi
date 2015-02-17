@@ -1,11 +1,26 @@
 # -*- test-case-name: vumi.middleware.tests.test_session_length -*-
 
+from confmodel import Config
+from confmodel.fields import ConfigDict, ConfigInt, ConfigText
+
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet import reactor
 
 from vumi.message import TransportUserMessage
-from vumi.middleware.base import BaseMiddleware
+from vumi.middleware.base import BaseMiddleware, BaseMiddlewareConfig
 from vumi.persist.txredis_manager import TxRedisManager
+
+
+class SessionLengthMiddlewareConfig(BaseMiddlewareConfig):
+    """
+    Configuration class for the session length middleware.
+    """
+
+    redis = ConfigDict("Redis config", default={}, static=True)
+    timeout = ConfigInt("Redis key timeout (secs)", default=600, static=True)
+    field_name = ConfigText(
+        "Field name in message helper_metadata", default="session",
+        static=True)
 
 
 class SessionLengthMiddleware(BaseMiddleware):
@@ -17,7 +32,7 @@ class SessionLengthMiddleware(BaseMiddleware):
     message['helper_metadata'][field_name]['session_end'] if the message
     marks the end of the session.
 
-    Configuration option:
+    Configuration options:
 
     :param dict redis:
         Redis configuration parameters.
@@ -27,15 +42,15 @@ class SessionLengthMiddleware(BaseMiddleware):
         The field name to use when storing the timestamps in the message
         helper_metadata. Defaults to 'session'.
     """
+    CONFIG_CLASS = SessionLengthMiddlewareConfig
     SESSION_NEW, SESSION_CLOSE = (
         TransportUserMessage.SESSION_NEW, TransportUserMessage.SESSION_CLOSE)
 
     @inlineCallbacks
     def setup_middleware(self):
-        r_config = self.config.get('redis_manager', {})
-        self.redis = yield TxRedisManager.from_config(r_config)
-        self.timeout = self.config.get('timeout', 600)
-        self.field_name = self.config.get('field_name', 'session')
+        self.redis = yield TxRedisManager.from_config(self.config.redis)
+        self.timeout = self.config.timeout
+        self.field_name = self.config.field_name
         self.clock = reactor
 
     @inlineCallbacks
