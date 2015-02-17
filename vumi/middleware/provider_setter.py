@@ -1,7 +1,18 @@
 # -*- test-case-name: vumi.middleware.tests.test_provider_setter -*-
 
-from vumi.middleware.base import TransportMiddleware
+from confmodel import Config
+from confmodel.fields import ConfigDict, ConfigText
+
+from vumi.middleware.base import TransportMiddleware, BaseMiddlewareConfig
 from vumi.utils import normalize_msisdn
+
+
+class StaticProviderSetterMiddlewareConfig(BaseMiddlewareConfig):
+    """
+    Config class for the static provider setting middleware.
+    """
+    provider = ConfigText(
+        "Value to set the ``provider`` field to", required=True, static=True)
 
 
 class StaticProviderSettingMiddleware(TransportMiddleware):
@@ -20,8 +31,10 @@ class StaticProviderSettingMiddleware(TransportMiddleware):
        provider for both inbound and outbound messages, you might need two
        copies of this middleware (one on either side of the other middleware).
     """
+    CONFIG_CLASS = StaticProviderSetterMiddlewareConfig
+
     def setup_middleware(self):
-        self.provider_value = self.config["provider"]
+        self.provider_value = self.config.provider
 
     def handle_inbound(self, message, connector_name):
         message["provider"] = self.provider_value
@@ -30,6 +43,33 @@ class StaticProviderSettingMiddleware(TransportMiddleware):
     def handle_outbound(self, message, connector_name):
         message["provider"] = self.provider_value
         return message
+
+
+class AddressPrefixProviderSettingMiddlewareConfig(BaseMiddlewareConfig):
+    """
+    Config for the address prefix provider setting middleware.
+    """
+
+    class ConfigNormalizeMsisdn(ConfigDict):
+        def clean(self, value):
+            if 'country_code' not in value:
+                self.raise_config_error(
+                    "does not contain the `country_code` key.")
+            if 'strip_plus' not in value:
+                value['strip_plus'] = False
+            return super(self.__class__, self).clean(value)
+
+    provider_prefixes = ConfigDict(
+        "Mapping from address prefix to provider value. Longer prefixes are "
+        "checked first to avoid ambiguity. If no prefix matches, the provider"
+        " value will be set to ``None``.", required=True, static=True)
+    normalize_msisdn = ConfigNormalizeMsisdn(
+        "Optional MSISDN normalization config. If present, this dict should "
+        "contain a (mandatory) ``country_code`` field and an optional boolean "
+        "``strip_plus`` field (default ``False``). If absent, the "
+        "``from_addr`` field will not be normalized prior to the prefix check."
+        " (This normalization is only used for the prefix check. The "
+        "``from_addr`` field on the message is not modified.)", static=True)
 
 
 class AddressPrefixProviderSettingMiddleware(TransportMiddleware):
@@ -61,13 +101,13 @@ class AddressPrefixProviderSettingMiddleware(TransportMiddleware):
        provider for both inbound and outbound messages, you might need two
        copies of this middleware (one on either side of the other middleware).
     """
+    CONFIG_CLASS = AddressPrefixProviderSettingMiddlewareConfig
+
     def setup_middleware(self):
-        prefixes = self.config["provider_prefixes"].items()
+        prefixes = self.config.provider_prefixes.items()
         self.provider_prefixes = sorted(
             prefixes, key=lambda item: -len(item[0]))
-        self.normalize_config = self.config.get("normalize_msisdn", {}).copy()
-        if self.normalize_config:
-            assert "country_code" in self.normalize_config
+        self.normalize_config = self.config.normalize_msisdn
 
     def normalize_addr(self, addr):
         if self.normalize_config:

@@ -5,6 +5,13 @@ from confmodel.fallbacks import FieldFallback
 
 from vumi.utils import load_class_by_string
 
+from confmodel import Config
+from confmodel.errors import ConfigError
+from confmodel.fields import (
+    ConfigInt, ConfigFloat, ConfigBool, ConfigList, ConfigDict, ConfigText,
+    ConfigUrl, ConfigRegex)
+from confmodel.interfaces import IConfigData
+
 
 class ConfigClassName(ConfigField):
     field_type = 'Class'
@@ -94,14 +101,19 @@ class ConfigContext(object):
             setattr(self, k, v)
 
 
-# Re-export these for compatibility.
-from confmodel import Config
-from confmodel.errors import ConfigError
-from confmodel.fields import (
-    ConfigInt, ConfigFloat, ConfigBool, ConfigList, ConfigDict, ConfigText,
-    ConfigUrl, ConfigRegex)
-from confmodel.interfaces import IConfigData
+class ConfigRiak(ConfigDict):
+    field_type = 'riak'
+    """Riak configuration.
 
+    Ensures that there is at least a ``bucket_prefix`` key.
+    """
+    def clean(self, value):
+        if "bucket_prefix" not in value:
+            self.raise_config_error(
+                "does not contain the `bucket_prefix` key.")
+        return super(self.__class__, self).clean(value)
+
+# Re-export these for compatibility.
 Config
 ConfigError
 ConfigInt

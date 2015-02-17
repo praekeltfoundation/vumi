@@ -9,7 +9,7 @@ from uuid import uuid4
 import itertools
 import warnings
 
-from twisted.internet.defer import returnValue, inlineCallbacks
+from twisted.internet.defer import returnValue
 
 from vumi.message import TransportEvent, TransportUserMessage, VUMI_DATE_FORMAT
 from vumi.persist.model import Model, Manager
@@ -498,7 +498,7 @@ class MessageStore(object):
         keys = yield self.batch_outbound_keys(batch_id)
         returnValue(len(keys))
 
-    @inlineCallbacks
+    @Manager.calls_manager
     def find_inbound_keys_matching(self, batch_id, query, ttl=None,
                                    wait=False):
         """
@@ -533,7 +533,7 @@ class MessageStore(object):
             yield deferred
         returnValue(token)
 
-    @inlineCallbacks
+    @Manager.calls_manager
     def find_outbound_keys_matching(self, batch_id, query, ttl=None,
                                     wait=False):
         """
@@ -781,7 +781,7 @@ class MessageStore(object):
             return_terms=True, max_results=max_results)
         returnValue(KeysWithAddresses(self, batch_id, results))
 
-    @inlineCallbacks
+    @Manager.calls_manager
     def message_event_keys_with_statuses(self, msg_id, max_results=None):
         """
         Return all event keys with (and ordered by) timestamps and statuses.

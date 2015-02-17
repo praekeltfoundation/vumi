@@ -1,4 +1,6 @@
 # -*- test-case-name: vumi.middleware.tests.test_base -*-
+from confmodel import Config
+
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.utils import load_class_by_string
@@ -7,6 +9,12 @@ from vumi.errors import ConfigError, VumiError
 
 class MiddlewareError(VumiError):
     pass
+
+
+class BaseMiddlewareConfig(Config):
+    """
+    Config class for the base middleware.
+    """
 
 
 class BaseMiddleware(object):
@@ -29,12 +37,16 @@ class BaseMiddleware(object):
 
     If you are subclassing this class, you should not override
     :meth:`__init__`. Custom setup should be done in
-    :meth:`setup_middleware` instead.
+    :meth:`setup_middleware` instead. The config class can be overidden by
+    replacing the ``config_class`` class variable.
     """
+    CONFIG_CLASS = BaseMiddlewareConfig
 
     def __init__(self, name, config, worker):
         self.name = name
-        self.config = config
+        self.config = self.CONFIG_CLASS(config, static=True)
+        self.consume_priority = config.get('consume_priority')
+        self.publish_priority = config.get('publish_priority')
         self.worker = worker
 
     def setup_middleware(self):
@@ -184,7 +196,7 @@ class MiddlewareStack(object):
     def _sort_by_priority(middlewares, priority_key):
         # We rely on Python's sorting algorithm being stable to preserve
         # order within priority levels.
-        return sorted(middlewares, key=lambda mw: mw.config[priority_key])
+        return sorted(middlewares, key=lambda mw: getattr(mw, priority_key))
 
     @inlineCallbacks
     def _handle(self, middlewares, handler_name, message, connector_name):
