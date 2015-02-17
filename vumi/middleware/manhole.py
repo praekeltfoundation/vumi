@@ -1,9 +1,9 @@
 # -*- test-case-name: vumi.middleware.tests.test_manhole -*-
 
-from confmodel import Config
 from confmodel.fields import ConfigList
 
 from vumi.middleware import BaseMiddleware
+from vumi.middleware.base import BaseMiddlewareConfig
 from vumi.config import ConfigServerEndpoint
 
 from twisted.internet import reactor
@@ -15,7 +15,7 @@ from twisted.python.filepath import FilePath
 from twisted.internet.endpoints import serverFromString
 
 
-class ManholeMiddlewareConfig(Config):
+class ManholeMiddlewareConfig(BaseMiddlewareConfig):
     twisted_endpoint = ConfigServerEndpoint(
         "Twisted endpoint to listen on", default="tcp:0")
     autorized_keys = ConfigList(

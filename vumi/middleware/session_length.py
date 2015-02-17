@@ -7,11 +7,11 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet import reactor
 
 from vumi.message import TransportUserMessage
-from vumi.middleware.base import BaseMiddleware
+from vumi.middleware.base import BaseMiddleware, BaseMiddlewareConfig
 from vumi.persist.txredis_manager import TxRedisManager
 
 
-class SessionLengthMiddlewareConfig(Config):
+class SessionLengthMiddlewareConfig(BaseMiddlewareConfig):
     """
     Configuration class for the session length middleware.
     """

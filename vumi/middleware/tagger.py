@@ -4,10 +4,10 @@ from confmodel import Config
 from confmodel.fields import ConfigDict
 import re
 
-from vumi.middleware.base import TransportMiddleware
+from vumi.middleware.base import TransportMiddleware, BaseMiddlewareConfig
 
 
-class TaggingMiddlewareConfig(Config):
+class TaggingMiddlewareConfig(BaseMiddlewareConfig):
 
     class ConfigIncoming(ConfigDict):
         def clean(self, value):

@@ -1,12 +1,12 @@
 # -*- test-case-name: vumi.middleware.tests.test_address_translator -*-
 
-from confmodel import Config
 from confmodel.fields import ConfigDict
 
 from vumi.middleware import BaseMiddleware
+from vumi.middleware.base import BaseMiddlewareConfig
 
 
-class AddressTranslatorMiddlewareConfig(Config):
+class AddressTranslatorMiddlewareConfig(BaseMiddlewareConfig):
     """
     Configuration class for the address translator middleware.
     """

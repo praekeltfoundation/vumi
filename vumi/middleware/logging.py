@@ -1,13 +1,13 @@
 # -*- test-case-name: vumi.middleware.tests.test_logging -*-
 
-from confmodel import Config
 from confmodel.fields import ConfigText
 
 from vumi.middleware import BaseMiddleware
+from vumi.middleware.base import BaseMiddlewareConfig
 from vumi import log
 
 
-class LoggingMiddlewareConfig(Config):
+class LoggingMiddlewareConfig(BaseMiddlewareConfig):
     """
     Configuration class for the logging middleware.
     """

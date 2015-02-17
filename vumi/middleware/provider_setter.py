@@ -3,11 +3,11 @@
 from confmodel import Config
 from confmodel.fields import ConfigDict, ConfigText
 
-from vumi.middleware.base import TransportMiddleware
+from vumi.middleware.base import TransportMiddleware, BaseMiddlewareConfig
 from vumi.utils import normalize_msisdn
 
 
-class StaticProviderSetterMiddlewareConfig(Config):
+class StaticProviderSetterMiddlewareConfig(BaseMiddlewareConfig):
     """
     Config class for the static provider setting middleware.
     """
@@ -45,7 +45,7 @@ class StaticProviderSettingMiddleware(TransportMiddleware):
         return message
 
 
-class AddressPrefixProviderSettingMiddlewareConfig(Config):
+class AddressPrefixProviderSettingMiddlewareConfig(BaseMiddlewareConfig):
     """
     Config for the address prefix provider setting middleware.
     """
