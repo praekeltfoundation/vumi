@@ -886,8 +886,8 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
     @inlineCallbacks
     def test_mt_sms_reconnect_while_throttled(self):
         """
-        If we reconnect while throttled, we don't try to unthrottle before we
-        the connection is in a suitable state.
+        If we reconnect while throttled, we don't try to unthrottle before the
+        connection is in a suitable state.
         """
         smpp_helper = yield self.get_smpp_helper()
         smpp_service = smpp_helper.transport.service
@@ -915,6 +915,8 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
             protocol = yield smpp_service.get_protocol()
             protocol.makeConnection(self.string_transport)
             [bind_pdu] = yield smpp_helper.wait_for_pdus(1)
+            self.assertTrue(
+                bind_pdu["header"]["command_id"].startswith("bind_"))
             self.clock.advance(transport_config.throttle_delay)
         [logmsg] = lc.logs
         self.assertEqual(
@@ -949,12 +951,15 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         with LogCatcher(message="Throttling outbound messages.") as lc:
             yield self.tx_helper.make_dispatch_outbound('hello world 1')
             yield self.tx_helper.make_dispatch_outbound('hello world 2')
+            msg3_d = self.tx_helper.make_dispatch_outbound('hello world 3')
         [logmsg] = lc.logs
         self.assertEqual(logmsg['logLevel'], logging.INFO)
 
         self.assertTrue(transport.throttled)
-        [submit_sm_pdu1] = yield smpp_helper.wait_for_pdus(1)
+        [submit_sm_pdu1, submit_sm_pdu2] = yield smpp_helper.wait_for_pdus(2)
         self.assertEqual(short_message(submit_sm_pdu1), 'hello world 1')
+        self.assertEqual(short_message(submit_sm_pdu2), 'hello world 2')
+        self.assertNoResult(msg3_d)
 
         with LogCatcher(message="No longer throttling outbound") as lc:
             self.clock.advance(1)
@@ -962,8 +967,66 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.assertEqual(logmsg['logLevel'], logging.INFO)
 
         self.assertFalse(transport.throttled)
-        [submit_sm_pdu2] = yield smpp_helper.wait_for_pdus(1)
+        yield msg3_d
+        [submit_sm_pdu3] = yield smpp_helper.wait_for_pdus(1)
+        self.assertEqual(short_message(submit_sm_pdu3), 'hello world 3')
+
+    @inlineCallbacks
+    def test_mt_sms_reconnect_while_tps_throttled(self):
+        """
+        If we reconnect while throttled due to the tps limit, we don't try to
+        unthrottle before the connection is in a suitable state.
+        """
+        smpp_helper = yield self.get_smpp_helper(config={
+            'mt_tps': 2,
+        })
+        transport = smpp_helper.transport
+
+        with LogCatcher(message="Throttling outbound messages.") as lc:
+            yield self.tx_helper.make_dispatch_outbound('hello world 1')
+            yield self.tx_helper.make_dispatch_outbound('hello world 2')
+            msg3_d = self.tx_helper.make_dispatch_outbound('hello world 3')
+        [logmsg] = lc.logs
+        self.assertEqual(logmsg['logLevel'], logging.INFO)
+
+        self.assertTrue(transport.throttled)
+        [submit_sm_pdu1, submit_sm_pdu2] = yield smpp_helper.wait_for_pdus(2)
+        self.assertEqual(short_message(submit_sm_pdu1), 'hello world 1')
         self.assertEqual(short_message(submit_sm_pdu2), 'hello world 2')
+        self.assertNoResult(msg3_d)
+
+        # Drop SMPP connection and check throttling.
+        with LogCatcher(message="Can't stop throttling while unbound") as lc:
+            transport.service.stopService()
+            self.clock.advance(1)
+        [logmsg] = lc.logs
+        self.assertEqual(logmsg['logLevel'], logging.INFO)
+        self.assertTrue(transport.throttled)
+
+        # Reconnect (but don't bind) and check throttling.
+        with LogCatcher(message="Can't stop throttling while unbound") as lc:
+            smpp_helper.transport.service.startService()
+            protocol = yield transport.service.get_protocol()
+            protocol.makeConnection(self.string_transport)
+            [bind_pdu] = yield smpp_helper.wait_for_pdus(1)
+            self.assertTrue(
+                bind_pdu["header"]["command_id"].startswith("bind_"))
+            self.clock.advance(1)
+        [logmsg] = lc.logs
+        self.assertEqual(logmsg['logLevel'], logging.INFO)
+        self.assertTrue(transport.throttled)
+
+        # Bind and check throttling.
+        with LogCatcher(message="No longer throttling outbound") as lc:
+            yield bind_protocol(
+                self.string_transport, protocol, bind_pdu=bind_pdu)
+            self.clock.advance(1)
+        [logmsg] = lc.logs
+        self.assertEqual(logmsg['logLevel'], logging.INFO)
+
+        self.assertFalse(transport.throttled)
+        [submit_sm_pdu2] = yield smpp_helper.wait_for_pdus(1)
+        self.assertEqual(short_message(submit_sm_pdu2), 'hello world 3')
 
     @inlineCallbacks
     def test_mt_sms_queue_full(self):
