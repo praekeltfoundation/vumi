@@ -38,7 +38,7 @@ class ParameterError(Exception):
 class MessageStoreProxyResource(Resource):
 
     isLeaf = True
-    default_concurrency = 3
+    default_concurrency = 1
 
     def __init__(self, message_store, batch_id, formatter):
         Resource.__init__(self)
