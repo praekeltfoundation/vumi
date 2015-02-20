@@ -13,11 +13,32 @@ from vumi.utils import to_kwargs
 VUMI_DATE_FORMAT = "%Y-%m-%d %H:%M:%S.%f"
 
 
+def format_vumi_date(timestamp):
+    """Format a datetime object using the Vumi date format.
+
+    :param datetime timestamp:
+        The datetime object to format.
+    :return str:
+        The timestamp formatted as a string.
+    """
+    return timestamp.strftime(VUMI_DATE_FORMAT)
+
+
+def parse_vumi_date(value):
+    """Parse a timestamp string in using the Vumi date format.
+
+    :param str value:
+        The string to parse.
+    :return datetime:
+        A datetime object representing the timestamp.
+    """
+    return datetime.strptime(value, VUMI_DATE_FORMAT)
+
+
 def date_time_decoder(json_object):
     for key, value in json_object.items():
         try:
-            json_object[key] = datetime.strptime(value,
-                    VUMI_DATE_FORMAT)
+            json_object[key] = parse_vumi_date(value)
         except ValueError:
             continue
         except TypeError:
