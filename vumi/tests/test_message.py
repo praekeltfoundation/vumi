@@ -1,7 +1,67 @@
+from datetime import datetime
+import json
+
 from vumi.tests.utils import RegexMatcher, UTCNearNow
-from vumi.message import (Message, TransportMessage, TransportEvent,
-                          TransportUserMessage)
+from vumi.message import (
+    Message, TransportMessage, TransportEvent, TransportUserMessage,
+    format_vumi_date, parse_vumi_date, from_json, to_json)
 from vumi.tests.helpers import VumiTestCase
+
+
+class ModuleUtilityTest(VumiTestCase):
+
+    def test_parse_vumi_date(self):
+        self.assertEqual(
+            parse_vumi_date('2015-01-02 23:14:11.456000'),
+            datetime(2015, 1, 2, 23, 14, 11, microsecond=456000))
+
+    def test_format_vumi_date(self):
+        self.assertEqual(
+            format_vumi_date(
+                datetime(2015, 1, 2, 23, 14, 11, microsecond=456000)),
+            '2015-01-02 23:14:11.456000')
+        self.assertEqual(
+            format_vumi_date(
+                datetime(2015, 1, 2, 23, 14, 11, microsecond=0)),
+            '2015-01-02 23:14:11.000000')
+
+    def test_from_json(self):
+        data = {
+            'foo': 1,
+            'baz': {
+                'a': 'b',
+            }
+        }
+        self.assertEqual(from_json(json.dumps(data)), data)
+
+    def test_to_json(self):
+        data = {
+            'foo': 1,
+            'baz': {
+                'a': 'b',
+            }
+        }
+        self.assertEqual(json.loads(to_json(data)), data)
+
+    def test_to_json_supports_vumi_dates(self):
+        timestamp = datetime(
+            2015, 1, 2, 12, 01, 02, microsecond=134001)
+        data = {
+            'foo': timestamp,
+        }
+        self.assertEqual(json.loads(to_json(data)), {
+            'foo': '2015-01-02 12:01:02.134001',
+        })
+
+    def test_from_json_supports_vumi_dates(self):
+        timestamp = datetime(
+            2015, 1, 2, 12, 01, 02, microsecond=134002)
+        data = {
+            'foo': '2015-01-02 12:01:02.134002',
+        }
+        self.assertEqual(from_json(json.dumps(data)), {
+            'foo': timestamp,
+        })
 
 
 class MessageTest(VumiTestCase):
