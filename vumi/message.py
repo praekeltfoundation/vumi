@@ -25,7 +25,7 @@ def format_vumi_date(timestamp):
 
 
 def parse_vumi_date(value):
-    """Parse a timestamp string in using the Vumi date format.
+    """Parse a timestamp string using the Vumi date format.
 
     :param str value:
         The string to parse.
@@ -50,7 +50,7 @@ class JSONMessageEncoder(json.JSONEncoder):
     """A JSON encoder that is able to serialize datetime"""
     def default(self, obj):
         if isinstance(obj, datetime):
-            return obj.strftime(VUMI_DATE_FORMAT)
+            return format_vumi_date(obj)
         return super(JSONMessageEncoder, self).default(obj)
 
 
