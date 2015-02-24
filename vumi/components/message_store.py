@@ -11,7 +11,8 @@ import warnings
 
 from twisted.internet.defer import returnValue
 
-from vumi.message import TransportEvent, TransportUserMessage, VUMI_DATE_FORMAT
+from vumi.message import (
+    TransportEvent, TransportUserMessage, parse_vumi_date, format_vumi_date)
 from vumi.persist.model import Model, Manager
 from vumi.persist.fields import (
     VumiMessage, ForeignKey, ManyToMany, ListOf, Tag, Dynamic, Unicode)
@@ -80,7 +81,7 @@ class OutboundMessage(Model):
         # We override this method to set our index fields before saving.
         batches_with_timestamps = []
         batches_with_addresses = []
-        timestamp = self.msg['timestamp']
+        timestamp = format_vumi_date(self.msg['timestamp'])
         for batch_id in self.batches.keys():
             batches_with_timestamps.append(u"%s$%s" % (batch_id, timestamp))
             batches_with_addresses.append(
@@ -234,7 +235,7 @@ class MessageStore(object):
         The ``start_timestamp`` parameter is used for testing only.
         """
         if start_timestamp is None:
-            start_timestamp = datetime.utcnow().strftime(VUMI_DATE_FORMAT)
+            start_timestamp = format_vumi_date(datetime.utcnow())
         yield self.cache.clear_batch(batch_id)
         yield self.cache.batch_start(batch_id)
         yield self.reconcile_outbound_cache(batch_id, start_timestamp)
