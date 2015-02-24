@@ -66,19 +66,19 @@ class MicaProcessorTestCase(SmppTransportTestCase):
         yield self.tx_helper.make_dispatch_outbound(message, to_addr='msisdn')
         pdus = yield smpp_helper.wait_for_pdus(7)
         self.assert_udh_parts(pdus, [
-            "A cup is a small, open container used for carrying and drinking"
-            " d",
-            "rinks. It may be made of wood, plastic, glass, clay, metal,"
-            " stone",
-            ", china or other materials, and may have a stem, handles or"
-            " other",
-            " adornments. Cups are used for drinking across a wide range of"
-            " cu",
-            "ltures and social classes, and different styles of cups may be"
-            " us",
-            "ed for different liquids or in different situations. Cups have"
-            " be",
-            "en used for thousands of years for the ...Reply 1 for more",
+            ("A cup is a small, open container used"
+             " for carrying and drinking d"),
+            ("rinks. It may be made of wood, plastic,"
+             " glass, clay, metal, stone"),
+            (", china or other materials, and may have"
+             " a stem, handles or other"),
+            (" adornments. Cups are used for drinking"
+             " across a wide range of cu"),
+            ("ltures and social classes, and different"
+             " styles of cups may be us"),
+            ("ed for different liquids or in different"
+             " situations. Cups have be"),
+            ("en used for thousands of years for the ...Reply 1 for more"),
         ], encoding='utf-16be')  # utf-16be is close enough to UCS2
         for pdu in pdus:
             self.assertTrue(len(short_message(pdu)) < 140)
