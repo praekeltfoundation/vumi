@@ -3,13 +3,16 @@
 
 """Message store."""
 
+from collections import defaultdict
+from datetime import datetime
+from uuid import uuid4
+import itertools
 import warnings
 
-from uuid import uuid4
+from twisted.internet.defer import returnValue
 
-from twisted.internet.defer import returnValue, inlineCallbacks
-
-from vumi.message import TransportEvent, TransportUserMessage
+from vumi.message import (
+    TransportEvent, TransportUserMessage, parse_vumi_date, format_vumi_date)
 from vumi.persist.model import Model, Manager
 from vumi.persist.fields import (
     VumiMessage, ForeignKey, ManyToMany, ListOf, Tag, Dynamic, Unicode)
@@ -17,7 +20,7 @@ from vumi.persist.txriak_manager import TxRiakManager
 from vumi import log
 from vumi.components.message_store_cache import MessageStoreCache
 from vumi.components.message_store_migrators import (
-    InboundMessageMigrator, OutboundMessageMigrator)
+    EventMigrator, InboundMessageMigrator, OutboundMessageMigrator)
 
 
 class Batch(Model):
@@ -78,7 +81,7 @@ class OutboundMessage(Model):
         # We override this method to set our index fields before saving.
         batches_with_timestamps = []
         batches_with_addresses = []
-        timestamp = self.msg['timestamp']
+        timestamp = format_vumi_date(self.msg['timestamp'])
         for batch_id in self.batches.keys():
             batches_with_timestamps.append(u"%s$%s" % (batch_id, timestamp))
             batches_with_addresses.append(
@@ -89,9 +92,25 @@ class OutboundMessage(Model):
 
 
 class Event(Model):
-    # key is message_id
+    VERSION = 1
+    MIGRATOR = EventMigrator
+
+    # key is event_id
     event = VumiMessage(TransportEvent)
     message = ForeignKey(OutboundMessage)
+
+    # Extra fields for compound indexes
+    message_with_status = Unicode(index=True, null=True)
+
+    def save(self):
+        # We override this method to set our index fields before saving.
+        timestamp = self.event['timestamp']
+        status = self.event['event_type']
+        if status == "delivery_report":
+            status = "%s.%s" % (status, self.event['delivery_status'])
+        self.message_with_status = u"%s$%s$%s" % (
+            self.message.key, timestamp, status)
+        return super(Event, self).save()
 
 
 class InboundMessage(Model):
@@ -118,6 +137,44 @@ class InboundMessage(Model):
         self.batches_with_timestamps = batches_with_timestamps
         self.batches_with_addresses = batches_with_addresses
         return super(InboundMessage, self).save()
+
+
+class ReconKeyManager(object):
+    """
+    A helper for tracking keys during cache recon.
+
+    Keys are added one at a time from oldest to newest, and a buffer of recent
+    keys is kept to allow old and new keys to be handled differently.
+    """
+
+    def __init__(self, start_timestamp, key_count):
+        self.start_timestamp = start_timestamp
+        self.key_count = key_count
+        self.cache_keys = []
+        self.new_keys = []
+
+    def add_key(self, key, timestamp):
+        """
+        Add a key and timestamp to the manager.
+
+        If ``timestamp`` is newer than :attr:`start_timestamp`, the pair is
+        added to :attr:`new_keys`, otherwise it is added to :attr:`cache_keys`.
+        If this causes :attr:`cache_keys` to grow larger than
+        :attr:`key_count`, the earliest entry is removed and returned. If not,
+        ``None`` is returned.
+
+        It is assumed that keys will be added from oldest to newest.
+        """
+        if timestamp > self.start_timestamp:
+            self.new_keys.append((key, timestamp))
+            return None
+        self.cache_keys.append((key, timestamp))
+        if len(self.cache_keys) > self.key_count:
+            return self.cache_keys.pop(0)
+        return None
+
+    def __iter__(self):
+        return itertools.chain(self.cache_keys, self.new_keys)
 
 
 class MessageStore(object):
@@ -171,35 +228,100 @@ class MessageStore(object):
         returnValue(False)
 
     @Manager.calls_manager
-    def reconcile_cache(self, batch_id):
+    def reconcile_cache(self, batch_id, start_timestamp=None):
+        """
+        Rebuild the cache for the given batch.
+
+        The ``start_timestamp`` parameter is used for testing only.
+        """
+        if start_timestamp is None:
+            start_timestamp = format_vumi_date(datetime.utcnow())
         yield self.cache.clear_batch(batch_id)
         yield self.cache.batch_start(batch_id)
-        yield self.reconcile_outbound_cache(batch_id)
-        yield self.reconcile_inbound_cache(batch_id)
+        yield self.reconcile_outbound_cache(batch_id, start_timestamp)
+        yield self.reconcile_inbound_cache(batch_id, start_timestamp)
 
     @Manager.calls_manager
-    def reconcile_inbound_cache(self, batch_id):
-        inbound_keys = yield self.batch_inbound_keys(batch_id)
-        for key in inbound_keys:
+    def reconcile_inbound_cache(self, batch_id, start_timestamp):
+        """
+        Rebuild the inbound message cache.
+        """
+        key_manager = ReconKeyManager(
+            start_timestamp, self.cache.TRUNCATE_MESSAGE_KEY_COUNT_AT)
+        key_count = 0
+
+        index_page = yield self.batch_inbound_keys_with_timestamps(batch_id)
+        while index_page is not None:
+            for key, timestamp in index_page:
+                old_key = key_manager.add_key(key, timestamp)
+                if old_key is not None:
+                    key_count += 1
+            index_page = yield index_page.next_page()
+
+        yield self.cache.add_inbound_message_count(batch_id, key_count)
+        for key, timestamp in key_manager:
             try:
-                msg = yield self.get_inbound_message(key)
-                yield self.cache.add_inbound_message(batch_id, msg)
-            except Exception:
+                yield self.cache.add_inbound_message_key(
+                    batch_id, key, self.cache.get_timestamp(timestamp))
+            except:
                 log.err()
 
     @Manager.calls_manager
-    def reconcile_outbound_cache(self, batch_id):
-        outbound_keys = yield self.batch_outbound_keys(batch_id)
-        for key in outbound_keys:
+    def reconcile_outbound_cache(self, batch_id, start_timestamp):
+        """
+        Rebuild the outbound message cache.
+        """
+        key_manager = ReconKeyManager(
+            start_timestamp, self.cache.TRUNCATE_MESSAGE_KEY_COUNT_AT)
+        key_count = 0
+        status_counts = defaultdict(int)
+
+        index_page = yield self.batch_outbound_keys_with_timestamps(batch_id)
+        while index_page is not None:
+            for key, timestamp in index_page:
+                old_key = key_manager.add_key(key, timestamp)
+                if old_key is not None:
+                    key_count += 1
+                    sc = yield self.get_event_counts(old_key[0])
+                    for status, count in sc.iteritems():
+                        status_counts[status] += count
+            index_page = yield index_page.next_page()
+
+        yield self.cache.add_outbound_message_count(batch_id, key_count)
+        for status, count in status_counts.iteritems():
+            yield self.cache.add_event_count(batch_id, status, count)
+        for key, timestamp in key_manager:
             try:
-                msg = yield self.get_outbound_message(key)
-                yield self.cache.add_outbound_message(batch_id, msg)
+                yield self.cache.add_outbound_message_key(
+                    batch_id, key, self.cache.get_timestamp(timestamp))
                 yield self.reconcile_event_cache(batch_id, key)
-            except Exception:
+            except:
                 log.err()
+
+    @Manager.calls_manager
+    def get_event_counts(self, message_id):
+        """
+        Get event counts for a particular message.
+
+        This is used for old messages that we want to bulk-update.
+        """
+        status_counts = defaultdict(int)
+
+        index_page = yield self.message_event_keys_with_statuses(message_id)
+        while index_page is not None:
+            for key, _timestamp, status in index_page:
+                status_counts[status] += 1
+                if status.startswith("delivery_report."):
+                    status_counts["delivery_report"] += 1
+            index_page = yield index_page.next_page()
+
+        returnValue(status_counts)
 
     @Manager.calls_manager
     def reconcile_event_cache(self, batch_id, message_id):
+        """
+        Update the event cache for a particular message.
+        """
         event_keys = yield self.message_event_keys(message_id)
         for event_key in event_keys:
             event = yield self.get_event(event_key)
@@ -377,7 +499,7 @@ class MessageStore(object):
         keys = yield self.batch_outbound_keys(batch_id)
         returnValue(len(keys))
 
-    @inlineCallbacks
+    @Manager.calls_manager
     def find_inbound_keys_matching(self, batch_id, query, ttl=None,
                                    wait=False):
         """
@@ -412,7 +534,7 @@ class MessageStore(object):
             yield deferred
         returnValue(token)
 
-    @inlineCallbacks
+    @Manager.calls_manager
     def find_outbound_keys_matching(self, batch_id, query, ttl=None,
                                     wait=False):
         """
@@ -660,6 +782,125 @@ class MessageStore(object):
             return_terms=True, max_results=max_results)
         returnValue(KeysWithAddresses(self, batch_id, results))
 
+    @Manager.calls_manager
+    def message_event_keys_with_statuses(self, msg_id, max_results=None):
+        """
+        Return all event keys with (and ordered by) timestamps and statuses.
+
+        :param str msg_id:
+            The message_id to fetch event keys for.
+
+        :param int max_results:
+            Number of results per page. Defaults to DEFAULT_MAX_RESULTS
+
+        This method performs a Riak index query. Unlike similar message key
+        methods, start and end values are not supported as the number of events
+        per message is expected to be small.
+        """
+        if max_results is None:
+            max_results = self.DEFAULT_MAX_RESULTS
+        start_value, end_value = self._start_end_values(msg_id, None, None)
+        results = yield self.events.index_keys_page(
+            'message_with_status', start_value, end_value,
+            return_terms=True, max_results=max_results)
+        returnValue(KeysWithAddresses(self, msg_id, results))
+
+    @Manager.calls_manager
+    def batch_inbound_stats(self, batch_id, max_results=None,
+                            start=None, end=None):
+        """
+        Return inbound message stats for the specified time range.
+
+        Currently, message stats include total message count and unique address
+        count.
+
+        :param str batch_id:
+            The batch_id to fetch keys for.
+
+        :param int max_results:
+            Number of results per page. Defaults to DEFAULT_MAX_RESULTS.
+
+        :param str start:
+            Optional start timestamp string matching VUMI_DATE_FORMAT.
+
+        :param str end:
+            Optional end timestamp string matching VUMI_DATE_FORMAT.
+
+        :returns:
+            ``dict`` containing 'total' and 'unique_addresses' entries.
+
+        This method performs multiple Riak index queries.
+        """
+        total = 0
+        unique_addresses = set()
+
+        start_value, end_value = self._start_end_values(batch_id, start, end)
+        if max_results is None:
+            max_results = self.DEFAULT_MAX_RESULTS
+        raw_page = yield self.inbound_messages.index_keys_page(
+            'batches_with_addresses', start_value, end_value,
+            return_terms=True, max_results=max_results)
+        page = KeysWithAddresses(self, batch_id, raw_page)
+
+        while page is not None:
+            results = list(page)
+            total += len(results)
+            unique_addresses.update(addr for key, timestamp, addr in results)
+            page = yield page.next_page()
+
+        returnValue({
+            "total": total,
+            "unique_addresses": len(unique_addresses),
+        })
+
+    @Manager.calls_manager
+    def batch_outbound_stats(self, batch_id, max_results=None,
+                             start=None, end=None):
+        """
+        Return outbound message stats for the specified time range.
+
+        Currently, message stats include total message count and unique address
+        count.
+
+        :param str batch_id:
+            The batch_id to fetch keys for.
+
+        :param int max_results:
+            Number of results per page. Defaults to DEFAULT_MAX_RESULTS.
+
+        :param str start:
+            Optional start timestamp string matching VUMI_DATE_FORMAT.
+
+        :param str end:
+            Optional end timestamp string matching VUMI_DATE_FORMAT.
+
+        :returns:
+            ``dict`` containing 'total' and 'unique_addresses' entries.
+
+        This method performs multiple Riak index queries.
+        """
+        total = 0
+        unique_addresses = set()
+
+        start_value, end_value = self._start_end_values(batch_id, start, end)
+        if max_results is None:
+            max_results = self.DEFAULT_MAX_RESULTS
+        raw_page = yield self.outbound_messages.index_keys_page(
+            'batches_with_addresses', start_value, end_value,
+            return_terms=True, max_results=max_results)
+        page = KeysWithAddresses(self, batch_id, raw_page)
+
+        while page is not None:
+            results = list(page)
+            total += len(results)
+            unique_addresses.update(addr for key, timestamp, addr in results)
+            page = yield page.next_page()
+
+        returnValue({
+            "total": total,
+            "unique_addresses": len(unique_addresses),
+        })
+
 
 class KeysWithTimestamps(object):
     """
@@ -688,6 +929,8 @@ class KeysWithTimestamps(object):
             of results.
         """
         next_page = yield self._index_page.next_page()
+        if next_page is None:
+            returnValue(None)
         returnValue(type(self)(self._message_store, self._batch_id, next_page))
 
     def has_next_page(self):
@@ -740,6 +983,8 @@ class KeysWithAddresses(object):
             results.
         """
         next_page = yield self._index_page.next_page()
+        if next_page is None:
+            returnValue(None)
         returnValue(type(self)(self._message_store, self._batch_id, next_page))
 
     def has_next_page(self):

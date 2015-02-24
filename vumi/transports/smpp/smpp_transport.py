@@ -135,6 +135,11 @@ class SmppService(ReconnectingClientService):
             self.wait_on_protocol_deferreds.append(d)
             return d
 
+    def is_bound(self):
+        if self._protocol is not None:
+            return self._protocol.is_bound()
+        return False
+
     def stopService(self):
         if self._protocol is not None:
             d = self._protocol.disconnect()
@@ -350,6 +355,10 @@ class SmppTransceiverTransport(Transport):
 
     def reset_mt_tps(self):
         if self.throttled and self.need_mt_throttling():
+            if not self.service.is_bound():
+                # We don't have a bound SMPP connection, so try again later.
+                log.msg("Can't stop throttling while unbound, trying later.")
+                return
             self.reset_mt_throttle_counter()
             self.stop_throttling(quiet=True)
 
@@ -499,6 +508,12 @@ class SmppTransceiverTransport(Transport):
         """
         self._unthrottle_delayedCall = None
 
+        if not self.service.is_bound():
+            # We don't have a bound SMPP connection, so try again later.
+            log.msg("Can't check throttling while unbound, trying later.")
+            self.check_stop_throttling(self.get_static_config().throttle_delay)
+            return
+
         if not self._throttled_message_ids:
             # We have no throttled messages waiting, so stop throttling.
             log.msg("No more throttled messages to retry.")
@@ -521,9 +536,9 @@ class SmppTransceiverTransport(Transport):
     def start_throttling(self, quiet=False):
         if self.throttled:
             return
-        # We always want to log throttling messages, but we don't always want
-        # them to be warnings.
-        logger = log.msg if quiet else log.warning
+        # We used to use `quiet` to decide log level, but now we always use
+        # `log.msg`.
+        logger = log.msg
         logger("Throttling outbound messages.")
         self.throttled = True
         return self.pause_connectors()
@@ -531,9 +546,9 @@ class SmppTransceiverTransport(Transport):
     def stop_throttling(self, quiet=False):
         if not self.throttled:
             return
-        # We always want to log throttling messages, but we don't always want
-        # them to be warnings.
-        logger = log.msg if quiet else log.warning
+        # We used to use `quiet` to decide log level, but now we always use
+        # `log.msg`.
+        logger = log.msg
         logger("No longer throttling outbound messages.")
         self.throttled = False
         self.unpause_connectors()

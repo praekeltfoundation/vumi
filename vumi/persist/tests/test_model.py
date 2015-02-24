@@ -9,10 +9,13 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from vumi.persist.model import (
     Model, Manager, ModelMigrator, ModelMigrationError, VumiRiakError)
 from vumi.persist.fields import (
-    ValidationError, Integer, Unicode, VumiMessage, Dynamic, ListOf,
+    ValidationError, Integer, Unicode, VumiMessage, Dynamic, ListOf, SetOf,
     ForeignKey, ManyToMany, Timestamp)
 from vumi.message import TransportUserMessage
 from vumi.tests.helpers import VumiTestCase, import_skip
+
+
+# TODO: Split up the field-specific tests and move them to ``test_fields``.
 
 
 class SimpleModel(Model):
@@ -40,6 +43,14 @@ class ListOfModel(Model):
 
 class IndexedListOfModel(Model):
     items = ListOf(Integer(), index=True)
+
+
+class SetOfModel(Model):
+    items = SetOf(Integer())
+
+
+class IndexedSetOfModel(Model):
+    items = SetOf(Integer(), index=True)
 
 
 class ForeignKeyModel(Model):
@@ -716,6 +727,9 @@ class ModelTestMixin(object):
         self.assertEqual(sorted(keys3), [])
         self.assertEqual(keys3.has_next_page(), False)
 
+        no_keys = yield keys3.next_page()
+        self.assertEqual(no_keys, None)
+
     @Manager.calls_manager
     def test_index_keys_page_explicit_continuation(self):
         indexed_model = self.manager.proxy(IndexedModel)
@@ -836,6 +850,22 @@ class ModelTestMixin(object):
         m1.msg = msg2
         self.assertTrue("extra" not in m1.msg)
 
+    @Manager.calls_manager
+    def test_vumimessage_field_excludes_cache(self):
+        msg_model = self.manager.proxy(VumiMessageModel)
+        cache_attr = TransportUserMessage._CACHE_ATTRIBUTE
+        msg = self.mkmsg(extra="bar")
+        msg.cache["cache"] = "me"
+        self.assertEqual(msg[cache_attr], {"cache": "me"})
+
+        m1 = msg_model("foo", msg=msg)
+        self.assertTrue(cache_attr not in m1.msg)
+        yield m1.save()
+
+        m2 = yield msg_model.load("foo")
+        self.assertTrue(cache_attr not in m2.msg)
+        self.assertEqual(m2.msg, m1.msg)
+
     def _create_dynamic_instance(self, dynamic_model):
         d1 = dynamic_model("foo", a=u"ab")
         d1.contact_info['cellphone'] = u"+27123"
@@ -941,6 +971,11 @@ class ModelTestMixin(object):
         del l2.items[0]
         self.assertEqual(list(l2.items), [2])
 
+        l2.items.append(5)
+        self.assertEqual(list(l2.items), [2, 5])
+        l2.items.remove(5)
+        self.assertEqual(list(l2.items), [2])
+
         l2.items.extend([3, 4, 5])
         self.assertEqual(list(l2.items), [2, 3, 4, 5])
 
@@ -973,6 +1008,13 @@ class ModelTestMixin(object):
         self.assertEqual(list(l2.items), [2])
         assert_indexes(l2, [2])
 
+        l2.items.append(5)
+        self.assertEqual(list(l2.items), [2, 5])
+        assert_indexes(l2, [2, 5])
+        l2.items.remove(5)
+        self.assertEqual(list(l2.items), [2])
+        assert_indexes(l2, [2])
+
         l2.items.extend([3, 4, 5])
         self.assertEqual(list(l2.items), [2, 3, 4, 5])
         assert_indexes(l2, [2, 3, 4, 5])
@@ -986,6 +1028,89 @@ class ModelTestMixin(object):
         l1 = list_model("foo")
         l1.items = [7, 8, 9]
         self.assertEqual(list(l1.items), [7, 8, 9])
+
+    @Manager.calls_manager
+    def test_setof_fields(self):
+        set_model = self.manager.proxy(SetOfModel)
+        m1 = set_model("foo")
+        m1.items.add(1)
+        m1.items.add(2)
+        yield m1.save()
+
+        m2 = yield set_model.load("foo")
+        self.assertTrue(1 in m2.items)
+        self.assertTrue(2 in m2.items)
+        self.assertEqual(set(m2.items), set([1, 2]))
+
+        m2.items.add(5)
+        self.assertTrue(5 in m2.items)
+
+        m2.items.remove(1)
+        self.assertTrue(1 not in m2.items)
+        self.assertRaises(KeyError, m2.items.remove, 1)
+
+        m2.items.add(1)
+        m2.items.discard(1)
+        self.assertTrue(1 not in m2.items)
+        m2.items.discard(1)
+        self.assertTrue(1 not in m2.items)
+
+        m2.items.update([3, 4, 5])
+        self.assertEqual(set(m2.items), set([2, 3, 4, 5]))
+
+        m2.items = set([7, 8])
+        self.assertEqual(set(m2.items), set([7, 8]))
+
+    @Manager.calls_manager
+    def test_setof_fields_indexes(self):
+        set_model = self.manager.proxy(IndexedSetOfModel)
+        m1 = set_model("foo")
+        m1.items.add(1)
+        m1.items.add(2)
+        yield m1.save()
+
+        assert_indexes = lambda mdl, values: self.assertEqual(
+            mdl._riak_object.get_indexes(),
+            set(('items_bin', str(v)) for v in values))
+
+        m2 = yield set_model.load("foo")
+        self.assertTrue(1 in m2.items)
+        self.assertTrue(2 in m2.items)
+        self.assertEqual(set(m2.items), set([1, 2]))
+        assert_indexes(m2, [1, 2])
+
+        m2.items.add(5)
+        self.assertTrue(5 in m2.items)
+        assert_indexes(m2, [1, 2, 5])
+
+        m2.items.remove(1)
+        self.assertTrue(1 not in m2.items)
+        assert_indexes(m2, [2, 5])
+
+        m2.items.add(1)
+        m2.items.discard(1)
+        self.assertTrue(1 not in m2.items)
+        assert_indexes(m2, [2, 5])
+        m2.items.discard(1)
+        self.assertTrue(1 not in m2.items)
+        assert_indexes(m2, [2, 5])
+
+        m2.items.update([3, 4, 5])
+        self.assertEqual(set(m2.items), set([2, 3, 4, 5]))
+        assert_indexes(m2, [2, 3, 4, 5])
+
+        m2.items = set([7, 8])
+        self.assertEqual(set(m2.items), set([7, 8]))
+        assert_indexes(m2, [7, 8])
+
+    def test_setof_fields_validation(self):
+        set_model = self.manager.proxy(SetOfModel)
+        m1 = set_model("foo")
+
+        self.assertRaises(ValidationError, m1.items.add, "foo")
+        self.assertRaises(ValidationError, m1.items.remove, "foo")
+        self.assertRaises(ValidationError, m1.items.discard, "foo")
+        self.assertRaises(ValidationError, m1.items.update, set(["foo"]))
 
     @Manager.calls_manager
     def test_foreignkey_fields(self):
@@ -1057,6 +1182,11 @@ class ModelTestMixin(object):
 
     @Manager.calls_manager
     def test_reverse_foreignkey_fields(self):
+        """
+        When we declare a ForeignKey field, we add both a paginated index
+        lookup method and a legacy non-paginated index lookup method to the
+        foreign model's backlinks attribute.
+        """
         fk_model = self.manager.proxy(ForeignKeyModel)
         simple_model = self.manager.proxy(SimpleModel)
         s1 = simple_model("foo", a=5, b=u'3')
@@ -1071,6 +1201,10 @@ class ModelTestMixin(object):
         s2 = yield simple_model.load("foo")
         results = yield s2.backlinks.foreignkeymodels()
         self.assertEqual(sorted(results), ["bar1", "bar2"])
+
+        results_p1 = yield s2.backlinks.foreignkeymodel_keys()
+        self.assertEqual(sorted(results_p1), ["bar1", "bar2"])
+        self.assertEqual(results_p1.has_next_page(), False)
 
     @Manager.calls_manager
     def load_all_bunches_flat(self, m2m_field):
@@ -1205,9 +1339,17 @@ class ModelTestMixin(object):
         results = yield s1.backlinks.manytomanymodels()
         self.assertEqual(sorted(results), ["bar1", "bar2"])
 
+        results_p1 = yield s1.backlinks.manytomanymodel_keys()
+        self.assertEqual(sorted(results_p1), ["bar1", "bar2"])
+        self.assertEqual(results_p1.has_next_page(), False)
+
         s2 = yield simple_model.load("foo2")
         results = yield s2.backlinks.manytomanymodels()
         self.assertEqual(sorted(results), ["bar1"])
+
+        results_p1 = yield s2.backlinks.manytomanymodel_keys()
+        self.assertEqual(sorted(results_p1), ["bar1"])
+        self.assertEqual(results_p1.has_next_page(), False)
 
     def test_timestamp_field_setting(self):
         timestamp_model = self.manager.proxy(TimestampModel)

@@ -264,6 +264,7 @@ class VumiMessageDescriptor(FieldDescriptor):
 
     def setup(self, model_cls):
         super(VumiMessageDescriptor, self).setup(model_cls)
+        self.message_class = self.field.message_class
         if self.field.prefix is None:
             self.prefix = "%s." % self.key
         else:
@@ -286,6 +287,8 @@ class VumiMessageDescriptor(FieldDescriptor):
         if msg is None:
             return
         for key, value in msg.payload.iteritems():
+            if key == self.message_class._CACHE_ATTRIBUTE:
+                continue
             # TODO: timestamp as datetime in payload must die.
             if key == "timestamp":
                 value = self._timestamp_to_json(value)
@@ -318,6 +321,11 @@ class VumiMessage(Field):
     :param string prefix:
         The prefix to use when storing message payload keys in Riak. Default is
         the name of the field followed by a dot ('.').
+
+    Note::
+
+       The special message attribute ``__cache__`` is not stored by this
+       field.
     """
     descriptor_class = VumiMessageDescriptor
 
@@ -540,6 +548,13 @@ class ListOfDescriptor(FieldDescriptor):
         field_list.append(raw_value)
         self._set_model_data(modelobj, field_list)
 
+    def remove_list_item(self, modelobj, value):
+        self.field.validate_subfield(value)
+        raw_value = self.field.subfield_to_riak(value)
+        field_list = modelobj._riak_object.get_data().get(self.key, [])
+        field_list.remove(raw_value)
+        self._set_model_data(modelobj, field_list)
+
     def extend_list(self, modelobj, values):
         map(self.field.validate_subfield, values)
         raw_values = [self.field.subfield_to_riak(value) for value in values]
@@ -567,8 +582,11 @@ class ListProxy(object):
     def __delitem__(self, idx):
         self._descriptor.del_list_item(self._modelobj, idx)
 
-    def append(self, idx):
-        self._descriptor.append_list_item(self._modelobj, idx)
+    def remove(self, value):
+        self._descriptor.remove_list_item(self._modelobj, value)
+
+    def append(self, value):
+        self._descriptor.append_list_item(self._modelobj, value)
 
     def extend(self, values):
         self._descriptor.extend_list(self._modelobj, values)
@@ -595,6 +613,114 @@ class ListOf(FieldWithSubtype):
         map(self.validate_subfield, valuelist)
 
 
+class SetOfDescriptor(FieldDescriptor):
+    """
+    A field descriptor for SetOf fields.
+    """
+
+    def get_value(self, modelobj):
+        return SetProxy(self, modelobj)
+
+    def _get_model_data(self, modelobj):
+        return set(modelobj._riak_object.get_data().get(self.key, []))
+
+    def _set_model_data(self, modelobj, raw_values):
+        raw_values = sorted(set(raw_values))
+        modelobj._riak_object.set_data_field(self.key, raw_values)
+        if self.index_name is not None:
+            modelobj._riak_object.remove_index(self.index_name)
+            for value in raw_values:
+                self._add_index(modelobj, value)
+
+    def set_contains_item(self, modelobj, value):
+        field_set = self._get_model_data(modelobj)
+        return value in field_set
+
+    def set_value(self, modelobj, values):
+        map(self.field.validate_subfield, values)
+        raw_values = [self.field.subfield_to_riak(value) for value in values]
+        self._set_model_data(modelobj, raw_values)
+
+    def add_set_item(self, modelobj, value):
+        self.field.validate_subfield(value)
+        field_set = self._get_model_data(modelobj)
+        field_set.add(self.field.subfield_to_riak(value))
+        self._set_model_data(modelobj, field_set)
+
+    def remove_set_item(self, modelobj, value):
+        self.field.validate_subfield(value)
+        field_set = self._get_model_data(modelobj)
+        field_set.remove(value)
+        self._set_model_data(modelobj, field_set)
+
+    def discard_set_item(self, modelobj, value):
+        self.field.validate_subfield(value)
+        field_set = self._get_model_data(modelobj)
+        field_set.discard(value)
+        self._set_model_data(modelobj, field_set)
+
+    def update_set(self, modelobj, values):
+        map(self.field.validate_subfield, values)
+        raw_values = [self.field.subfield_to_riak(value) for value in values]
+        field_set = self._get_model_data(modelobj)
+        field_set.update(raw_values)
+        self._set_model_data(modelobj, field_set)
+
+    def iter_set(self, modelobj):
+        field_set = self._get_model_data(modelobj)
+        for raw_value in field_set:
+            yield self.field.subfield_from_riak(raw_value)
+
+
+class SetProxy(object):
+    def __init__(self, descriptor, modelobj):
+        self._descriptor = descriptor
+        self._modelobj = modelobj
+
+    def __contains__(self, value):
+        return self._descriptor.set_contains_item(self._modelobj, value)
+
+    def add(self, value):
+        self._descriptor.add_set_item(self._modelobj, value)
+
+    def remove(self, value):
+        self._descriptor.remove_set_item(self._modelobj, value)
+
+    def discard(self, value):
+        self._descriptor.discard_set_item(self._modelobj, value)
+
+    def update(self, values):
+        self._descriptor.update_set(self._modelobj, values)
+
+    def __iter__(self):
+        return self._descriptor.iter_set(self._modelobj)
+
+
+class SetOf(FieldWithSubtype):
+    """
+    A field that contains a set of values of some other type.
+
+    :param Field field_type:
+        The field specification for the dynamic values. Default is Unicode().
+    """
+    descriptor_class = SetOfDescriptor
+
+    def __init__(self, field_type=None, **kw):
+        super(SetOf, self).__init__(field_type=field_type, default=set, **kw)
+
+    def custom_validate(self, valueset):
+        if not isinstance(valueset, set):
+            raise ValidationError(
+                "Value %r should be a set of values" % valueset)
+        map(self.validate_subfield, valueset)
+
+    def custom_to_riak(self, value):
+        return sorted(value)
+
+    def custom_from_riak(self, raw_value):
+        return set(raw_value)
+
+
 class ForeignKeyDescriptor(FieldDescriptor):
     def setup(self, model_cls):
         super(ForeignKeyDescriptor, self).setup(model_cls)
@@ -603,18 +729,35 @@ class ForeignKeyDescriptor(FieldDescriptor):
             self.index_name = "%s_bin" % self.key
         else:
             self.index_name = self.field.index
-        if self.field.backlink is None:
-            self.backlink_name = model_cls.__name__.lower() + "s"
-        else:
-            self.backlink_name = self.field.backlink
+
+        backlink_name = self.field.backlink
+        if backlink_name is None:
+            backlink_name = model_cls.__name__.lower() + "s"
         self.other_model.backlinks.declare_backlink(
-            self.backlink_name, self.reverse_lookup_keys)
+            backlink_name, self.reverse_lookup_keys)
+
+        backlink_keys_name = backlink_name + "_keys"
+        if backlink_keys_name.endswith("s_keys"):
+            backlink_keys_name = backlink_name[:-1] + "_keys"
+        self.other_model.backlinks.declare_backlink(
+            backlink_keys_name, self.reverse_lookup_keys_paginated)
 
     def reverse_lookup_keys(self, modelobj, manager=None):
         if manager is None:
             manager = modelobj.manager
         return manager.index_keys(
             self.model_cls, self.index_name, modelobj.key)
+
+    def reverse_lookup_keys_paginated(self, modelobj, manager=None,
+                                      max_results=None, continuation=None):
+        """
+        Perform a paginated index query for backlinked objects.
+        """
+        if manager is None:
+            manager = modelobj.manager
+        return manager.index_keys_page(
+            self.model_cls, self.index_name, modelobj.key,
+            max_results=max_results, continuation=continuation)
 
     def clean(self, modelobj):
         if self.key not in modelobj._riak_object.get_data():
@@ -695,7 +838,9 @@ class ForeignKey(Field):
         The name to use for the backlink on :attr:`other_model.backlinks`.
         The default is the name of the class the field is on converted
         to lowercase and with 's' appended (e.g. 'FooModel' would result
-        in :attr:`other_model.backlinks.foomodels`).
+        in :attr:`other_model.backlinks.foomodels`). This is also used (with
+        `_keys` appended and a trailing `s` omitted if one is present) for the
+        paginated keys backlink function.
     """
     descriptor_class = ForeignKeyDescriptor
 
@@ -803,7 +948,9 @@ class ManyToMany(ForeignKey):
         The name to use for the backlink on :attr:`other_model.backlinks`.
         The default is the name of the class the field is on converted
         to lowercase and with 's' appended (e.g. 'FooModel' would result
-        in :attr:`other_model.backlinks.foomodels`).
+        in :attr:`other_model.backlinks.foomodels`). This is also used (with
+        `_keys` appended and a trailing `s` omitted if one is present) for the
+        paginated keys backlink function.
     """
     descriptor_class = ManyToManyDescriptor
     initializable = False

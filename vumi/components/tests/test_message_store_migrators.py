@@ -7,15 +7,20 @@ from vumi.tests.helpers import (
 
 try:
     from vumi.components.tests.message_store_old_models import (
-        OutboundMessageVNone, InboundMessageVNone, BatchVNone,
+        OutboundMessageVNone, InboundMessageVNone, EventVNone, BatchVNone,
         OutboundMessageV1, InboundMessageV1, OutboundMessageV2,
         InboundMessageV2)
     from vumi.components.message_store import (
         OutboundMessage as OutboundMessageV3,
-        InboundMessage as InboundMessageV3)
+        InboundMessage as InboundMessageV3,
+        Event as EventV1)
     riak_import_error = None
 except ImportError, e:
     riak_import_error = e
+
+
+def mws_value(msg_id, event, status):
+    return "%s$%s$%s" % (msg_id, event['timestamp'], status)
 
 
 def bwt_value(batch_id, msg):
@@ -50,6 +55,103 @@ class TestMigratorBase(VumiTestCase):
             import_skip(riak_import_error, 'riak')
         self.manager = self.persistence_helper.get_riak_manager()
         self.msg_helper = self.add_helper(MessageHelper())
+
+
+class TestEventMigrator(TestMigratorBase):
+    @inlineCallbacks
+    def setUp(self):
+        yield super(TestEventMigrator, self).setUp()
+        self.event_vnone = self.manager.proxy(EventVNone)
+        self.event_v1 = self.manager.proxy(EventV1)
+
+    @inlineCallbacks
+    def test_migrate_vnone_to_v1(self):
+        """
+        A vNone model can be migrated to v1.
+        """
+        msg = self.msg_helper.make_outbound("outbound")
+        msg_id = msg["message_id"]
+        event = self.msg_helper.make_ack(msg)
+        old_record = self.event_vnone(
+            event["event_id"], event=event, message=msg_id)
+        yield old_record.save()
+
+        new_record = yield self.event_v1.load(old_record.key)
+        self.assertEqual(new_record.event, event)
+        self.assertEqual(new_record.message.key, msg_id)
+
+        # The migration doesn't set the new fields and indexes, that only
+        # happens at save time.
+
+        self.assertEqual(new_record.message_with_status, None)
+        self.assertEqual(new_record._riak_object.get_indexes(), set([
+            ("message_bin", msg_id),
+        ]))
+
+        yield new_record.save()
+        self.assertEqual(
+            new_record.message_with_status, mws_value(msg_id, event, "ack"))
+        self.assertEqual(new_record._riak_object.get_indexes(), set([
+            ("message_bin", msg_id),
+            ("message_with_status_bin", mws_value(msg_id, event, "ack")),
+        ]))
+
+    @inlineCallbacks
+    def test_reverse_migrate_v1_vnone(self):
+        """
+        A v1 model can be stored in a vNone-compatible way.
+        """
+        # Configure the manager to save the older message version.
+        modelcls = self.event_v1._modelcls
+        model_name = "%s.%s" % (modelcls.__module__, modelcls.__name__)
+        self.manager.store_versions[model_name] = None
+
+        msg = self.msg_helper.make_outbound("outbound")
+        msg_id = msg["message_id"]
+        event = self.msg_helper.make_ack(msg)
+        new_record = self.event_v1(
+            event["event_id"], event=event, message=msg_id)
+        yield new_record.save()
+
+        old_record = yield self.event_vnone.load(new_record.key)
+        self.assertEqual(old_record.event, event)
+        self.assertEqual(old_record.message.key, msg_id)
+
+    @inlineCallbacks
+    def test_migrate_vnone_to_v1_index_only_foreign_key(self):
+        """
+        A vNone model can be migrated to v1 even if it's old enough to still
+        have index-only foreign keys.
+        """
+        msg = self.msg_helper.make_outbound("outbound")
+        msg_id = msg["message_id"]
+        event = self.msg_helper.make_ack(msg)
+        old_record = self.event_vnone(
+            event["event_id"], event=event, message=msg_id)
+
+        # Remove the foreign key field from the data before saving it.
+        old_record._riak_object.delete_data_field("message")
+        yield old_record.save()
+
+        new_record = yield self.event_v1.load(old_record.key)
+        self.assertEqual(new_record.event, event)
+        self.assertEqual(new_record.message.key, msg_id)
+
+        # The migration doesn't set the new fields and indexes, that only
+        # happens at save time.
+
+        self.assertEqual(new_record.message_with_status, None)
+        self.assertEqual(new_record._riak_object.get_indexes(), set([
+            ("message_bin", msg_id),
+        ]))
+
+        yield new_record.save()
+        self.assertEqual(
+            new_record.message_with_status, mws_value(msg_id, event, "ack"))
+        self.assertEqual(new_record._riak_object.get_indexes(), set([
+            ("message_bin", msg_id),
+            ("message_with_status_bin", mws_value(msg_id, event, "ack")),
+        ]))
 
 
 class TestOutboundMessageMigrator(TestMigratorBase):

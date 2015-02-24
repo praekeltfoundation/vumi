@@ -5,26 +5,35 @@ python:
 node_js:
   - "0.10"
 env:
-  # Test against the latest version of Twisted.
-  - TWISTED_VERSION="Twisted"
+  # Test against the latest version of Twisted using Riak 1.4.
+  - TWISTED_VERSION="Twisted" RIAK_VERSION="1.4.12-1"
 matrix:
   include:
-    # Test against the oldest version of Twisted that we claim to support
+    # Test against the oldest version of Twisted that we claim to support.
+    # Also test against the Travis-provided version of Riak (currently 2.0.x).
     # This is a separate matrix inclusion to avoid spawning unnecessary builds.
+    # Although there are two different things we're testing against here, they
+    # are orthogonal and any failures should be easily attributable to either
+    # Twisted version or Riak version without adding an additional build job.
     - python: "2.7"
-      env: TWISTED_VERSION="Twisted==13.1.0"
+      env: TWISTED_VERSION="Twisted==13.1.0" RIAK_VERSION="current"
 services:
-  - riak
   - redis-server
 before_install:
-  # we need the protobuf-compiler so we can install Riak client libraries
+  # Set up an appropriate version of Riak.
+  - sudo utils/setup_travis_riak.sh "${RIAK_VERSION}"
+  # We need the protobuf-compiler so we can install Riak client libraries.
+  - sudo apt-get -qq update
   - sudo apt-get install -qq protobuf-compiler
 install:
-  # We easy_install a binary riak_pb package because pip install needs `protoc'.
   - "pip install ${TWISTED_VERSION}"
   - "pip install -r requirements.pip --use-wheel"
   - "pip install coveralls --use-wheel"
   - "python setup.py install"
+before_script:
+  # To see what version of Riak we're running and check that it's happy.
+  - riak version
+  - sudo riak-admin member-status
 script:
   - VUMITEST_REDIS_DB=1 VUMI_TEST_NODE_PATH="$(which node)" coverage run --source=vumi `which trial` vumi
 after_success:

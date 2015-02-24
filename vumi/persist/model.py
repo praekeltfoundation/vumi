@@ -74,8 +74,8 @@ class BackLinkProxy(object):
 
     def __getattr__(self, key):
         if key not in self._backlinks.functions:
-            raise AttributeError("Not backlink function registered for %r"
-                                 % (key,))
+            raise AttributeError(
+                "No backlink function registered for %r" % (key,))
 
         def wrapped_backlink(*args, **kwargs):
             return self._backlinks.functions[key](self._modelobj, *args,

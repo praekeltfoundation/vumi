@@ -272,3 +272,24 @@ class MicaProcessorTestCase(SmppTransportTestCase):
         self.assertEqual(pdu_tlv(submit_sm_pdu, 'ussd_service_op'), '17')
         self.assertEqual(pdu_tlv(submit_sm_pdu, 'user_message_reference'),
                          session_identifier)
+
+    @inlineCallbacks
+    def test_submit_sm_null_message(self):
+        """
+        We can successfully send a message with null content.
+        """
+        user_msisdn = 'msisdn'
+        session_identifier = 12345
+        smpp_helper = yield self.get_smpp_helper()
+
+        yield self.tx_helper.make_dispatch_outbound(
+            None,
+            transport_type="ussd",
+            session_event=TransportUserMessage.SESSION_RESUME,
+            transport_metadata={
+                'session_info': {
+                    'session_identifier': session_identifier
+                }
+            }, to_addr=user_msisdn)
+        [resume] = yield smpp_helper.wait_for_pdus(1)
+        self.assertEqual(pdu_tlv(resume, 'ussd_service_op'), '02')

@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# -*- test-case-name: vumi.scripts.tests.test_model_migrator -*-
+# -*- test-case-name: vumi.scripts.tests.test_vumi_model_migrator -*-
 import sys
 
 from twisted.internet.defer import inlineCallbacks, gatherResults, succeed
@@ -23,7 +23,7 @@ class Options(usage.Options):
         ["concurrent-migrations", None, "20",
          "The number of concurrent migrations to perform."],
         ["index-page-size", None, "1000",
-         "The number of key to fetch in each index query."],
+         "The number of keys to fetch in each index query."],
         ["continuation-token", None, None,
          "A continuation token for resuming an interrupted migration."],
     ]
@@ -97,7 +97,7 @@ class ModelMigrator(object):
         try:
             obj = yield self.model.load(key)
             if obj is not None:
-                if not dry_run:
+                if obj.was_migrated and not dry_run:
                     yield obj.save()
             else:
                 self.emit("Skipping tombstone key %r." % (key,))

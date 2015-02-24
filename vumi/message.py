@@ -13,11 +13,32 @@ from vumi.utils import to_kwargs
 VUMI_DATE_FORMAT = "%Y-%m-%d %H:%M:%S.%f"
 
 
+def format_vumi_date(timestamp):
+    """Format a datetime object using the Vumi date format.
+
+    :param datetime timestamp:
+        The datetime object to format.
+    :return str:
+        The timestamp formatted as a string.
+    """
+    return timestamp.strftime(VUMI_DATE_FORMAT)
+
+
+def parse_vumi_date(value):
+    """Parse a timestamp string using the Vumi date format.
+
+    :param str value:
+        The string to parse.
+    :return datetime:
+        A datetime object representing the timestamp.
+    """
+    return datetime.strptime(value, VUMI_DATE_FORMAT)
+
+
 def date_time_decoder(json_object):
     for key, value in json_object.items():
         try:
-            json_object[key] = datetime.strptime(value,
-                    VUMI_DATE_FORMAT)
+            json_object[key] = parse_vumi_date(value)
         except ValueError:
             continue
         except TypeError:
@@ -29,7 +50,7 @@ class JSONMessageEncoder(json.JSONEncoder):
     """A JSON encoder that is able to serialize datetime"""
     def default(self, obj):
         if isinstance(obj, datetime):
-            return obj.strftime(VUMI_DATE_FORMAT)
+            return format_vumi_date(obj)
         return super(JSONMessageEncoder, self).default(obj)
 
 
@@ -43,13 +64,16 @@ def to_json(obj):
 
 class Message(object):
     """
-    Start of a somewhat unified message object to be
-    used internally in Vumi and while being in transit
-    over AMQP
+    A unified message object used by Vumi when transmitting messages over AMQP
+    and occassionally as a standardised JSON format for use in external APIs.
 
-    scary transport format -> Vumi Tansport -> Unified Message -> Vumi Worker
-
+    The special ``.cache`` property stores a dictionary of data that is not
+    stored by the :class:`vumi.fields.VumiMessage` field and hence not stored
+    by Vumi's message store.
     """
+
+    # name of the special attribute that isn't stored by the message store
+    _CACHE_ATTRIBUTE = "__cache__"
 
     def __init__(self, _process_fields=True, **kwargs):
         if _process_fields:
@@ -108,6 +132,13 @@ class Message(object):
 
     def copy(self):
         return self.from_json(self.to_json())
+
+    @property
+    def cache(self):
+        """
+        A special payload attribute that isn't stored by the message store.
+        """
+        return self.payload.setdefault(self._CACHE_ATTRIBUTE, {})
 
 
 class TransportMessage(Message):
@@ -210,6 +241,17 @@ class TransportUserMessage(TransportMessage):
     TRANSPORT_TYPES = set([TT_HTTP_API, TT_IRC, TT_TELNET, TT_TWITTER, TT_SMS,
                            TT_USSD, TT_XMPP, TT_MXIT, TT_WECHAT])
 
+    AT_IRC_NICKNAME = 'irc_nickname'
+    AT_TWITTER_HANDLE = 'twitter_handle'
+    AT_MSISDN = 'msisdn'
+    AT_GTALK_ID = 'gtalk_id'
+    AT_JABBER_ID = 'jabber_id'
+    AT_MXIT_ID = 'mxit_id'
+    AT_WECHAT_ID = 'wechat_id'
+    ADDRESS_TYPES = set([
+        AT_IRC_NICKNAME, AT_TWITTER_HANDLE, AT_MSISDN, AT_GTALK_ID,
+        AT_JABBER_ID, AT_MXIT_ID, AT_WECHAT_ID])
+
     def process_fields(self, fields):
         fields = super(TransportUserMessage, self).process_fields(fields)
         fields.setdefault('message_id', self.generate_id())
@@ -219,6 +261,8 @@ class TransportUserMessage(TransportMessage):
         fields.setdefault('content', None)
         fields.setdefault('transport_metadata', {})
         fields.setdefault('group', None)
+        fields.setdefault('to_addr_type', None)
+        fields.setdefault('from_addr_type', None)
         return fields
 
     def validate_fields(self):

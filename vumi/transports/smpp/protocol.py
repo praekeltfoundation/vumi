@@ -559,8 +559,16 @@ class EsmeTransceiver(Protocol):
         :rtype: list
         """
 
-        optional_parameters = pdu_params.pop('optional_parameters', {}).copy()
         split_msg = self.csm_split_message(pdu_params.pop('short_message'))
+
+        if len(split_msg) == 1:
+            # There is only one part, so send it without SAR stuff.
+            sequence_numbers = yield self.submit_sm(
+                vumi_message_id, destination_addr, short_message=split_msg[0],
+                **pdu_params)
+            returnValue(sequence_numbers)
+
+        optional_parameters = pdu_params.pop('optional_parameters', {}).copy()
         ref_num = yield self.sequence_generator.next()
         sequence_numbers = []
         yield self.vumi_transport.message_stash.init_multipart_info(
@@ -582,7 +590,7 @@ class EsmeTransceiver(Protocol):
     @inlineCallbacks
     def submit_csm_udh(self, vumi_message_id, destination_addr, **pdu_params):
         """
-        Submit a concatenated SMS to the SMSC using UDH headers
+        Submit a concatenated SMS to the SMSC using user data headers (UDH)
         in the message content.
 
         Same parameters apply as for ``submit_sm`` with the exception
@@ -600,6 +608,14 @@ class EsmeTransceiver(Protocol):
 
         pdu_params = pdu_params.copy()
         split_msg = self.csm_split_message(pdu_params.pop('short_message'))
+
+        if len(split_msg) == 1:
+            # There is only one part, so send it without UDH stuff.
+            sequence_numbers = yield self.submit_sm(
+                vumi_message_id, destination_addr, short_message=split_msg[0],
+                **pdu_params)
+            returnValue(sequence_numbers)
+
         ref_num = yield self.sequence_generator.next()
         sequence_numbers = []
         yield self.vumi_transport.message_stash.init_multipart_info(
