@@ -27,12 +27,17 @@ def format_vumi_date(timestamp):
 def parse_vumi_date(value):
     """Parse a timestamp string using the Vumi date format.
 
+    Timestamps without microseconds are also parsed correctly.
+
     :param str value:
         The string to parse.
     :return datetime:
         A datetime object representing the timestamp.
     """
-    return datetime.strptime(value, VUMI_DATE_FORMAT)
+    date_format = VUMI_DATE_FORMAT
+    if "." not in value:
+        date_format = date_format.split(".")[0]
+    return datetime.strptime(value, date_format)
 
 
 def date_time_decoder(json_object):
