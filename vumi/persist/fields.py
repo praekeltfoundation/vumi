@@ -5,7 +5,7 @@
 import iso8601
 from datetime import datetime
 
-from vumi.message import VUMI_DATE_FORMAT
+from vumi.message import format_vumi_date, parse_vumi_date
 from vumi.utils import to_kwargs
 
 
@@ -248,10 +248,10 @@ class Timestamp(Field):
                               "iso8601 formatted string.")
 
     def custom_to_riak(self, value):
-        return value.strftime(VUMI_DATE_FORMAT)
+        return format_vumi_date(value)
 
     def custom_from_riak(self, value):
-        return datetime.strptime(value, VUMI_DATE_FORMAT)
+        return parse_vumi_date(value)
 
 
 class Json(Field):
@@ -276,10 +276,10 @@ class VumiMessageDescriptor(FieldDescriptor):
                 modelobj._riak_object.delete_data_field(key)
 
     def _timestamp_to_json(self, dt):
-        return dt.strftime(VUMI_DATE_FORMAT)
+        return format_vumi_date(dt)
 
     def _timestamp_from_json(self, value):
-        return datetime.strptime(value, VUMI_DATE_FORMAT)
+        return parse_vumi_date(value)
 
     def set_value(self, modelobj, msg):
         """Set the value associated with this descriptor."""

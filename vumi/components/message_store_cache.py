@@ -9,7 +9,7 @@ import time
 from twisted.internet.defer import returnValue
 
 from vumi.persist.redis_base import Manager
-from vumi.message import TransportEvent, VUMI_DATE_FORMAT
+from vumi.message import TransportEvent, parse_vumi_date
 from vumi.errors import VumiError
 
 
@@ -230,7 +230,7 @@ class MessageStoreCache(object):
         Return a timestamp value for a datetime value.
         """
         if isinstance(timestamp, basestring):
-            timestamp = datetime.strptime(timestamp, VUMI_DATE_FORMAT)
+            timestamp = parse_vumi_date(timestamp)
         return time.mktime(timestamp.timetuple())
 
     @Manager.calls_manager
