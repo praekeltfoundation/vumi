@@ -11,13 +11,43 @@ from vumi.utils import to_kwargs
 
 # This is the date format we work with internally
 VUMI_DATE_FORMAT = "%Y-%m-%d %H:%M:%S.%f"
+# Same as above, but without microseconds (for more permissive parsing).
+_VUMI_DATE_FORMAT_NO_MICROSECONDS = "%Y-%m-%d %H:%M:%S"
+
+
+def format_vumi_date(timestamp):
+    """Format a datetime object using the Vumi date format.
+
+    :param datetime timestamp:
+        The datetime object to format.
+    :return str:
+        The timestamp formatted as a string.
+    """
+    return timestamp.strftime(VUMI_DATE_FORMAT)
+
+
+def parse_vumi_date(value):
+    """Parse a timestamp string using the Vumi date format.
+
+    Timestamps without microseconds are also parsed correctly.
+
+    :param str value:
+        The string to parse.
+    :return datetime:
+        A datetime object representing the timestamp.
+    """
+    date_format = VUMI_DATE_FORMAT
+    # We only look at the last ten characters, because that's where the "."
+    # will be in a valid serialised timestamp with microseconds.
+    if "." not in value[-10:]:
+        date_format = _VUMI_DATE_FORMAT_NO_MICROSECONDS
+    return datetime.strptime(value, date_format)
 
 
 def date_time_decoder(json_object):
     for key, value in json_object.items():
         try:
-            json_object[key] = datetime.strptime(value,
-                    VUMI_DATE_FORMAT)
+            json_object[key] = parse_vumi_date(value)
         except ValueError:
             continue
         except TypeError:
@@ -29,7 +59,7 @@ class JSONMessageEncoder(json.JSONEncoder):
     """A JSON encoder that is able to serialize datetime"""
     def default(self, obj):
         if isinstance(obj, datetime):
-            return obj.strftime(VUMI_DATE_FORMAT)
+            return format_vumi_date(obj)
         return super(JSONMessageEncoder, self).default(obj)
 
 

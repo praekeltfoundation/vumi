@@ -13,7 +13,7 @@ SESSION_NEW, SESSION_CLOSE, SESSION_NONE = (
     TransportUserMessage.SESSION_NONE)
 
 
-class TestStaticProviderSettingMiddleware(VumiTestCase):
+class TestSessionLengthMiddleware(VumiTestCase):
     def setUp(self):
         self.persistence_helper = self.add_helper(PersistenceHelper())
         self.clock = Clock()
