@@ -87,7 +87,8 @@ class TestService(VumiTestCase):
         yield self.worker_helper.kick_delivery()
         # If we get here without timing out, everything should be happy.
         self.assertEqual(consumer._in_progress, 0)
-        self.flushLoggedErrors()
+        [failure] = self.flushLoggedErrors()
+        self.assertEqual(failure.getErrorMessage(), "oops")
 
     @inlineCallbacks
     def test_start_publisher(self):
