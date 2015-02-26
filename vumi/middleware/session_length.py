@@ -1,6 +1,5 @@
 # -*- test-case-name: vumi.middleware.tests.test_session_length -*-
 
-from confmodel import Config
 from confmodel.fields import ConfigDict, ConfigInt, ConfigText
 
 from twisted.internet.defer import inlineCallbacks, returnValue
@@ -16,7 +15,7 @@ class SessionLengthMiddlewareConfig(BaseMiddlewareConfig):
     Configuration class for the session length middleware.
     """
 
-    redis = ConfigDict("Redis config", default={}, static=True)
+    redis_manager = ConfigDict("Redis config", default={}, static=True)
     timeout = ConfigInt("Redis key timeout (secs)", default=600, static=True)
     field_name = ConfigText(
         "Field name in message helper_metadata", default="session",
@@ -51,7 +50,8 @@ class SessionLengthMiddleware(BaseMiddleware):
 
     @inlineCallbacks
     def setup_middleware(self):
-        self.redis = yield TxRedisManager.from_config(self.config.redis)
+        self.redis = yield TxRedisManager.from_config(
+            self.config.redis_manager)
         self.timeout = self.config.timeout
         self.field_name = self.config.field_name
         self.clock = reactor

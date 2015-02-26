@@ -12,7 +12,7 @@ from vumi.components.message_formatters import JsonFormatter, CsvFormatter
 from vumi.config import (
     ConfigDict, ConfigText, ConfigServerEndpoint, ConfigInt,
     ServerEndpointFallback)
-from vumi.message import VUMI_DATE_FORMAT
+from vumi.message import format_vumi_date
 from vumi.persist.txriak_manager import TxRiakManager
 from vumi.persist.txredis_manager import TxRedisManager
 from vumi.transports.httprpc import httprpc
@@ -38,7 +38,7 @@ class ParameterError(Exception):
 class MessageStoreProxyResource(Resource):
 
     isLeaf = True
-    default_concurrency = 3
+    default_concurrency = 1
 
     def __init__(self, message_store, batch_id, formatter):
         Resource.__init__(self)
@@ -55,7 +55,7 @@ class MessageStoreProxyResource(Resource):
         [value] = request.args[argname]
         try:
             timestamp = iso8601.parse_date(value)
-            return timestamp.strftime(VUMI_DATE_FORMAT)
+            return format_vumi_date(timestamp)
         except iso8601.ParseError as e:
             raise ParameterError(
                 "Invalid '%s' parameter: %s" % (argname, str(e)))

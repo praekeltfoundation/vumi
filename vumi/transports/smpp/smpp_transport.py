@@ -355,6 +355,10 @@ class SmppTransceiverTransport(Transport):
 
     def reset_mt_tps(self):
         if self.throttled and self.need_mt_throttling():
+            if not self.service.is_bound():
+                # We don't have a bound SMPP connection, so try again later.
+                log.msg("Can't stop throttling while unbound, trying later.")
+                return
             self.reset_mt_throttle_counter()
             self.stop_throttling(quiet=True)
 
