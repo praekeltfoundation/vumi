@@ -16,10 +16,12 @@ class SessionLengthMiddlewareConfig(BaseMiddlewareConfig):
     """
 
     redis_manager = ConfigDict("Redis config", default={}, static=True)
-    timeout = ConfigInt("Redis key timeout (secs)", default=600, static=True)
+    timeout = ConfigInt(
+        "Redis key timeout (secs)",
+        default=600, static=True)
     field_name = ConfigText(
-        "Field name in message helper_metadata", default="session",
-        static=True)
+        "Field name in message helper_metadata",
+        default="session", static=True)
 
 
 class SessionLengthMiddleware(BaseMiddleware):
@@ -48,6 +50,9 @@ class SessionLengthMiddleware(BaseMiddleware):
     SESSION_START = 'session_start'
     SESSION_END = 'session_end'
 
+    DIRECTION_INBOUND = 'inbound'
+    DIRECTION_OUTBOUND = 'outbound'
+
     @inlineCallbacks
     def setup_middleware(self):
         self.redis = yield TxRedisManager.from_config(
@@ -63,9 +68,20 @@ class SessionLengthMiddleware(BaseMiddleware):
     def _time(self):
         return self.clock.seconds()
 
-    def _generate_redis_key(self, message, address):
-        return '%s:%s:%s' % (
-            message.get('transport_name'), address, 'session_created')
+    def _key_namespace(self, message):
+        return message.get('transport_name')
+
+    def _key_address(self, message, direction):
+        if direction == self.DIRECTION_INBOUND:
+            return message['from_addr']
+        elif direction == self.DIRECTION_OUTBOUND:
+            return message['to_addr']
+
+    def _key(self, message, direction):
+        return ':'.join((
+            self._key_namespace(message),
+            self._key_address(message, direction),
+            'session_created'))
 
     def _set_metadata(self, message, key, value):
         metadata = message['helper_metadata'].setdefault(self.field_name, {})
@@ -123,12 +139,12 @@ class SessionLengthMiddleware(BaseMiddleware):
 
     @inlineCallbacks
     def handle_inbound(self, message, connector_name):
-        redis_key = self._generate_redis_key(message, message.get('from_addr'))
+        redis_key = self._key(message, self.DIRECTION_INBOUND)
         yield self._process_message(message, redis_key)
         returnValue(message)
 
     @inlineCallbacks
     def handle_outbound(self, message, connector_name):
-        redis_key = self._generate_redis_key(message, message.get('to_addr'))
+        redis_key = self._key(message, self.DIRECTION_OUTBOUND)
         yield self._process_message(message, redis_key)
         returnValue(message)
