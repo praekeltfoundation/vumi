@@ -333,11 +333,16 @@ class Consumer(object):
     @inlineCallbacks
     def consume(self, message):
         self._in_progress += 1
-        result = yield self.consume_message(self.message_class.from_json(
-                                            message.content.body))
-        self._in_progress -= 1
-        if self._testing:
-            self.channel.message_processed()
+        try:
+            result = yield self.consume_message(
+                self.message_class.from_json(message.content.body))
+        finally:
+            # If we get an exception here the consumer's already pretty much
+            # broken, but we still decrement the _in_progress counter so we
+            # don't wait forever for it during shutdown.
+            self._in_progress -= 1
+            if self._testing:
+                self.channel.message_processed()
         if result is not False:
             yield self.channel.basic_ack(message.delivery_tag, False)
         else:
