@@ -15,6 +15,14 @@ class ModuleUtilityTest(VumiTestCase):
             parse_vumi_date('2015-01-02 23:14:11.456000'),
             datetime(2015, 1, 2, 23, 14, 11, microsecond=456000))
 
+    def test_parse_vumi_date_no_microseconds(self):
+        """
+        We can parse a timestamp even if it has no microseconds.
+        """
+        self.assertEqual(
+            parse_vumi_date('2015-01-02 23:14:11'),
+            datetime(2015, 1, 2, 23, 14, 11, microsecond=0))
+
     def test_format_vumi_date(self):
         self.assertEqual(
             format_vumi_date(
