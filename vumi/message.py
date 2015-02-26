@@ -37,7 +37,9 @@ def parse_vumi_date(value):
         A datetime object representing the timestamp.
     """
     date_format = VUMI_DATE_FORMAT
-    if "." not in value:
+    # We only look at the last ten characters, because that's where the "."
+    # will be in a valid serialised timestamp with microseconds.
+    if "." not in value[-10:]:
         date_format = _VUMI_DATE_FORMAT_NO_MICROSECONDS
     return datetime.strptime(value, date_format)
 
