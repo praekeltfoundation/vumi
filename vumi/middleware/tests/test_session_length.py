@@ -145,6 +145,38 @@ class TestSessionLengthMiddleware(VumiTestCase):
             msg['helper_metadata']['session']['session_start'], 23)
 
     @inlineCallbacks
+    def test_incoming_message_session_start_custom_key(self):
+        mw = yield self.mk_middleware(key_namespace='foo')
+
+        msg = self.mk_msg('+12345', '+54321')
+        msg = yield mw.handle_inbound(msg, "dummy_connector")
+
+        value = yield self.redis.get('foo:+54321:session_created')
+        self.assertEqual(value, '0.0')
+
+    @inlineCallbacks
+    def test_incoming_message_session_end_custom_key(self):
+        mw = yield self.mk_middleware(key_namespace='foo')
+        yield self.redis.set('foo:+54321:session_created', '23.0')
+
+        msg = self.mk_msg('+12345', '+54321', session_event=SESSION_CLOSE)
+        msg = yield mw.handle_inbound(msg, "dummy_connector")
+
+        value = yield self.redis.get('foo:+54321:session_created')
+        self.assertEqual(value, None)
+
+    @inlineCallbacks
+    def test_incoming_message_session_none_custom_key(self):
+        mw = yield self.mk_middleware(key_namespace='foo')
+        yield self.redis.set('foo:+54321:session_created', '23.0')
+
+        msg = self.mk_msg('+12345', '+54321', session_event=SESSION_NONE)
+        msg = yield mw.handle_inbound(msg, "dummy_connector")
+
+        self.assertEqual(
+            msg['helper_metadata']['session']['session_start'], 23.0)
+
+    @inlineCallbacks
     def test_outgoing_message_session_start(self):
         mw = yield self.mk_middleware()
         msg_start = self.mk_msg('+12345', '+54321')
@@ -237,6 +269,38 @@ class TestSessionLengthMiddleware(VumiTestCase):
 
         self.assertEqual(
             msg['helper_metadata']['session']['session_start'], 23)
+
+    @inlineCallbacks
+    def test_outgoing_message_session_start_custom_key(self):
+        mw = yield self.mk_middleware(key_namespace='foo')
+
+        msg = self.mk_msg('+12345', '+54321')
+        msg = yield mw.handle_outbound(msg, "dummy_connector")
+
+        value = yield self.redis.get('foo:+12345:session_created')
+        self.assertEqual(value, '0.0')
+
+    @inlineCallbacks
+    def test_outgoing_message_session_end_custom_key(self):
+        mw = yield self.mk_middleware(key_namespace='foo')
+        yield self.redis.set('foo:+12345:session_created', '23.0')
+
+        msg = self.mk_msg('+12345', '+54321', session_event=SESSION_CLOSE)
+        msg = yield mw.handle_outbound(msg, "dummy_connector")
+
+        value = yield self.redis.get('foo:+12345:session_created')
+        self.assertEqual(value, None)
+
+    @inlineCallbacks
+    def test_outgoing_message_session_none_custom_key(self):
+        mw = yield self.mk_middleware(key_namespace='foo')
+        yield self.redis.set('foo:+12345:session_created', '23.0')
+
+        msg = self.mk_msg('+12345', '+54321', session_event=SESSION_NONE)
+        msg = yield mw.handle_outbound(msg, "dummy_connector")
+
+        self.assertEqual(
+            msg['helper_metadata']['session']['session_start'], 23.0)
 
     @inlineCallbacks
     def test_redis_key_timeout(self):
