@@ -11,6 +11,8 @@ from vumi.utils import to_kwargs
 
 # This is the date format we work with internally
 VUMI_DATE_FORMAT = "%Y-%m-%d %H:%M:%S.%f"
+# Same as above, but without microseconds (for more permissive parsing).
+_VUMI_DATE_FORMAT_NO_MICROSECONDS = "%Y-%m-%d %H:%M:%S"
 
 
 def format_vumi_date(timestamp):
@@ -36,7 +38,7 @@ def parse_vumi_date(value):
     """
     date_format = VUMI_DATE_FORMAT
     if "." not in value:
-        date_format = date_format.split(".")[0]
+        date_format = _VUMI_DATE_FORMAT_NO_MICROSECONDS
     return datetime.strptime(value, date_format)
 
 
