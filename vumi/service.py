@@ -55,7 +55,8 @@ class AmqpFactory(protocol.ReconnectingClientFactory):
         return self.amqp_client
 
     def clientConnectionFailed(self, connector, reason):
-        log.err("AmqpFactory connection failed (%s)" % (reason.getErrorMessage(),))
+        log.err("AmqpFactory connection failed (%s)" % (
+            reason.getErrorMessage(),))
         self.worker._amqp_connection_failed()
         self.amqp_client = None
         protocol.ReconnectingClientFactory.clientConnectionFailed(
@@ -65,7 +66,8 @@ class AmqpFactory(protocol.ReconnectingClientFactory):
         if not self.worker.running:
             # We've specifically asked for this disconnect.
             return
-        log.err("AmqpFactory client connection lost (%s)" % (reason.getErrorMessage(),))
+        log.err("AmqpFactory client connection lost (%s)" % (
+            reason.getErrorMessage(),))
         self.worker._amqp_connection_failed()
         self.amqp_client = None
         protocol.ReconnectingClientFactory.clientConnectionLost(
@@ -223,8 +225,8 @@ class Worker(MultiService, object):
                    exchange_name='vumi', exchange_type='direct', durable=True,
                    delivery_mode=2):
         class_name = self.routing_key_to_class_name(routing_key)
-        publisher_class = type("%sDynamicPublisher" % class_name, (Publisher,),
-            {
+        publisher_class = type(
+            "%sDynamicPublisher" % class_name, (Publisher,), {
                 "routing_key": routing_key,
                 "exchange_name": exchange_name,
                 "exchange_type": exchange_type,
@@ -418,8 +420,8 @@ class Publisher(object):
 
     def publish_raw(self, data, **kwargs):
         amq_message = Content(data)
-        amq_message['delivery mode'] = kwargs.pop('delivery_mode',
-                self.delivery_mode)
+        amq_message['delivery mode'] = kwargs.pop(
+            'delivery_mode', self.delivery_mode)
         return self.publish(amq_message, **kwargs)
 
 
