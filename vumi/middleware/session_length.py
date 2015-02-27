@@ -22,7 +22,8 @@ class SessionLengthMiddlewareConfig(BaseMiddlewareConfig):
     key_namespace = ConfigText(
         "Namespace to use to lookup and set the (address, timestamp) "
         "key-value pairs in redis. In none is given, the middleware will use "
-        "the `transport_name` message field instead.",
+        "the `transport_name` message field if it exists, otherwise "
+        "defaulting to `SessionLengthMiddleware.FALLBACK_KEY`.",
         default=None, static=True)
     field_name = ConfigText(
         "Field name in message helper_metadata",
@@ -57,6 +58,7 @@ class SessionLengthMiddleware(BaseMiddleware):
 
     DIRECTION_INBOUND = 'inbound'
     DIRECTION_OUTBOUND = 'outbound'
+    FALLBACK_KEY = '__default__'
 
     FALLBACK_KEY = '__default__'
 
@@ -79,8 +81,10 @@ class SessionLengthMiddleware(BaseMiddleware):
     def _key_namespace(self, message):
         if self.key_namespace is not None:
             return self.key_namespace
+        elif message['transport_name'] is not None:
+            return message['transport_name']
         else:
-            return message.get('transport_name')
+            return self.FALLBACK_KEY
 
     def _key_address(self, message, direction):
         if direction == self.DIRECTION_INBOUND:
