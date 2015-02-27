@@ -58,7 +58,6 @@ class SessionLengthMiddleware(BaseMiddleware):
 
     DIRECTION_INBOUND = 'inbound'
     DIRECTION_OUTBOUND = 'outbound'
-    FALLBACK_KEY = '__default__'
 
     FALLBACK_KEY = '__default__'
 
