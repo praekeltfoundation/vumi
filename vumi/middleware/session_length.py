@@ -19,11 +19,6 @@ class SessionLengthMiddlewareConfig(BaseMiddlewareConfig):
     timeout = ConfigInt(
         "Redis key timeout (secs)",
         default=600, static=True)
-    key_namespace = ConfigText(
-        "Namespace to use to lookup and set the (address, timestamp) "
-        "key-value pairs in redis. In none is given, the middleware will use "
-        "the `transport_name` message field instead.",
-        default=None, static=True)
     field_name = ConfigText(
         "Field name in message helper_metadata",
         default="session", static=True)
@@ -62,7 +57,6 @@ class SessionLengthMiddleware(BaseMiddleware):
     def setup_middleware(self):
         self.redis = yield TxRedisManager.from_config(
             self.config.redis_manager)
-        self.key_namespace = self.config.key_namespace
         self.timeout = self.config.timeout
         self.field_name = self.config.field_name
         self.clock = reactor
@@ -75,10 +69,7 @@ class SessionLengthMiddleware(BaseMiddleware):
         return self.clock.seconds()
 
     def _key_namespace(self, message):
-        if self.key_namespace is not None:
-            return self.key_namespace
-        else:
-            return message.get('transport_name')
+        return message.get('transport_name')
 
     def _key_address(self, message, direction):
         if direction == self.DIRECTION_INBOUND:
