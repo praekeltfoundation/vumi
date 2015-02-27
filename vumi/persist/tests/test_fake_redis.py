@@ -107,35 +107,37 @@ class TestFakeRedis(VumiTestCase):
         yield self.assert_redis_op(
             [('three', 0.3), ('two', 0.2), ('one', 0.1)],
             'zrange', 'set', 0, -1, withscores=True, desc=True)
-        yield self.assert_redis_op([('three', 0.3)],
+        yield self.assert_redis_op(
+            [('three', 0.3)],
             'zrange', 'set', 0, 0, withscores=True, desc=True)
 
     @inlineCallbacks
     def test_zrangebyscore(self):
-        yield self.redis.zadd('set', one=0.1, two=0.2, three=0.3, four=0.4,
-            five=0.5)
-        yield self.assert_redis_op(['two', 'three', 'four'], 'zrangebyscore',
-            'set', 0.2, 0.4)
-        yield self.assert_redis_op(['two', 'three'], 'zrangebyscore',
-            'set', 0.2, 0.4, 0, 2)
-        yield self.assert_redis_op(['three'], 'zrangebyscore',
-            'set', '(0.2', '(0.4')
-        yield self.assert_redis_op(['two', 'three', 'four', 'five'],
+        yield self.redis.zadd(
+            'set', one=0.1, two=0.2, three=0.3, four=0.4, five=0.5)
+        yield self.assert_redis_op(
+            ['two', 'three', 'four'], 'zrangebyscore', 'set', 0.2, 0.4)
+        yield self.assert_redis_op(
+            ['two', 'three'], 'zrangebyscore', 'set', 0.2, 0.4, 0, 2)
+        yield self.assert_redis_op(
+            ['three'], 'zrangebyscore', 'set', '(0.2', '(0.4')
+        yield self.assert_redis_op(
+            ['two', 'three', 'four', 'five'],
             'zrangebyscore', 'set', '0.2', '+inf')
-        yield self.assert_redis_op(['one', 'two'],
-            'zrangebyscore', 'set', '-inf', '0.2')
+        yield self.assert_redis_op(
+            ['one', 'two'], 'zrangebyscore', 'set', '-inf', '0.2')
 
     @inlineCallbacks
     def test_zcount(self):
-        yield self.redis.zadd('set', one=0.1, two=0.2, three=0.3, four=0.4,
-            five=0.5)
-        yield self.assert_redis_op('3', 'zcount',
-            'set', 0.2, 0.4)
+        yield self.redis.zadd(
+            'set', one=0.1, two=0.2, three=0.3, four=0.4, five=0.5)
+        yield self.assert_redis_op(
+            '3', 'zcount', 'set', 0.2, 0.4)
 
     @inlineCallbacks
     def test_zrangebyscore_with_scores(self):
-        yield self.redis.zadd('set', one=0.1, two=0.2, three=0.3, four=0.4,
-            five=0.5)
+        yield self.redis.zadd(
+            'set', one=0.1, two=0.2, three=0.3, four=0.4, five=0.5)
         yield self.assert_redis_op(
             [('two', 0.2), ('three', 0.3), ('four', 0.4)],
             'zrangebyscore', 'set', 0.2, 0.4, withscores=True)
@@ -461,22 +463,22 @@ class TestFakeRedisCharsetHandling(VumiTestCase):
         # Redis client assumes utf-8
         redis = self.get_redis()
         yield redis.set('name', u'Zoë Destroyer of Ascii')
-        yield self.assert_redis_op(redis, 'Zo\xc3\xab Destroyer of Ascii',
-            'get', 'name')
+        yield self.assert_redis_op(
+            redis, 'Zo\xc3\xab Destroyer of Ascii', 'get', 'name')
 
     @inlineCallbacks
     def test_charset_encoding_custom_replace(self):
         redis = self.get_redis(charset='ascii', errors='replace')
         yield redis.set('name', u'Zoë Destroyer of Ascii')
-        yield self.assert_redis_op(redis, 'Zo? Destroyer of Ascii',
-            'get', 'name')
+        yield self.assert_redis_op(
+            redis, 'Zo? Destroyer of Ascii', 'get', 'name')
 
     @inlineCallbacks
     def test_charset_encoding_custom_ignore(self):
         redis = self.get_redis(charset='ascii', errors='ignore')
         yield redis.set('name', u'Zoë Destroyer of Ascii')
-        yield self.assert_redis_op(redis, 'Zo Destroyer of Ascii',
-            'get', 'name')
+        yield self.assert_redis_op(
+            redis, 'Zo Destroyer of Ascii', 'get', 'name')
 
 
 class TestFakeRedisAsync(TestFakeRedis):
