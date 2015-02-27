@@ -12,6 +12,8 @@ SESSION_NEW, SESSION_CLOSE, SESSION_NONE = (
     TransportUserMessage.SESSION_CLOSE,
     TransportUserMessage.SESSION_NONE)
 
+FALLBACK_KEY = SessionLengthMiddleware.FALLBACK_KEY
+
 
 class TestSessionLengthMiddleware(VumiTestCase):
     def setUp(self):
@@ -30,10 +32,11 @@ class TestSessionLengthMiddleware(VumiTestCase):
         returnValue(mw)
 
     def mk_msg(self, to_addr, from_addr, session_event=SESSION_NEW,
-               session_start=None, session_end=None):
+               session_start=None, session_end=None,
+               transport_name="dummy_transport"):
         msg = TransportUserMessage(
             to_addr=to_addr, from_addr=from_addr,
-            transport_name="dummy_transport",
+            transport_name=transport_name,
             transport_type="dummy_transport_type",
             session_event=session_event)
 
@@ -177,6 +180,55 @@ class TestSessionLengthMiddleware(VumiTestCase):
             msg['helper_metadata']['session']['session_start'], 23.0)
 
     @inlineCallbacks
+    def test_incoming_message_session_start_default_key(self):
+        mw = yield self.mk_middleware()
+
+        msg = self.mk_msg('+12345', '+54321', transport_name=None)
+        msg = yield mw.handle_inbound(msg, "dummy_connector")
+
+        value = yield self.redis.get(
+            '%s:+54321:session_created' % (FALLBACK_KEY,))
+
+        self.assertEqual(value, '0.0')
+
+    @inlineCallbacks
+    def test_incoming_message_session_end_default_key(self):
+        mw = yield self.mk_middleware()
+
+        yield self.redis.set(
+            '%s:+54321:session_created' % (FALLBACK_KEY,), '23.0')
+
+        msg = self.mk_msg(
+            '+12345',
+            '+54321',
+            session_event=SESSION_CLOSE,
+            transport_name=None)
+
+        msg = yield mw.handle_inbound(msg, "dummy_connector")
+
+        value = yield self.redis.get(
+            '%s:+54321:session_created' % (FALLBACK_KEY,))
+        self.assertEqual(value, None)
+
+    @inlineCallbacks
+    def test_incoming_message_session_none_default_key(self):
+        mw = yield self.mk_middleware()
+
+        yield self.redis.set(
+            '%s:+54321:session_created' % (FALLBACK_KEY,), '23.0')
+
+        msg = self.mk_msg(
+            '+12345',
+            '+54321',
+            session_event=SESSION_NONE,
+            transport_name=None)
+
+        msg = yield mw.handle_inbound(msg, "dummy_connector")
+
+        self.assertEqual(
+            msg['helper_metadata']['session']['session_start'], 23.0)
+
+    @inlineCallbacks
     def test_outgoing_message_session_start(self):
         mw = yield self.mk_middleware()
         msg_start = self.mk_msg('+12345', '+54321')
@@ -297,6 +349,55 @@ class TestSessionLengthMiddleware(VumiTestCase):
         yield self.redis.set('foo:+12345:session_created', '23.0')
 
         msg = self.mk_msg('+12345', '+54321', session_event=SESSION_NONE)
+        msg = yield mw.handle_outbound(msg, "dummy_connector")
+
+        self.assertEqual(
+            msg['helper_metadata']['session']['session_start'], 23.0)
+
+    @inlineCallbacks
+    def test_outgoing_message_session_start_default_key(self):
+        mw = yield self.mk_middleware()
+
+        msg = self.mk_msg('+12345', '+54321', transport_name=None)
+        msg = yield mw.handle_outbound(msg, "dummy_connector")
+
+        value = yield self.redis.get(
+            '%s:+12345:session_created' % (FALLBACK_KEY,))
+
+        self.assertEqual(value, '0.0')
+
+    @inlineCallbacks
+    def test_outgoing_message_session_end_default_key(self):
+        mw = yield self.mk_middleware()
+
+        yield self.redis.set(
+            '%s:+12345:session_created' % (FALLBACK_KEY,), '23.0')
+
+        msg = self.mk_msg(
+            '+12345',
+            '+54321',
+            session_event=SESSION_CLOSE,
+            transport_name=None)
+
+        msg = yield mw.handle_outbound(msg, "dummy_connector")
+
+        value = yield self.redis.get(
+            '%s:+12345:session_created' % (FALLBACK_KEY,))
+        self.assertEqual(value, None)
+
+    @inlineCallbacks
+    def test_outgoing_message_session_none_default_key(self):
+        mw = yield self.mk_middleware()
+
+        yield self.redis.set(
+            '%s:+12345:session_created' % (FALLBACK_KEY,), '23.0')
+
+        msg = self.mk_msg(
+            '+12345',
+            '+54321',
+            session_event=SESSION_NONE,
+            transport_name=None)
+
         msg = yield mw.handle_outbound(msg, "dummy_connector")
 
         self.assertEqual(

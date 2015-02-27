@@ -58,6 +58,8 @@ class SessionLengthMiddleware(BaseMiddleware):
     DIRECTION_INBOUND = 'inbound'
     DIRECTION_OUTBOUND = 'outbound'
 
+    FALLBACK_KEY = '__default__'
+
     @inlineCallbacks
     def setup_middleware(self):
         self.redis = yield TxRedisManager.from_config(
