@@ -8,7 +8,7 @@ from twisted.python.usage import UsageError
 
 from vumi.scripts.vumi_redis_tools import (
     scan_keys, TaskRunner, Options, Task, TaskError,
-    Count, Expire, ListKeys, Skip)
+    Count, Expire, Persist, ListKeys, Skip)
 from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 
 
@@ -139,6 +139,42 @@ class TestExpire(VumiTestCase):
             self.redis.ttl("key2"), None)
 
 
+class TestPersist(VumiTestCase):
+
+    def setUp(self):
+        self.runner = DummyTaskRunner()
+        self.persistence_helper = self.add_helper(
+            PersistenceHelper(is_sync=True))
+        self.redis = self.persistence_helper.get_redis_manager()
+        self.redis._purge_all()  # Make sure we start fresh.
+
+    def mk_persist(self):
+        t = Persist()
+        t.init(self.runner, self.redis)
+        t.before()
+        return t
+
+    def test_name(self):
+        t = Persist()
+        self.assertEqual(t.name, "persist")
+
+    def test_create(self):
+        t = Task.parse("persist")
+        self.assertEqual(t.name, "persist")
+        self.assertEqual(type(t), Persist)
+
+    def test_process_key(self):
+        t = self.mk_persist()
+        self.redis.setex("key1", 10, "bar")
+        self.redis.setex("key2", 20, "baz")
+        key = t.process_key("key1")
+        self.assertEqual(key, "key1")
+        self.assertEqual(
+            self.redis.ttl("key1"), None)
+        self.assertTrue(
+            0 < self.redis.ttl("key2") <= 20)
+
+
 class TestListKeys(VumiTestCase):
 
     def setUp(self):
@@ -254,12 +290,13 @@ class TestOptions(VumiTestCase):
     def test_help(self):
         opts = Options()
         lines = opts.getUsage().splitlines()
-        self.assertEqual(lines[-5:], [
+        self.assertEqual(lines[-6:], [
             "Available tasks:",
-            "      --count   A task that counts the number of keys.",
-            "      --expire  A task that sets an expiry time on each key.",
-            "      --list    A task that prints out each key.",
-            "      --skip    A task that skips keys that match a regular"
+            "      --count    A task that counts the number of keys.",
+            "      --expire   A task that sets an expiry time on each key.",
+            "      --list     A task that prints out each key.",
+            "      --persist  A task that persists each key.",
+            "      --skip     A task that skips keys that match a regular"
             " expression.",
         ])
 
