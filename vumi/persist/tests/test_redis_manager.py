@@ -62,6 +62,8 @@ class TestRedisManager(VumiTestCase):
             'key%d' % i for i in range(10)))
 
     def test_ttl(self):
+        # FIXME: Real Redis returns -1 for missing TTLs and -1 or -2 (depending
+        #        on version) for missing keys.
         missing_ttl = self.manager.ttl("missing_key")
         self.assertEqual(missing_ttl, None)
 
