@@ -19,10 +19,13 @@ from twisted.internet.defer import (
 from twisted.internet.error import ProcessTerminated
 from twisted.web.http_headers import Headers
 
-from vumi.application.sandbox import (
+from vumi.application.sandbox.worker import (
     Sandbox, SandboxApi, SandboxCommand, SandboxResources,
-    SandboxResource, RedisResource, OutboundResource, JsSandboxResource,
-    LoggingResource, HttpClientResource, JsSandbox, JsFileSandbox,
+    JsSandboxResource, JsSandbox, JsFileSandbox)
+from vumi.application.sandbox import (
+    SandboxResource, LoggingResource, HttpClientResource, OutboundResource,
+    RedisResource)
+from vumi.application.sandbox.resources.http import (
     HttpClientContextFactory, HttpClientPolicyForHTTPS, make_context_factory)
 from vumi.application.tests.helpers import (
     ApplicationHelper, find_nodejs_or_skip_test)
@@ -394,8 +397,8 @@ class JsSandboxTestMixin(object):
 
     @inlineCallbacks
     def test_js_sandboxer(self):
-        app_js = pkg_resources.resource_filename('vumi.application.tests',
-                                                 'app.js')
+        app_js = pkg_resources.resource_filename(
+            'vumi.application.sandbox.tests', 'app.js')
         javascript = file(app_js).read()
         app = yield self.setup_app(javascript)
 
@@ -417,8 +420,8 @@ class JsSandboxTestMixin(object):
 
     @inlineCallbacks
     def test_js_sandboxer_with_app_context(self):
-        app_js = pkg_resources.resource_filename('vumi.application.tests',
-                                                 'app_requires_path.js')
+        app_js = pkg_resources.resource_filename(
+            'vumi.application.sandbox.tests', 'app_requires_path.js')
         javascript = file(app_js).read()
         app = yield self.setup_app(javascript, extra_config={
             "app_context": "{path: require('path')}",
@@ -441,8 +444,8 @@ class JsSandboxTestMixin(object):
 
     @inlineCallbacks
     def test_js_sandboxer_with_delayed_requests(self):
-        app_js = pkg_resources.resource_filename('vumi.application.tests',
-                                                 'app_delayed_requests.js')
+        app_js = pkg_resources.resource_filename(
+            'vumi.application.sandbox.tests', 'app_delayed_requests.js')
         javascript = file(app_js).read()
         app = yield self.setup_app(javascript, extra_config={
             "app_context": "{setImmediate: setImmediate}",
