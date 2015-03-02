@@ -628,6 +628,13 @@ class RedisPairWrapper(object):
             self._perform_operation_gen)
 
     def _perform_operation_gen(self, op, *args, **kw):
+        """
+        Perform an operation on both the fake and real Redises and assert that
+        the responses and errors are the same.
+
+        NOTE: This method is a generator and is not used directly. It's wrapped
+              with an appropriate sync/async wrapper in __init__() above.
+        """
         results = []
         errors = []
         for redis in [self._fake_redis, self._real_redis]:
