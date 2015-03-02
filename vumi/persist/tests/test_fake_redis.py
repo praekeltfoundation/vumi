@@ -490,62 +490,6 @@ class FakeRedisTestMixin(object):
         yield redis.hset("hash_key", "a", 1.0)
         yield self.assert_redis_op(redis, 'hash', 'type', 'hash_key')
 
-    # @inlineCallbacks
-    # def test_scan_simple(self):
-    #     redis = yield self.get_redis()
-    #     for i in range(20):
-    #         yield redis.set("key%02d" % i, str(i))
-    #     # Ordered the way FakeRedis.scan() returns them.
-    #     result_keys = redis._sort_keys_by_hash(
-    #         ["key%02d" % i for i in range(20)])
-
-    #     self.assertEqual(
-    #         (yield redis.scan(None)),
-    #         ('10', result_keys[:10]))
-    #     self.assertEqual(
-    #         (yield redis.scan(None, count=5)),
-    #         ('5', result_keys[:5]))
-    #     self.assertEqual(
-    #         (yield redis.scan('5', count=5)),
-    #         ('10', result_keys[5:10]))
-    #     self.assertEqual(
-    #         (yield redis.scan('15', count=5)),
-    #         (None, result_keys[15:]))
-    #     self.assertEqual(
-    #         (yield redis.scan(None, count=20)),
-    #         (None, result_keys))
-
-    # @inlineCallbacks
-    # def test_scan_interleaved_key_changes(self):
-    #     redis = yield self.get_redis()
-    #     for i in range(20):
-    #         yield redis.set("key%02d" % i, str(i))
-    #     # Ordered the way FakeRedis.scan() returns them.
-    #     result_keys = redis._sort_keys_by_hash(
-    #         ["key%02d" % i for i in range(20)])
-
-    #     self.assertEqual(
-    #         (yield redis.scan(None)),
-    #         ('10', result_keys[:10]))
-
-    #     # Set and delete a bunch of keys to change some internal state. The
-    #     # next call to scan() will return duplicates.
-    #     for i in range(20):
-    #         yield redis.set("transient%02d" % i, str(i))
-    #         yield redis.delete("transient%02d" % i)
-
-    #     self.assertEqual(
-    #         (yield redis.scan('10')),
-    #         ('31', result_keys[5:15]))
-    #     self.assertEqual(
-    #         (yield redis.scan('31')),
-    #         (None, result_keys[15:]))
-
-    @inlineCallbacks
-    def test_scan_no_keys(self):
-        redis = yield self.get_redis()
-        yield self.assert_redis_op(redis, [None, []], 'scan', None)
-
     @inlineCallbacks
     def test_charset_encoding_default(self):
         # Redis client assumes utf-8
@@ -568,8 +512,77 @@ class FakeRedisTestMixin(object):
         yield self.assert_redis_op(
             redis, 'Zo Destroyer of Ascii', 'get', 'name')
 
+    @inlineCallbacks
+    def test_scan_no_keys(self):
+        """
+        Real and fake Redis implementation all return the same (empty) response
+        when we scan for keys that don't exist. Other scanning methods are in
+        FakeRedisUnverifiedTestMixin because we can't fake the same arbitrary
+        order in which keys are returned from real Redis.
+        """
+        redis = yield self.get_redis()
+        yield self.assert_redis_op(redis, [None, []], 'scan', None)
 
-class TestFakeRedis(FakeRedisTestMixin, VumiTestCase):
+
+class FakeRedisUnverifiedTestMixin(object):
+    """
+    This mixin adds some extra tests that are not verified against real Redis.
+
+    Each test in here should explain why verification isn't possible.
+    """
+
+    @inlineCallbacks
+    def test_scan_simple(self):
+        """
+        Scanning returns keys in an order that depends on arbitrary state in
+        the Redis server, so we can't fake it in a way that's identical to real
+        Redis.
+        """
+        redis = yield self.get_redis()
+        for i in range(20):
+            yield redis.set("key%02d" % i, str(i))
+        # Ordered the way FakeRedis.scan() returns them.
+        result_keys = redis._sort_keys_by_hash(
+            ["key%02d" % i for i in range(20)])
+
+        self.assert_redis_op(redis, ['10', result_keys[:10]], 'scan', None)
+        self.assert_redis_op(
+            redis, ['5', result_keys[:5]], 'scan', None, count=5)
+        self.assert_redis_op(
+            redis, ['10', result_keys[5:10]], 'scan', '5', count=5)
+        self.assert_redis_op(
+            redis, [None, result_keys[15:]], 'scan', '15', count=5)
+        self.assert_redis_op(
+            redis, [None, result_keys], 'scan', None, count=20)
+
+    @inlineCallbacks
+    def test_scan_interleaved_key_changes(self):
+        """
+        Scanning returns keys in an order that depends on arbitrary state in
+        the Redis server, so we can't fake it in a way that's identical to real
+        Redis.
+        """
+        redis = yield self.get_redis()
+        for i in range(20):
+            yield redis.set("key%02d" % i, str(i))
+        # Ordered the way FakeRedis.scan() returns them.
+        result_keys = redis._sort_keys_by_hash(
+            ["key%02d" % i for i in range(20)])
+
+        self.assert_redis_op(redis, ['10', result_keys[:10]], 'scan', None)
+
+        # Set and delete a bunch of keys to change some internal state. The
+        # next call to scan() will return duplicates.
+        for i in range(20):
+            yield redis.set("transient%02d" % i, str(i))
+            yield redis.delete("transient%02d" % i)
+
+        self.assert_redis_op(redis, ['31', result_keys[5:15]], 'scan', '10')
+        self.assert_redis_op(redis, [None, result_keys[15:]], 'scan', '31')
+
+
+class TestFakeRedis(FakeRedisUnverifiedTestMixin, FakeRedisTestMixin,
+                    VumiTestCase):
 
     def get_redis(self, **kwargs):
         redis = FakeRedis(**kwargs)
@@ -586,7 +599,8 @@ class TestFakeRedis(FakeRedisTestMixin, VumiTestCase):
         redis.clock.advance(delay)
 
 
-class TestFakeRedisAsync(FakeRedisTestMixin, VumiTestCase):
+class TestFakeRedisAsync(FakeRedisUnverifiedTestMixin, FakeRedisTestMixin,
+                         VumiTestCase):
 
     def get_redis(self, **kwargs):
         redis = FakeRedis(async=True, **kwargs)
