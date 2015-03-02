@@ -464,7 +464,7 @@ class FakeRedisTestMixin(object):
         yield self.assert_redis_op(redis, 1, 'expire', "tempval", 10)
         # Temporary key.
         yield self.assert_redis_op(redis, 10, 'ttl', "tempval")
-        yield self.wait(redis, 0.5)  # Wait a bit for the TTL to change.
+        yield self.wait(redis, 0.6)  # Wait a bit for the TTL to change.
         yield self.assert_redis_op(redis, 9, 'ttl', "tempval")
         yield self.assert_redis_op(redis, 1, 'expire', "tempval", 5)
         yield self.assert_redis_op(redis, 5, 'ttl', "tempval")
