@@ -1813,7 +1813,7 @@ class TestPersistenceHelper(VumiTestCase):
 
     def test__purge_redis(self):
         """
-        ._purge_redis() should call manager._purge_all() and disconnect.
+        ._purge_redis() should call manager._purge_all() and remain connected.
         """
         persistence_helper = PersistenceHelper()
         manager = FakeRedisManagerForCleanup('prefix1')
@@ -1821,7 +1821,7 @@ class TestPersistenceHelper(VumiTestCase):
         self.assertEqual(manager.connected, True)
         success_result_of(persistence_helper._purge_redis(manager))
         self.assertEqual(manager.purged, True)
-        self.assertEqual(manager.connected, False)
+        self.assertEqual(manager.connected, True)
 
     def test__purge_redis_not_connected(self):
         """
