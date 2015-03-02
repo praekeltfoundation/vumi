@@ -5,6 +5,7 @@ from twisted.internet.task import Clock
 
 from vumi.message import TransportUserMessage
 from vumi.middleware.session_length import SessionLengthMiddleware
+from vumi.middleware.tagger import TaggingMiddleware
 from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 
 SESSION_NEW, SESSION_CLOSE, SESSION_NONE = (
@@ -30,12 +31,15 @@ class TestSessionLengthMiddleware(VumiTestCase):
         returnValue(mw)
 
     def mk_msg(self, to_addr, from_addr, session_event=SESSION_NEW,
-               session_start=None, session_end=None):
+               session_start=None, session_end=None, tag=None):
         msg = TransportUserMessage(
             to_addr=to_addr, from_addr=from_addr,
             transport_name="dummy_transport",
             transport_type="dummy_transport_type",
             session_event=session_event)
+
+        if tag is not None:
+            TaggingMiddleware.add_tag_to_msg(msg, tag)
 
         if session_start is not None:
             self._set_metadata(msg, 'session_start', session_start)
@@ -145,6 +149,48 @@ class TestSessionLengthMiddleware(VumiTestCase):
             msg['helper_metadata']['session']['session_start'], 23)
 
     @inlineCallbacks
+    def test_incoming_message_session_start_tag_namespace_type(self):
+        mw = yield self.mk_middleware(namespace_type='tag')
+
+        msg = self.mk_msg('+12345', '+54321', tag=('pool1', 'tag1'))
+        msg = yield mw.handle_inbound(msg, "dummy_connector")
+
+        value = yield self.redis.get('pool1:tag1:+54321:session_created')
+        self.assertEqual(value, '0.0')
+
+    @inlineCallbacks
+    def test_incoming_message_session_end_tag_namespace_type(self):
+        mw = yield self.mk_middleware(namespace_type='tag')
+        yield self.redis.set('pool1:tag1:+54321:session_created', '23.0')
+
+        msg = self.mk_msg(
+            '+12345',
+            '+54321',
+            session_event=SESSION_CLOSE,
+            tag=('pool1', 'tag1'))
+
+        msg = yield mw.handle_inbound(msg, "dummy_connector")
+
+        value = yield self.redis.get('pool1:tag1:+54321:session_created')
+        self.assertEqual(value, None)
+
+    @inlineCallbacks
+    def test_incoming_message_session_none_tag_namespace_type(self):
+        mw = yield self.mk_middleware(namespace_type='tag')
+        yield self.redis.set('pool1:tag1:+54321:session_created', '23.0')
+
+        msg = self.mk_msg(
+            '+12345',
+            '+54321',
+            session_event=SESSION_CLOSE,
+            tag=('pool1', 'tag1'))
+
+        msg = yield mw.handle_inbound(msg, "dummy_connector")
+
+        self.assertEqual(
+            msg['helper_metadata']['session']['session_start'], 23.0)
+
+    @inlineCallbacks
     def test_outgoing_message_session_start(self):
         mw = yield self.mk_middleware()
         msg_start = self.mk_msg('+12345', '+54321')
@@ -237,6 +283,48 @@ class TestSessionLengthMiddleware(VumiTestCase):
 
         self.assertEqual(
             msg['helper_metadata']['session']['session_start'], 23)
+
+    @inlineCallbacks
+    def test_outgoing_message_session_start_tag_namespace_type(self):
+        mw = yield self.mk_middleware(namespace_type='tag')
+
+        msg = self.mk_msg('+12345', '+54321', tag=('pool1', 'tag1'))
+        msg = yield mw.handle_outbound(msg, "dummy_connector")
+
+        value = yield self.redis.get('pool1:tag1:+12345:session_created')
+        self.assertEqual(value, '0.0')
+
+    @inlineCallbacks
+    def test_outgoing_message_session_end_tag_namespace_type(self):
+        mw = yield self.mk_middleware(namespace_type='tag')
+        yield self.redis.set('pool1:tag1:+12345:session_created', '23.0')
+
+        msg = self.mk_msg(
+            '+12345',
+            '+54321',
+            session_event=SESSION_CLOSE,
+            tag=('pool1', 'tag1'))
+
+        msg = yield mw.handle_outbound(msg, "dummy_connector")
+
+        value = yield self.redis.get('tag1:+12345:session_created')
+        self.assertEqual(value, None)
+
+    @inlineCallbacks
+    def test_outgoing_message_session_none_tag_namespace_type(self):
+        mw = yield self.mk_middleware(namespace_type='tag')
+        yield self.redis.set('pool1:tag1:+12345:session_created', '23.0')
+
+        msg = self.mk_msg(
+            '+12345',
+            '+54321',
+            session_event=SESSION_NONE,
+            tag=('pool1', 'tag1'))
+
+        msg = yield mw.handle_outbound(msg, "dummy_connector")
+
+        self.assertEqual(
+            msg['helper_metadata']['session']['session_start'], 23.0)
 
     @inlineCallbacks
     def test_redis_key_timeout(self):
