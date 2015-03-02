@@ -55,11 +55,6 @@ class TestSessionLengthMiddleware(VumiTestCase):
         metadata = msg['helper_metadata'].setdefault(metadata_field_name, {})
         metadata[name] = value
 
-    def get_log(self, lc):
-        [log] = lc.logs
-        [message] = log['message']
-        return message
-
     @inlineCallbacks
     def test_incoming_message_session_start(self):
         mw = yield self.mk_middleware()
@@ -215,9 +210,8 @@ class TestSessionLengthMiddleware(VumiTestCase):
         with LogCatcher() as lc:
             result_msg = yield mw.handle_inbound(msg, "dummy_connector")
 
-        self.assertEqual(
-            self.get_log(lc),
-            "Session length redis namespace cannot be None, skipping message")
+        self.assertEqual(lc.messages(), [
+            "Session length redis namespace cannot be None, skipping message"])
 
         self.assertEqual(msg, result_msg)
         self.assertTrue('session' not in msg['helper_metadata'])
@@ -235,9 +229,8 @@ class TestSessionLengthMiddleware(VumiTestCase):
         with LogCatcher() as lc:
             result_msg = yield mw.handle_inbound(msg, "dummy_connector")
 
-        self.assertEqual(
-            self.get_log(lc),
-            "Session length redis namespace cannot be None, skipping message")
+        self.assertEqual(lc.messages(), [
+            "Session length redis namespace cannot be None, skipping message"])
 
         self.assertEqual(msg, result_msg)
         self.assertTrue('session' not in msg['helper_metadata'])
@@ -255,9 +248,8 @@ class TestSessionLengthMiddleware(VumiTestCase):
         with LogCatcher() as lc:
             result_msg = yield mw.handle_inbound(msg, "dummy_connector")
 
-        self.assertEqual(
-            self.get_log(lc),
-            "Session length redis namespace cannot be None, skipping message")
+        self.assertEqual(lc.messages(), [
+            "Session length redis namespace cannot be None, skipping message"])
 
         self.assertEqual(msg, result_msg)
         self.assertTrue('session' not in msg['helper_metadata'])
@@ -323,9 +315,8 @@ class TestSessionLengthMiddleware(VumiTestCase):
         with LogCatcher() as lc:
             result_msg = yield mw.handle_inbound(msg, "dummy_connector")
 
-        self.assertEqual(
-            self.get_log(lc),
-            "Session length redis namespace cannot be None, skipping message")
+        self.assertEqual(lc.messages(), [
+            "Session length redis namespace cannot be None, skipping message"])
 
         self.assertEqual(msg, result_msg)
         self.assertTrue('session' not in msg['helper_metadata'])
@@ -340,9 +331,8 @@ class TestSessionLengthMiddleware(VumiTestCase):
         with LogCatcher() as lc:
             result_msg = yield mw.handle_inbound(msg, "dummy_connector")
 
-        self.assertEqual(
-            self.get_log(lc),
-            "Session length redis namespace cannot be None, skipping message")
+        self.assertEqual(lc.messages(), [
+            "Session length redis namespace cannot be None, skipping message"])
 
         self.assertEqual(msg, result_msg)
         self.assertTrue('session' not in msg['helper_metadata'])
@@ -358,9 +348,8 @@ class TestSessionLengthMiddleware(VumiTestCase):
         with LogCatcher() as lc:
             result_msg = yield mw.handle_inbound(msg, "dummy_connector")
 
-        self.assertEqual(
-            self.get_log(lc),
-            "Session length redis namespace cannot be None, skipping message")
+        self.assertEqual(lc.messages(), [
+            "Session length redis namespace cannot be None, skipping message"])
 
         self.assertEqual(msg, result_msg)
         self.assertTrue('session' not in msg['helper_metadata'])
@@ -468,9 +457,8 @@ class TestSessionLengthMiddleware(VumiTestCase):
         with LogCatcher() as lc:
             result_msg = yield mw.handle_outbound(msg, "dummy_connector")
 
-        self.assertEqual(
-            self.get_log(lc),
-            "Session length redis namespace cannot be None, skipping message")
+        self.assertEqual(lc.messages(), [
+            "Session length redis namespace cannot be None, skipping message"])
 
         self.assertEqual(msg, result_msg)
         self.assertTrue('session' not in msg['helper_metadata'])
@@ -488,9 +476,8 @@ class TestSessionLengthMiddleware(VumiTestCase):
         with LogCatcher() as lc:
             result_msg = yield mw.handle_outbound(msg, "dummy_connector")
 
-        self.assertEqual(
-            self.get_log(lc),
-            "Session length redis namespace cannot be None, skipping message")
+        self.assertEqual(lc.messages(), [
+            "Session length redis namespace cannot be None, skipping message"])
 
         self.assertEqual(msg, result_msg)
         self.assertTrue('session' not in msg['helper_metadata'])
@@ -508,9 +495,8 @@ class TestSessionLengthMiddleware(VumiTestCase):
         with LogCatcher() as lc:
             result_msg = yield mw.handle_outbound(msg, "dummy_connector")
 
-        self.assertEqual(
-            self.get_log(lc),
-            "Session length redis namespace cannot be None, skipping message")
+        self.assertEqual(lc.messages(), [
+            "Session length redis namespace cannot be None, skipping message"])
 
         self.assertEqual(msg, result_msg)
         self.assertTrue('session' not in msg['helper_metadata'])
@@ -576,9 +562,8 @@ class TestSessionLengthMiddleware(VumiTestCase):
         with LogCatcher() as lc:
             result_msg = yield mw.handle_outbound(msg, "dummy_connector")
 
-        self.assertEqual(
-            self.get_log(lc),
-            "Session length redis namespace cannot be None, skipping message")
+        self.assertEqual(lc.messages(), [
+            "Session length redis namespace cannot be None, skipping message"])
 
         self.assertEqual(msg, result_msg)
         self.assertTrue('session' not in msg['helper_metadata'])
@@ -593,9 +578,8 @@ class TestSessionLengthMiddleware(VumiTestCase):
         with LogCatcher() as lc:
             result_msg = yield mw.handle_outbound(msg, "dummy_connector")
 
-        self.assertEqual(
-            self.get_log(lc),
-            "Session length redis namespace cannot be None, skipping message")
+        self.assertEqual(lc.messages(), [
+            "Session length redis namespace cannot be None, skipping message"])
 
         self.assertEqual(msg, result_msg)
         self.assertTrue('session' not in msg['helper_metadata'])
@@ -611,9 +595,8 @@ class TestSessionLengthMiddleware(VumiTestCase):
         with LogCatcher() as lc:
             result_msg = yield mw.handle_outbound(msg, "dummy_connector")
 
-        self.assertEqual(
-            self.get_log(lc),
-            "Session length redis namespace cannot be None, skipping message")
+        self.assertEqual(lc.messages(), [
+            "Session length redis namespace cannot be None, skipping message"])
 
         self.assertEqual(msg, result_msg)
         self.assertTrue('session' not in msg['helper_metadata'])
