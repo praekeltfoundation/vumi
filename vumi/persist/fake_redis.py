@@ -26,6 +26,13 @@ def call_to_deferred(deferred, func, *args, **kw):
     execute(func, *args, **kw).chainDeferred(deferred)
 
 
+class ResponseError(Exception):
+    """
+    Exception class for things we throw to match the real Redis client
+    libraries.
+    """
+
+
 class FakeRedis(object):
     """In process and memory implementation of redis-like data store.
 
@@ -171,7 +178,7 @@ class FakeRedis(object):
         else:
             cursor = str(start + i + 1)
 
-        return cursor, fnmatch.filter(output, match)
+        return [cursor, fnmatch.filter(output, match)]
 
     @maybe_async
     def flushdb(self):
@@ -188,6 +195,7 @@ class FakeRedis(object):
     def set(self, key, value):
         value = self._encode(value)  # set() sets string value
         self._set_key(key, value)
+        return True
 
     @maybe_async
     def setex(self, key, time, value):
@@ -387,7 +395,7 @@ class FakeRedis(object):
 
     @maybe_async
     def zcount(self, key, min, max):
-        return str(len(self.zrangebyscore.sync(self, key, min, max)))
+        return len(self.zrangebyscore.sync(self, key, min, max))
 
     @maybe_async
     def zscore(self, key, value):
@@ -416,12 +424,13 @@ class FakeRedis(object):
 
     @maybe_async
     def lpush(self, key, obj):
-        self._setdefault_key(key, []).insert(0, obj)
+        self._setdefault_key(key, []).insert(0, self._encode(obj))
+        return self.llen.sync(self, key)
 
     @maybe_async
     def rpush(self, key, obj):
-        self._setdefault_key(key, []).append(obj)
-        return self.llen.sync(self, key) - 1
+        self._setdefault_key(key, []).append(self._encode(obj))
+        return self.llen.sync(self, key)
 
     @maybe_async
     def lrange(self, key, start, end):
@@ -435,6 +444,7 @@ class FakeRedis(object):
     @maybe_async
     def lrem(self, key, value, num=0):
         removed = [0]
+        value = self._encode(value)
 
         def keep(v):
             if v == value and (num == 0 or removed[0] < abs(num)):
@@ -468,6 +478,7 @@ class FakeRedis(object):
             # want to keep.
             del lval[stop + 1:]
         del lval[:start]
+        return True
 
     # Expiry operations
 
@@ -484,7 +495,7 @@ class FakeRedis(object):
     def ttl(self, key):
         delayed = self._expiries.get(key)
         if delayed is not None and delayed.active():
-            return int(delayed.getTime() - self.clock.seconds())
+            return round(delayed.getTime() - self.clock.seconds())
         return None
 
     @maybe_async
@@ -508,9 +519,15 @@ class Zset(object):
             end = None
         return start, end
 
+    def _to_float(self, value):
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            raise ResponseError("value is not a valid float")
+
     def zadd(self, **valscores):
         new_zval = [val for val in self._zval if val[1] not in valscores]
-        new_zval.extend((float(score), value)
+        new_zval.extend((self._to_float(score), value)
                         for value, score in valscores.items())
         new_zval.sort()
         added = len(new_zval) - len(self._zval)

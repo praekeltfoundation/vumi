@@ -12,8 +12,7 @@ except ImportError:
     txr = txrp
 
 from twisted.internet import reactor
-from twisted.internet.defer import (
-    inlineCallbacks, DeferredList, succeed, Deferred)
+from twisted.internet.defer import inlineCallbacks, succeed, Deferred
 
 from vumi.persist.redis_base import Manager
 from vumi.persist.fake_redis import FakeRedis
@@ -62,6 +61,12 @@ class VumiRedis(txr.Redis):
             d.addCallback(lambda _: self.quit())
         return d.addCallback(lambda _: self._disconnected_d)
 
+    def _ok_to_true(self, r):
+        """
+        Some commands return 'OK', but we expect True.
+        """
+        return True if r == 'OK' else r
+
     def hget(self, key, field):
         d = super(VumiRedis, self).hget(key, field)
         d.addCallback(lambda r: r.get(field) if r else None)
@@ -69,6 +74,11 @@ class VumiRedis(txr.Redis):
 
     def lrem(self, key, value, num=0):
         return super(VumiRedis, self).lrem(key, value, count=num)
+
+    def ltrim(self, key, start, end):
+        d = super(VumiRedis, self).ltrim(key, start, end)
+        d.addCallback(self._ok_to_true)
+        return d
 
     # lpop() and rpop() are implemented in txredis 2.2.1 (which is in Ubuntu),
     # but not 2.2 (which is in pypi). Annoyingly, pop() in 2.2.1 calls lpop()
@@ -81,6 +91,11 @@ class VumiRedis(txr.Redis):
     def lpop(self, key):
         self._send('LPOP', key)
         return self.getResponse()
+
+    def set(self, key, value, *args, **kw):
+        d = super(VumiRedis, self).set(key, value, *args, **kw)
+        d.addCallback(self._ok_to_true)
+        return d
 
     def setex(self, key, seconds, value):
         return self.set(key, value, expire=seconds)
@@ -101,10 +116,15 @@ class VumiRedis(txr.Redis):
         pieces = zip(args[::2], args[1::2])
         pieces.extend(kwargs.iteritems())
         orig_zadd = super(VumiRedis, self).zadd
-        deferreds = [orig_zadd(key, member, score) for member, score in pieces]
-        d = DeferredList(deferreds, fireOnOneErrback=True)
-        d.addCallback(lambda results: sum([result for success, result
-                                           in results if success]))
+        d = succeed(0)
+
+        def do_zadd(s, key, member, score):
+            d = orig_zadd(key, member, score)
+            d.addCallback(lambda r: r + s)
+            return d
+
+        for member, score in pieces:
+            d.addCallback(do_zadd, key, member, score)
         return d
 
     def zrange(self, key, start, end, desc=False, withscores=False):
@@ -143,7 +163,7 @@ class VumiRedis(txr.Redis):
         self._send("SCAN", cursor, *args)
         d = self.getResponse()
         d.addCallback(
-            lambda r: ((None if r[0] == '0' or r[0] == 0 else r[0]), r[1]))
+            lambda r: [(None if r[0] == '0' or r[0] == 0 else r[0]), r[1]])
         return d
 
     def ttl(self, key):
@@ -152,6 +172,15 @@ class VumiRedis(txr.Redis):
         # exist so we require redis >= 2.7.1 in setup.py (WAT).
         d = super(VumiRedis, self).ttl(key)
         d.addCallback(lambda r: (None if r < 0 else r))
+        return d
+
+    def persist(self, key):
+        self._send('PERSIST', key)
+        return self.getResponse()
+
+    def type(self, key):
+        d = self.get_type(key)
+        d.addCallback(lambda r: r if r is not None else 'none')
         return d
 
 
