@@ -88,7 +88,11 @@ class SessionLengthMiddleware(BaseMiddleware):
         return message['transport_name']
 
     def get_tag(self, message):
-        return ":".join(TaggingMiddleware.map_msg_to_tag(message))
+        tag = TaggingMiddleware.map_msg_to_tag(message)
+        if tag is None:
+            return None
+        else:
+            return ":".join(tag)
 
     def _time(self):
         return self.clock.seconds()
@@ -104,14 +108,6 @@ class SessionLengthMiddleware(BaseMiddleware):
             self.namespace_handler(message),
             self._key_address(message, direction),
             'session_created'))
-
-    def _check_key(self, message):
-        if self.namespace_handler(message) is None:
-            log.warning(
-                "Session length middleware cannot be None, skipping message")
-            return False
-        else:
-            return True
 
     def _set_metadata(self, message, key, value):
         metadata = message['helper_metadata'].setdefault(self.field_name, {})
@@ -162,7 +158,8 @@ class SessionLengthMiddleware(BaseMiddleware):
     def _process_message(self, message, direction):
         if self.namespace_handler(message) is None:
             log.warning(
-                "Session length middleware cannot be None, skipping message")
+                "Session length redis namespace cannot be None, "
+                "skipping message")
             returnValue(message)
             return
 
