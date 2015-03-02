@@ -113,14 +113,14 @@ class TestSessionLengthMiddleware(VumiTestCase):
             session_start=23,
             session_event=SESSION_NEW)
 
-        yield self.redis.set('dummy_transport:+12345:session_created', '23')
+        yield self.redis.set('dummy_transport:+12345:session_created', '23.0')
 
         msg = yield mw.handle_inbound(msg, "dummy_connector")
         value = yield self.redis.get('dummy_transport:+12345:session_created')
-        self.assertEqual(value, '23')
+        self.assertEqual(value, '23.0')
 
         self.assertEqual(
-            msg['helper_metadata']['session']['session_start'], 23)
+            msg['helper_metadata']['session']['session_start'], 23.0)
 
     @inlineCallbacks
     def test_incoming_message_session_end_no_overwrite(self):
@@ -129,17 +129,17 @@ class TestSessionLengthMiddleware(VumiTestCase):
         msg = self.mk_msg(
             '+12345',
             '+54321',
-            session_start=23,
-            session_end=32,
+            session_start=23.0,
+            session_end=32.0,
             session_event=SESSION_CLOSE)
 
         msg = yield mw.handle_inbound(msg, "dummy_connector")
 
         self.assertEqual(
-            msg['helper_metadata']['session']['session_start'], 23)
+            msg['helper_metadata']['session']['session_start'], 23.0)
 
         self.assertEqual(
-            msg['helper_metadata']['session']['session_end'], 32)
+            msg['helper_metadata']['session']['session_end'], 32.0)
 
     @inlineCallbacks
     def test_incoming_message_session_none_no_overwrite(self):
@@ -148,13 +148,64 @@ class TestSessionLengthMiddleware(VumiTestCase):
         msg = self.mk_msg(
             '+12345',
             '+54321',
-            session_start=23,
+            session_start=23.0,
             session_event=SESSION_NONE)
 
         msg = yield mw.handle_inbound(msg, "dummy_connector")
 
         self.assertEqual(
-            msg['helper_metadata']['session']['session_start'], 23)
+            msg['helper_metadata']['session']['session_start'], 23.0)
+
+    @inlineCallbacks
+    def test_incoming_message_session_start_transport_namespace_type(self):
+        mw = yield self.mk_middleware(namespace_type='transport_name')
+
+        msg = self.mk_msg('+12345', '+54321', transport_name='foo')
+        msg = yield mw.handle_inbound(msg, "dummy_connector")
+
+        value = yield self.redis.get('foo:+54321:session_created')
+        self.assertEqual(value, '0.0')
+
+        self.assertEqual(
+            msg['helper_metadata']['session']['session_start'], 0.0)
+
+    @inlineCallbacks
+    def test_incoming_message_session_end_transport_namespace_type(self):
+        mw = yield self.mk_middleware(namespace_type='transport_name')
+        yield self.redis.set('foo:+54321:session_created', '23.0')
+
+        msg = self.mk_msg(
+            '+12345',
+            '+54321',
+            session_event=SESSION_CLOSE,
+            transport_name='foo')
+
+        msg = yield mw.handle_inbound(msg, "dummy_connector")
+
+        value = yield self.redis.get('foo:+54321:session_created')
+        self.assertEqual(value, None)
+
+        self.assertEqual(
+            msg['helper_metadata']['session']['session_start'], 23.0)
+
+        self.assertEqual(
+            msg['helper_metadata']['session']['session_end'], 0.0)
+
+    @inlineCallbacks
+    def test_incoming_message_session_none_transport_namespace_type(self):
+        mw = yield self.mk_middleware(namespace_type='transport_name')
+        yield self.redis.set('foo:+54321:session_created', '23.0')
+
+        msg = self.mk_msg(
+            '+12345',
+            '+54321',
+            session_event=SESSION_CLOSE,
+            transport_name='foo')
+
+        msg = yield mw.handle_inbound(msg, "dummy_connector")
+
+        self.assertEqual(
+            msg['helper_metadata']['session']['session_start'], 23.0)
 
     @inlineCallbacks
     def test_incoming_message_session_start_no_transport_name(self):
