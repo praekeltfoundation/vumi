@@ -741,7 +741,3 @@ class TestFakeRedisVerifyAsync(FakeRedisTestMixin, VumiTestCase):
         d = Deferred()
         reactor.callLater(delay, d.callback, None)
         return d
-
-
-# TestFakeRedisVerify.skip = "foo"
-# TestFakeRedisVerifyAsync.skip = "foo"
