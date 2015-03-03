@@ -174,12 +174,17 @@ class VumiRedis(txr.Redis):
         d.addCallback(lambda r: (None if r < 0 else r))
         return d
 
+    # txredis doesn't implement this.
     def persist(self, key):
+        """
+        Remove the expiration from a key, causing it to persist indefinitely.
+        """
         self._send('PERSIST', key)
         return self.getResponse()
 
     def type(self, key):
         d = self.get_type(key)
+        # txredis turns 'none' into None, so we reverse that for consistency.
         d.addCallback(lambda r: r if r is not None else 'none')
         return d
 
