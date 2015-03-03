@@ -293,9 +293,16 @@ class FakeRedis(object):
 
     @maybe_async
     def hincrby(self, key, field, amount=1):
-        value = self._data.get(key, {}).get(field, "0")
+        try:
+            value = self._data.get(key, {}).get(field, "0")
+        except AttributeError:
+            raise ResponseError("WRONGTYPE Operation against a key holding"
+                                " the wrong kind of value")
         # the int(str(..)) coerces amount to an int but rejects floats
-        value = int(value) + int(str(amount))
+        try:
+            value = int(value) + int(str(amount))
+        except (TypeError, ValueError):
+            raise ResponseError("value is not an integer or out of range")
         self._setdefault_key(key, {})[field] = str(value)
         return value
 
