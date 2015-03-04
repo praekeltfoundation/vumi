@@ -40,6 +40,17 @@ case "${RIAK_VERSION}" in
 esac
 
 
+# Set the default ulimit if it isn't already set.
+if [ -e /etc/default/riak ]; then
+    echo "/etc/default/riak already exists and contains the following:"
+    cat /etc/default/riak
+    echo "-------"
+else
+    echo "/etc/default/riak does not exist, creating it."
+    echo "ulimit -n 65536" > /etc/default/riak
+fi
+
+
 # Get rid of all the existing Riak data so we start fresh and then start fresh.
 rm -rf /var/lib/riak/*
 service riak start
