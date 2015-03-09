@@ -58,7 +58,7 @@ class TestSessionLengthMiddleware(VumiTestCase):
     @inlineCallbacks
     def test_incoming_message_session_start(self):
         mw = yield self.mk_middleware()
-        msg_start = self.mk_msg('+54321', '+12345')
+        msg_start = self.mk_msg('+12345', '+54321')
 
         msg = yield mw.handle_inbound(msg_start, "dummy_connector")
         value = yield self.redis.get('dummy_transport:+54321:session_created')
@@ -70,7 +70,7 @@ class TestSessionLengthMiddleware(VumiTestCase):
     @inlineCallbacks
     def test_incoming_message_session_end(self):
         mw = yield self.mk_middleware()
-        msg_end = self.mk_msg('+54321', '+12345', session_event=SESSION_CLOSE)
+        msg_end = self.mk_msg('+12345', '+54321', session_event=SESSION_CLOSE)
 
         msg = yield mw.handle_inbound(msg_end, "dummy_connector")
         self.assertEqual(
@@ -79,22 +79,22 @@ class TestSessionLengthMiddleware(VumiTestCase):
     @inlineCallbacks
     def test_incoming_message_session_start_end(self):
         mw = yield self.mk_middleware()
-        msg_start = self.mk_msg('+54321', '+12345')
-        msg_end = self.mk_msg('+54321', '+12345', session_event=SESSION_CLOSE)
+        msg_start = self.mk_msg('+12345', '+54321')
+        msg_end = self.mk_msg('+12345', '+54321', session_event=SESSION_CLOSE)
 
         msg = yield mw.handle_inbound(msg_start, "dummy_connector")
         value = yield self.redis.get('dummy_transport:+54321:session_created')
         self.assertEqual(value, '0.0')
 
         self.assertEqual(
-            msg['helper_metadata']['session']['session_start'], 0.0)
+                msg['helper_metadata']['session']['session_start'], 0.0)
 
         self.clock.advance(1.0)
         msg = yield mw.handle_inbound(msg_end, "dummy_connector")
         value = yield self.redis.get('dummy_transport:+54321:session_created')
         self.assertTrue(value is None)
         self.assertEqual(
-            msg['helper_metadata']['session']['session_start'], 0.0)
+                msg['helper_metadata']['session']['session_start'], 0.0)
         self.assertEqual(
             msg['helper_metadata']['session']['session_end'], 1.0)
 
@@ -103,8 +103,8 @@ class TestSessionLengthMiddleware(VumiTestCase):
         mw = yield self.mk_middleware()
 
         msg = self.mk_msg(
-            '+54321',
             '+12345',
+            '+54321',
             session_start=23,
             session_event=SESSION_NEW)
 
@@ -122,8 +122,8 @@ class TestSessionLengthMiddleware(VumiTestCase):
         mw = yield self.mk_middleware()
 
         msg = self.mk_msg(
-            '+54321',
             '+12345',
+            '+54321',
             session_start=23.0,
             session_end=32.0,
             session_event=SESSION_CLOSE)
@@ -141,8 +141,8 @@ class TestSessionLengthMiddleware(VumiTestCase):
         mw = yield self.mk_middleware()
 
         msg = self.mk_msg(
-            '+54321',
             '+12345',
+            '+54321',
             session_start=23.0,
             session_event=SESSION_NONE)
 
@@ -155,7 +155,7 @@ class TestSessionLengthMiddleware(VumiTestCase):
     def test_incoming_message_session_start_transport_namespace_type(self):
         mw = yield self.mk_middleware(namespace_type='transport_name')
 
-        msg = self.mk_msg('+54321', '+12345', transport_name='foo')
+        msg = self.mk_msg('+12345', '+54321', transport_name='foo')
         msg = yield mw.handle_inbound(msg, "dummy_connector")
 
         value = yield self.redis.get('foo:+54321:session_created')
@@ -170,8 +170,8 @@ class TestSessionLengthMiddleware(VumiTestCase):
         yield self.redis.set('foo:+54321:session_created', '23.0')
 
         msg = self.mk_msg(
-            '+54321',
             '+12345',
+            '+54321',
             session_event=SESSION_CLOSE,
             transport_name='foo')
 
@@ -192,8 +192,8 @@ class TestSessionLengthMiddleware(VumiTestCase):
         yield self.redis.set('foo:+54321:session_created', '23.0')
 
         msg = self.mk_msg(
-            '+54321',
             '+12345',
+            '+54321',
             session_event=SESSION_CLOSE,
             transport_name='foo')
 
@@ -205,7 +205,7 @@ class TestSessionLengthMiddleware(VumiTestCase):
     @inlineCallbacks
     def test_incoming_message_session_start_no_transport_name(self):
         mw = yield self.mk_middleware(namespace_type='transport_name')
-        msg = self.mk_msg('+54321', '+12345', transport_name=None)
+        msg = self.mk_msg('+12345', '+54321', transport_name=None)
 
         with LogCatcher() as lc:
             result_msg = yield mw.handle_inbound(msg, "dummy_connector")
@@ -221,8 +221,8 @@ class TestSessionLengthMiddleware(VumiTestCase):
         mw = yield self.mk_middleware(namespace_type='transport_name')
 
         msg = self.mk_msg(
-            '+54321',
             '+12345',
+            '+54321',
             session_event=SESSION_CLOSE,
             transport_name=None)
 
@@ -240,8 +240,8 @@ class TestSessionLengthMiddleware(VumiTestCase):
         mw = yield self.mk_middleware(namespace_type='transport_name')
 
         msg = self.mk_msg(
-            '+54321',
             '+12345',
+            '+54321',
             session_event=SESSION_NONE,
             transport_name=None)
 
@@ -258,7 +258,7 @@ class TestSessionLengthMiddleware(VumiTestCase):
     def test_incoming_message_session_start_tag_namespace_type(self):
         mw = yield self.mk_middleware(namespace_type='tag')
 
-        msg = self.mk_msg('+54321', '+12345', tag=('pool1', 'tag1'))
+        msg = self.mk_msg('+12345', '+54321', tag=('pool1', 'tag1'))
         msg = yield mw.handle_inbound(msg, "dummy_connector")
 
         value = yield self.redis.get('pool1:tag1:+54321:session_created')
@@ -273,8 +273,8 @@ class TestSessionLengthMiddleware(VumiTestCase):
         yield self.redis.set('pool1:tag1:+54321:session_created', '23.0')
 
         msg = self.mk_msg(
-            '+54321',
             '+12345',
+            '+54321',
             session_event=SESSION_CLOSE,
             tag=('pool1', 'tag1'))
 
@@ -295,8 +295,8 @@ class TestSessionLengthMiddleware(VumiTestCase):
         yield self.redis.set('pool1:tag1:+54321:session_created', '23.0')
 
         msg = self.mk_msg(
-            '+54321',
             '+12345',
+            '+54321',
             session_event=SESSION_CLOSE,
             tag=('pool1', 'tag1'))
 
@@ -310,7 +310,7 @@ class TestSessionLengthMiddleware(VumiTestCase):
         mw = yield self.mk_middleware(namespace_type='tag')
 
         # create message with no tag
-        msg = self.mk_msg('+54321', '+12345')
+        msg = self.mk_msg('+12345', '+54321')
 
         with LogCatcher() as lc:
             result_msg = yield mw.handle_inbound(msg, "dummy_connector")
@@ -326,7 +326,7 @@ class TestSessionLengthMiddleware(VumiTestCase):
         mw = yield self.mk_middleware(namespace_type='tag')
 
         # create message with no tag
-        msg = self.mk_msg('+54321', '+12345', session_event=SESSION_CLOSE)
+        msg = self.mk_msg('+12345', '+54321', session_event=SESSION_CLOSE)
 
         with LogCatcher() as lc:
             result_msg = yield mw.handle_inbound(msg, "dummy_connector")
@@ -343,7 +343,7 @@ class TestSessionLengthMiddleware(VumiTestCase):
         yield self.redis.set('pool1:tag1:+54321:session_created', '23.0')
 
         # create message with no tag
-        msg = self.mk_msg('+54321', '+12345', session_event=SESSION_NONE)
+        msg = self.mk_msg('+12345', '+54321', session_event=SESSION_NONE)
 
         with LogCatcher() as lc:
             result_msg = yield mw.handle_inbound(msg, "dummy_connector")
@@ -357,41 +357,41 @@ class TestSessionLengthMiddleware(VumiTestCase):
     @inlineCallbacks
     def test_outgoing_message_session_start(self):
         mw = yield self.mk_middleware()
-        msg_start = self.mk_msg('+54321', '+12345')
+        msg_start = self.mk_msg('+12345', '+54321')
 
         msg = yield mw.handle_outbound(msg_start, "dummy_connector")
         value = yield self.redis.get('dummy_transport:+12345:session_created')
         self.assertEqual(value, '0.0')
         self.assertEqual(
-            msg['helper_metadata']['session']['session_start'], 0.0)
+                msg['helper_metadata']['session']['session_start'], 0.0)
 
     @inlineCallbacks
     def test_outgoing_message_session_end(self):
         mw = yield self.mk_middleware()
-        msg_end = self.mk_msg('+54321', '+12345', session_event=SESSION_CLOSE)
+        msg_end = self.mk_msg('+12345', '+54321', session_event=SESSION_CLOSE)
 
         msg = yield mw.handle_outbound(msg_end, "dummy_connector")
         self.assertEqual(
-            msg['helper_metadata']['session']['session_end'], 0.0)
+                msg['helper_metadata']['session']['session_end'], 0.0)
 
     @inlineCallbacks
     def test_outgoing_message_session_start_end(self):
         mw = yield self.mk_middleware()
-        msg_start = self.mk_msg('+54321', '+12345')
-        msg_end = self.mk_msg('+54321', '+12345', session_event=SESSION_CLOSE)
+        msg_start = self.mk_msg('+12345', '+54321')
+        msg_end = self.mk_msg('+12345', '+54321', session_event=SESSION_CLOSE)
 
         msg = yield mw.handle_outbound(msg_start, "dummy_connector")
         value = yield self.redis.get('dummy_transport:+12345:session_created')
         self.assertEqual(value, '0.0')
         self.assertEqual(
-            msg['helper_metadata']['session']['session_start'], 0.0)
+                msg['helper_metadata']['session']['session_start'], 0.0)
 
         self.clock.advance(1.0)
         msg = yield mw.handle_outbound(msg_end, "dummy_connector")
         value = yield self.redis.get('dummy_transport:+54321:session_created')
         self.assertTrue(value is None)
         self.assertEqual(
-            msg['helper_metadata']['session']['session_start'], 0.0)
+                msg['helper_metadata']['session']['session_start'], 0.0)
         self.assertEqual(
             msg['helper_metadata']['session']['session_end'], 1.0)
 
@@ -400,8 +400,8 @@ class TestSessionLengthMiddleware(VumiTestCase):
         mw = yield self.mk_middleware()
 
         msg = self.mk_msg(
-            '+54321',
             '+12345',
+            '+54321',
             session_start=23,
             session_event=SESSION_NEW)
 
@@ -419,8 +419,8 @@ class TestSessionLengthMiddleware(VumiTestCase):
         mw = yield self.mk_middleware()
 
         msg = self.mk_msg(
-            '+54321',
             '+12345',
+            '+54321',
             session_start=23,
             session_end=32,
             session_event=SESSION_CLOSE)
@@ -438,8 +438,8 @@ class TestSessionLengthMiddleware(VumiTestCase):
         mw = yield self.mk_middleware()
 
         msg = self.mk_msg(
-            '+54321',
             '+12345',
+            '+54321',
             session_start=23,
             session_event=SESSION_NONE)
 
@@ -452,7 +452,7 @@ class TestSessionLengthMiddleware(VumiTestCase):
     def test_outgoing_message_session_start_no_transport_name(self):
         mw = yield self.mk_middleware(namespace_type='transport_name')
 
-        msg = self.mk_msg('+54321', '+12345', transport_name=None)
+        msg = self.mk_msg('+12345', '+54321', transport_name=None)
 
         with LogCatcher() as lc:
             result_msg = yield mw.handle_outbound(msg, "dummy_connector")
@@ -468,8 +468,8 @@ class TestSessionLengthMiddleware(VumiTestCase):
         mw = yield self.mk_middleware(namespace_type='transport_name')
 
         msg = self.mk_msg(
-            '+54321',
             '+12345',
+            '+54321',
             session_event=SESSION_CLOSE,
             transport_name=None)
 
@@ -487,8 +487,8 @@ class TestSessionLengthMiddleware(VumiTestCase):
         mw = yield self.mk_middleware(namespace_type='transport_name')
 
         msg = self.mk_msg(
-            '+54321',
             '+12345',
+            '+54321',
             session_event=SESSION_NONE,
             transport_name=None)
 
@@ -505,7 +505,7 @@ class TestSessionLengthMiddleware(VumiTestCase):
     def test_outgoing_message_session_start_tag_namespace_type(self):
         mw = yield self.mk_middleware(namespace_type='tag')
 
-        msg = self.mk_msg('+54321', '+12345', tag=('pool1', 'tag1'))
+        msg = self.mk_msg('+12345', '+54321', tag=('pool1', 'tag1'))
         msg = yield mw.handle_outbound(msg, "dummy_connector")
 
         value = yield self.redis.get('pool1:tag1:+12345:session_created')
@@ -520,8 +520,8 @@ class TestSessionLengthMiddleware(VumiTestCase):
         yield self.redis.set('pool1:tag1:+12345:session_created', '23.0')
 
         msg = self.mk_msg(
-            '+54321',
             '+12345',
+            '+54321',
             session_event=SESSION_CLOSE,
             tag=('pool1', 'tag1'))
 
@@ -542,8 +542,8 @@ class TestSessionLengthMiddleware(VumiTestCase):
         yield self.redis.set('pool1:tag1:+12345:session_created', '23.0')
 
         msg = self.mk_msg(
-            '+54321',
             '+12345',
+            '+54321',
             session_event=SESSION_NONE,
             tag=('pool1', 'tag1'))
 
@@ -557,7 +557,7 @@ class TestSessionLengthMiddleware(VumiTestCase):
         mw = yield self.mk_middleware(namespace_type='tag')
 
         # create message with no tag
-        msg = self.mk_msg('+54321', '+12345')
+        msg = self.mk_msg('+12345', '+54321')
 
         with LogCatcher() as lc:
             result_msg = yield mw.handle_outbound(msg, "dummy_connector")
@@ -573,7 +573,7 @@ class TestSessionLengthMiddleware(VumiTestCase):
         mw = yield self.mk_middleware(namespace_type='tag')
 
         # create message with no tag
-        msg = self.mk_msg('+54321', '+12345', session_event=SESSION_CLOSE)
+        msg = self.mk_msg('+12345', '+54321', session_event=SESSION_CLOSE)
 
         with LogCatcher() as lc:
             result_msg = yield mw.handle_outbound(msg, "dummy_connector")
@@ -590,7 +590,7 @@ class TestSessionLengthMiddleware(VumiTestCase):
         yield self.redis.set('pool1:tag1:+54321:session_created', '23.0')
 
         # create message with no tag
-        msg = self.mk_msg('+54321', '+12345', session_event=SESSION_NONE)
+        msg = self.mk_msg('+12345', '+54321', session_event=SESSION_NONE)
 
         with LogCatcher() as lc:
             result_msg = yield mw.handle_outbound(msg, "dummy_connector")
@@ -604,7 +604,7 @@ class TestSessionLengthMiddleware(VumiTestCase):
     @inlineCallbacks
     def test_redis_key_timeout(self):
         mw = yield self.mk_middleware()
-        msg_start = self.mk_msg('+54321', '+12345')
+        msg_start = self.mk_msg('+12345', '+54321')
 
         yield mw.handle_inbound(msg_start, "dummy_connector")
         ttl = yield self.redis.ttl('dummy_transport::+54321:session_created')
@@ -613,7 +613,7 @@ class TestSessionLengthMiddleware(VumiTestCase):
     @inlineCallbacks
     def test_redis_key_custom_timeout(self):
         mw = yield self.mk_middleware(timeout=20)
-        msg_start = self.mk_msg('+54321', '+12345')
+        msg_start = self.mk_msg('+12345', '+54321')
 
         yield mw.handle_inbound(msg_start, "dummy_connector")
         ttl = yield self.redis.ttl('dummy_transport:+54321:session_created')
@@ -622,7 +622,7 @@ class TestSessionLengthMiddleware(VumiTestCase):
     @inlineCallbacks
     def test_custom_message_field_name(self):
         mw = yield self.mk_middleware(field_name='foobar')
-        msg_start = self.mk_msg('+54321', '+12345')
+        msg_start = self.mk_msg('+12345', '+54321')
 
         msg = yield mw.handle_inbound(msg_start, "dummy_connector")
         self.assertEqual(
