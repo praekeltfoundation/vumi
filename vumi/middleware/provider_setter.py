@@ -1,10 +1,17 @@
 # -*- test-case-name: vumi.middleware.tests.test_provider_setter -*-
 
-from confmodel import Config
 from confmodel.fields import ConfigDict, ConfigText
 
+from vumi import log
+from vumi.errors import VumiError
 from vumi.middleware.base import TransportMiddleware, BaseMiddlewareConfig
 from vumi.utils import normalize_msisdn
+
+
+class ProviderSettingMiddlewareError(VumiError):
+    """
+    Raised when provider setting middleware encounters an error.
+    """
 
 
 class StaticProviderSetterMiddlewareConfig(BaseMiddlewareConfig):
@@ -118,9 +125,14 @@ class AddressPrefixProviderSettingMiddleware(TransportMiddleware):
         return addr
 
     def get_provider(self, addr):
-        from_addr = self.normalize_addr(addr)
+        if addr is None:
+            log.error(ProviderSettingMiddlewareError(
+                "Address for determining message provider cannot be None,"
+                " skipping message"))
+            return None
+        addr = self.normalize_addr(addr)
         for prefix, provider in self.provider_prefixes:
-            if from_addr.startswith(prefix):
+            if addr.startswith(prefix):
                 return provider
         return None
 
