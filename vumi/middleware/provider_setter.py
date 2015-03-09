@@ -1,6 +1,5 @@
 # -*- test-case-name: vumi.middleware.tests.test_provider_setter -*-
 
-from confmodel import Config
 from confmodel.fields import ConfigDict, ConfigText
 
 from vumi.middleware.base import TransportMiddleware, BaseMiddlewareConfig
