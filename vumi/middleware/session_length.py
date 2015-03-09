@@ -6,10 +6,17 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet import reactor
 
 from vumi import log
+from vumi.errors import VumiError
 from vumi.message import TransportUserMessage
 from vumi.middleware.base import BaseMiddleware, BaseMiddlewareConfig
 from vumi.middleware.tagger import TaggingMiddleware
 from vumi.persist.txredis_manager import TxRedisManager
+
+
+class SessionLengthMiddlewareError(VumiError):
+    """
+    Raised when the SessionLengthMiddleware encounters unexcepted messages.
+    """
 
 
 class SessionLengthMiddlewareConfig(BaseMiddlewareConfig):
@@ -162,6 +169,12 @@ class SessionLengthMiddleware(BaseMiddleware):
                 "skipping message")
             returnValue(message)
             return
+
+        if self._key_address(message, direction) is None:
+            log.error(SessionLengthMiddlewareError(
+                "Session length key address cannot be None, "
+                "skipping message"))
+            returnValue(message)
 
         redis_key = self._key(message, direction)
 

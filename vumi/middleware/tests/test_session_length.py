@@ -4,7 +4,8 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet.task import Clock
 
 from vumi.message import TransportUserMessage
-from vumi.middleware.session_length import SessionLengthMiddleware
+from vumi.middleware.session_length import (
+    SessionLengthMiddleware, SessionLengthMiddlewareError)
 from vumi.middleware.tagger import TaggingMiddleware
 from vumi.tests.utils import LogCatcher
 from vumi.tests.helpers import VumiTestCase, PersistenceHelper
@@ -627,3 +628,25 @@ class TestSessionLengthMiddleware(VumiTestCase):
         msg = yield mw.handle_inbound(msg_start, "dummy_connector")
         self.assertEqual(
             msg['helper_metadata']['foobar']['session_start'], 0.0)
+
+    @inlineCallbacks
+    def test_incoming_message_session_no_from_addr(self):
+        mw = yield self.mk_middleware()
+        msg_start = self.mk_msg('+12345', None)
+        msg = yield mw.handle_inbound(msg_start, "dummy_connector")
+        self.assertEqual(msg, msg_start)
+        [err] = self.flushLoggedErrors(SessionLengthMiddlewareError)
+        self.assertEqual(
+            str(err.value),
+            "Session length key address cannot be None, skipping message")
+
+    @inlineCallbacks
+    def test_outgoing_message_session_no_to_addr(self):
+        mw = yield self.mk_middleware()
+        msg_start = self.mk_msg(None, '+54321')
+        msg = yield mw.handle_outbound(msg_start, "dummy_connector")
+        self.assertEqual(msg, msg_start)
+        [err] = self.flushLoggedErrors(SessionLengthMiddlewareError)
+        self.assertEqual(
+            str(err.value),
+            "Session length key address cannot be None, skipping message")
