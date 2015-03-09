@@ -162,9 +162,9 @@ class SessionLengthMiddleware(BaseMiddleware):
     def _process_message(self, message, direction):
         namespace = self.namespace_handler(message)
         if namespace is None:
-            log.warning(
+            log.error(SessionLengthMiddlewareError(
                 "Session length redis namespace cannot be None, "
-                "skipping message")
+                "skipping message"))
             returnValue(message)
 
         key_addr = self._key_address(message, direction)
