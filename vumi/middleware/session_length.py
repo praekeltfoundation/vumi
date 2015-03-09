@@ -6,10 +6,17 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet import reactor
 
 from vumi import log
+from vumi.errors import VumiError
 from vumi.message import TransportUserMessage
 from vumi.middleware.base import BaseMiddleware, BaseMiddlewareConfig
 from vumi.middleware.tagger import TaggingMiddleware
 from vumi.persist.txredis_manager import TxRedisManager
+
+
+class SessionLengthMiddlewareError(VumiError):
+    """
+    Raised when the SessionLengthMiddleware encounters unexcepted messages.
+    """
 
 
 class SessionLengthMiddlewareConfig(BaseMiddlewareConfig):
@@ -103,11 +110,8 @@ class SessionLengthMiddleware(BaseMiddleware):
         elif direction == self.DIRECTION_OUTBOUND:
             return message['to_addr']
 
-    def _key(self, message, direction):
-        return ':'.join((
-            self.namespace_handler(message),
-            self._key_address(message, direction),
-            'session_created'))
+    def _key(self, namespace, key_addr):
+        return ':'.join((namespace, key_addr, 'session_created'))
 
     def _set_metadata(self, message, key, value):
         metadata = message['helper_metadata'].setdefault(self.field_name, {})
@@ -156,14 +160,21 @@ class SessionLengthMiddleware(BaseMiddleware):
 
     @inlineCallbacks
     def _process_message(self, message, direction):
-        if self.namespace_handler(message) is None:
-            log.warning(
+        namespace = self.namespace_handler(message)
+        if namespace is None:
+            log.error(SessionLengthMiddlewareError(
                 "Session length redis namespace cannot be None, "
-                "skipping message")
+                "skipping message"))
             returnValue(message)
-            return
 
-        redis_key = self._key(message, direction)
+        key_addr = self._key_address(message, direction)
+        if key_addr is None:
+            log.error(SessionLengthMiddlewareError(
+                "Session length key address cannot be None, "
+                "skipping message"))
+            returnValue(message)
+
+        redis_key = self._key(namespace, key_addr)
 
         if message.get('session_event') == self.SESSION_NEW:
             yield self._handle_start(message, redis_key)
