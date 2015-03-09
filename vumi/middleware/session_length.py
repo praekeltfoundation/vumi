@@ -99,9 +99,9 @@ class SessionLengthMiddleware(BaseMiddleware):
 
     def _key_address(self, message, direction):
         if direction == self.DIRECTION_INBOUND:
-            return message['from_addr']
-        elif direction == self.DIRECTION_OUTBOUND:
             return message['to_addr']
+        elif direction == self.DIRECTION_OUTBOUND:
+            return message['from_addr']
 
     def _key(self, message, direction):
         return ':'.join((
@@ -161,7 +161,6 @@ class SessionLengthMiddleware(BaseMiddleware):
                 "Session length redis namespace cannot be None, "
                 "skipping message")
             returnValue(message)
-            return
 
         redis_key = self._key(message, direction)
 
