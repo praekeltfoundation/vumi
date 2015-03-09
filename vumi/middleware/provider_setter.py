@@ -117,9 +117,9 @@ class AddressPrefixProviderSettingMiddleware(TransportMiddleware):
         return addr
 
     def get_provider(self, addr):
-        from_addr = self.normalize_addr(addr)
+        addr = self.normalize_addr(addr)
         for prefix, provider in self.provider_prefixes:
-            if from_addr.startswith(prefix):
+            if addr.startswith(prefix):
                 return provider
         return None
 
