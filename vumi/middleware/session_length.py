@@ -166,7 +166,6 @@ class SessionLengthMiddleware(BaseMiddleware):
                 "Session length redis namespace cannot be None, "
                 "skipping message")
             returnValue(message)
-            return
 
         key_addr = self._key_address(message, direction)
         if key_addr is None:
