@@ -429,7 +429,18 @@ class ModelTestMixin(object):
         yield simple_model("yy000001", a=98, b=u'def').save()
         yield simple_model("yy000002", a=98, b=u'ghi').save()
 
-        search = lambda q: simple_model.real_search(q, rows=11)
+        @inlineCallbacks
+        def search(q):
+            results = []
+            while True:
+                new_results = yield simple_model.real_search(
+                    q, rows=11, start=len(results))
+                self.assertTrue(len(new_results) <= 11)
+                results.extend(new_results)
+                if len(new_results) < 11:
+                    break
+            returnValue(results)
+
         yield self.assert_search_results(keys, search, 'a:99')
 
     @Manager.calls_manager
