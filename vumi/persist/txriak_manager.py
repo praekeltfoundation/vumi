@@ -324,21 +324,12 @@ class TxRiakManager(Manager):
         d.addCallback(lambda r: [doc["id"] for doc in r["docs"]])
         return d
 
-    @inlineCallbacks
     def real_search(self, modelcls, query, rows=None, start=None):
         rows = 1000 if rows is None else rows
+        start = 0 if start is None else start
         bucket_name = self.bucket_name(modelcls)
         bucket = self.client.bucket(bucket_name)
-        if start is not None:
-            keys = yield self._search_iteration(bucket, query, rows, start)
-            returnValue(keys)
-        keys = []
-        new_keys = yield self._search_iteration(bucket, query, rows, 0)
-        while new_keys:
-            keys.extend(new_keys)
-            new_keys = yield self._search_iteration(
-                bucket, query, rows, len(keys))
-        returnValue(keys)
+        return self._search_iteration(bucket, query, rows, start)
 
     def riak_enable_search(self, modelcls):
         bucket_name = self.bucket_name(modelcls)
