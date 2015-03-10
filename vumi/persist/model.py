@@ -474,6 +474,19 @@ class Model(object):
         """
         Performs a real riak search, does no inspection on the given query.
 
+        :param Manager manager:
+            The model manager to use for the query.
+        :param str query:
+            The query to perform.
+        :param int rows:
+            The maximum number of search results to return. The default
+            of ``None`` indicates a backend specific number of rows
+            (usually 1000).
+        :param int start:
+            Numer of the first search result to return. The default of
+            ``None`` is equivalent to ``0`` and starts with the first
+            search result.
+
         :returns: list of keys.
         """
         return manager.real_search(cls, query, rows=rows, start=start)
