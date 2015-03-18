@@ -398,6 +398,18 @@ class TransportUserMessageTest(TransportMessageTestMixin, VumiTestCase):
         self.assertEqual(msg['transport_metadata'], {})
         self.assertEqual(msg['helper_metadata'], {})
 
+    def test_transport_user_message_send_with_session_event(self):
+        msg = TransportUserMessage.send(
+            '123', 'Hi!', session_event=TransportUserMessage.SESSION_NEW)
+        self.assertEqual(msg['to_addr'], '123')
+        self.assertEqual(msg['from_addr'], None)
+        self.assertEqual(msg['session_event'], msg.SESSION_NEW)
+        self.assertEqual(msg['in_reply_to'], None)
+        self.assertEqual(msg['transport_name'], None)
+        self.assertEqual(msg['transport_type'], None)
+        self.assertEqual(msg['transport_metadata'], {})
+        self.assertEqual(msg['helper_metadata'], {})
+
 
 class TransportEventTest(TransportMessageTestMixin, VumiTestCase):
     def make_message(self, **extra_fields):
