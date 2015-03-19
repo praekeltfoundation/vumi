@@ -285,3 +285,8 @@ class Manager(object):
     expire = RedisCall(['key', 'seconds'])
     persist = RedisCall(['key'])
     ttl = RedisCall(['key'])
+
+    # HyperLogLog operations
+
+    pfadd = RedisCall(['key'], vararg='values')
+    pfcount = RedisCall(['key'])

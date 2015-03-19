@@ -523,6 +523,22 @@ class FakeRedisTestMixin(object):
         redis = yield self.get_redis()
         yield self.assert_redis_op(redis, [None, []], 'scan', None)
 
+    @inlineCallbacks
+    def test_pfadd_and_pfcount(self):
+        """
+        We can't test these two things separately, so test them together.
+        """
+        redis = yield self.get_redis()
+        yield self.assert_redis_op(redis, 1, 'pfadd', 'hll1', 'a')
+        yield self.assert_redis_op(redis, 1, 'pfcount', 'hll1')
+        yield self.assert_redis_op(redis, 0, 'pfadd', 'hll1', 'a')
+        yield self.assert_redis_op(redis, 1, 'pfcount', 'hll1')
+
+        yield self.assert_redis_op(redis, 1, 'pfadd', 'hll2', 'a', 'b')
+        yield self.assert_redis_op(redis, 2, 'pfcount', 'hll2')
+        yield self.assert_redis_op(redis, 0, 'pfadd', 'hll2', 'a', 'b')
+        yield self.assert_redis_op(redis, 2, 'pfcount', 'hll2')
+
 
 class FakeRedisUnverifiedTestMixin(object):
     """
@@ -579,6 +595,20 @@ class FakeRedisUnverifiedTestMixin(object):
 
         self.assert_redis_op(redis, ['31', result_keys[5:15]], 'scan', '10')
         self.assert_redis_op(redis, [None, result_keys[15:]], 'scan', '31')
+
+    @inlineCallbacks
+    def test_pfadd_and_pfcount_large(self):
+        """
+        for large sets, we get approximate counts. Redis and hyperloglog use
+        different hash functions, so we get different approximations out of
+        them and can't verify the results.
+        """
+        redis = yield self.get_redis()
+        values = ['v%s' % i for i in xrange(1000)]
+        yield self.assert_redis_op(redis, 1, 'pfadd', 'hll1', *values)
+        yield self.assert_redis_op(redis, 998, 'pfcount', 'hll1')
+        yield self.assert_redis_op(redis, 0, 'pfadd', 'hll1', *values)
+        yield self.assert_redis_op(redis, 998, 'pfcount', 'hll1')
 
 
 class TestFakeRedis(FakeRedisUnverifiedTestMixin, FakeRedisTestMixin,
