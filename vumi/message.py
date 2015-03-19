@@ -382,11 +382,11 @@ class TransportUserMessage(TransportMessage):
         kw.setdefault('from_addr', None)
         kw.setdefault('transport_name', None)
         kw.setdefault('transport_type', None)
+        kw.setdefault('session_event', cls.SESSION_NONE)
         out_msg = cls(
             to_addr=to_addr,
             in_reply_to=None,
             content=content,
-            session_event=cls.SESSION_NONE,
             **kw)
         return out_msg
 

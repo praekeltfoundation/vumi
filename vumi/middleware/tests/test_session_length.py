@@ -4,7 +4,10 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet.task import Clock
 
 from vumi.message import TransportUserMessage
-from vumi.middleware.session_length import SessionLengthMiddleware
+from vumi.middleware.session_length import (
+    SessionLengthMiddleware, SessionLengthMiddlewareError)
+from vumi.middleware.tagger import TaggingMiddleware
+from vumi.tests.utils import LogCatcher
 from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 
 SESSION_NEW, SESSION_CLOSE, SESSION_NONE = (
@@ -30,12 +33,16 @@ class TestSessionLengthMiddleware(VumiTestCase):
         returnValue(mw)
 
     def mk_msg(self, to_addr, from_addr, session_event=SESSION_NEW,
-               session_start=None, session_end=None):
+               session_start=None, session_end=None, tag=None,
+               transport_name='dummy_transport'):
         msg = TransportUserMessage(
             to_addr=to_addr, from_addr=from_addr,
-            transport_name="dummy_transport",
+            transport_name=transport_name,
             transport_type="dummy_transport_type",
             session_event=session_event)
+
+        if tag is not None:
+            TaggingMiddleware.add_tag_to_msg(msg, tag)
 
         if session_start is not None:
             self._set_metadata(msg, 'session_start', session_start)
@@ -49,6 +56,10 @@ class TestSessionLengthMiddleware(VumiTestCase):
         metadata = msg['helper_metadata'].setdefault(metadata_field_name, {})
         metadata[name] = value
 
+    def assert_middleware_error(self, msg):
+        [err] = self.flushLoggedErrors(SessionLengthMiddlewareError)
+        self.assertEqual(str(err.value), msg)
+
     @inlineCallbacks
     def test_incoming_message_session_start(self):
         mw = yield self.mk_middleware()
@@ -57,8 +68,9 @@ class TestSessionLengthMiddleware(VumiTestCase):
         msg = yield mw.handle_inbound(msg_start, "dummy_connector")
         value = yield self.redis.get('dummy_transport:+54321:session_created')
         self.assertEqual(value, '0.0')
+
         self.assertEqual(
-                msg['helper_metadata']['session']['session_start'], 0.0)
+            msg['helper_metadata']['session']['session_start'], 0.0)
 
     @inlineCallbacks
     def test_incoming_message_session_end(self):
@@ -67,7 +79,7 @@ class TestSessionLengthMiddleware(VumiTestCase):
 
         msg = yield mw.handle_inbound(msg_end, "dummy_connector")
         self.assertEqual(
-                msg['helper_metadata']['session']['session_end'], 0.0)
+            msg['helper_metadata']['session']['session_end'], 0.0)
 
     @inlineCallbacks
     def test_incoming_message_session_start_end(self):
@@ -101,14 +113,14 @@ class TestSessionLengthMiddleware(VumiTestCase):
             session_start=23,
             session_event=SESSION_NEW)
 
-        yield self.redis.set('dummy_transport:+12345:session_created', '23')
+        yield self.redis.set('dummy_transport:+12345:session_created', '23.0')
 
         msg = yield mw.handle_inbound(msg, "dummy_connector")
         value = yield self.redis.get('dummy_transport:+12345:session_created')
-        self.assertEqual(value, '23')
+        self.assertEqual(value, '23.0')
 
         self.assertEqual(
-            msg['helper_metadata']['session']['session_start'], 23)
+            msg['helper_metadata']['session']['session_start'], 23.0)
 
     @inlineCallbacks
     def test_incoming_message_session_end_no_overwrite(self):
@@ -117,17 +129,17 @@ class TestSessionLengthMiddleware(VumiTestCase):
         msg = self.mk_msg(
             '+12345',
             '+54321',
-            session_start=23,
-            session_end=32,
+            session_start=23.0,
+            session_end=32.0,
             session_event=SESSION_CLOSE)
 
         msg = yield mw.handle_inbound(msg, "dummy_connector")
 
         self.assertEqual(
-            msg['helper_metadata']['session']['session_start'], 23)
+            msg['helper_metadata']['session']['session_start'], 23.0)
 
         self.assertEqual(
-            msg['helper_metadata']['session']['session_end'], 32)
+            msg['helper_metadata']['session']['session_end'], 32.0)
 
     @inlineCallbacks
     def test_incoming_message_session_none_no_overwrite(self):
@@ -136,45 +148,204 @@ class TestSessionLengthMiddleware(VumiTestCase):
         msg = self.mk_msg(
             '+12345',
             '+54321',
-            session_start=23,
+            session_start=23.0,
             session_event=SESSION_NONE)
 
         msg = yield mw.handle_inbound(msg, "dummy_connector")
 
         self.assertEqual(
-            msg['helper_metadata']['session']['session_start'], 23)
+            msg['helper_metadata']['session']['session_start'], 23.0)
 
     @inlineCallbacks
-    def test_incoming_message_session_start_custom_key(self):
-        mw = yield self.mk_middleware(key_namespace='foo')
+    def test_incoming_message_session_start_transport_namespace_type(self):
+        mw = yield self.mk_middleware(namespace_type='transport_name')
 
-        msg = self.mk_msg('+12345', '+54321')
+        msg = self.mk_msg('+12345', '+54321', transport_name='foo')
         msg = yield mw.handle_inbound(msg, "dummy_connector")
 
         value = yield self.redis.get('foo:+54321:session_created')
         self.assertEqual(value, '0.0')
 
+        self.assertEqual(
+            msg['helper_metadata']['session']['session_start'], 0.0)
+
     @inlineCallbacks
-    def test_incoming_message_session_end_custom_key(self):
-        mw = yield self.mk_middleware(key_namespace='foo')
+    def test_incoming_message_session_end_transport_namespace_type(self):
+        mw = yield self.mk_middleware(namespace_type='transport_name')
         yield self.redis.set('foo:+54321:session_created', '23.0')
 
-        msg = self.mk_msg('+12345', '+54321', session_event=SESSION_CLOSE)
+        msg = self.mk_msg(
+            '+12345',
+            '+54321',
+            session_event=SESSION_CLOSE,
+            transport_name='foo')
+
         msg = yield mw.handle_inbound(msg, "dummy_connector")
 
         value = yield self.redis.get('foo:+54321:session_created')
         self.assertEqual(value, None)
 
+        self.assertEqual(
+            msg['helper_metadata']['session']['session_start'], 23.0)
+
+        self.assertEqual(
+            msg['helper_metadata']['session']['session_end'], 0.0)
+
     @inlineCallbacks
-    def test_incoming_message_session_none_custom_key(self):
-        mw = yield self.mk_middleware(key_namespace='foo')
+    def test_incoming_message_session_none_transport_namespace_type(self):
+        mw = yield self.mk_middleware(namespace_type='transport_name')
         yield self.redis.set('foo:+54321:session_created', '23.0')
 
-        msg = self.mk_msg('+12345', '+54321', session_event=SESSION_NONE)
+        msg = self.mk_msg(
+            '+12345',
+            '+54321',
+            session_event=SESSION_CLOSE,
+            transport_name='foo')
+
         msg = yield mw.handle_inbound(msg, "dummy_connector")
 
         self.assertEqual(
             msg['helper_metadata']['session']['session_start'], 23.0)
+
+    @inlineCallbacks
+    def test_incoming_message_session_start_no_transport_name(self):
+        mw = yield self.mk_middleware(namespace_type='transport_name')
+        msg = self.mk_msg('+12345', '+54321', transport_name=None)
+
+        result_msg = yield mw.handle_inbound(msg, "dummy_connector")
+        self.assert_middleware_error(
+            "Session length redis namespace cannot be None, skipping message")
+
+        self.assertEqual(msg, result_msg)
+        self.assertTrue('session' not in msg['helper_metadata'])
+
+    @inlineCallbacks
+    def test_incoming_message_session_end_no_transport_name(self):
+        mw = yield self.mk_middleware(namespace_type='transport_name')
+
+        msg = self.mk_msg(
+            '+12345',
+            '+54321',
+            session_event=SESSION_CLOSE,
+            transport_name=None)
+
+        result_msg = yield mw.handle_inbound(msg, "dummy_connector")
+        self.assert_middleware_error(
+            "Session length redis namespace cannot be None, skipping message")
+
+        self.assertEqual(msg, result_msg)
+        self.assertTrue('session' not in msg['helper_metadata'])
+
+    @inlineCallbacks
+    def test_incoming_message_session_none_no_transport_name(self):
+        mw = yield self.mk_middleware(namespace_type='transport_name')
+
+        msg = self.mk_msg(
+            '+12345',
+            '+54321',
+            session_event=SESSION_NONE,
+            transport_name=None)
+
+        result_msg = yield mw.handle_inbound(msg, "dummy_connector")
+        self.assert_middleware_error(
+            "Session length redis namespace cannot be None, skipping message")
+
+        self.assertEqual(msg, result_msg)
+        self.assertTrue('session' not in msg['helper_metadata'])
+
+    @inlineCallbacks
+    def test_incoming_message_session_start_tag_namespace_type(self):
+        mw = yield self.mk_middleware(namespace_type='tag')
+
+        msg = self.mk_msg('+12345', '+54321', tag=('pool1', 'tag1'))
+        msg = yield mw.handle_inbound(msg, "dummy_connector")
+
+        value = yield self.redis.get('pool1:tag1:+54321:session_created')
+        self.assertEqual(value, '0.0')
+
+        self.assertEqual(
+            msg['helper_metadata']['session']['session_start'], 0.0)
+
+    @inlineCallbacks
+    def test_incoming_message_session_end_tag_namespace_type(self):
+        mw = yield self.mk_middleware(namespace_type='tag')
+        yield self.redis.set('pool1:tag1:+54321:session_created', '23.0')
+
+        msg = self.mk_msg(
+            '+12345',
+            '+54321',
+            session_event=SESSION_CLOSE,
+            tag=('pool1', 'tag1'))
+
+        msg = yield mw.handle_inbound(msg, "dummy_connector")
+
+        value = yield self.redis.get('pool1:tag1:+54321:session_created')
+        self.assertEqual(value, None)
+
+        self.assertEqual(
+            msg['helper_metadata']['session']['session_start'], 23.0)
+
+        self.assertEqual(
+            msg['helper_metadata']['session']['session_end'], 0.0)
+
+    @inlineCallbacks
+    def test_incoming_message_session_none_tag_namespace_type(self):
+        mw = yield self.mk_middleware(namespace_type='tag')
+        yield self.redis.set('pool1:tag1:+54321:session_created', '23.0')
+
+        msg = self.mk_msg(
+            '+12345',
+            '+54321',
+            session_event=SESSION_CLOSE,
+            tag=('pool1', 'tag1'))
+
+        msg = yield mw.handle_inbound(msg, "dummy_connector")
+
+        self.assertEqual(
+            msg['helper_metadata']['session']['session_start'], 23.0)
+
+    @inlineCallbacks
+    def test_incoming_message_session_start_no_tag(self):
+        mw = yield self.mk_middleware(namespace_type='tag')
+
+        # create message with no tag
+        msg = self.mk_msg('+12345', '+54321')
+
+        result_msg = yield mw.handle_inbound(msg, "dummy_connector")
+        self.assert_middleware_error(
+            "Session length redis namespace cannot be None, skipping message")
+
+        self.assertEqual(msg, result_msg)
+        self.assertTrue('session' not in msg['helper_metadata'])
+
+    @inlineCallbacks
+    def test_incoming_message_session_end_tag_no_tag(self):
+        mw = yield self.mk_middleware(namespace_type='tag')
+
+        # create message with no tag
+        msg = self.mk_msg('+12345', '+54321', session_event=SESSION_CLOSE)
+
+        result_msg = yield mw.handle_inbound(msg, "dummy_connector")
+        self.assert_middleware_error(
+            "Session length redis namespace cannot be None, skipping message")
+
+        self.assertEqual(msg, result_msg)
+        self.assertTrue('session' not in msg['helper_metadata'])
+
+    @inlineCallbacks
+    def test_incoming_message_session_none_tag_no_tag(self):
+        mw = yield self.mk_middleware(namespace_type='tag')
+        yield self.redis.set('pool1:tag1:+54321:session_created', '23.0')
+
+        # create message with no tag
+        msg = self.mk_msg('+12345', '+54321', session_event=SESSION_NONE)
+
+        result_msg = yield mw.handle_inbound(msg, "dummy_connector")
+        self.assert_middleware_error(
+            "Session length redis namespace cannot be None, skipping message")
+
+        self.assertEqual(msg, result_msg)
+        self.assertTrue('session' not in msg['helper_metadata'])
 
     @inlineCallbacks
     def test_outgoing_message_session_start(self):
@@ -271,36 +442,145 @@ class TestSessionLengthMiddleware(VumiTestCase):
             msg['helper_metadata']['session']['session_start'], 23)
 
     @inlineCallbacks
-    def test_outgoing_message_session_start_custom_key(self):
-        mw = yield self.mk_middleware(key_namespace='foo')
+    def test_outgoing_message_session_start_no_transport_name(self):
+        mw = yield self.mk_middleware(namespace_type='transport_name')
 
-        msg = self.mk_msg('+12345', '+54321')
+        msg = self.mk_msg('+12345', '+54321', transport_name=None)
+
+        result_msg = yield mw.handle_outbound(msg, "dummy_connector")
+        self.assert_middleware_error(
+            "Session length redis namespace cannot be None, skipping message")
+
+        self.assertEqual(msg, result_msg)
+        self.assertTrue('session' not in msg['helper_metadata'])
+
+    @inlineCallbacks
+    def test_outgoing_message_session_end_no_transport_name(self):
+        mw = yield self.mk_middleware(namespace_type='transport_name')
+
+        msg = self.mk_msg(
+            '+12345',
+            '+54321',
+            session_event=SESSION_CLOSE,
+            transport_name=None)
+
+        result_msg = yield mw.handle_outbound(msg, "dummy_connector")
+        self.assert_middleware_error(
+            "Session length redis namespace cannot be None, skipping message")
+
+        self.assertEqual(msg, result_msg)
+        self.assertTrue('session' not in msg['helper_metadata'])
+
+    @inlineCallbacks
+    def test_outgoing_message_session_none_no_transport_name(self):
+        mw = yield self.mk_middleware(namespace_type='transport_name')
+
+        msg = self.mk_msg(
+            '+12345',
+            '+54321',
+            session_event=SESSION_NONE,
+            transport_name=None)
+
+        result_msg = yield mw.handle_outbound(msg, "dummy_connector")
+        self.assert_middleware_error(
+            "Session length redis namespace cannot be None, skipping message")
+
+        self.assertEqual(msg, result_msg)
+        self.assertTrue('session' not in msg['helper_metadata'])
+
+    @inlineCallbacks
+    def test_outgoing_message_session_start_tag_namespace_type(self):
+        mw = yield self.mk_middleware(namespace_type='tag')
+
+        msg = self.mk_msg('+12345', '+54321', tag=('pool1', 'tag1'))
         msg = yield mw.handle_outbound(msg, "dummy_connector")
 
-        value = yield self.redis.get('foo:+12345:session_created')
+        value = yield self.redis.get('pool1:tag1:+12345:session_created')
         self.assertEqual(value, '0.0')
 
-    @inlineCallbacks
-    def test_outgoing_message_session_end_custom_key(self):
-        mw = yield self.mk_middleware(key_namespace='foo')
-        yield self.redis.set('foo:+12345:session_created', '23.0')
+        self.assertEqual(
+            msg['helper_metadata']['session']['session_start'], 0.0)
 
-        msg = self.mk_msg('+12345', '+54321', session_event=SESSION_CLOSE)
+    @inlineCallbacks
+    def test_outgoing_message_session_end_tag_namespace_type(self):
+        mw = yield self.mk_middleware(namespace_type='tag')
+        yield self.redis.set('pool1:tag1:+12345:session_created', '23.0')
+
+        msg = self.mk_msg(
+            '+12345',
+            '+54321',
+            session_event=SESSION_CLOSE,
+            tag=('pool1', 'tag1'))
+
         msg = yield mw.handle_outbound(msg, "dummy_connector")
 
-        value = yield self.redis.get('foo:+12345:session_created')
+        value = yield self.redis.get('tag1:+12345:session_created')
         self.assertEqual(value, None)
 
-    @inlineCallbacks
-    def test_outgoing_message_session_none_custom_key(self):
-        mw = yield self.mk_middleware(key_namespace='foo')
-        yield self.redis.set('foo:+12345:session_created', '23.0')
+        self.assertEqual(
+            msg['helper_metadata']['session']['session_start'], 23.0)
 
-        msg = self.mk_msg('+12345', '+54321', session_event=SESSION_NONE)
+        self.assertEqual(
+            msg['helper_metadata']['session']['session_end'], 0.0)
+
+    @inlineCallbacks
+    def test_outgoing_message_session_none_tag_namespace_type(self):
+        mw = yield self.mk_middleware(namespace_type='tag')
+        yield self.redis.set('pool1:tag1:+12345:session_created', '23.0')
+
+        msg = self.mk_msg(
+            '+12345',
+            '+54321',
+            session_event=SESSION_NONE,
+            tag=('pool1', 'tag1'))
+
         msg = yield mw.handle_outbound(msg, "dummy_connector")
 
         self.assertEqual(
             msg['helper_metadata']['session']['session_start'], 23.0)
+
+    @inlineCallbacks
+    def test_outgoing_message_session_start_no_tag(self):
+        mw = yield self.mk_middleware(namespace_type='tag')
+
+        # create message with no tag
+        msg = self.mk_msg('+12345', '+54321')
+
+        result_msg = yield mw.handle_outbound(msg, "dummy_connector")
+        self.assert_middleware_error(
+            "Session length redis namespace cannot be None, skipping message")
+
+        self.assertEqual(msg, result_msg)
+        self.assertTrue('session' not in msg['helper_metadata'])
+
+    @inlineCallbacks
+    def test_outgoing_message_session_end_tag_no_tag(self):
+        mw = yield self.mk_middleware(namespace_type='tag')
+
+        # create message with no tag
+        msg = self.mk_msg('+12345', '+54321', session_event=SESSION_CLOSE)
+
+        result_msg = yield mw.handle_outbound(msg, "dummy_connector")
+        self.assert_middleware_error(
+            "Session length redis namespace cannot be None, skipping message")
+
+        self.assertEqual(msg, result_msg)
+        self.assertTrue('session' not in msg['helper_metadata'])
+
+    @inlineCallbacks
+    def test_outgoing_message_session_none_tag_no_tag(self):
+        mw = yield self.mk_middleware(namespace_type='tag')
+        yield self.redis.set('pool1:tag1:+54321:session_created', '23.0')
+
+        # create message with no tag
+        msg = self.mk_msg('+12345', '+54321', session_event=SESSION_NONE)
+
+        result_msg = yield mw.handle_outbound(msg, "dummy_connector")
+        self.assert_middleware_error(
+            "Session length redis namespace cannot be None, skipping message")
+
+        self.assertEqual(msg, result_msg)
+        self.assertTrue('session' not in msg['helper_metadata'])
 
     @inlineCallbacks
     def test_redis_key_timeout(self):
@@ -328,3 +608,21 @@ class TestSessionLengthMiddleware(VumiTestCase):
         msg = yield mw.handle_inbound(msg_start, "dummy_connector")
         self.assertEqual(
             msg['helper_metadata']['foobar']['session_start'], 0.0)
+
+    @inlineCallbacks
+    def test_incoming_message_session_no_from_addr(self):
+        mw = yield self.mk_middleware()
+        msg_start = self.mk_msg('+12345', None)
+        msg = yield mw.handle_inbound(msg_start, "dummy_connector")
+        self.assertEqual(msg, msg_start)
+        self.assert_middleware_error(
+            "Session length key address cannot be None, skipping message")
+
+    @inlineCallbacks
+    def test_outgoing_message_session_no_to_addr(self):
+        mw = yield self.mk_middleware()
+        msg_start = self.mk_msg(None, '+54321')
+        msg = yield mw.handle_outbound(msg_start, "dummy_connector")
+        self.assertEqual(msg, msg_start)
+        self.assert_middleware_error(
+            "Session length key address cannot be None, skipping message")
