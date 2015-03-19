@@ -16,7 +16,11 @@ matrix:
     # are orthogonal and any failures should be easily attributable to either
     # Twisted version or Riak version without adding an additional build job.
     - python: "2.7"
-      env: TWISTED_VERSION="Twisted==13.1.0" RIAK_VERSION="current"
+      ## Riak 2.0 sometimes doesn't have enough file descriptors:
+      ## https://github.com/travis-ci/travis-ci/issues/3328
+      ## Until that's fixed, don't build against new Riak.
+      # env: TWISTED_VERSION="Twisted==13.1.0" RIAK_VERSION="current"
+      env: TWISTED_VERSION="Twisted==13.1.0" RIAK_VERSION="1.4.12-1"
 services:
   - redis-server
 before_install:
@@ -38,3 +42,6 @@ script:
   - VUMITEST_REDIS_DB=1 VUMI_TEST_NODE_PATH="$(which node)" coverage run --source=vumi `which trial` vumi
 after_success:
   - coveralls
+# To figure out why Riak 2.0 sometimes breaks.
+after_failure:
+  - "echo 'Riak console log:'; cat /usr/lib/riak/log/console.log"
