@@ -1234,6 +1234,7 @@ class TestMessageStoreCache(TestMessageStoreBase):
         batch_id = yield self.store.batch_start([("pool", "tag")])
 
         # Store via message_store
+        yield self.create_inbound_messages(batch_id, 10)
         messages = yield self.create_outbound_messages(batch_id, 10)
         for msg in messages:
             ack = self.msg_helper.make_ack(msg)
@@ -1249,6 +1250,12 @@ class TestMessageStoreCache(TestMessageStoreBase):
         self.assertFalse((yield self.store.needs_reconciliation(batch_id)))
         self.assertFalse(
             (yield self.store.needs_reconciliation(batch_id, delta=0)))
+
+        inbound_uniques = yield self.store.cache.count_from_addrs(batch_id)
+        self.assertEqual(inbound_uniques, 10)
+        outbound_uniques = yield self.store.cache.count_to_addrs(batch_id)
+        self.assertEqual(outbound_uniques, 10)
+
         batch_status = yield self.store.batch_status(batch_id)
         self.assertEqual(batch_status['ack'], 10)
         self.assertEqual(batch_status['sent'], 10)
@@ -1284,6 +1291,12 @@ class TestMessageStoreCache(TestMessageStoreBase):
         self.assertEqual(inbound_count, 10)
         outbound_count = yield cache.count_outbound_message_keys(batch_id)
         self.assertEqual(outbound_count, 10)
+
+        inbound_uniques = yield self.store.cache.count_from_addrs(batch_id)
+        self.assertEqual(inbound_uniques, 10)
+        outbound_uniques = yield self.store.cache.count_to_addrs(batch_id)
+        self.assertEqual(outbound_uniques, 10)
+
         batch_status = yield self.store.batch_status(batch_id)
         self.assertEqual(batch_status["sent"], 10)
         self.assertEqual(batch_status["ack"], 10)
@@ -1300,6 +1313,7 @@ class TestMessageStoreCache(TestMessageStoreBase):
         yield cache.batch_start(batch_id, use_counters=False)
 
         # Store via message_store
+        yield self.create_inbound_messages(batch_id, 10)
         messages = yield self.create_outbound_messages(batch_id, 10)
         for msg in messages:
             ack = self.msg_helper.make_ack(msg)
@@ -1322,6 +1336,12 @@ class TestMessageStoreCache(TestMessageStoreBase):
         self.assertFalse((yield self.store.needs_reconciliation(batch_id)))
         self.assertFalse(
             (yield self.store.needs_reconciliation(batch_id, delta=0)))
+
+        inbound_uniques = yield self.store.cache.count_from_addrs(batch_id)
+        self.assertEqual(inbound_uniques, 10)
+        outbound_uniques = yield self.store.cache.count_to_addrs(batch_id)
+        self.assertEqual(outbound_uniques, 10)
+
         batch_status = yield self.store.batch_status(batch_id)
         self.assertEqual(batch_status['ack'], 10)
         self.assertEqual(batch_status['sent'], 10)
