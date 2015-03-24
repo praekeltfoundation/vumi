@@ -1252,9 +1252,9 @@ class TestMessageStoreCache(TestMessageStoreBase):
             (yield self.store.needs_reconciliation(batch_id, delta=0)))
 
         inbound_uniques = yield self.store.cache.count_from_addrs(batch_id)
-        self.assertEqual(inbound_uniques, 10)
+        self.assertEqual(inbound_uniques, 1)
         outbound_uniques = yield self.store.cache.count_to_addrs(batch_id)
-        self.assertEqual(outbound_uniques, 10)
+        self.assertEqual(outbound_uniques, 1)
 
         batch_status = yield self.store.batch_status(batch_id)
         self.assertEqual(batch_status['ack'], 10)
@@ -1293,9 +1293,9 @@ class TestMessageStoreCache(TestMessageStoreBase):
         self.assertEqual(outbound_count, 10)
 
         inbound_uniques = yield self.store.cache.count_from_addrs(batch_id)
-        self.assertEqual(inbound_uniques, 10)
+        self.assertEqual(inbound_uniques, 1)
         outbound_uniques = yield self.store.cache.count_to_addrs(batch_id)
-        self.assertEqual(outbound_uniques, 10)
+        self.assertEqual(outbound_uniques, 1)
 
         batch_status = yield self.store.batch_status(batch_id)
         self.assertEqual(batch_status["sent"], 10)
@@ -1338,9 +1338,9 @@ class TestMessageStoreCache(TestMessageStoreBase):
             (yield self.store.needs_reconciliation(batch_id, delta=0)))
 
         inbound_uniques = yield self.store.cache.count_from_addrs(batch_id)
-        self.assertEqual(inbound_uniques, 10)
+        self.assertEqual(inbound_uniques, 1)
         outbound_uniques = yield self.store.cache.count_to_addrs(batch_id)
-        self.assertEqual(outbound_uniques, 10)
+        self.assertEqual(outbound_uniques, 1)
 
         batch_status = yield self.store.batch_status(batch_id)
         self.assertEqual(batch_status['ack'], 10)
