@@ -241,7 +241,7 @@ class MessageStoreCache(object):
         timestamp = self.get_timestamp(msg['timestamp'])
         yield self.add_outbound_message_key(
             batch_id, msg['message_id'], timestamp)
-        yield self.add_to_addr(batch_id, msg['to_addr'], timestamp)
+        yield self.add_to_addr(batch_id, msg['to_addr'])
 
     @Manager.calls_manager
     def add_outbound_message_key(self, batch_id, message_key, timestamp):
@@ -339,7 +339,7 @@ class MessageStoreCache(object):
         timestamp = self.get_timestamp(msg['timestamp'])
         yield self.add_inbound_message_key(
             batch_id, msg['message_id'], timestamp)
-        yield self.add_from_addr(batch_id, msg['from_addr'], timestamp)
+        yield self.add_from_addr(batch_id, msg['from_addr'])
 
     @Manager.calls_manager
     def add_inbound_message_key(self, batch_id, message_key, timestamp):
@@ -363,7 +363,7 @@ class MessageStoreCache(object):
         """
         yield self.redis.incr(self.inbound_count_key(batch_id), count)
 
-    def add_from_addr(self, batch_id, from_addr, timestamp):
+    def add_from_addr(self, batch_id, from_addr):
         """
         Add a from_addr to this batch_id using Redis's HyperLogLog
         functionality. Generally this information is set when
@@ -392,7 +392,7 @@ class MessageStoreCache(object):
         """
         return self.redis.pfcount(self.from_addr_key(batch_id))
 
-    def add_to_addr(self, batch_id, to_addr, timestamp):
+    def add_to_addr(self, batch_id, to_addr):
         """
         Add a to_addr to this batch_id using Redis's HyperLogLog
         functionality. Generally this information is set when
