@@ -34,7 +34,7 @@ setup(
         'service_identity',
         'txssmi>=0.3.0',
         'wokkel',
-        'redis>=2.7.1',
+        'redis>=2.10.0',
         'txredis',
         'python-smpp>=0.1.5',
         'pytz==2013b',
