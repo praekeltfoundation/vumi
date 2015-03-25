@@ -250,9 +250,10 @@ class MessageStore(object):
             start_timestamp, self.cache.TRUNCATE_MESSAGE_KEY_COUNT_AT)
         key_count = 0
 
-        index_page = yield self.batch_inbound_keys_with_timestamps(batch_id)
+        index_page = yield self.batch_inbound_keys_with_addresses(batch_id)
         while index_page is not None:
-            for key, timestamp in index_page:
+            for key, timestamp, addr in index_page:
+                yield self.cache.add_from_addr(batch_id, addr)
                 old_key = key_manager.add_key(key, timestamp)
                 if old_key is not None:
                     key_count += 1
@@ -276,9 +277,10 @@ class MessageStore(object):
         key_count = 0
         status_counts = defaultdict(int)
 
-        index_page = yield self.batch_outbound_keys_with_timestamps(batch_id)
+        index_page = yield self.batch_outbound_keys_with_addresses(batch_id)
         while index_page is not None:
-            for key, timestamp in index_page:
+            for key, timestamp, addr in index_page:
+                yield self.cache.add_to_addr(batch_id, addr)
                 old_key = key_manager.add_key(key, timestamp)
                 if old_key is not None:
                     key_count += 1
