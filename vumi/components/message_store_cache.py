@@ -27,8 +27,8 @@ class MessageStoreCache(object):
     OUTBOUND_COUNT_KEY = 'outbound_count'
     INBOUND_KEY = 'inbound'
     INBOUND_COUNT_KEY = 'inbound_count'
-    TO_ADDR_KEY = 'to_addr'
-    FROM_ADDR_KEY = 'from_addr'
+    TO_ADDR_KEY = 'to_addr_hll'
+    FROM_ADDR_KEY = 'from_addr_hll'
     EVENT_KEY = 'event'
     EVENT_COUNT_KEY = 'event_count'
     STATUS_KEY = 'status'
@@ -241,7 +241,7 @@ class MessageStoreCache(object):
         timestamp = self.get_timestamp(msg['timestamp'])
         yield self.add_outbound_message_key(
             batch_id, msg['message_id'], timestamp)
-        yield self.add_to_addr(batch_id, msg['to_addr'], timestamp)
+        yield self.add_to_addr(batch_id, msg['to_addr'])
 
     @Manager.calls_manager
     def add_outbound_message_key(self, batch_id, message_key, timestamp):
@@ -339,7 +339,7 @@ class MessageStoreCache(object):
         timestamp = self.get_timestamp(msg['timestamp'])
         yield self.add_inbound_message_key(
             batch_id, msg['message_id'], timestamp)
-        yield self.add_from_addr(batch_id, msg['from_addr'], timestamp)
+        yield self.add_from_addr(batch_id, msg['from_addr'])
 
     @Manager.calls_manager
     def add_inbound_message_key(self, batch_id, message_key, timestamp):
@@ -363,18 +363,14 @@ class MessageStoreCache(object):
         """
         yield self.redis.incr(self.inbound_count_key(batch_id), count)
 
-    def add_from_addr(self, batch_id, from_addr, timestamp):
+    def add_from_addr(self, batch_id, from_addr):
         """
-        Add a from_addr to this batch_id, weighted by timestamp. Generally
-        this information is retrieved when `add_inbound_message()` is called.
+        Add a from_addr to this batch_id using Redis's HyperLogLog
+        functionality. Generally this information is set when
+        `add_inbound_message()` is called.
         """
-        # NOTE: Disabled because this doesn't scale to large batches.
-        #       See https://github.com/praekelt/vumi/issues/877
-
-        # return self.redis.zadd(self.from_addr_key(batch_id), **{
-        #     from_addr.encode('utf-8'): timestamp,
-        # })
-        return
+        return self.redis.pfadd(
+            self.from_addr_key(batch_id), from_addr.encode('utf-8'))
 
     def get_from_addrs(self, batch_id, asc=False):
         """
@@ -389,26 +385,21 @@ class MessageStoreCache(object):
 
     def count_from_addrs(self, batch_id):
         """
-        Return the number of from_addrs for this batch_id
+        Return count of the unique from_addrs in this batch. Note that the
+        returned count is not exact. We use Redis's HyperLogLog functionality,
+        so the count is subject to a standard error of 0.81%:
+        http://redis.io/commands/pfcount
         """
-        # NOTE: Disabled because this doesn't scale to large batches.
-        #       See https://github.com/praekelt/vumi/issues/877
+        return self.redis.pfcount(self.from_addr_key(batch_id))
 
-        # return self.redis.zcard(self.from_addr_key(batch_id))
-        return 0
-
-    def add_to_addr(self, batch_id, to_addr, timestamp):
+    def add_to_addr(self, batch_id, to_addr):
         """
-        Add a to-addr to this batch_id, weighted by timestamp. Generally
-        this information is retrieved when `add_outbound_message()` is called.
+        Add a to_addr to this batch_id using Redis's HyperLogLog
+        functionality. Generally this information is set when
+        `add_outbound_message()` is called.
         """
-        # NOTE: Disabled because this doesn't scale to large batches.
-        #       See https://github.com/praekelt/vumi/issues/877
-
-        # return self.redis.zadd(self.to_addr_key(batch_id), **{
-        #     to_addr.encode('utf-8'): timestamp,
-        # })
-        return
+        return self.redis.pfadd(
+            self.to_addr_key(batch_id), to_addr.encode('utf-8'))
 
     def get_to_addrs(self, batch_id, asc=False):
         """
@@ -424,13 +415,12 @@ class MessageStoreCache(object):
 
     def count_to_addrs(self, batch_id):
         """
-        Return count of the unique to_addrs in this batch.
+        Return count of the unique to_addrs in this batch. Note that the
+        returned count is not exact. We use Redis's HyperLogLog functionality,
+        so the count is subject to a standard error of 0.81%:
+        http://redis.io/commands/pfcount
         """
-        # NOTE: Disabled because this doesn't scale to large batches.
-        #       See https://github.com/praekelt/vumi/issues/877
-
-        # return self.redis.zcard(self.to_addr_key(batch_id))
-        return 0
+        return self.redis.pfcount(self.to_addr_key(batch_id))
 
     def get_inbound_message_keys(self, batch_id, start=0, stop=-1, asc=False,
                                  with_timestamp=False):
