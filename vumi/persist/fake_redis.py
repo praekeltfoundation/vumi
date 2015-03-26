@@ -6,6 +6,7 @@ from itertools import takewhile, dropwhile
 import os
 from zlib import crc32
 
+from hyperloglog import HyperLogLog
 from twisted.internet import reactor
 from twisted.internet.defer import Deferred, execute
 from twisted.internet.task import Clock
@@ -512,6 +513,21 @@ class FakeRedis(object):
             delayed.cancel()
             return 1
         return 0
+
+    # HyperLogLog operations
+
+    @maybe_async
+    def pfadd(self, key, *values):
+        hll = self._setdefault_key(key, HyperLogLog(0.01))
+        old_card = hll.card()
+        for value in values:
+            hll.add(value)
+        return hll.card() != old_card
+
+    @maybe_async
+    def pfcount(self, key):
+        hll = self._data.get(key, HyperLogLog(0.01))
+        return len(hll)
 
 
 class Zset(object):

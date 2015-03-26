@@ -188,6 +188,30 @@ class VumiRedis(txr.Redis):
         d.addCallback(lambda r: r if r is not None else 'none')
         return d
 
+    # txredis doesn't implement this.
+    def pfadd(self, key, *values):
+        """
+        Add the values to the HyperLogLog data structure at the given key.
+
+        .. note::
+
+           Requires redis server 2.8.9 or later.
+        """
+        self._send('PFADD', key, *values)
+        return self.getResponse()
+
+    # txredis doesn't implement this.
+    def pfcount(self, key):
+        """
+        Return the approximate cardinality of the HyperLogLog at the given key.
+
+        .. note::
+
+           Requires redis server 2.8.9 or later.
+        """
+        self._send('PFCOUNT', key)
+        return self.getResponse()
+
 
 class VumiRedisClientFactory(txr.RedisClientFactory):
     protocol = VumiRedis
