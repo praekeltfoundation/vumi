@@ -293,6 +293,10 @@ class Consumer(object):
                 yield self.consume(message)
         except txamqp.queue.Closed as e:
             log.err("Queue has closed", e)
+        except:
+            # Log this explicitly instead of waiting for the deferred to be
+            # garbage-collected, because that might only happen later on pypy.
+            log.err()
 
     @inlineCallbacks
     def _channel_consume(self):
