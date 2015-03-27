@@ -5,7 +5,7 @@ from smpp.pdu_builder import DeliverSM
 from vumi.message import TransportUserMessage
 
 from vumi.transports.smpp.pdu_utils import (
-    command_id, seq_no, pdu_tlv)
+    command_id, seq_no, pdu_tlv, short_message)
 from vumi.transports.smpp.tests.test_smpp_transport import (
     SmppTransportTestCase)
 from vumi.transports.smpp.smpp_transport import (
@@ -34,8 +34,54 @@ class MicaProcessorTestCase(SmppTransportTestCase):
                 'data_coding_overrides': {
                     0: 'utf-8',
                 }
+            },
+            'submit_short_message_processor_config': {
+                'submit_sm_encoding': 'utf-16be',
+                'submit_sm_data_coding': 8,
+                'send_multipart_udh': True,
             }
         }
+
+    def assert_udh_parts(self, pdus, texts, encoding):
+        pdu_header = lambda pdu: short_message(pdu)[:6]
+        pdu_text = lambda pdu: short_message(pdu)[6:].decode(encoding)
+        udh_header = lambda i: '\x05\x00\x03\x03\x07' + chr(i)
+        self.assertEqual(
+            [(pdu_header(pdu), pdu_text(pdu)) for pdu in pdus],
+            [(udh_header(i + 1), text) for i, text in enumerate(texts)])
+
+    @inlineCallbacks
+    def test_submit_sm_multipart_udh_ucs2(self):
+        message = (
+            "A cup is a small, open container used for carrying and "
+            "drinking drinks. It may be made of wood, plastic, glass, "
+            "clay, metal, stone, china or other materials, and may have "
+            "a stem, handles or other adornments. Cups are used for "
+            "drinking across a wide range of cultures and social classes, "
+            "and different styles of cups may be used for different liquids "
+            "or in different situations. Cups have been used for thousands "
+            "of years for the ...Reply 1 for more")
+
+        smpp_helper = yield self.get_smpp_helper()
+        yield self.tx_helper.make_dispatch_outbound(message, to_addr='msisdn')
+        pdus = yield smpp_helper.wait_for_pdus(7)
+        self.assert_udh_parts(pdus, [
+            ("A cup is a small, open container used"
+             " for carrying and drinking d"),
+            ("rinks. It may be made of wood, plastic,"
+             " glass, clay, metal, stone"),
+            (", china or other materials, and may have"
+             " a stem, handles or other"),
+            (" adornments. Cups are used for drinking"
+             " across a wide range of cu"),
+            ("ltures and social classes, and different"
+             " styles of cups may be us"),
+            ("ed for different liquids or in different"
+             " situations. Cups have be"),
+            ("en used for thousands of years for the ...Reply 1 for more"),
+        ], encoding='utf-16be')  # utf-16be is close enough to UCS2
+        for pdu in pdus:
+            self.assertTrue(len(short_message(pdu)) < 140)
 
     @inlineCallbacks
     def test_submit_and_deliver_ussd_new(self):

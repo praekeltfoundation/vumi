@@ -110,6 +110,16 @@ class Expire(Task):
         return key
 
 
+class Persist(Task):
+    """A task that persists each key."""
+
+    name = "persist"
+
+    def process_key(self, key):
+        self.redis.persist(key)
+        return key
+
+
 class ListKeys(Task):
     """A task that prints out each key."""
 

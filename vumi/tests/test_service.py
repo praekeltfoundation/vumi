@@ -1,7 +1,7 @@
 import json
 from collections import namedtuple
 
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, Deferred
 
 from vumi.message import Message
 from vumi.service import Worker, WorkerCreator
@@ -55,6 +55,40 @@ class TestService(VumiTestCase):
             'test.routing.key', lambda msg: log.append(msg), prefetch_count=10)
         self.assertEqual(10, consumer.channel._get_consumer_prefetch(
             consumer._consumer_tag))
+
+    @inlineCallbacks
+    def test_broken_consume(self):
+        """
+        If a consumer function throws an exception, we still decrement the
+        progress counter.
+        """
+        worker = yield self.worker_helper.get_worker(Worker, {}, start=False)
+        start_d = Deferred()
+        pause_d = Deferred()
+
+        @inlineCallbacks
+        def consume_func(msg):
+            start_d.callback(None)
+            yield pause_d
+            raise Exception("oops")
+
+        consumer = yield worker.consume('test.routing.key', consume_func)
+        message = fake_amq_message({"key": "value"})
+
+        # Assert we have no messages being processed and publish a message.
+        self.assertEqual(consumer._in_progress, 0)
+        self.worker_helper.broker.basic_publish(
+            'vumi', 'test.routing.key', message.content)
+        # Wait for the processing to start and assert that it's in progress.
+        yield start_d
+        self.assertEqual(consumer._in_progress, 1)
+        # Unpause the processing and wait for it to finish.
+        pause_d.callback(None)
+        yield self.worker_helper.kick_delivery()
+        # If we get here without timing out, everything should be happy.
+        self.assertEqual(consumer._in_progress, 0)
+        [failure] = self.flushLoggedErrors()
+        self.assertEqual(failure.getErrorMessage(), "oops")
 
     @inlineCallbacks
     def test_start_publisher(self):

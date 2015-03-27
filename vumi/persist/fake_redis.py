@@ -6,6 +6,7 @@ from itertools import takewhile, dropwhile
 import os
 from zlib import crc32
 
+from hyperloglog import HyperLogLog
 from twisted.internet import reactor
 from twisted.internet.defer import Deferred, execute
 from twisted.internet.task import Clock
@@ -24,6 +25,13 @@ def maybe_async(func):
 
 def call_to_deferred(deferred, func, *args, **kw):
     execute(func, *args, **kw).chainDeferred(deferred)
+
+
+class ResponseError(Exception):
+    """
+    Exception class for things we throw to match the real Redis client
+    libraries.
+    """
 
 
 class FakeRedis(object):
@@ -171,7 +179,7 @@ class FakeRedis(object):
         else:
             cursor = str(start + i + 1)
 
-        return cursor, fnmatch.filter(output, match)
+        return [cursor, fnmatch.filter(output, match)]
 
     @maybe_async
     def flushdb(self):
@@ -188,6 +196,7 @@ class FakeRedis(object):
     def set(self, key, value):
         value = self._encode(value)  # set() sets string value
         self._set_key(key, value)
+        return True
 
     @maybe_async
     def setex(self, key, time, value):
@@ -272,8 +281,8 @@ class FakeRedis(object):
 
     @maybe_async
     def hgetall(self, key):
-        return dict((self._encode(k), self._encode(v)) for k, v in
-            self._data.get(key, {}).items())
+        return dict((self._encode(k), self._encode(v))
+                    for k, v in self._data.get(key, {}).items())
 
     @maybe_async
     def hlen(self, key):
@@ -285,9 +294,16 @@ class FakeRedis(object):
 
     @maybe_async
     def hincrby(self, key, field, amount=1):
-        value = self._data.get(key, {}).get(field, "0")
+        try:
+            value = self._data.get(key, {}).get(field, "0")
+        except AttributeError:
+            raise ResponseError("WRONGTYPE Operation against a key holding"
+                                " the wrong kind of value")
         # the int(str(..)) coerces amount to an int but rejects floats
-        value = int(value) + int(str(amount))
+        try:
+            value = int(value) + int(str(amount))
+        except (TypeError, ValueError):
+            raise ResponseError("value is not an integer or out of range")
         self._setdefault_key(key, {})[field] = str(value)
         return value
 
@@ -376,10 +392,10 @@ class FakeRedis(object):
 
     @maybe_async
     def zrangebyscore(self, key, min='-inf', max='+inf', start=0, num=None,
-                withscores=False, score_cast_func=float):
+                      withscores=False, score_cast_func=float):
         zval = self._data.get(key, Zset())
-        results = zval.zrangebyscore(min, max, start, num,
-                              score_cast_func=score_cast_func)
+        results = zval.zrangebyscore(
+            min, max, start, num, score_cast_func=score_cast_func)
         if withscores:
             return results
         else:
@@ -387,7 +403,7 @@ class FakeRedis(object):
 
     @maybe_async
     def zcount(self, key, min, max):
-        return str(len(self.zrangebyscore.sync(self, key, min, max)))
+        return len(self.zrangebyscore.sync(self, key, min, max))
 
     @maybe_async
     def zscore(self, key, value):
@@ -416,12 +432,13 @@ class FakeRedis(object):
 
     @maybe_async
     def lpush(self, key, obj):
-        self._setdefault_key(key, []).insert(0, obj)
+        self._setdefault_key(key, []).insert(0, self._encode(obj))
+        return self.llen.sync(self, key)
 
     @maybe_async
     def rpush(self, key, obj):
-        self._setdefault_key(key, []).append(obj)
-        return self.llen.sync(self, key) - 1
+        self._setdefault_key(key, []).append(self._encode(obj))
+        return self.llen.sync(self, key)
 
     @maybe_async
     def lrange(self, key, start, end):
@@ -435,6 +452,7 @@ class FakeRedis(object):
     @maybe_async
     def lrem(self, key, value, num=0):
         removed = [0]
+        value = self._encode(value)
 
         def keep(v):
             if v == value and (num == 0 or removed[0] < abs(num)):
@@ -468,6 +486,7 @@ class FakeRedis(object):
             # want to keep.
             del lval[stop + 1:]
         del lval[:start]
+        return True
 
     # Expiry operations
 
@@ -484,7 +503,7 @@ class FakeRedis(object):
     def ttl(self, key):
         delayed = self._expiries.get(key)
         if delayed is not None and delayed.active():
-            return int(delayed.getTime() - self.clock.seconds())
+            return round(delayed.getTime() - self.clock.seconds())
         return None
 
     @maybe_async
@@ -494,6 +513,21 @@ class FakeRedis(object):
             delayed.cancel()
             return 1
         return 0
+
+    # HyperLogLog operations
+
+    @maybe_async
+    def pfadd(self, key, *values):
+        hll = self._setdefault_key(key, HyperLogLog(0.01))
+        old_card = hll.card()
+        for value in values:
+            hll.add(value)
+        return hll.card() != old_card
+
+    @maybe_async
+    def pfcount(self, key):
+        hll = self._data.get(key, HyperLogLog(0.01))
+        return len(hll)
 
 
 class Zset(object):
@@ -508,10 +542,16 @@ class Zset(object):
             end = None
         return start, end
 
+    def _to_float(self, value):
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            raise ResponseError("value is not a valid float")
+
     def zadd(self, **valscores):
         new_zval = [val for val in self._zval if val[1] not in valscores]
-        new_zval.extend((float(score), value) for value, score
-                            in valscores.items())
+        new_zval.extend((self._to_float(score), value)
+                        for value, score in valscores.items())
         new_zval.sort()
         added = len(new_zval) - len(self._zval)
         self._zval = new_zval

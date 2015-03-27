@@ -1392,7 +1392,6 @@ class PersistenceHelper(object):
             # Ignore managers that are already closed.
             if e.args[0] != 'Not connected':
                 raise
-        yield manager.close_manager()
 
     def _check_patches_applied(self):
         if not self._patches_applied:

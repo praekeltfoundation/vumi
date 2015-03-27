@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 
 from twisted.internet.defer import inlineCallbacks, returnValue
 
-from vumi.message import TransportEvent, VUMI_DATE_FORMAT
+from vumi.message import TransportEvent, format_vumi_date
 from vumi.tests.helpers import (
     VumiTestCase, MessageHelper, PersistenceHelper, import_skip)
 
@@ -587,7 +587,7 @@ class TestMessageStore(TestMessageStoreBase):
         messages = yield self.create_inbound_messages(batch_id, 10)
         sorted_keys = sorted((msg['timestamp'], msg['message_id'])
                              for msg in messages)
-        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT))
+        all_keys = [(key, format_vumi_date(timestamp))
                     for (timestamp, key) in sorted_keys]
 
         first_page = yield self.store.batch_inbound_keys_with_timestamps(
@@ -610,7 +610,7 @@ class TestMessageStore(TestMessageStoreBase):
         messages = yield self.create_inbound_messages(batch_id, 5)
         sorted_keys = sorted((msg['timestamp'], msg['message_id'])
                              for msg in messages)
-        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT))
+        all_keys = [(key, format_vumi_date(timestamp))
                     for (timestamp, key) in sorted_keys]
 
         index_page = yield self.store.batch_inbound_keys_with_timestamps(
@@ -623,7 +623,7 @@ class TestMessageStore(TestMessageStoreBase):
         messages = yield self.create_inbound_messages(batch_id, 5)
         sorted_keys = sorted((msg['timestamp'], msg['message_id'])
                              for msg in messages)
-        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT))
+        all_keys = [(key, format_vumi_date(timestamp))
                     for (timestamp, key) in sorted_keys]
 
         index_page = yield self.store.batch_inbound_keys_with_timestamps(
@@ -636,7 +636,7 @@ class TestMessageStore(TestMessageStoreBase):
         messages = yield self.create_inbound_messages(batch_id, 5)
         sorted_keys = sorted((msg['timestamp'], msg['message_id'])
                              for msg in messages)
-        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT))
+        all_keys = [(key, format_vumi_date(timestamp))
                     for (timestamp, key) in sorted_keys]
 
         index_page = yield self.store.batch_inbound_keys_with_timestamps(
@@ -649,7 +649,7 @@ class TestMessageStore(TestMessageStoreBase):
         messages = yield self.create_inbound_messages(batch_id, 5)
         sorted_keys = sorted((msg['timestamp'], msg['message_id'])
                              for msg in messages)
-        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT))
+        all_keys = [(key, format_vumi_date(timestamp))
                     for (timestamp, key) in sorted_keys]
 
         index_page = yield self.store.batch_inbound_keys_with_timestamps(
@@ -662,7 +662,7 @@ class TestMessageStore(TestMessageStoreBase):
         messages = yield self.create_outbound_messages(batch_id, 10)
         sorted_keys = sorted((msg['timestamp'], msg['message_id'])
                              for msg in messages)
-        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT))
+        all_keys = [(key, format_vumi_date(timestamp))
                     for (timestamp, key) in sorted_keys]
 
         first_page = yield self.store.batch_outbound_keys_with_timestamps(
@@ -685,7 +685,7 @@ class TestMessageStore(TestMessageStoreBase):
         messages = yield self.create_outbound_messages(batch_id, 5)
         sorted_keys = sorted((msg['timestamp'], msg['message_id'])
                              for msg in messages)
-        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT))
+        all_keys = [(key, format_vumi_date(timestamp))
                     for (timestamp, key) in sorted_keys]
 
         index_page = yield self.store.batch_outbound_keys_with_timestamps(
@@ -698,7 +698,7 @@ class TestMessageStore(TestMessageStoreBase):
         messages = yield self.create_outbound_messages(batch_id, 5)
         sorted_keys = sorted((msg['timestamp'], msg['message_id'])
                              for msg in messages)
-        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT))
+        all_keys = [(key, format_vumi_date(timestamp))
                     for (timestamp, key) in sorted_keys]
 
         index_page = yield self.store.batch_outbound_keys_with_timestamps(
@@ -711,7 +711,7 @@ class TestMessageStore(TestMessageStoreBase):
         messages = yield self.create_outbound_messages(batch_id, 5)
         sorted_keys = sorted((msg['timestamp'], msg['message_id'])
                              for msg in messages)
-        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT))
+        all_keys = [(key, format_vumi_date(timestamp))
                     for (timestamp, key) in sorted_keys]
 
         index_page = yield self.store.batch_outbound_keys_with_timestamps(
@@ -724,7 +724,7 @@ class TestMessageStore(TestMessageStoreBase):
         messages = yield self.create_outbound_messages(batch_id, 5)
         sorted_keys = sorted((msg['timestamp'], msg['message_id'])
                              for msg in messages)
-        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT))
+        all_keys = [(key, format_vumi_date(timestamp))
                     for (timestamp, key) in sorted_keys]
 
         index_page = yield self.store.batch_outbound_keys_with_timestamps(
@@ -738,7 +738,7 @@ class TestMessageStore(TestMessageStoreBase):
         sorted_keys = sorted(
             (msg['timestamp'], msg['from_addr'], msg['message_id'])
             for msg in messages)
-        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT), addr)
+        all_keys = [(key, format_vumi_date(timestamp), addr)
                     for (timestamp, addr, key) in sorted_keys]
 
         first_page = yield self.store.batch_inbound_keys_with_addresses(
@@ -762,7 +762,7 @@ class TestMessageStore(TestMessageStoreBase):
         sorted_keys = sorted(
             (msg['timestamp'], msg['from_addr'], msg['message_id'])
             for msg in messages)
-        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT), addr)
+        all_keys = [(key, format_vumi_date(timestamp), addr)
                     for (timestamp, addr, key) in sorted_keys]
 
         index_page = yield self.store.batch_inbound_keys_with_addresses(
@@ -776,7 +776,7 @@ class TestMessageStore(TestMessageStoreBase):
         sorted_keys = sorted(
             (msg['timestamp'], msg['from_addr'], msg['message_id'])
             for msg in messages)
-        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT), addr)
+        all_keys = [(key, format_vumi_date(timestamp), addr)
                     for (timestamp, addr, key) in sorted_keys]
 
         index_page = yield self.store.batch_inbound_keys_with_addresses(
@@ -790,7 +790,7 @@ class TestMessageStore(TestMessageStoreBase):
         sorted_keys = sorted(
             (msg['timestamp'], msg['from_addr'], msg['message_id'])
             for msg in messages)
-        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT), addr)
+        all_keys = [(key, format_vumi_date(timestamp), addr)
                     for (timestamp, addr, key) in sorted_keys]
 
         index_page = yield self.store.batch_inbound_keys_with_addresses(
@@ -804,7 +804,7 @@ class TestMessageStore(TestMessageStoreBase):
         sorted_keys = sorted(
             (msg['timestamp'], msg['to_addr'], msg['message_id'])
             for msg in messages)
-        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT), addr)
+        all_keys = [(key, format_vumi_date(timestamp), addr)
                     for (timestamp, addr, key) in sorted_keys]
 
         first_page = yield self.store.batch_outbound_keys_with_addresses(
@@ -828,7 +828,7 @@ class TestMessageStore(TestMessageStoreBase):
         sorted_keys = sorted(
             (msg['timestamp'], msg['to_addr'], msg['message_id'])
             for msg in messages)
-        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT), addr)
+        all_keys = [(key, format_vumi_date(timestamp), addr)
                     for (timestamp, addr, key) in sorted_keys]
 
         index_page = yield self.store.batch_outbound_keys_with_addresses(
@@ -842,7 +842,7 @@ class TestMessageStore(TestMessageStoreBase):
         sorted_keys = sorted(
             (msg['timestamp'], msg['to_addr'], msg['message_id'])
             for msg in messages)
-        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT), addr)
+        all_keys = [(key, format_vumi_date(timestamp), addr)
                     for (timestamp, addr, key) in sorted_keys]
 
         index_page = yield self.store.batch_outbound_keys_with_addresses(
@@ -856,7 +856,7 @@ class TestMessageStore(TestMessageStoreBase):
         sorted_keys = sorted(
             (msg['timestamp'], msg['to_addr'], msg['message_id'])
             for msg in messages)
-        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT), addr)
+        all_keys = [(key, format_vumi_date(timestamp), addr)
                     for (timestamp, addr, key) in sorted_keys]
 
         index_page = yield self.store.batch_outbound_keys_with_addresses(
@@ -880,7 +880,7 @@ class TestMessageStore(TestMessageStoreBase):
             yield self.store.add_event(dr)
 
         mk_tuple = lambda e, status: (
-            e["event_id"], e["timestamp"].strftime(VUMI_DATE_FORMAT), status)
+            e["event_id"], format_vumi_date(e["timestamp"]), status)
 
         all_keys = [mk_tuple(ack, "ack")] + [
             mk_tuple(e, "delivery_report.%s" % (e["delivery_status"],))
@@ -944,7 +944,7 @@ class TestMessageStore(TestMessageStoreBase):
         sorted_keys = sorted(
             (msg['timestamp'], msg['from_addr'], msg['message_id'])
             for msg in messages)
-        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT), addr)
+        all_keys = [(key, format_vumi_date(timestamp), addr)
                     for (timestamp, addr, key) in sorted_keys]
 
         inbound_stats_1 = yield self.store.batch_inbound_stats(
@@ -979,7 +979,7 @@ class TestMessageStore(TestMessageStoreBase):
         sorted_keys = sorted(
             (msg['timestamp'], msg['from_addr'], msg['message_id'])
             for msg in messages)
-        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT), addr)
+        all_keys = [(key, format_vumi_date(timestamp), addr)
                     for (timestamp, addr, key) in sorted_keys]
 
         inbound_stats_1 = yield self.store.batch_inbound_stats(
@@ -1015,7 +1015,7 @@ class TestMessageStore(TestMessageStoreBase):
         sorted_keys = sorted(
             (msg['timestamp'], msg['from_addr'], msg['message_id'])
             for msg in messages)
-        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT), addr)
+        all_keys = [(key, format_vumi_date(timestamp), addr)
                     for (timestamp, addr, key) in sorted_keys]
 
         inbound_stats_1 = yield self.store.batch_inbound_stats(
@@ -1072,7 +1072,7 @@ class TestMessageStore(TestMessageStoreBase):
         sorted_keys = sorted(
             (msg['timestamp'], msg['to_addr'], msg['message_id'])
             for msg in messages)
-        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT), addr)
+        all_keys = [(key, format_vumi_date(timestamp), addr)
                     for (timestamp, addr, key) in sorted_keys]
 
         outbound_stats_1 = yield self.store.batch_outbound_stats(
@@ -1107,7 +1107,7 @@ class TestMessageStore(TestMessageStoreBase):
         sorted_keys = sorted(
             (msg['timestamp'], msg['to_addr'], msg['message_id'])
             for msg in messages)
-        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT), addr)
+        all_keys = [(key, format_vumi_date(timestamp), addr)
                     for (timestamp, addr, key) in sorted_keys]
 
         outbound_stats_1 = yield self.store.batch_outbound_stats(
@@ -1143,7 +1143,7 @@ class TestMessageStore(TestMessageStoreBase):
         sorted_keys = sorted(
             (msg['timestamp'], msg['to_addr'], msg['message_id'])
             for msg in messages)
-        all_keys = [(key, timestamp.strftime(VUMI_DATE_FORMAT), addr)
+        all_keys = [(key, format_vumi_date(timestamp), addr)
                     for (timestamp, addr, key) in sorted_keys]
 
         outbound_stats_1 = yield self.store.batch_outbound_stats(
@@ -1231,11 +1231,21 @@ class TestMessageStoreCache(TestMessageStoreBase):
 
     @inlineCallbacks
     def test_reconcile_cache(self):
+        cache = self.store.cache
         batch_id = yield self.store.batch_start([("pool", "tag")])
 
         # Store via message_store
-        messages = yield self.create_outbound_messages(batch_id, 10)
-        for msg in messages:
+        yield self.create_inbound_messages(batch_id, 1, from_addr='from1')
+        yield self.create_inbound_messages(batch_id, 2, from_addr='from2')
+        yield self.create_inbound_messages(batch_id, 3, from_addr='from3')
+
+        outbound_messages = []
+        outbound_messages.extend((yield self.create_outbound_messages(
+            batch_id, 4, to_addr='to1')))
+        outbound_messages.extend((yield self.create_outbound_messages(
+            batch_id, 6, to_addr='to2')))
+
+        for msg in outbound_messages:
             ack = self.msg_helper.make_ack(msg)
             yield self.store.add_event(ack)
 
@@ -1249,6 +1259,17 @@ class TestMessageStoreCache(TestMessageStoreBase):
         self.assertFalse((yield self.store.needs_reconciliation(batch_id)))
         self.assertFalse(
             (yield self.store.needs_reconciliation(batch_id, delta=0)))
+
+        inbound_count = yield cache.count_inbound_message_keys(batch_id)
+        self.assertEqual(inbound_count, 6)
+        outbound_count = yield cache.count_outbound_message_keys(batch_id)
+        self.assertEqual(outbound_count, 10)
+
+        inbound_uniques = yield cache.count_from_addrs(batch_id)
+        self.assertEqual(inbound_uniques, 3)
+        outbound_uniques = yield cache.count_to_addrs(batch_id)
+        self.assertEqual(outbound_uniques, 2)
+
         batch_status = yield self.store.batch_status(batch_id)
         self.assertEqual(batch_status['ack'], 10)
         self.assertEqual(batch_status['sent'], 10)
@@ -1265,8 +1286,20 @@ class TestMessageStoreCache(TestMessageStoreBase):
         batch_id = yield self.store.batch_start([("pool", "tag")])
 
         # Store via message_store
-        inbound_messages = yield self.create_inbound_messages(batch_id, 10)
-        outbound_messages = yield self.create_outbound_messages(batch_id, 10)
+        inbound_messages = []
+        inbound_messages.extend((yield self.create_inbound_messages(
+            batch_id, 1, from_addr='from1')))
+        inbound_messages.extend((yield self.create_inbound_messages(
+            batch_id, 2, from_addr='from2')))
+        inbound_messages.extend((yield self.create_inbound_messages(
+            batch_id, 3, from_addr='from3')))
+
+        outbound_messages = []
+        outbound_messages.extend((yield self.create_outbound_messages(
+            batch_id, 4, to_addr='to1')))
+        outbound_messages.extend((yield self.create_outbound_messages(
+            batch_id, 6, to_addr='to2')))
+
         for msg in outbound_messages:
             ack = self.msg_helper.make_ack(msg)
             yield self.store.add_event(ack)
@@ -1276,15 +1309,20 @@ class TestMessageStoreCache(TestMessageStoreBase):
 
         # We want one message newer than the start of the recon, and they're
         # ordered from newest to oldest.
-        start_timestamp = inbound_messages[1]["timestamp"].strftime(
-            VUMI_DATE_FORMAT)
+        start_timestamp = format_vumi_date(inbound_messages[1]["timestamp"])
 
         yield self.store.reconcile_cache(batch_id, start_timestamp)
 
         inbound_count = yield cache.count_inbound_message_keys(batch_id)
-        self.assertEqual(inbound_count, 10)
+        self.assertEqual(inbound_count, 6)
         outbound_count = yield cache.count_outbound_message_keys(batch_id)
         self.assertEqual(outbound_count, 10)
+
+        inbound_uniques = yield self.store.cache.count_from_addrs(batch_id)
+        self.assertEqual(inbound_uniques, 3)
+        outbound_uniques = yield self.store.cache.count_to_addrs(batch_id)
+        self.assertEqual(outbound_uniques, 2)
+
         batch_status = yield self.store.batch_status(batch_id)
         self.assertEqual(batch_status["sent"], 10)
         self.assertEqual(batch_status["ack"], 10)
@@ -1301,8 +1339,17 @@ class TestMessageStoreCache(TestMessageStoreBase):
         yield cache.batch_start(batch_id, use_counters=False)
 
         # Store via message_store
-        messages = yield self.create_outbound_messages(batch_id, 10)
-        for msg in messages:
+        yield self.create_inbound_messages(batch_id, 1, from_addr='from1')
+        yield self.create_inbound_messages(batch_id, 2, from_addr='from2')
+        yield self.create_inbound_messages(batch_id, 3, from_addr='from3')
+
+        outbound_messages = []
+        outbound_messages.extend((yield self.create_outbound_messages(
+            batch_id, 4, to_addr='to1')))
+        outbound_messages.extend((yield self.create_outbound_messages(
+            batch_id, 6, to_addr='to2')))
+
+        for msg in outbound_messages:
             ack = self.msg_helper.make_ack(msg)
             yield self.store.add_event(ack)
 
@@ -1323,6 +1370,17 @@ class TestMessageStoreCache(TestMessageStoreBase):
         self.assertFalse((yield self.store.needs_reconciliation(batch_id)))
         self.assertFalse(
             (yield self.store.needs_reconciliation(batch_id, delta=0)))
+
+        inbound_count = yield cache.count_inbound_message_keys(batch_id)
+        self.assertEqual(inbound_count, 6)
+        outbound_count = yield cache.count_outbound_message_keys(batch_id)
+        self.assertEqual(outbound_count, 10)
+
+        inbound_uniques = yield self.store.cache.count_from_addrs(batch_id)
+        self.assertEqual(inbound_uniques, 3)
+        outbound_uniques = yield self.store.cache.count_to_addrs(batch_id)
+        self.assertEqual(outbound_uniques, 2)
+
         batch_status = yield self.store.batch_status(batch_id)
         self.assertEqual(batch_status['ack'], 10)
         self.assertEqual(batch_status['sent'], 10)

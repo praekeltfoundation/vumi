@@ -11,6 +11,7 @@ import logging
 import operator
 from uuid import uuid4
 from StringIO import StringIO
+import warnings
 
 from treq.client import HTTPClient
 
@@ -35,6 +36,13 @@ from vumi.persist.txredis_manager import TxRedisManager
 from vumi.utils import load_class_by_string, HttpDataLimitError, to_kwargs
 from vumi import log
 from vumi.application.sandbox_rlimiter import SandboxRlimiter
+
+
+warnings.warn(
+    "Use of vumi.application.sandbox is deprecated, the vumi sandbox worker "
+    "and its components have moved to the vxsandbox package:"
+    "pypi.python.org/pypi/vxsandbox",
+    category=DeprecationWarning)
 
 
 class MultiDeferred(object):

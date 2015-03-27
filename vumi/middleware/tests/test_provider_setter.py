@@ -1,7 +1,8 @@
 """Tests for vumi.middleware.provider_setter."""
 
 from vumi.middleware.provider_setter import (
-    StaticProviderSettingMiddleware, AddressPrefixProviderSettingMiddleware)
+    StaticProviderSettingMiddleware, AddressPrefixProviderSettingMiddleware,
+    ProviderSettingMiddlewareError)
 from vumi.tests.helpers import VumiTestCase, MessageHelper
 
 
@@ -59,6 +60,10 @@ class TestAddressPrefixProviderSettingMiddleware(VumiTestCase):
             "address_prefix_provider_setter", config, dummy_worker)
         mw.setup_middleware()
         return mw
+
+    def assert_middleware_error(self, msg):
+        [err] = self.flushLoggedErrors(ProviderSettingMiddlewareError)
+        self.assertEqual(str(err.value), msg)
 
     def test_set_provider_unique_matching_prefix(self):
         """
@@ -188,3 +193,31 @@ class TestAddressPrefixProviderSettingMiddleware(VumiTestCase):
             None, to_addr="+1234567", from_addr="+345", provider="OTHER-MNO")
         processed_msg = mw.handle_outbound(msg, "dummy_connector")
         self.assertEqual(processed_msg.get("provider"), "OTHER-MNO")
+
+    def test_provider_logs_no_address_error_for_inbound(self):
+        """
+        If the from_addr of an inbound message is None, an error should be
+        logged and the message returned.
+        """
+        mw = self.mk_middleware({"provider_prefixes": {"+123": "MY-MNO"}})
+        msg = self.msg_helper.make_inbound(
+            None, to_addr="+1234567", from_addr=None)
+        processed_msg = mw.handle_inbound(msg, "dummy_connector")
+        self.assertEqual(processed_msg.get("provider"), None)
+        self.assert_middleware_error(
+            "Address for determining message provider cannot be None,"
+            " skipping message")
+
+    def test_provider_logs_no_address_error_for_outbound(self):
+        """
+        If the to_addr of an outbound message is None, an error should be
+        logged and the message returned.
+        """
+        mw = self.mk_middleware({"provider_prefixes": {"+123": "MY-MNO"}})
+        msg = self.msg_helper.make_outbound(
+            None, to_addr=None, from_addr="+345")
+        processed_msg = mw.handle_outbound(msg, "dummy_connector")
+        self.assertEqual(processed_msg.get("provider"), None)
+        self.assert_middleware_error(
+            "Address for determining message provider cannot be None,"
+            " skipping message")

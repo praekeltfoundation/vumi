@@ -6,28 +6,29 @@ python:
 node_js:
   - "0.10"
 env:
-  # Test against the latest version of Twisted.
-  - TWISTED_VERSION="Twisted"
+  # Test against the latest version of Twisted using Riak 1.4.
+  - TWISTED_VERSION="Twisted" RIAK_VERSION="1.4.12-1"
 matrix:
   include:
     # Test against the oldest version of Twisted that we claim to support.
+    # Also test against the Travis-provided version of Riak (currently 2.0.x).
     # This is a separate matrix inclusion to avoid spawning unnecessary builds.
+    # Although there are two different things we're testing against here, they
+    # are orthogonal and any failures should be easily attributable to either
+    # Twisted version or Riak version without adding an additional build job.
     - python: "2.7"
-      env: TWISTED_VERSION="Twisted==13.1.0"
+      ## Riak 2.0 sometimes doesn't have enough file descriptors:
+      ## https://github.com/travis-ci/travis-ci/issues/3328
+      ## Until that's fixed, don't build against new Riak.
+      # env: TWISTED_VERSION="Twisted==13.1.0" RIAK_VERSION="current"
+      env: TWISTED_VERSION="Twisted==13.1.0" RIAK_VERSION="1.4.12-1"
 services:
   - redis-server
 before_install:
-  # We need Riak 1.4, so we add Basho's repo and install from there.
-  # Additionally, we remove existing Riak data and replace the config with ours.
-  - sudo service riak stop
-  - "curl http://apt.basho.com/gpg/basho.apt.key | sudo apt-key add -"
-  - sudo bash -c "echo deb http://apt.basho.com $(lsb_release -sc) main > /etc/apt/sources.list.d/basho.list"
-  - sudo apt-get -qq update
-  - sudo apt-get install -qq -y --force-yes riak=1.4.12-1
-  - sudo rm -rf /var/lib/riak/*
-  - sudo cp utils/app.config /etc/riak/app.config
-  - sudo service riak start
+  # Set up an appropriate version of Riak.
+  - sudo utils/setup_travis_riak.sh "${RIAK_VERSION}"
   # We need the protobuf-compiler so we can install Riak client libraries.
+  - sudo apt-get -qq update
   - sudo apt-get install -qq protobuf-compiler
 install:
   - "pip install ${TWISTED_VERSION}"
@@ -36,8 +37,11 @@ install:
 before_script:
   # To see what version of Riak we're running and check that it's happy.
   - riak version
-  - riak-admin member-status
+  - sudo riak-admin member-status
 script:
   - VUMITEST_REDIS_DB=1 VUMI_TEST_NODE_PATH="$(which node)" coverage run --source=vumi `which trial` vumi
 after_success:
   - coveralls
+# To figure out why Riak 2.0 sometimes breaks.
+after_failure:
+  - "echo 'Riak console log:'; cat /usr/lib/riak/log/console.log"
