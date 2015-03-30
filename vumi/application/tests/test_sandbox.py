@@ -401,7 +401,6 @@ class TestSandbox(SandboxTestCaseBase):
 class JsSandboxTestMixin(object):
 
     BIGGER_RLIMITS = {
-        "RLIMIT_DATA": [64 * 1024 * 1024] * 2,
         "RLIMIT_STACK": [2 * 1024 * 1024] * 2,
         "RLIMIT_AS": [256 * 1024 * 1024] * 2,
     }
@@ -418,8 +417,6 @@ class JsSandboxTestMixin(object):
                 self.app_helper.make_inbound("foo", sandbox_id='sandbox1'))
             failures = [log['failure'].value for log in lc.errors]
             msgs = lc.messages()
-        # TODO: Kill this debug print.
-        print msgs
         self.assertEqual(failures, [])
         self.assertEqual(status, 0)
         self.assertEqual(msgs, [
@@ -445,8 +442,6 @@ class JsSandboxTestMixin(object):
                 self.app_helper.make_inbound("foo", sandbox_id='sandbox1'))
             failures = [log['failure'].value for log in lc.errors]
             msgs = lc.messages()
-        # TODO: Kill this debug print.
-        print msgs
         self.assertEqual(failures, [])
         self.assertEqual(status, 0)
         self.assertEqual(msgs, [
@@ -471,8 +466,6 @@ class JsSandboxTestMixin(object):
                 self.app_helper.make_inbound("foo", sandbox_id='sandbox1'))
             failures = [log['failure'].value for log in lc.errors]
             msgs = lc.messages()
-        # TODO: Kill this debug print.
-        print msgs
         self.assertEqual(failures, [])
         self.assertEqual(status, 0)
         self.assertEqual(msgs, [
@@ -494,9 +487,8 @@ class TestJsSandbox(SandboxTestCaseBase, JsSandboxTestMixin):
         super(TestJsSandbox, self).setUp()
 
     def setup_app(self, javascript_code, extra_config=None):
-        extra_config = extra_config or {
-            'rlimits': self.BIGGER_RLIMITS,
-        }
+        extra_config = extra_config or {}
+        extra_config.setdefault('rlimits', self.BIGGER_RLIMITS)
         extra_config.update({
             'javascript': javascript_code,
             'executable': self._node_path,
@@ -519,9 +511,8 @@ class TestJsFileSandbox(SandboxTestCaseBase, JsSandboxTestMixin):
         tmp_file.write(javascript)
         tmp_file.close()
 
-        extra_config = extra_config or {
-            'rlimits': self.BIGGER_RLIMITS,
-        }
+        extra_config = extra_config or {}
+        extra_config.setdefault('rlimits', self.BIGGER_RLIMITS)
         extra_config.update({
             'javascript_file': tmp_file_name,
             'executable': self._node_path,
