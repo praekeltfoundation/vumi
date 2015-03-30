@@ -41,7 +41,7 @@ before_script:
   - riak version
   - sudo riak-admin member-status
 script:
-  - if [ -z "$NO_COVERAGE" ]; then COVERAGE_CMD="echo"; else COVERAGE_CMD=""; fi
+  - if [ -z "$NO_COVERAGE" ]; then COVERAGE_CMD="coverage run --source=vumi"; else COVERAGE_CMD=""; fi
   - VUMITEST_REDIS_DB=1 VUMI_TEST_NODE_PATH="$(which node)" $COVERAGE_CMD `which trial` vumi
 after_success:
   - if [ -z "$NO_COVERAGE" ]; then coveralls; fi
