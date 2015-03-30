@@ -22,6 +22,7 @@ class TestMTechKenyaTransport(VumiTestCase):
         self.cellulant_sms_calls = DeferredQueue()
         self.mock_mtech_sms = MockHttpServer(self.handle_request)
         yield self.mock_mtech_sms.start()
+        self.add_cleanup(self.mock_mtech_sms.stop)
 
         self.valid_creds = {
             'mt_username': 'testuser',
@@ -37,11 +38,6 @@ class TestMTechKenyaTransport(VumiTestCase):
             TransportHelper(self.transport_class, mobile_addr='2371234567'))
         self.transport = yield self.tx_helper.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url()
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield self.mock_mtech_sms.stop()
-        yield super(TestMTechKenyaTransport, self).tearDown()
 
     def handle_request(self, request):
         if request.args.get('user') != [self.valid_creds['mt_username']]:

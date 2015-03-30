@@ -20,6 +20,7 @@ class TestMediafoneTransport(VumiTestCase):
         self.mediafone_calls = DeferredQueue()
         self.mock_mediafone = MockHttpServer(self.handle_request)
         yield self.mock_mediafone.start()
+        self.add_cleanup(self.mock_mediafone.stop)
 
         self.config = {
             'web_path': "foo",
@@ -33,11 +34,6 @@ class TestMediafoneTransport(VumiTestCase):
         self.transport_url = self.transport.get_transport_url()
         self.mediafonemc_response = ''
         self.mediafonemc_response_code = http.OK
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield self.mock_mediafone.stop()
-        yield super(TestMediafoneTransport, self).tearDown()
 
     def handle_request(self, request):
         self.mediafone_calls.put(request)
