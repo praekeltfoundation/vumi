@@ -412,6 +412,8 @@ class JsSandboxTestMixin(object):
                 self.app_helper.make_inbound("foo", sandbox_id='sandbox1'))
             failures = [log['failure'].value for log in lc.errors]
             msgs = lc.messages()
+        # TODO: Kill this debug print.
+        print msgs
         self.assertEqual(failures, [])
         self.assertEqual(status, 0)
         self.assertEqual(msgs, [
@@ -437,6 +439,8 @@ class JsSandboxTestMixin(object):
                 self.app_helper.make_inbound("foo", sandbox_id='sandbox1'))
             failures = [log['failure'].value for log in lc.errors]
             msgs = lc.messages()
+        # TODO: Kill this debug print.
+        print msgs
         self.assertEqual(failures, [])
         self.assertEqual(status, 0)
         self.assertEqual(msgs, [
@@ -461,6 +465,8 @@ class JsSandboxTestMixin(object):
                 self.app_helper.make_inbound("foo", sandbox_id='sandbox1'))
             failures = [log['failure'].value for log in lc.errors]
             msgs = lc.messages()
+        # TODO: Kill this debug print.
+        print msgs
         self.assertEqual(failures, [])
         self.assertEqual(status, 0)
         self.assertEqual(msgs, [
