@@ -37,7 +37,7 @@ setup(
         'redis>=2.10.0',
         'txredis',
         'python-smpp>=0.1.5',
-        'pytz==2013b',
+        'pytz',
         'riak>=2.1',
         'txJSON-RPC==0.3.1',
         'txTwitter>=0.1.4a',
