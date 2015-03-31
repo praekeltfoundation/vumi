@@ -26,9 +26,6 @@ services:
 before_install:
   # Set up an appropriate version of Riak.
   - sudo utils/setup_travis_riak.sh "${RIAK_VERSION}"
-  # We need the protobuf-compiler so we can install Riak client libraries.
-  - sudo apt-get -qq update
-  - sudo apt-get install -qq protobuf-compiler
 install:
   - "pip install ${TWISTED_VERSION}"
   - "pip install -r requirements.pip --use-wheel"
