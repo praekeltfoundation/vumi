@@ -41,7 +41,7 @@ setup(
         'riak>=2.1',
         'txJSON-RPC==0.3.1',
         'txTwitter>=0.1.4a',
-        'treq==0.2.1',
+        'treq',
         'confmodel>=0.2.0',
         'hyperloglog',
     ],
