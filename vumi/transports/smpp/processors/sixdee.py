@@ -44,11 +44,22 @@ class DeliverShortMessageProcessor(default.DeliverShortMessageProcessor):
     @inlineCallbacks
     def handle_deliver_sm_ussd(self, pdu, pdu_params, pdu_opts):
         service_op = pdu_opts['ussd_service_op']
-        sixdee_session_identifier = pdu_opts['user_message_reference']
+
+        # 6D uses its_session_info as follows:
+        #
+        # * First 15 bit: dialog id (i.e. session id)
+        # * Last bit: end session (1 to end, 0 to continue)
+
+        its_session_number = int(pdu_opts['its_session_info'], 16)
+        end_session = bool(its_session_number % 2)
+        sixdee_session_identifier = "%04x" % (its_session_number & 0xfffe)
         vumi_session_identifier = make_vumi_session_identifier(
             pdu_params['source_addr'], sixdee_session_identifier)
 
-        session_event = self.ussd_service_op_map.get(service_op)
+        if end_session:
+            session_event = 'close'
+        else:
+            session_event = self.ussd_service_op_map.get(service_op)
 
         if session_event == 'new':
             # PSSR request. Let's assume it means a new session.
@@ -147,13 +158,16 @@ class SubmitShortMessageProcessor(default.SubmitShortMessageProcessor):
             vumi_session_identifier = make_vumi_session_identifier(
                 to_addr, sixdee_session_identifier)
 
+            its_session_info = (
+                int(sixdee_session_identifier, 16) |
+                int(not continue_session))
+
             service_op = self.ussd_service_op_map[('continue'
                                                    if continue_session
                                                    else 'close')]
             optional_parameters.update({
                 'ussd_service_op': service_op,
-                'user_message_reference': (
-                    str(sixdee_session_identifier).zfill(2)),
+                'its_session_info': "%04x" % (its_session_info,)
             })
 
             if not continue_session:
