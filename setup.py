@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="vumi",
-    version="0.5.18a",
+    version="0.5.19a0",
     url='http://github.com/praekelt/vumi',
     license='BSD',
     description="Super-scalable messaging engine for the delivery of SMS, "
@@ -41,7 +41,7 @@ setup(
         'riak>=2.1',
         'txJSON-RPC==0.3.1',
         'txTwitter>=0.1.4a',
-        'treq==0.2.1',
+        'treq',
         'confmodel>=0.2.0',
         'hyperloglog',
     ],
