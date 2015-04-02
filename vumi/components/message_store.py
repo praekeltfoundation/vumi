@@ -3,6 +3,7 @@
 
 """Message store."""
 
+from calendar import timegm
 from collections import defaultdict
 from datetime import datetime
 from uuid import uuid4
@@ -21,6 +22,29 @@ from vumi import log
 from vumi.components.message_store_cache import MessageStoreCache
 from vumi.components.message_store_migrators import (
     EventMigrator, InboundMessageMigrator, OutboundMessageMigrator)
+
+
+def to_reverse_timestamp(vumi_timestamp):
+    """
+    Turn a vumi_date-formatted string into a string that sorts in reverse order
+    and can be turned back into a timestamp later.
+
+    This is done by converting to a unix timestamp and subtracting it from
+    0xffffffffff (2**40 - 1) to get a number well outside the range
+    representable by the datetime module. The result is returned as a
+    hexadecimal string.
+    """
+    timestamp = timegm(parse_vumi_date(vumi_timestamp).timetuple())
+    return "%X" % (0xffffffffff - timestamp)
+
+
+def from_reverse_timestamp(reverse_timestamp):
+    """
+    Turn a reverse timestamp string (from `to_reverse_timestamp()`) into a
+    vumi_date-formatted string.
+    """
+    timestamp = 0xffffffffff - int(reverse_timestamp, 16)
+    return format_vumi_date(datetime.utcfromtimestamp(timestamp))
 
 
 class Batch(Model):

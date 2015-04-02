@@ -11,6 +11,50 @@ from vumi.tests.helpers import (
     VumiTestCase, MessageHelper, PersistenceHelper, import_skip)
 
 
+class TestReverseTimestampUtils(VumiTestCase):
+
+    def setUp(self):
+        try:
+            from vumi.components.message_store import (
+                to_reverse_timestamp, from_reverse_timestamp)
+        except ImportError, e:
+            import_skip(e, 'riak')
+        self.to_reverse_timestamp = to_reverse_timestamp
+        self.from_reverse_timestamp = from_reverse_timestamp
+
+    def test_to_reverse_timestamp(self):
+        """
+        to_reverse_timestamp() turns a vumi_date-formatted string into a
+        reverse timestamp.
+        """
+        self.assertEqual(
+            "FFAAE41F25", self.to_reverse_timestamp("2015-04-01 12:13:14"))
+        self.assertEqual(
+            "FFAAE41F25",
+            self.to_reverse_timestamp("2015-04-01 12:13:14.000000"))
+        self.assertEqual(
+            "FFAAE41F25",
+            self.to_reverse_timestamp("2015-04-01 12:13:14.999999"))
+        self.assertEqual(
+            "FFAAE41F24", self.to_reverse_timestamp("2015-04-01 12:13:15"))
+        self.assertEqual(
+            "F0F9025FA5", self.to_reverse_timestamp("4015-04-01 12:13:14"))
+
+    def test_from_reverse_timestamp(self):
+        """
+        from_reverse_timestamp() is the inverse of to_reverse_timestamp().
+        """
+        self.assertEqual(
+            "2015-04-01 12:13:14.000000",
+            self.from_reverse_timestamp("FFAAE41F25"))
+        self.assertEqual(
+            "2015-04-01 12:13:13.000000",
+            self.from_reverse_timestamp("FFAAE41F26"))
+        self.assertEqual(
+            "4015-04-01 12:13:14.000000",
+            self.from_reverse_timestamp("F0F9025FA5"))
+
+
 class TestMessageStoreBase(VumiTestCase):
 
     @inlineCallbacks
