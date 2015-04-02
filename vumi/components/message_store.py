@@ -825,6 +825,82 @@ class MessageStore(object):
             key_with_ts_and_value_formatter, self, batch_id, results))
 
     @Manager.calls_manager
+    def batch_inbound_keys_with_addresses_reverse(self, batch_id,
+                                                  max_results=None,
+                                                  start=None, end=None):
+        """
+        Return all inbound message keys with timestamps and addresses.
+        Results are ordered from newest to oldest.
+
+        :param str batch_id:
+            The batch_id to fetch keys for.
+
+        :param int max_results:
+            Number of results per page. Defaults to DEFAULT_MAX_RESULTS
+
+        :param str start:
+            Optional start timestamp string matching VUMI_DATE_FORMAT.
+
+        :param str end:
+            Optional end timestamp string matching VUMI_DATE_FORMAT.
+
+        This method performs a Riak index query.
+        """
+        if max_results is None:
+            max_results = self.DEFAULT_MAX_RESULTS
+        # We're using reverse timestamps, so swap start and end and convert to
+        # reverse timestamps.
+        if start is not None:
+            start = to_reverse_timestamp(start)
+        if end is not None:
+            end = to_reverse_timestamp(end)
+        start, end = end, start
+        start_value, end_value = self._start_end_values(batch_id, start, end)
+        results = yield self.inbound_messages.index_keys_page(
+            'batches_with_addresses_reverse', start_value, end_value,
+            return_terms=True, max_results=max_results)
+        returnValue(IndexPageWrapper(
+            key_with_rts_and_value_formatter, self, batch_id, results))
+
+    @Manager.calls_manager
+    def batch_outbound_keys_with_addresses_reverse(self, batch_id,
+                                                   max_results=None,
+                                                   start=None, end=None):
+        """
+        Return all outbound message keys with timestamps and addresses.
+        Results are ordered from newest to oldest.
+
+        :param str batch_id:
+            The batch_id to fetch keys for.
+
+        :param int max_results:
+            Number of results per page. Defaults to DEFAULT_MAX_RESULTS
+
+        :param str start:
+            Optional start timestamp string matching VUMI_DATE_FORMAT.
+
+        :param str end:
+            Optional end timestamp string matching VUMI_DATE_FORMAT.
+
+        This method performs a Riak index query.
+        """
+        if max_results is None:
+            max_results = self.DEFAULT_MAX_RESULTS
+        # We're using reverse timestamps, so swap start and end and convert to
+        # reverse timestamps.
+        if start is not None:
+            start = to_reverse_timestamp(start)
+        if end is not None:
+            end = to_reverse_timestamp(end)
+        start, end = end, start
+        start_value, end_value = self._start_end_values(batch_id, start, end)
+        results = yield self.outbound_messages.index_keys_page(
+            'batches_with_addresses_reverse', start_value, end_value,
+            return_terms=True, max_results=max_results)
+        returnValue(IndexPageWrapper(
+            key_with_rts_and_value_formatter, self, batch_id, results))
+
+    @Manager.calls_manager
     def message_event_keys_with_statuses(self, msg_id, max_results=None):
         """
         Return all event keys with (and ordered by) timestamps and statuses.
@@ -1021,3 +1097,18 @@ def key_with_ts_and_value_formatter(batch_id, result):
         raise ValueError(
             "Index value %r does not match expected format." % (value,))
     return (key, timestamp, address)
+
+
+def key_with_rts_and_value_formatter(batch_id, result):
+    value, key = result
+    prefix = batch_id + "$"
+    if not value.startswith(prefix):
+        raise ValueError(
+            "Index value %r does not begin with expected prefix %r." % (
+                value, prefix))
+    suffix = value[len(prefix):]
+    timestamp, delimiter, address = suffix.partition("$")
+    if delimiter != "$":
+        raise ValueError(
+            "Index value %r does not match expected format." % (value,))
+    return (key, from_reverse_timestamp(timestamp), address)

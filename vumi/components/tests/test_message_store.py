@@ -17,6 +17,11 @@ except ImportError, e:
     import_skip(e, 'riak')
 
 
+def zero_ms(timestamp):
+    dt, dot, ms = format_vumi_date(timestamp).partition(".")
+    return dot.join([dt, "0" * len(ms)])
+
+
 class TestReverseTimestampUtils(VumiTestCase):
 
     def test_to_reverse_timestamp(self):
@@ -776,7 +781,7 @@ class TestMessageStore(TestMessageStoreBase):
         self.assertEqual(list(index_page), all_keys[1:-1])
 
     @inlineCallbacks
-    def test_batch_inbound_keys_with_address(self):
+    def test_batch_inbound_keys_with_addresses(self):
         batch_id = yield self.store.batch_start([('pool', 'tag')])
         messages = yield self.create_inbound_messages(batch_id, 10)
         sorted_keys = sorted(
@@ -800,7 +805,7 @@ class TestMessageStore(TestMessageStoreBase):
         self.assertEqual(results, all_keys)
 
     @inlineCallbacks
-    def test_batch_inbound_keys_with_address_start(self):
+    def test_batch_inbound_keys_with_addresses_start(self):
         batch_id = yield self.store.batch_start([('pool', 'tag')])
         messages = yield self.create_inbound_messages(batch_id, 5)
         sorted_keys = sorted(
@@ -814,7 +819,7 @@ class TestMessageStore(TestMessageStoreBase):
         self.assertEqual(list(index_page), all_keys[1:])
 
     @inlineCallbacks
-    def test_batch_inbound_keys_with_address_end(self):
+    def test_batch_inbound_keys_with_addresses_end(self):
         batch_id = yield self.store.batch_start([('pool', 'tag')])
         messages = yield self.create_inbound_messages(batch_id, 5)
         sorted_keys = sorted(
@@ -828,7 +833,7 @@ class TestMessageStore(TestMessageStoreBase):
         self.assertEqual(list(index_page), all_keys[:-1])
 
     @inlineCallbacks
-    def test_batch_inbound_keys_with_address_range(self):
+    def test_batch_inbound_keys_with_addresses_range(self):
         batch_id = yield self.store.batch_start([('pool', 'tag')])
         messages = yield self.create_inbound_messages(batch_id, 5)
         sorted_keys = sorted(
@@ -842,7 +847,7 @@ class TestMessageStore(TestMessageStoreBase):
         self.assertEqual(list(index_page), all_keys[1:-1])
 
     @inlineCallbacks
-    def test_batch_outbound_keys_with_address(self):
+    def test_batch_outbound_keys_with_addresses(self):
         batch_id = yield self.store.batch_start([('pool', 'tag')])
         messages = yield self.create_outbound_messages(batch_id, 10)
         sorted_keys = sorted(
@@ -866,7 +871,7 @@ class TestMessageStore(TestMessageStoreBase):
         self.assertEqual(results, all_keys)
 
     @inlineCallbacks
-    def test_batch_outbound_keys_with_address_start(self):
+    def test_batch_outbound_keys_with_addresses_start(self):
         batch_id = yield self.store.batch_start([('pool', 'tag')])
         messages = yield self.create_outbound_messages(batch_id, 5)
         sorted_keys = sorted(
@@ -880,7 +885,7 @@ class TestMessageStore(TestMessageStoreBase):
         self.assertEqual(list(index_page), all_keys[1:])
 
     @inlineCallbacks
-    def test_batch_outbound_keys_with_address_end(self):
+    def test_batch_outbound_keys_with_addresses_end(self):
         batch_id = yield self.store.batch_start([('pool', 'tag')])
         messages = yield self.create_outbound_messages(batch_id, 5)
         sorted_keys = sorted(
@@ -894,7 +899,7 @@ class TestMessageStore(TestMessageStoreBase):
         self.assertEqual(list(index_page), all_keys[:-1])
 
     @inlineCallbacks
-    def test_batch_outbound_keys_with_address_range(self):
+    def test_batch_outbound_keys_with_addresses_range(self):
         batch_id = yield self.store.batch_start([('pool', 'tag')])
         messages = yield self.create_outbound_messages(batch_id, 5)
         sorted_keys = sorted(
@@ -906,6 +911,140 @@ class TestMessageStore(TestMessageStoreBase):
         index_page = yield self.store.batch_outbound_keys_with_addresses(
             batch_id, max_results=6, start=all_keys[1][1], end=all_keys[-2][1])
         self.assertEqual(list(index_page), all_keys[1:-1])
+
+    @inlineCallbacks
+    def test_batch_inbound_keys_with_addresses_reverse(self):
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+        messages = yield self.create_inbound_messages(batch_id, 10)
+        sorted_keys = sorted(
+            [(zero_ms(msg['timestamp']), msg['from_addr'], msg['message_id'])
+             for msg in messages], reverse=True)
+        all_keys = [(key, timestamp, addr)
+                    for (timestamp, addr, key) in sorted_keys]
+
+        page = yield self.store.batch_inbound_keys_with_addresses_reverse(
+            batch_id, max_results=6)
+
+        results = list(page)
+        self.assertEqual(len(results), 6)
+        self.assertEqual(page.has_next_page(), True)
+
+        next_page = yield page.next_page()
+        results.extend(next_page)
+        self.assertEqual(len(results), 10)
+        self.assertEqual(next_page.has_next_page(), False)
+
+        self.assertEqual(results, all_keys)
+
+    @inlineCallbacks
+    def test_batch_inbound_keys_with_addresses_reverse_start(self):
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+        messages = yield self.create_inbound_messages(batch_id, 5)
+        sorted_keys = sorted(
+            [(zero_ms(msg['timestamp']), msg['from_addr'], msg['message_id'])
+             for msg in messages], reverse=True)
+        all_keys = [(key, timestamp, addr)
+                    for (timestamp, addr, key) in sorted_keys]
+
+        print all_keys
+        page = yield self.store.batch_inbound_keys_with_addresses_reverse(
+            batch_id, max_results=6, start=all_keys[-2][1])
+        self.assertEqual(list(page), all_keys[:-1])
+
+    @inlineCallbacks
+    def test_batch_inbound_keys_with_addresses_reverse_end(self):
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+        messages = yield self.create_inbound_messages(batch_id, 5)
+        sorted_keys = sorted(
+            [(zero_ms(msg['timestamp']), msg['from_addr'], msg['message_id'])
+             for msg in messages], reverse=True)
+        all_keys = [(key, timestamp, addr)
+                    for (timestamp, addr, key) in sorted_keys]
+
+        page = yield self.store.batch_inbound_keys_with_addresses_reverse(
+            batch_id, max_results=6, end=all_keys[1][1])
+        self.assertEqual(list(page), all_keys[1:])
+
+    @inlineCallbacks
+    def test_batch_inbound_keys_with_addresses_reverse_range(self):
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+        messages = yield self.create_inbound_messages(batch_id, 5)
+        sorted_keys = sorted(
+            [(zero_ms(msg['timestamp']), msg['from_addr'], msg['message_id'])
+             for msg in messages], reverse=True)
+        all_keys = [(key, timestamp, addr)
+                    for (timestamp, addr, key) in sorted_keys]
+
+        page = yield self.store.batch_inbound_keys_with_addresses_reverse(
+            batch_id, max_results=6, start=all_keys[-2][1], end=all_keys[1][1])
+        self.assertEqual(list(page), all_keys[1:-1])
+
+    @inlineCallbacks
+    def test_batch_outbound_keys_with_addresses_reverse(self):
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+        messages = yield self.create_outbound_messages(batch_id, 10)
+        sorted_keys = sorted(
+            [(zero_ms(msg['timestamp']), msg['to_addr'], msg['message_id'])
+             for msg in messages], reverse=True)
+        all_keys = [(key, timestamp, addr)
+                    for (timestamp, addr, key) in sorted_keys]
+
+        page = yield self.store.batch_outbound_keys_with_addresses_reverse(
+            batch_id, max_results=6)
+
+        results = list(page)
+        self.assertEqual(len(results), 6)
+        self.assertEqual(page.has_next_page(), True)
+
+        next_page = yield page.next_page()
+        results.extend(next_page)
+        self.assertEqual(len(results), 10)
+        self.assertEqual(next_page.has_next_page(), False)
+
+        self.assertEqual(results, all_keys)
+
+    @inlineCallbacks
+    def test_batch_outbound_keys_with_addresses_reverse_start(self):
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+        messages = yield self.create_outbound_messages(batch_id, 5)
+        sorted_keys = sorted(
+            [(zero_ms(msg['timestamp']), msg['to_addr'], msg['message_id'])
+             for msg in messages], reverse=True)
+        all_keys = [(key, timestamp, addr)
+                    for (timestamp, addr, key) in sorted_keys]
+
+        print all_keys
+        page = yield self.store.batch_outbound_keys_with_addresses_reverse(
+            batch_id, max_results=6, start=all_keys[-2][1])
+        self.assertEqual(list(page), all_keys[:-1])
+
+    @inlineCallbacks
+    def test_batch_outbound_keys_with_addresses_reverse_end(self):
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+        messages = yield self.create_outbound_messages(batch_id, 5)
+        sorted_keys = sorted(
+            [(zero_ms(msg['timestamp']), msg['to_addr'], msg['message_id'])
+             for msg in messages], reverse=True)
+        all_keys = [(key, timestamp, addr)
+                    for (timestamp, addr, key) in sorted_keys]
+
+        page = yield self.store.batch_outbound_keys_with_addresses_reverse(
+            batch_id, max_results=6, end=all_keys[1][1])
+        self.assertEqual(list(page), all_keys[1:])
+
+    @inlineCallbacks
+    def test_batch_outbound_keys_with_addresses_reverse_range(self):
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+        messages = yield self.create_outbound_messages(batch_id, 5)
+        sorted_keys = sorted(
+            [(zero_ms(msg['timestamp']), msg['to_addr'], msg['message_id'])
+             for msg in messages], reverse=True)
+        all_keys = [(key, timestamp, addr)
+                    for (timestamp, addr, key) in sorted_keys]
+
+        page = yield self.store.batch_outbound_keys_with_addresses_reverse(
+            batch_id, max_results=6, start=all_keys[-2][1], end=all_keys[1][1])
+        self.assertEqual(list(page), all_keys[1:-1])
 
     @inlineCallbacks
     def test_message_event_keys_with_statuses(self):
