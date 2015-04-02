@@ -432,7 +432,7 @@ class MessageStore(object):
         returnValue(msg.msg if msg is not None else None)
 
     @Manager.calls_manager
-    def add_event(self, event):
+    def add_event(self, event, batch_ids=None):
         event_id = event['event_id']
         msg_id = event['user_message_id']
         event_record = yield self.events.load(event_id)
@@ -440,12 +440,18 @@ class MessageStore(object):
             event_record = self.events(event_id, event=event, message=msg_id)
         else:
             event_record.event = event
-        yield event_record.save()
 
-        msg_record = yield self.outbound_messages.load(msg_id)
-        if msg_record is not None:
-            for batch_id in msg_record.batches.keys():
-                yield self.cache.add_event(batch_id, event)
+        # If we aren't given batch_ids, get them from the outbound message.
+        if batch_ids is None:
+            msg_record = yield self.outbound_messages.load(msg_id)
+            if msg_record is not None:
+                batch_ids = msg_record.batches.keys()
+
+        for batch_id in batch_ids:
+            event_record.batches.add_key(batch_id)
+            yield self.cache.add_event(batch_id, event)
+
+        yield event_record.save()
 
     @Manager.calls_manager
     def get_event(self, event_id):
