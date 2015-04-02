@@ -10,7 +10,7 @@ from uuid import uuid4
 import itertools
 import warnings
 
-from twisted.internet.defer import returnValue
+from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.message import (
     TransportEvent, TransportUserMessage, parse_vumi_date, format_vumi_date)
@@ -1127,3 +1127,22 @@ def key_with_rts_and_value_formatter(batch_id, result):
         raise ValueError(
             "Index value %r does not match expected format." % (value,))
     return (key, from_reverse_timestamp(timestamp), address)
+
+
+@inlineCallbacks
+def add_batches_to_event(stored_event):
+    """
+    Post-migrate function to be used with `vumi_model_migrator` to add batches
+    to stored events that don't have any.
+    """
+    if stored_event.batches.keys():
+        # We already have batches, so there's no need to look them up.
+        returnValue(False)
+
+    outbound_messages = stored_event.manager.proxy(OutboundMessage)
+    msg_record = yield outbound_messages.load(stored_event.message.key)
+    if msg_record is not None:
+        for batch_id in msg_record.batches.keys():
+            stored_event.batches.add_key(batch_id)
+
+    returnValue(True)

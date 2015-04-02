@@ -12,7 +12,8 @@ from vumi.tests.helpers import (
 
 try:
     from vumi.components.message_store import (
-        MessageStore, to_reverse_timestamp, from_reverse_timestamp)
+        MessageStore, to_reverse_timestamp, from_reverse_timestamp,
+        add_batches_to_event)
 except ImportError, e:
     import_skip(e, 'riak')
 
@@ -313,7 +314,7 @@ class TestMessageStore(TestMessageStoreBase):
         event_keys = yield self.store.message_event_keys(msg_id)
         batch_status = yield self.store.batch_status(batch_id)
         batch_1_status = yield self.store.batch_status(batch_1)
-        batch_2_status = yield self.store.batch_status(batch_1)
+        batch_2_status = yield self.store.batch_status(batch_2)
 
         self.assertEqual(stored_ack, ack)
         self.assertEqual(event_keys, [ack_id])
@@ -1714,3 +1715,43 @@ class TestMessageStoreCache(TestMessageStoreBase):
             found = results[msg['message_id']]
             expected = time.mktime(msg['timestamp'].timetuple())
             self.assertAlmostEqual(found, expected)
+
+
+class TestMigrationFunctions(TestMessageStoreBase):
+
+    @inlineCallbacks
+    def test_add_batches_to_event_no_batches(self):
+        """
+        If the stored event has no batches, they're looked up from the outbound
+        message and added to the event.
+        """
+        msg_id, msg, batch_id = yield self._create_outbound()
+
+        ack = self.msg_helper.make_ack(msg)
+        ack_id = ack['event_id']
+        yield self.store.add_event(ack, batch_ids=[])
+
+        event = yield self.store.events.load(ack_id)
+        self.assertEqual(event.batches.keys(), [])
+
+        updated = yield add_batches_to_event(event)
+        self.assertEqual(updated, True)
+        self.assertEqual(event.batches.keys(), [batch_id])
+
+    @inlineCallbacks
+    def test_add_batches_to_event_with_batches(self):
+        """
+        If the stored event already has batches, we do nothing.
+        """
+        msg_id, msg, batch_id = yield self._create_outbound()
+
+        ack = self.msg_helper.make_ack(msg)
+        ack_id = ack['event_id']
+        yield self.store.add_event(ack, batch_ids=[batch_id])
+
+        event = yield self.store.events.load(ack_id)
+        self.assertEqual(event.batches.keys(), [batch_id])
+
+        updated = yield add_batches_to_event(event)
+        self.assertEqual(updated, False)
+        self.assertEqual(event.batches.keys(), [batch_id])
