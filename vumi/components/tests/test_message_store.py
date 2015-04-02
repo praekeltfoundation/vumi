@@ -946,7 +946,6 @@ class TestMessageStore(TestMessageStoreBase):
         all_keys = [(key, timestamp, addr)
                     for (timestamp, addr, key) in sorted_keys]
 
-        print all_keys
         page = yield self.store.batch_inbound_keys_with_addresses_reverse(
             batch_id, max_results=6, start=all_keys[-2][1])
         self.assertEqual(list(page), all_keys[:-1])
@@ -1013,7 +1012,6 @@ class TestMessageStore(TestMessageStoreBase):
         all_keys = [(key, timestamp, addr)
                     for (timestamp, addr, key) in sorted_keys]
 
-        print all_keys
         page = yield self.store.batch_outbound_keys_with_addresses_reverse(
             batch_id, max_results=6, start=all_keys[-2][1])
         self.assertEqual(list(page), all_keys[:-1])
