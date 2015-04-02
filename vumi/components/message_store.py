@@ -122,24 +122,33 @@ class OutboundMessage(Model):
 
 
 class Event(Model):
-    VERSION = 1
+    VERSION = 2
     MIGRATOR = EventMigrator
 
     # key is event_id
     event = VumiMessage(TransportEvent)
     message = ForeignKey(OutboundMessage)
+    batches = ManyToMany(Batch)
 
     # Extra fields for compound indexes
     message_with_status = Unicode(index=True, null=True)
+    batches_with_statuses_reverse = ListOf(Unicode(), index=True)
 
     def save(self):
         # We override this method to set our index fields before saving.
         timestamp = self.event['timestamp']
+        if not isinstance(timestamp, basestring):
+            timestamp = format_vumi_date(timestamp)
         status = self.event['event_type']
         if status == "delivery_report":
             status = "%s.%s" % (status, self.event['delivery_status'])
         self.message_with_status = u"%s$%s$%s" % (
             self.message.key, timestamp, status)
+        self.batches_with_statuses_reverse = []
+        reverse_ts = to_reverse_timestamp(timestamp)
+        for batch_id in self.batches.keys():
+            self.batches_with_statuses_reverse.append(
+                u"%s$%s$%s" % (batch_id, reverse_ts, status))
         return super(Event, self).save()
 
 
