@@ -26,6 +26,10 @@ class Options(usage.Options):
          "The number of keys to fetch in each index query."],
         ["continuation-token", None, None,
          "A continuation token for resuming an interrupted migration."],
+        ["post-migrate-function", None, None,
+         "Full Python name of a callable to post-process each migrated object."
+         " Should update the model object and return a (possibly deferred)"
+         " boolean to indicate whether the object has been modified."],
     ]
 
     optFlags = [
@@ -86,6 +90,13 @@ class ModelMigrator(object):
         manager = self.get_riak_manager(riak_config)
         self.model = manager.proxy(model_cls)
 
+        # The default post-migrate-function does nothing and returns True if
+        # and only if the object was migrated.
+        self.post_migrate_function = lambda obj: obj.was_migrated
+        if options['post-migrate-function'] is not None:
+            self.post_migrate_function = load_class_by_string(
+                options['post-migrate-function'])
+
     def get_riak_manager(self, riak_config):
         return TxRiakManager.from_config(riak_config)
 
@@ -97,7 +108,8 @@ class ModelMigrator(object):
         try:
             obj = yield self.model.load(key)
             if obj is not None:
-                if obj.was_migrated and not dry_run:
+                should_save = yield self.post_migrate_function(obj)
+                if should_save and not dry_run:
                     yield obj.save()
             else:
                 self.emit("Skipping tombstone key %r." % (key,))

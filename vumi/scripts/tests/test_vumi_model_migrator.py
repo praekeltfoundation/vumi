@@ -4,12 +4,45 @@ import sys
 from StringIO import StringIO
 
 from twisted.internet.defer import inlineCallbacks, succeed
+from twisted.internet.task import deferLater
 from twisted.python import usage
 
 from vumi.persist import model
 from vumi.persist.fields import Unicode
 from vumi.scripts.vumi_model_migrator import ModelMigrator, Options, main
 from vumi.tests.helpers import VumiTestCase, PersistenceHelper
+
+
+def post_migrate_function(obj):
+    """
+    Post-migrate-function for use in tests.
+    """
+    obj.a = obj.a + u"-modified"
+    return True
+
+
+def post_migrate_function_deferred(obj):
+    """
+    Post-migrate-function for use in tests.
+    """
+    from twisted.internet import reactor
+    return deferLater(reactor, 0.1, post_migrate_function, obj)
+
+
+def post_migrate_function_new_only(obj):
+    """
+    Post-migrate-function for use in tests.
+    """
+    if obj.was_migrated:
+        return post_migrate_function(obj)
+    return False
+
+
+def fqpn(thing):
+    """
+    Get the fully-qualified name of a thing.
+    """
+    return ".".join([thing.__module__, thing.__name__])
 
 
 class SimpleModelMigrator(model.ModelMigrator):
@@ -52,8 +85,7 @@ class TestModelMigrator(VumiTestCase):
         self.riak_manager = self.persistence_helper.get_riak_manager()
         self.old_model = self.riak_manager.proxy(SimpleModelOld)
         self.model = self.riak_manager.proxy(SimpleModel)
-        self.model_cls_path = ".".join([
-            SimpleModel.__module__, SimpleModel.__name__])
+        self.model_cls_path = fqpn(SimpleModel)
         self.expected_bucket_prefix = "bucket"
         self.default_args = [
             "-m", self.model_cls_path,
@@ -61,7 +93,8 @@ class TestModelMigrator(VumiTestCase):
         ]
 
     def make_migrator(self, args=None, index_page_size=None,
-                      concurrent_migrations=None, continuation_token=None):
+                      concurrent_migrations=None, continuation_token=None,
+                      post_migrate_function=None):
         if args is None:
             args = self.default_args
         if index_page_size is not None:
@@ -73,6 +106,9 @@ class TestModelMigrator(VumiTestCase):
         if continuation_token is not None:
             args.extend(
                 ["--continuation-token", continuation_token])
+        if post_migrate_function is not None:
+            args.extend(
+                ["--post-migrate-function", post_migrate_function])
         options = Options()
         options.parseOptions(args)
         return StubbedModelMigrator(self, options)
@@ -310,3 +346,98 @@ class TestModelMigrator(VumiTestCase):
         ])
         self.assertEqual(sorted(loads), [u"key-0", u"key-1", u"key-2"])
         self.assertEqual(sorted(stores), [u"key-0", u"key-2"])
+
+    @inlineCallbacks
+    def test_migrating_with_post_migrate_function(self):
+        """
+        If post-migrate-function is provided, it should be called for every
+        object.
+        """
+        yield self.mk_simple_models_old(3)
+        loads, stores = self.record_load_and_store()
+        model_migrator = self.make_migrator(
+            post_migrate_function=fqpn(post_migrate_function))
+
+        yield model_migrator.run()
+        self.assertEqual(model_migrator.output, [
+            "Migrating ...",
+            "Done, 3 objects migrated.",
+        ])
+        self.assertEqual(sorted(loads), [u"key-%d" % i for i in range(3)])
+        self.assertEqual(sorted(stores), [u"key-%d" % i for i in range(3)])
+        for i in range(3):
+            obj = yield self.model.load(u"key-%d" % i)
+            self.assertEqual(obj.a, u"value-%d-modified" % i)
+
+    @inlineCallbacks
+    def test_migrating_with_deferred_post_migrate_function(self):
+        """
+        A post-migrate-function may return a Deferred.
+        """
+        yield self.mk_simple_models_old(3)
+        loads, stores = self.record_load_and_store()
+        model_migrator = self.make_migrator(
+            post_migrate_function=fqpn(post_migrate_function_deferred))
+
+        yield model_migrator.run()
+        self.assertEqual(model_migrator.output, [
+            "Migrating ...",
+            "Done, 3 objects migrated.",
+        ])
+        self.assertEqual(sorted(loads), [u"key-%d" % i for i in range(3)])
+        self.assertEqual(sorted(stores), [u"key-%d" % i for i in range(3)])
+        for i in range(3):
+            obj = yield self.model.load(u"key-%d" % i)
+            self.assertEqual(obj.a, u"value-%d-modified" % i)
+
+    @inlineCallbacks
+    def test_migrating_old_and_new_with_post_migrate_function(self):
+        """
+        A post-migrate-function may choose to modify objects that were not
+        migrated.
+        """
+        yield self.mk_simple_models_old(1)
+        yield self.mk_simple_models_new(1, start=1)
+        yield self.mk_simple_models_old(1, start=2)
+        loads, stores = self.record_load_and_store()
+        model_migrator = self.make_migrator(
+            post_migrate_function=fqpn(post_migrate_function))
+
+        yield model_migrator.run()
+        self.assertEqual(model_migrator.output, [
+            "Migrating ...",
+            "Done, 3 objects migrated.",
+        ])
+        self.assertEqual(sorted(loads), [u"key-%d" % i for i in range(3)])
+        self.assertEqual(sorted(stores), [u"key-%d" % i for i in range(3)])
+        for i in range(3):
+            obj = yield self.model.load(u"key-%d" % i)
+            self.assertEqual(obj.a, u"value-%d-modified" % i)
+
+    @inlineCallbacks
+    def test_migrating_old_and_new_with_new_only_post_migrate_function(self):
+        """
+        A post-migrate-function may choose to leave objects that were not
+        migrated unmodified.
+        """
+        yield self.mk_simple_models_old(1)
+        yield self.mk_simple_models_new(1, start=1)
+        yield self.mk_simple_models_old(1, start=2)
+        loads, stores = self.record_load_and_store()
+        model_migrator = self.make_migrator(
+            post_migrate_function=fqpn(post_migrate_function_new_only))
+
+        yield model_migrator.run()
+        self.assertEqual(model_migrator.output, [
+            "Migrating ...",
+            "Done, 3 objects migrated.",
+        ])
+        self.assertEqual(sorted(loads), [u"key-0", u"key-1", u"key-2"])
+        self.assertEqual(sorted(stores), [u"key-0", u"key-2"])
+
+        obj_0 = yield self.model.load(u"key-0")
+        self.assertEqual(obj_0.a, u"value-0-modified")
+        obj_1 = yield self.model.load(u"key-1")
+        self.assertEqual(obj_1.a, u"value-1")
+        obj_2 = yield self.model.load(u"key-2")
+        self.assertEqual(obj_2.a, u"value-2-modified")
