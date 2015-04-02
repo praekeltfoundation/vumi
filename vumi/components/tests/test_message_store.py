@@ -10,17 +10,14 @@ from vumi.message import TransportEvent, format_vumi_date
 from vumi.tests.helpers import (
     VumiTestCase, MessageHelper, PersistenceHelper, import_skip)
 
+try:
+    from vumi.components.message_store import (
+        MessageStore, to_reverse_timestamp, from_reverse_timestamp)
+except ImportError, e:
+    import_skip(e, 'riak')
+
 
 class TestReverseTimestampUtils(VumiTestCase):
-
-    def setUp(self):
-        try:
-            from vumi.components.message_store import (
-                to_reverse_timestamp, from_reverse_timestamp)
-        except ImportError, e:
-            import_skip(e, 'riak')
-        self.to_reverse_timestamp = to_reverse_timestamp
-        self.from_reverse_timestamp = from_reverse_timestamp
 
     def test_to_reverse_timestamp(self):
         """
@@ -28,31 +25,26 @@ class TestReverseTimestampUtils(VumiTestCase):
         reverse timestamp.
         """
         self.assertEqual(
-            "FFAAE41F25", self.to_reverse_timestamp("2015-04-01 12:13:14"))
+            "FFAAE41F25", to_reverse_timestamp("2015-04-01 12:13:14"))
         self.assertEqual(
-            "FFAAE41F25",
-            self.to_reverse_timestamp("2015-04-01 12:13:14.000000"))
+            "FFAAE41F25", to_reverse_timestamp("2015-04-01 12:13:14.000000"))
         self.assertEqual(
-            "FFAAE41F25",
-            self.to_reverse_timestamp("2015-04-01 12:13:14.999999"))
+            "FFAAE41F25", to_reverse_timestamp("2015-04-01 12:13:14.999999"))
         self.assertEqual(
-            "FFAAE41F24", self.to_reverse_timestamp("2015-04-01 12:13:15"))
+            "FFAAE41F24", to_reverse_timestamp("2015-04-01 12:13:15"))
         self.assertEqual(
-            "F0F9025FA5", self.to_reverse_timestamp("4015-04-01 12:13:14"))
+            "F0F9025FA5", to_reverse_timestamp("4015-04-01 12:13:14"))
 
     def test_from_reverse_timestamp(self):
         """
         from_reverse_timestamp() is the inverse of to_reverse_timestamp().
         """
         self.assertEqual(
-            "2015-04-01 12:13:14.000000",
-            self.from_reverse_timestamp("FFAAE41F25"))
+            "2015-04-01 12:13:14.000000", from_reverse_timestamp("FFAAE41F25"))
         self.assertEqual(
-            "2015-04-01 12:13:13.000000",
-            self.from_reverse_timestamp("FFAAE41F26"))
+            "2015-04-01 12:13:13.000000", from_reverse_timestamp("FFAAE41F26"))
         self.assertEqual(
-            "4015-04-01 12:13:14.000000",
-            self.from_reverse_timestamp("F0F9025FA5"))
+            "4015-04-01 12:13:14.000000", from_reverse_timestamp("F0F9025FA5"))
 
 
 class TestMessageStoreBase(VumiTestCase):
@@ -61,10 +53,6 @@ class TestMessageStoreBase(VumiTestCase):
     def setUp(self):
         self.persistence_helper = self.add_helper(
             PersistenceHelper(use_riak=True))
-        try:
-            from vumi.components.message_store import MessageStore
-        except ImportError, e:
-            import_skip(e, 'riak')
         self.redis = yield self.persistence_helper.get_redis_manager()
         self.manager = self.persistence_helper.get_riak_manager()
         self.store = MessageStore(self.manager, self.redis)
@@ -237,17 +225,23 @@ class TestMessageStore(TestMessageStoreBase):
             (yield self.store.batch_outbound_keys(batch_id_2)), [msg_id])
         # Make sure we're writing the right indexes.
         stored_msg = yield self.store.outbound_messages.load(msg_id)
+        timestamp = format_vumi_date(msg['timestamp'])
+        reverse_ts = to_reverse_timestamp(timestamp)
         self.assertEqual(stored_msg._riak_object.get_indexes(), set([
             ('batches_bin', batch_id_1),
             ('batches_bin', batch_id_2),
             ('batches_with_timestamps_bin',
-             "%s$%s" % (batch_id_1, msg['timestamp'])),
+             "%s$%s" % (batch_id_1, timestamp)),
             ('batches_with_timestamps_bin',
-             "%s$%s" % (batch_id_2, msg['timestamp'])),
+             "%s$%s" % (batch_id_2, timestamp)),
             ('batches_with_addresses_bin',
-             "%s$%s$%s" % (batch_id_1, msg['timestamp'], msg['to_addr'])),
+             "%s$%s$%s" % (batch_id_1, timestamp, msg['to_addr'])),
             ('batches_with_addresses_bin',
-             "%s$%s$%s" % (batch_id_2, msg['timestamp'], msg['to_addr'])),
+             "%s$%s$%s" % (batch_id_2, timestamp, msg['to_addr'])),
+            ('batches_with_addresses_reverse_bin',
+             "%s$%s$%s" % (batch_id_1, reverse_ts, msg['to_addr'])),
+            ('batches_with_addresses_reverse_bin',
+             "%s$%s$%s" % (batch_id_2, reverse_ts, msg['to_addr'])),
         ]))
 
     @inlineCallbacks
@@ -433,17 +427,23 @@ class TestMessageStore(TestMessageStoreBase):
                          [msg_id])
         # Make sure we're writing the right indexes.
         stored_msg = yield self.store.inbound_messages.load(msg_id)
+        timestamp = format_vumi_date(msg['timestamp'])
+        reverse_ts = to_reverse_timestamp(timestamp)
         self.assertEqual(stored_msg._riak_object.get_indexes(), set([
             ('batches_bin', batch_id_1),
             ('batches_bin', batch_id_2),
             ('batches_with_timestamps_bin',
-             "%s$%s" % (batch_id_1, msg['timestamp'])),
+             "%s$%s" % (batch_id_1, timestamp)),
             ('batches_with_timestamps_bin',
-             "%s$%s" % (batch_id_2, msg['timestamp'])),
+             "%s$%s" % (batch_id_2, timestamp)),
             ('batches_with_addresses_bin',
-             "%s$%s$%s" % (batch_id_1, msg['timestamp'], msg['from_addr'])),
+             "%s$%s$%s" % (batch_id_1, timestamp, msg['from_addr'])),
             ('batches_with_addresses_bin',
-             "%s$%s$%s" % (batch_id_2, msg['timestamp'], msg['from_addr'])),
+             "%s$%s$%s" % (batch_id_2, timestamp, msg['from_addr'])),
+            ('batches_with_addresses_reverse_bin',
+             "%s$%s$%s" % (batch_id_1, reverse_ts, msg['from_addr'])),
+            ('batches_with_addresses_reverse_bin',
+             "%s$%s$%s" % (batch_id_2, reverse_ts, msg['from_addr'])),
         ]))
 
     @inlineCallbacks
