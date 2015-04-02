@@ -724,7 +724,8 @@ class MessageStore(object):
             'batches_with_timestamps', start_value, end_value,
             return_terms=with_timestamps, max_results=max_results)
         if with_timestamps:
-            results = KeysWithTimestamps(self, batch_id, results)
+            results = IndexPageWrapper(
+                key_with_timestamp_formatter, self, batch_id, results)
         returnValue(results)
 
     @Manager.calls_manager
@@ -759,7 +760,8 @@ class MessageStore(object):
             'batches_with_timestamps', start_value, end_value,
             return_terms=with_timestamps, max_results=max_results)
         if with_timestamps:
-            results = KeysWithTimestamps(self, batch_id, results)
+            results = IndexPageWrapper(
+                key_with_timestamp_formatter, self, batch_id, results)
         returnValue(results)
 
     @Manager.calls_manager
@@ -789,7 +791,8 @@ class MessageStore(object):
         results = yield self.inbound_messages.index_keys_page(
             'batches_with_addresses', start_value, end_value,
             return_terms=True, max_results=max_results)
-        returnValue(KeysWithAddresses(self, batch_id, results))
+        returnValue(IndexPageWrapper(
+            key_with_ts_and_value_formatter, self, batch_id, results))
 
     @Manager.calls_manager
     def batch_outbound_keys_with_addresses(self, batch_id, max_results=None,
@@ -818,7 +821,8 @@ class MessageStore(object):
         results = yield self.outbound_messages.index_keys_page(
             'batches_with_addresses', start_value, end_value,
             return_terms=True, max_results=max_results)
-        returnValue(KeysWithAddresses(self, batch_id, results))
+        returnValue(IndexPageWrapper(
+            key_with_ts_and_value_formatter, self, batch_id, results))
 
     @Manager.calls_manager
     def message_event_keys_with_statuses(self, msg_id, max_results=None):
@@ -841,7 +845,8 @@ class MessageStore(object):
         results = yield self.events.index_keys_page(
             'message_with_status', start_value, end_value,
             return_terms=True, max_results=max_results)
-        returnValue(KeysWithAddresses(self, msg_id, results))
+        returnValue(IndexPageWrapper(
+            key_with_ts_and_value_formatter, self, msg_id, results))
 
     @Manager.calls_manager
     def batch_inbound_stats(self, batch_id, max_results=None,
@@ -878,7 +883,8 @@ class MessageStore(object):
         raw_page = yield self.inbound_messages.index_keys_page(
             'batches_with_addresses', start_value, end_value,
             return_terms=True, max_results=max_results)
-        page = KeysWithAddresses(self, batch_id, raw_page)
+        page = IndexPageWrapper(
+            key_with_ts_and_value_formatter, self, batch_id, raw_page)
 
         while page is not None:
             results = list(page)
@@ -926,7 +932,8 @@ class MessageStore(object):
         raw_page = yield self.outbound_messages.index_keys_page(
             'batches_with_addresses', start_value, end_value,
             return_terms=True, max_results=max_results)
-        page = KeysWithAddresses(self, batch_id, raw_page)
+        page = IndexPageWrapper(
+            key_with_ts_and_value_formatter, self, batch_id, raw_page)
 
         while page is not None:
             results = list(page)
@@ -940,22 +947,30 @@ class MessageStore(object):
         })
 
 
-class KeysWithTimestamps(object):
+class IndexPageWrapper(object):
     """
-    Index page that reformats results into something easier to work with.
+    Index page wrapper that reformats index values into something easier to
+    work with.
 
     This is a wrapper around the lower-level index page object from Riak and
     proxies a subset of its functionality.
-
-    TODO: This is currently written specifically for batch_id+timestamp
-          indexes, but the intent is to generalise it to any kind of compound
-          index once we've figured out a good way to do those.
     """
-    def __init__(self, message_store, batch_id, index_page):
+    def __init__(self, formatter, message_store, batch_id, index_page):
+        self._formatter = formatter
         self._message_store = message_store
         self.manager = message_store.manager
         self._batch_id = batch_id
         self._index_page = index_page
+
+    def _wrap_index_page(self, index_page):
+        """
+        Wrap a raw index page object if it is not None.
+        """
+        if index_page is not None:
+            index_page = type(self)(
+                self._formatter, self._message_store, self._batch_id,
+                index_page)
+        return index_page
 
     @Manager.calls_manager
     def next_page(self):
@@ -963,13 +978,11 @@ class KeysWithTimestamps(object):
         Fetch the next page of results.
 
         :returns:
-            A new :class:`KeysWithTimestamps` object containing the next page
+            A new :class:`IndexPageWrapper` object containing the next page
             of results.
         """
         next_page = yield self._index_page.next_page()
-        if next_page is None:
-            returnValue(None)
-        returnValue(type(self)(self._message_store, self._batch_id, next_page))
+        returnValue(self._wrap_index_page(next_page))
 
     def has_next_page(self):
         """
@@ -982,72 +995,29 @@ class KeysWithTimestamps(object):
         return self._index_page.has_next_page()
 
     def __iter__(self):
-        return (self._format_result(r) for r in self._index_page)
-
-    def _format_result(self, result):
-        value, key = result
-        prefix = self._batch_id + "$"
-        if not value.startswith(prefix):
-            raise ValueError(
-                "Index value %r does not begin with expected prefix %r." % (
-                    value, prefix))
-        return (key, value[len(prefix):])
+        return (self._formatter(self._batch_id, r) for r in self._index_page)
 
 
-class KeysWithAddresses(object):
-    """
-    Index page that reformats results into something easier to work with.
+def key_with_timestamp_formatter(batch_id, result):
+    value, key = result
+    prefix = batch_id + "$"
+    if not value.startswith(prefix):
+        raise ValueError(
+            "Index value %r does not begin with expected prefix %r." % (
+                value, prefix))
+    return (key, value[len(prefix):])
 
-    This is a wrapper around the lower-level index page object from Riak and
-    proxies a subset of its functionality.
 
-    TODO: This is currently written specifically for batch_id+timestamp+address
-          indexes, but the intent is to generalise it to any kind of compound
-          index once we've figured out a good way to do those.
-    """
-    def __init__(self, message_store, batch_id, index_page):
-        self._message_store = message_store
-        self.manager = message_store.manager
-        self._batch_id = batch_id
-        self._index_page = index_page
-
-    @Manager.calls_manager
-    def next_page(self):
-        """
-        Fetch the next page of results.
-
-        :returns:
-            A new :class:`KeysWithAddresses` object containing the next page of
-            results.
-        """
-        next_page = yield self._index_page.next_page()
-        if next_page is None:
-            returnValue(None)
-        returnValue(type(self)(self._message_store, self._batch_id, next_page))
-
-    def has_next_page(self):
-        """
-        Indicate whether there are more results to follow.
-
-        :returns:
-            ``True`` if there are more results, ``False`` if this is the last
-            page.
-        """
-        return self._index_page.has_next_page()
-
-    def __iter__(self):
-        return (self._format_result(r) for r in self._index_page)
-
-    def _format_result(self, result):
-        value, key = result
-        prefix = self._batch_id + "$"
-        if not value.startswith(prefix):
-            raise ValueError(
-                "Index value %r does not begin with expected prefix %r." % (
-                    value, prefix))
-        suffix = value[len(prefix):]
-        timestamp, delimiter, address = suffix.partition("$")
-        if delimiter != "$":
-            raise ValueError(
-                "Index value %r does not match expected format." % (value,))
-        return (key, timestamp, address)
+def key_with_ts_and_value_formatter(batch_id, result):
+    value, key = result
+    prefix = batch_id + "$"
+    if not value.startswith(prefix):
+        raise ValueError(
+            "Index value %r does not begin with expected prefix %r." % (
+                value, prefix))
+    suffix = value[len(prefix):]
+    timestamp, delimiter, address = suffix.partition("$")
+    if delimiter != "$":
+        raise ValueError(
+            "Index value %r does not match expected format." % (value,))
+    return (key, timestamp, address)
