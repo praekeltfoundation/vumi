@@ -21,6 +21,9 @@ matrix:
       ## Until that's fixed, don't build against new Riak.
       # env: TWISTED_VERSION="Twisted==13.1.0" RIAK_VERSION="current"
       env: TWISTED_VERSION="Twisted==13.1.0" RIAK_VERSION="1.4.12-1"
+    # Test on pypy without coverage, because it's unnecessary and very slow.
+    - python: "pypy"
+      env: TWISTED_VERSION="Twisted" RIAK_VERSION="1.4.12-1" NO_COVERAGE="1"
 services:
   - redis-server
 before_install:
@@ -35,9 +38,10 @@ before_script:
   - riak version
   - sudo riak-admin member-status
 script:
-  - VUMITEST_REDIS_DB=1 VUMI_TEST_NODE_PATH="$(which node)" coverage run --source=vumi `which trial` vumi
+  - if [ -z "$NO_COVERAGE" ]; then COVERAGE_CMD="coverage run --source=vumi"; else COVERAGE_CMD=""; fi
+  - VUMITEST_REDIS_DB=1 VUMI_TEST_NODE_PATH="$(which node)" $COVERAGE_CMD `which trial` vumi
 after_success:
-  - coveralls
+  - if [ -z "$NO_COVERAGE" ]; then coveralls; fi
 # To figure out why Riak 2.0 sometimes breaks.
 after_failure:
   - "echo 'Riak console log:'; cat /usr/lib/riak/log/console.log"

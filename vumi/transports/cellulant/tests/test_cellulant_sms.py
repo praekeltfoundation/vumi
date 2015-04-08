@@ -19,6 +19,7 @@ class TestCellulantSmsTransport(VumiTestCase):
         self.cellulant_sms_calls = DeferredQueue()
         self.mock_cellulant_sms = MockHttpServer(self.handle_request)
         yield self.mock_cellulant_sms.start()
+        self.add_cleanup(self.mock_cellulant_sms.stop)
 
         self.config = {
             'web_path': "foo",
@@ -39,11 +40,6 @@ class TestCellulantSmsTransport(VumiTestCase):
             TransportHelper(CellulantSmsTransport))
         self.transport = yield self.tx_helper.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url()
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield self.mock_cellulant_sms.stop()
-        yield super(TestCellulantSmsTransport, self).tearDown()
 
     def handle_request(self, request):
         self.cellulant_sms_calls.put(request)
@@ -174,6 +170,7 @@ class TestAcksCellulantSmsTransport(VumiTestCase):
         self.mock_cellulant_sms = MockHttpServer(self.handle_request)
         self._mock_response = ''
         yield self.mock_cellulant_sms.start()
+        self.add_cleanup(self.mock_cellulant_sms.stop)
 
         self.config = {
             'web_path': "foo",
@@ -195,11 +192,6 @@ class TestAcksCellulantSmsTransport(VumiTestCase):
             TransportHelper(CellulantSmsTransport))
         self.transport = yield self.tx_helper.get_transport(self.config)
         self.transport_url = self.transport.get_transport_url()
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield self.mock_cellulant_sms.stop()
-        yield super(TestAcksCellulantSmsTransport, self).tearDown()
 
     def mock_response(self, response):
         self._mock_response = response
@@ -271,6 +263,7 @@ class TestPermissiveCellulantSmsTransport(VumiTestCase):
         self.cellulant_sms_calls = DeferredQueue()
         self.mock_cellulant_sms = MockHttpServer(self.handle_request)
         yield self.mock_cellulant_sms.start()
+        self.add_cleanup(self.mock_cellulant_sms.stop)
 
         self.config = {
             'web_path': "foo",
@@ -313,11 +306,6 @@ class TestPermissiveCellulantSmsTransport(VumiTestCase):
             self.config['web_path'],
             urlencode(params)
         )
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield self.mock_cellulant_sms.stop()
-        yield super(TestPermissiveCellulantSmsTransport, self).tearDown()
 
     @inlineCallbacks
     def test_bad_parameter_in_permissive_mode(self):

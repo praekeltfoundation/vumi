@@ -64,7 +64,8 @@ class NetCoreTestCase(VumiTestCase):
         self.assertEqual(resp.code, http.BAD_REQUEST)
         self.assertEqual(resp.delivered_body, (
             "Not all parameters have values. "
-            "Received: ['', 'sms', 'of life', '10010', '8800000000']"))
+            "Received: %r" % (sorted(
+                ['', 'sms', 'of life', '10010', '8800000000']),)))
         self.assertEqual(
             [], self.tx_helper.get_dispatched_inbound())
 
