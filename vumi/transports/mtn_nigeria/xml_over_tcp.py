@@ -276,14 +276,14 @@ class XmlOverTcpClient(Protocol):
             raise CodedXmlOverTcpError(
                 '208',
                 "Unexpected fields in received packet: %s"
-                % list(unexpected_fields))
+                % sorted(unexpected_fields))
 
         missing_mandatory_fields = mandatory_fields - packet_fields
         if missing_mandatory_fields:
             raise CodedXmlOverTcpError(
                 '208',
                 "Missing mandatory fields in received packet: %s"
-                % list(missing_mandatory_fields))
+                % sorted(missing_mandatory_fields))
 
     def handle_error(self, session_id, request_id, e):
         log.err(e)

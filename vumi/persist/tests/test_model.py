@@ -1534,8 +1534,13 @@ class TestModelOnTxRiak(VumiTestCase, ModelTestMixin):
         except ImportError, e:
             import_skip(e, 'riak')
         self.manager = TxRiakManager.from_config({'bucket_prefix': 'test.'})
-        self.add_cleanup(self.manager.purge_all)
+        self.add_cleanup(self.cleanup_manager)
         yield self.manager.purge_all()
+
+    @inlineCallbacks
+    def cleanup_manager(self):
+        yield self.manager.purge_all()
+        yield self.manager.close_manager()
 
 
 class TestModelOnRiak(VumiTestCase, ModelTestMixin):
@@ -1547,4 +1552,9 @@ class TestModelOnRiak(VumiTestCase, ModelTestMixin):
             import_skip(e, 'riak')
 
         self.manager = RiakManager.from_config({'bucket_prefix': 'test.'})
+        self.add_cleanup(self.cleanup_manager)
         self.manager.purge_all()
+
+    def cleanup_manager(self):
+        self.manager.purge_all()
+        self.manager.close_manager()

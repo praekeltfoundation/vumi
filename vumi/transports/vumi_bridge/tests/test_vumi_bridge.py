@@ -218,7 +218,7 @@ class TestGoConversationServerTransport(TestGoConversationTransportBase):
     def test_receive_bad_message(self):
         transport = yield self.get_configured_transport()
         url = transport.get_transport_url('messages.json')
-        resp = yield self.post_msg(url, 'I want to break your things.')
+        resp = yield self.post_msg(url, 'This is not JSON.')
         self.assertEqual(resp.code, 400)
         [failure] = self.flushLoggedErrors()
         self.assertTrue('No JSON object' in str(failure))
@@ -242,7 +242,7 @@ class TestGoConversationServerTransport(TestGoConversationTransportBase):
     def test_receive_bad_event(self):
         transport = yield self.get_configured_transport()
         url = transport.get_transport_url('events.json')
-        resp = yield self.post_msg(url, 'I want to break your things.')
+        resp = yield self.post_msg(url, 'This is not JSON.')
         self.assertEqual(resp.code, 400)
         [failure] = self.flushLoggedErrors()
         self.assertTrue('No JSON object' in str(failure))

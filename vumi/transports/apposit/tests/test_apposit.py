@@ -22,6 +22,7 @@ class TestAppositTransport(VumiTestCase):
         self.mock_server_response = ''
         self.mock_server_response_code = http.OK
         yield self.mock_server.start()
+        self.add_cleanup(self.mock_server.stop)
 
         config = {
             'web_path': 'api/v1/apposit/sms',
@@ -47,11 +48,6 @@ class TestAppositTransport(VumiTestCase):
         self.transport = yield self.tx_helper.get_transport(config)
         self.transport_url = self.transport.get_transport_url()
         self.web_path = config['web_path']
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield self.mock_server.stop()
-        yield super(TestAppositTransport, self).tearDown()
 
     def send_full_inbound_request(self, **params):
         return http_request_full(

@@ -61,15 +61,8 @@ class TestManholeMiddleware(VumiTestCase):
         yield conn.sendRequest(channel, 'pty-req', term, wantReply=1)
         yield conn.sendRequest(channel, 'shell', '', wantReply=1)
         self._client_sockets.append(proto)
+        self.add_cleanup(proto.loseConnection)
         defer.returnValue(channel)
-
-    @inlineCallbacks
-    def tearDown(self):
-        for mw in self._middlewares:
-            yield mw.teardown_middleware()
-
-        for proto in self._client_sockets:
-            proto.loseConnection()
 
     def get_middleware(self, config={}):
         config = dict({
@@ -82,6 +75,7 @@ class TestManholeMiddleware(VumiTestCase):
         mw = ManholeMiddleware("test_manhole_mw", config, worker)
         mw.setup_middleware()
         self._middlewares.append(mw)
+        self.add_cleanup(mw.teardown_middleware)
         return mw
 
     @inlineCallbacks

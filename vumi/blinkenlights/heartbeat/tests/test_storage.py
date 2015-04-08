@@ -43,7 +43,7 @@ class TestStorage(VumiTestCase):
         yield self.stg.add_system_ids(['foo', 'bar'])
         yield self.stg.add_system_ids(['bar'])
         res = yield self.redis.smembers(storage.SYSTEMS_KEY)
-        self.assertEqual(tuple(res), ('foo', 'bar'))
+        self.assertEqual(sorted(res), sorted(['foo', 'bar']))
 
     @inlineCallbacks
     def test_write_system(self):

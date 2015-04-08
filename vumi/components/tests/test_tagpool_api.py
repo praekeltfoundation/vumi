@@ -100,7 +100,8 @@ class TestTagpoolApiServer(VumiTestCase):
         tags = [("newpool", "tag1"), ("newpool", "tag2")]
         result = yield self.proxy.callRemote("declare_tags", tags)
         self.assertEqual(result, None)
-        self.assertEqual((yield self.tagpool.free_tags("newpool")), tags)
+        free_tags = yield self.tagpool.free_tags("newpool")
+        self.assertEqual(sorted(free_tags), sorted(tags))
 
     @inlineCallbacks
     def test_get_metadata(self):
@@ -141,7 +142,8 @@ class TestTagpoolApiServer(VumiTestCase):
     @inlineCallbacks
     def test_free_tags(self):
         result = yield self.proxy.callRemote("free_tags", "pool1")
-        self.assertEqual(result, [["pool1", "tag1"], ["pool1", "tag2"]])
+        self.assertEqual(
+            sorted(result), [["pool1", "tag1"], ["pool1", "tag2"]])
         result = yield self.proxy.callRemote("free_tags", "pool2")
         self.assertEqual(result, [])
         result = yield self.proxy.callRemote("free_tags", "pool3")
@@ -152,7 +154,8 @@ class TestTagpoolApiServer(VumiTestCase):
         result = yield self.proxy.callRemote("inuse_tags", "pool1")
         self.assertEqual(result, [])
         result = yield self.proxy.callRemote("inuse_tags", "pool2")
-        self.assertEqual(result, [["pool2", "tag1"], ["pool2", "tag2"]])
+        self.assertEqual(
+            sorted(result), [["pool2", "tag1"], ["pool2", "tag2"]])
         result = yield self.proxy.callRemote("inuse_tags", "pool3")
         self.assertEqual(result, [])
 

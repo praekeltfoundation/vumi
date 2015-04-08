@@ -154,15 +154,14 @@ class TestDmarkUssdTransport(VumiTestCase):
         response = yield self.tx_helper.mk_request_raw(
             params={"ussdServiceCode": '', "msisdn": '', "creationTime": ''})
 
-        self.assertEqual(
-            response.delivered_body,
-            json.dumps({
-                'missing_parameter': [
-                    "transactionTime", "transactionId", "response",
-                    "ussdRequestString",
-                ],
-            })
-        )
+        json_resp = json.loads(response.delivered_body)
+        json_resp['missing_parameter'] = sorted(json_resp['missing_parameter'])
+        self.assertEqual(json_resp, {
+            'missing_parameter': sorted([
+                "transactionTime", "transactionId", "response",
+                "ussdRequestString",
+            ]),
+        })
         self.assertEqual(response.code, 400)
 
     @inlineCallbacks
