@@ -1100,15 +1100,5 @@ def key_with_ts_and_value_formatter(batch_id, result):
 
 
 def key_with_rts_and_value_formatter(batch_id, result):
-    value, key = result
-    prefix = batch_id + "$"
-    if not value.startswith(prefix):
-        raise ValueError(
-            "Index value %r does not begin with expected prefix %r." % (
-                value, prefix))
-    suffix = value[len(prefix):]
-    timestamp, delimiter, address = suffix.partition("$")
-    if delimiter != "$":
-        raise ValueError(
-            "Index value %r does not match expected format." % (value,))
-    return (key, from_reverse_timestamp(timestamp), address)
+    key, reverse_ts, value = key_with_ts_and_value_formatter(batch_id, result)
+    return (key, from_reverse_timestamp(reverse_ts), value)
