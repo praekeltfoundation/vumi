@@ -75,9 +75,30 @@ class OutboundMessageMigrator(MessageMigratorBase):
 
     def reverse_from_3(self, mdata):
         # The only difference between v2 and v3 is an index that's computed at
-        # save time, to the reverse migration is identical to the forward
+        # save time, so the reverse migration is identical to the forward
         # migration except for the version we set.
         mdata.set_value('$VERSION', 2)
+        self._copy_msg_field('msg', mdata)
+        mdata.copy_values('batches')
+        mdata.copy_indexes('batches')
+
+        return mdata
+
+    def migrate_from_3(self, mdata):
+        # We only copy existing fields and indexes over. The new fields and
+        # indexes are computed at save time.
+        mdata.set_value('$VERSION', 4)
+        self._copy_msg_field('msg', mdata)
+        mdata.copy_values('batches')
+        mdata.copy_indexes('batches')
+
+        return mdata
+
+    def reverse_from_4(self, mdata):
+        # The only difference between v3 and v4 is an index that's computed at
+        # save time, so the reverse migration is identical to the forward
+        # migration except for the version we set.
+        mdata.set_value('$VERSION', 3)
         self._copy_msg_field('msg', mdata)
         mdata.copy_values('batches')
         mdata.copy_indexes('batches')
@@ -116,9 +137,30 @@ class InboundMessageMigrator(MessageMigratorBase):
 
     def reverse_from_3(self, mdata):
         # The only difference between v2 and v3 is an index that's computed at
-        # save time, to the reverse migration is identical to the forward
+        # save time, so the reverse migration is identical to the forward
         # migration except for the version we set.
         mdata.set_value('$VERSION', 2)
+        self._copy_msg_field('msg', mdata)
+        mdata.copy_values('batches')
+        mdata.copy_indexes('batches')
+
+        return mdata
+
+    def migrate_from_3(self, mdata):
+        # We only copy existing fields and indexes over. The new fields and
+        # indexes are computed at save time.
+        mdata.set_value('$VERSION', 4)
+        self._copy_msg_field('msg', mdata)
+        mdata.copy_values('batches')
+        mdata.copy_indexes('batches')
+
+        return mdata
+
+    def reverse_from_4(self, mdata):
+        # The only difference between v3 and v4 is an index that's computed at
+        # save time, so the reverse migration is identical to the forward
+        # migration except for the version we set.
+        mdata.set_value('$VERSION', 3)
         self._copy_msg_field('msg', mdata)
         mdata.copy_values('batches')
         mdata.copy_indexes('batches')

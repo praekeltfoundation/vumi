@@ -1,7 +1,7 @@
 """Previous versions of message store models."""
 
 
-from vumi.message import TransportUserMessage, TransportEvent
+from vumi.message import TransportUserMessage, TransportEvent, format_vumi_date
 from vumi.persist.model import Model
 from vumi.persist.fields import (
     VumiMessage, ForeignKey, ListOf, Dynamic, Tag, Unicode, ManyToMany)
@@ -107,3 +107,59 @@ class InboundMessageV2(Model):
             batches_with_timestamps.append(u"%s$%s" % (batch_id, timestamp))
         self.batches_with_timestamps = batches_with_timestamps
         return super(InboundMessageV2, self).save()
+
+
+class OutboundMessageV3(Model):
+    bucket = 'outboundmessage'
+
+    VERSION = 3
+    MIGRATOR = OutboundMessageMigrator
+
+    # key is message_id
+    msg = VumiMessage(TransportUserMessage)
+    batches = ManyToMany(BatchVNone)
+
+    # Extra fields for compound indexes
+    batches_with_timestamps = ListOf(Unicode(), index=True)
+    batches_with_addresses = ListOf(Unicode(), index=True)
+
+    def save(self):
+        # We override this method to set our index fields before saving.
+        batches_with_timestamps = []
+        batches_with_addresses = []
+        timestamp = format_vumi_date(self.msg['timestamp'])
+        for batch_id in self.batches.keys():
+            batches_with_timestamps.append(u"%s$%s" % (batch_id, timestamp))
+            batches_with_addresses.append(
+                u"%s$%s$%s" % (batch_id, timestamp, self.msg['to_addr']))
+        self.batches_with_timestamps = batches_with_timestamps
+        self.batches_with_addresses = batches_with_addresses
+        return super(OutboundMessageV3, self).save()
+
+
+class InboundMessageV3(Model):
+    bucket = 'inboundmessage'
+
+    VERSION = 3
+    MIGRATOR = InboundMessageMigrator
+
+    # key is message_id
+    msg = VumiMessage(TransportUserMessage)
+    batches = ManyToMany(BatchVNone)
+
+    # Extra fields for compound indexes
+    batches_with_timestamps = ListOf(Unicode(), index=True)
+    batches_with_addresses = ListOf(Unicode(), index=True)
+
+    def save(self):
+        # We override this method to set our index fields before saving.
+        batches_with_timestamps = []
+        batches_with_addresses = []
+        timestamp = self.msg['timestamp']
+        for batch_id in self.batches.keys():
+            batches_with_timestamps.append(u"%s$%s" % (batch_id, timestamp))
+            batches_with_addresses.append(
+                u"%s$%s$%s" % (batch_id, timestamp, self.msg['from_addr']))
+        self.batches_with_timestamps = batches_with_timestamps
+        self.batches_with_addresses = batches_with_addresses
+        return super(InboundMessageV3, self).save()
