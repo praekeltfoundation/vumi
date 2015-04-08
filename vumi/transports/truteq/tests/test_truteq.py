@@ -280,8 +280,9 @@ class TestTruteqTransport(VumiTestCase):
             yield self.send(cmd)
             [warning] = logger.messages()
             self.assertEqual(
-                warning,
-                "Received unsupported message, dropping: %r." % (cmd,))
+                warning[:59],
+                "Received unsupported message, dropping: <MO command_id=103 ")
+        self.flushLoggedErrors()
 
     @inlineCallbacks
     def test_reconnect(self):

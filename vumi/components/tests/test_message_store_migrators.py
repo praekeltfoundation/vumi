@@ -930,7 +930,7 @@ class TestInboundMessageMigrator(TestMigratorBase):
         msg = self.msg_helper.make_inbound("inbound")
         batch_1 = self.batch_vnone(key=u"batch-1")
         batch_2 = self.batch_vnone(key=u"batch-2")
-        new_record = self.inbound_v3(msg["message_id"], msg=msg)
+        new_record = self.inbound_v4(msg["message_id"], msg=msg)
         new_record.batches.add_key(batch_1.key)
         new_record.batches.add_key(batch_2.key)
         yield new_record.save()

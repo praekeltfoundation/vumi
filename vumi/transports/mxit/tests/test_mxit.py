@@ -242,8 +242,8 @@ class TestMxitTransport(VumiTestCase):
             auth, 'Basic %s' % (
                 base64.b64encode('client_id:client_secret')))
         self.assertEqual(
-            'scope=message%2Fsend&grant_type=client_credentials',
-            req.content.read())
+            ['grant_type=client_credentials', 'scope=message%2Fsend'],
+            sorted(req.content.read().split('&')))
         req.write(json.dumps({
             'access_token': 'access_token',
             'expires_in': '10'

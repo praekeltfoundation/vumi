@@ -67,7 +67,7 @@ class NetcoreResource(Resource):
         if not all(param_values):
             request.setResponseCode(http.BAD_REQUEST)
             return ('Not all parameters have values. '
-                    'Received: %r' % (param_values,))
+                    'Received: %r' % (sorted(param_values),))
 
         content = request.args['content'][0]
         if self.config.reject_none and content == "None":
