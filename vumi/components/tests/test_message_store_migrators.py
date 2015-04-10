@@ -22,7 +22,7 @@ except ImportError, e:
 
 
 def mws_value(msg_id, event, status):
-    return "%s$%s$%s" % (msg_id, event['timestamp'], status)
+    return "%s$%s$%s" % (msg_id, format_vumi_date(event['timestamp']), status)
 
 
 def bwsr_value(batch_id, event, status):
@@ -31,15 +31,17 @@ def bwsr_value(batch_id, event, status):
 
 
 def bwt_value(batch_id, msg):
-    return "%s$%s" % (batch_id, msg['timestamp'])
+    return "%s$%s" % (batch_id, format_vumi_date(msg['timestamp']))
 
 
 def bwa_in_value(batch_id, msg):
-    return "%s$%s$%s" % (batch_id, msg['timestamp'], msg['from_addr'])
+    return "%s$%s$%s" % (
+        batch_id, format_vumi_date(msg['timestamp']), msg['from_addr'])
 
 
 def bwa_out_value(batch_id, msg):
-    return "%s$%s$%s" % (batch_id, msg['timestamp'], msg['to_addr'])
+    return "%s$%s$%s" % (
+        batch_id, format_vumi_date(msg['timestamp']), msg['to_addr'])
 
 
 def bwar_in_value(batch_id, msg):
