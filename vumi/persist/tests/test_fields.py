@@ -283,6 +283,7 @@ class TestUnicode(VumiTestCase):
         self.assertEqual(m_unicode.u, u"foé")
 
 
+@model_field_tests
 class TestTag(VumiTestCase):
     def test_validate(self):
         t = Tag()
@@ -299,6 +300,7 @@ class TestTag(VumiTestCase):
         self.assertEqual(t.from_riak(["pool", "tagname"]), ("pool", "tagname"))
 
 
+@model_field_tests
 class TestTimestamp(VumiTestCase):
     def test_validate(self):
         t = Timestamp()
@@ -317,7 +319,46 @@ class TestTimestamp(VumiTestCase):
         dt = datetime(2100, 10, 5, 11, 10, 9)
         self.assertEqual(t.from_riak("2100-10-05 11:10:09.000000"), dt)
 
+    class TimestampModel(Model):
+        """
+        Toy model for Timestamp tests.
+        """
+        time = Timestamp(null=True)
 
+    @needs_riak
+    def test_set_field(self):
+        """
+        A timestamp field can be set to a datetime or string value through its
+        descriptor.
+        """
+        timestamp_model = self.manager.proxy(self.TimestampModel)
+        t = timestamp_model("foo")
+
+        now = datetime.now()
+        t.time = now
+        self.assertEqual(t.time, now)
+
+        t.time = u"2007-01-25T12:00:00Z"
+        self.assertEqual(t.time, datetime(2007, 01, 25, 12, 0))
+
+    @needs_riak
+    @Manager.calls_manager
+    def test_assorted_values(self):
+        """
+        Values are preserved when the field is stored and later loaded.
+        """
+        timestamp_model = self.manager.proxy(self.TimestampModel)
+        now = datetime.now()
+        yield timestamp_model("m_now", time=now).save()
+        yield timestamp_model("m_string", time=u"2007-01-25T12:00:00Z").save()
+
+        m_now = yield timestamp_model.load("m_now")
+        self.assertEqual(m_now.time, now)
+        m_string = yield timestamp_model.load("m_string")
+        self.assertEqual(m_string.time, datetime(2007, 01, 25, 12, 0))
+
+
+@model_field_tests
 class TestJson(VumiTestCase):
     def test_validate(self):
         j = Json()
@@ -334,12 +375,40 @@ class TestJson(VumiTestCase):
         d = {"foo": [1, 2, 3]}
         self.assertEqual(j.from_riak(d), d)
 
+    class JsonModel(Model):
+        """
+        Toy model for Json tests.
+        """
+        j = Json()
+
+    @needs_riak
+    @Manager.calls_manager
+    def test_assorted_values(self):
+        """
+        Values are preserved when the field is stored and later loaded.
+        """
+        json_model = self.manager.proxy(self.JsonModel)
+        yield json_model("m_str", j="string").save()
+        yield json_model("m_int", j=1).save()
+        yield json_model("m_list", j=["string", 1]).save()
+        yield json_model("m_dict", j={"key": "val"}).save()
+
+        m_str = yield json_model.load("m_str")
+        self.assertEqual(m_str.j, "string")
+        m_int = yield json_model.load("m_int")
+        self.assertEqual(m_int.j, 1)
+        m_list = yield json_model.load("m_list")
+        self.assertEqual(m_list.j, ["string", 1])
+        m_dict = yield json_model.load("m_dict")
+        self.assertEqual(m_dict.j, {"key": "val"})
+
 
 class TestFieldWithSubtype(VumiTestCase):
     def test_fails_on_fancy_subtype(self):
         self.assertRaises(RuntimeError, FieldWithSubtype, Dynamic())
 
 
+@model_field_tests
 class TestDynamic(VumiTestCase):
     def test_validate(self):
         dynamic = Dynamic()
@@ -351,16 +420,295 @@ class TestDynamic(VumiTestCase):
         self.assertRaises(ValidationError, dynamic.validate,
                           {u'a': 'foo', u'b': 2})
 
+    class DynamicModel(Model):
+        """
+        Toy model for Dynamic tests.
+        """
+        a = Unicode()
+        contact_info = Dynamic()
 
+    @needs_riak
+    def test_get_data_with_dynamic_proxy(self):
+        """
+        A Dynamic field creates more than one field in the Riak object.
+        """
+        dynamic_model = self.manager.proxy(self.DynamicModel)
+
+        m = dynamic_model("foo", a=u"ab")
+        m.contact_info['foo'] = u'bar'
+        m.contact_info['zip'] = u'zap'
+
+        self.assertEqual(m.get_data(), {
+            'key': 'foo',
+            '$VERSION': None,
+            'a': 'ab',
+            'contact_info.foo': 'bar',
+            'contact_info.zip': 'zap',
+        })
+
+    def _create_dynamic_instance(self, dynamic_model, key):
+        m = dynamic_model(key, a=u"ab")
+        m.contact_info['cellphone'] = u"+27123"
+        m.contact_info['telephone'] = u"+2755"
+        m.contact_info['honorific'] = u"BDFL"
+        return m
+
+    @needs_riak
+    @Manager.calls_manager
+    def test_dynamic_value(self):
+        """
+        Values are preserved when the field is stored and later loaded.
+        """
+        dynamic_model = self.manager.proxy(self.DynamicModel)
+        yield self._create_dynamic_instance(dynamic_model, "foo").save()
+
+        m = yield dynamic_model.load("foo")
+        self.assertEqual(m.a, u"ab")
+        self.assertEqual(m.contact_info['cellphone'], u"+27123")
+        self.assertEqual(m.contact_info['telephone'], u"+2755")
+        self.assertEqual(m.contact_info['honorific'], u"BDFL")
+
+    @needs_riak
+    def test_dynamic_field_init(self):
+        """
+        Dynamic fields can be initialised with dicts.
+        """
+        dynamic_model = self.manager.proxy(self.DynamicModel)
+        contact_info = {'cellphone': u'+27123', 'telephone': u'+2755'}
+        m = dynamic_model("foo", a=u"ab", contact_info=contact_info)
+        self.assertEqual(m.contact_info.copy(), contact_info)
+
+    @needs_riak
+    def test_dynamic_field_keys_and_values(self):
+        """
+        Dynamic field keys and values are available as lists or and iterators,
+        similar to a dict.
+        """
+        dynamic_model = self.manager.proxy(self.DynamicModel)
+        m = self._create_dynamic_instance(dynamic_model, "foo")
+
+        keys = m.contact_info.keys()
+        iterkeys = m.contact_info.iterkeys()
+        self.assertTrue(isinstance(keys, list))
+        self.assertTrue(hasattr(iterkeys, 'next'))
+        self.assertEqual(sorted(keys), ['cellphone', 'honorific', 'telephone'])
+        self.assertEqual(sorted(iterkeys), sorted(keys))
+
+        values = m.contact_info.values()
+        itervalues = m.contact_info.itervalues()
+        self.assertTrue(isinstance(values, list))
+        self.assertTrue(hasattr(itervalues, 'next'))
+        self.assertEqual(sorted(values), ["+27123", "+2755", "BDFL"])
+        self.assertEqual(sorted(itervalues), sorted(values))
+
+        items = m.contact_info.items()
+        iteritems = m.contact_info.iteritems()
+        self.assertTrue(isinstance(items, list))
+        self.assertTrue(hasattr(iteritems, 'next'))
+        self.assertEqual(sorted(items), [('cellphone', "+27123"),
+                                         ('honorific', "BDFL"),
+                                         ('telephone', "+2755")])
+        self.assertEqual(sorted(iteritems), sorted(items))
+
+    @needs_riak
+    def test_dynamic_field_clear(self):
+        """
+        Dynamic fields can be cleared.
+        """
+        dynamic_model = self.manager.proxy(self.DynamicModel)
+        m = self._create_dynamic_instance(dynamic_model, "foo")
+        m.contact_info.clear()
+        self.assertEqual(m.contact_info.items(), [])
+
+    @needs_riak
+    def test_dynamic_field_update(self):
+        """
+        Dynamic fields can be bulk-updated.
+        """
+        dynamic_model = self.manager.proxy(self.DynamicModel)
+        m = self._create_dynamic_instance(dynamic_model, "foo")
+        m.contact_info.update({"cellphone": "123", "name": "foo"})
+        self.assertEqual(sorted(m.contact_info.items()), [
+            ('cellphone', "123"), ('honorific', "BDFL"), ('name', "foo"),
+            ('telephone', "+2755")])
+
+    @needs_riak
+    def test_dynamic_field_contains(self):
+        """
+        Dynamic fields support `in`.
+        """
+        dynamic_model = self.manager.proxy(self.DynamicModel)
+        m = self._create_dynamic_instance(dynamic_model, "foo")
+        self.assertTrue("cellphone" in m.contact_info)
+        self.assertFalse("landline" in m.contact_info)
+
+    @needs_riak
+    def test_dynamic_field_del(self):
+        """
+        Values can be removed from dynamic fields.
+        """
+        dynamic_model = self.manager.proxy(self.DynamicModel)
+        m = self._create_dynamic_instance(dynamic_model, "foo")
+        del m.contact_info["telephone"]
+        self.assertEqual(sorted(m.contact_info.keys()),
+                         ['cellphone', 'honorific'])
+
+    @needs_riak
+    def test_dynamic_field_setting(self):
+        """
+        Setting a dynamic field to a dict replaces its contents.
+        """
+        dynamic_model = self.manager.proxy(self.DynamicModel)
+        m = self._create_dynamic_instance(dynamic_model, "foo")
+        m.contact_info = {u'cellphone': u'789', u'name': u'foo'}
+        self.assertEqual(sorted(m.contact_info.items()), [
+            (u'cellphone', u'789'),
+            (u'name', u'foo'),
+        ])
+
+
+@model_field_tests
 class TestListOf(VumiTestCase):
     def test_validate(self):
+        """
+        By default, a ListOf field is a list of Unicode fields.
+        """
         listof = ListOf()
         listof.validate([u'foo', u'bar'])
         self.assertRaises(ValidationError, listof.validate,
                           u'this is not a list')
         self.assertRaises(ValidationError, listof.validate, ['a', 2])
+        self.assertRaises(ValidationError, listof.validate, [1, 2])
+
+    def test_validate_with_subtype(self):
+        """
+        If an explicit subtype is provided, its validation is used.
+        """
+        listof_unicode = ListOf(Unicode())
+        listof_unicode.validate([u"a", u"b"])
+        self.assertRaises(ValidationError, listof_unicode.validate, [1, 2])
+
+        listof_int = ListOf(Integer())
+        listof_int.validate([1, 2])
+        self.assertRaises(ValidationError, listof_int.validate, [u"a", u"b"])
+
+        listof_smallint = ListOf(Integer(max=10))
+        listof_smallint.validate([1, 2])
+        self.assertRaises(
+            ValidationError, listof_smallint.validate, [1, 100])
+
+    class ListOfModel(Model):
+        """
+        Toy model for ListOf tests.
+        """
+        items = ListOf(Integer())
+        texts = ListOf(Unicode())
+
+    class IndexedListOfModel(Model):
+        """
+        Toy model for ListOf index tests.
+        """
+        items = ListOf(Integer(), index=True)
+
+    @needs_riak
+    def test_get_data_with_list_proxy(self):
+        """
+        A ListOf field creates a list field in the Riak object.
+        """
+        list_model = self.manager.proxy(self.ListOfModel)
+        m = list_model("foo")
+        m.items.append(1)
+        m.items.append(42)
+        m.texts.append(u"Thing 1.")
+        m.texts.append(u"Thing 42.")
+        self.assertEqual(m.get_data(), {
+            'key': 'foo',
+            '$VERSION': None,
+            'items': [1, 42],
+            'texts': [u"Thing 1.", u"Thing 42."],
+        })
+
+    @needs_riak
+    @Manager.calls_manager
+    def test_listof_fields(self):
+        """
+        A ListOf field can be manipulated as if it were a list.
+        """
+        list_model = self.manager.proxy(self.ListOfModel)
+        l1 = list_model("foo")
+        l1.items.append(1)
+        l1.items.append(2)
+        yield l1.save()
+
+        l2 = yield list_model.load("foo")
+        self.assertEqual(l2.items[0], 1)
+        self.assertEqual(l2.items[1], 2)
+        self.assertEqual(list(l2.items), [1, 2])
+
+        l2.items[0] = 5
+        self.assertEqual(l2.items[0], 5)
+
+        del l2.items[0]
+        self.assertEqual(list(l2.items), [2])
+
+        l2.items.append(5)
+        self.assertEqual(list(l2.items), [2, 5])
+        l2.items.remove(5)
+        self.assertEqual(list(l2.items), [2])
+
+        l2.items.extend([3, 4, 5])
+        self.assertEqual(list(l2.items), [2, 3, 4, 5])
+
+        l2.items = [1]
+        self.assertEqual(list(l2.items), [1])
+
+    @needs_riak
+    @Manager.calls_manager
+    def test_listof_fields_indexes(self):
+        """
+        An indexed ListOf field has an index value for each item in the list.
+        """
+        list_model = self.manager.proxy(self.IndexedListOfModel)
+        l1 = list_model("foo")
+        l1.items.append(1)
+        l1.items.append(2)
+        yield l1.save()
+
+        assert_indexes = lambda mdl, values: self.assertEqual(
+            mdl._riak_object.get_indexes(),
+            set(('items_bin', str(v)) for v in values))
+
+        l2 = yield list_model.load("foo")
+        self.assertEqual(l2.items[0], 1)
+        self.assertEqual(l2.items[1], 2)
+        self.assertEqual(list(l2.items), [1, 2])
+        assert_indexes(l2, [1, 2])
+
+        l2.items[0] = 5
+        self.assertEqual(l2.items[0], 5)
+        assert_indexes(l2, [2, 5])
+
+        del l2.items[0]
+        self.assertEqual(list(l2.items), [2])
+        assert_indexes(l2, [2])
+
+        l2.items.append(5)
+        self.assertEqual(list(l2.items), [2, 5])
+        assert_indexes(l2, [2, 5])
+        l2.items.remove(5)
+        self.assertEqual(list(l2.items), [2])
+        assert_indexes(l2, [2])
+
+        l2.items.extend([3, 4, 5])
+        self.assertEqual(list(l2.items), [2, 3, 4, 5])
+        assert_indexes(l2, [2, 3, 4, 5])
+
+        l2.items = [1]
+        self.assertEqual(list(l2.items), [1])
+        assert_indexes(l2, [1])
 
 
+@model_field_tests
 class TestSetOf(VumiTestCase):
     def test_validate(self):
         f = SetOf()
@@ -383,6 +731,7 @@ class TestSetOf(VumiTestCase):
         self.assertEqual(f.from_riak([1, 2, 3]), set([1, 2, 3]))
 
 
+@model_field_tests
 class TestVumiMessage(VumiTestCase):
     def test_validate(self):
         f = VumiMessage(Message)

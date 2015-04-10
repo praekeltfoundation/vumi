@@ -2,15 +2,13 @@
 
 """Tests for vumi.persist.model."""
 
-from datetime import datetime
-
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.persist.model import (
     Model, Manager, ModelMigrator, ModelMigrationError, VumiRiakError)
 from vumi.persist.fields import (
-    ValidationError, Integer, Unicode, VumiMessage, Dynamic, ListOf, SetOf,
-    ForeignKey, ManyToMany, Timestamp)
+    ValidationError, Integer, Unicode, VumiMessage, Dynamic, SetOf,
+    ForeignKey, ManyToMany)
 from vumi.message import TransportUserMessage
 from vumi.tests.helpers import VumiTestCase, import_skip
 
@@ -30,19 +28,6 @@ class IndexedModel(Model):
 
 class VumiMessageModel(Model):
     msg = VumiMessage(TransportUserMessage)
-
-
-class DynamicModel(Model):
-    a = Unicode()
-    contact_info = Dynamic()
-
-
-class ListOfModel(Model):
-    items = ListOf(Integer())
-
-
-class IndexedListOfModel(Model):
-    items = ListOf(Integer(), index=True)
 
 
 class SetOfModel(Model):
@@ -67,10 +52,6 @@ class InheritedModel(SimpleModel):
 
 class OverriddenModel(InheritedModel):
     c = Integer(min=0, max=5)
-
-
-class TimestampModel(Model):
-    time = Timestamp(null=True)
 
 
 class VersionedModelMigrator(ModelMigrator):
@@ -310,32 +291,6 @@ class ModelTestMixin(object):
             'key': 'bar',
             '$VERSION': None,
             'simples': ['foo'],
-            })
-
-    def test_get_data_with_dynamic_proxy(self):
-        dynamic_model = self.manager.proxy(DynamicModel)
-
-        d1 = dynamic_model("foo", a=u"ab")
-        d1.contact_info['foo'] = u'bar'
-        d1.contact_info['zip'] = u'zap'
-
-        self.assertEqual(d1.get_data(), {
-            'key': 'foo',
-            '$VERSION': None,
-            'a': 'ab',
-            'contact_info.foo': 'bar',
-            'contact_info.zip': 'zap',
-            })
-
-    def test_get_data_with_list_proxy(self):
-        list_model = self.manager.proxy(ListOfModel)
-        l1 = list_model("foo")
-        l1.items.append(1)
-        l1.items.append(2)
-        self.assertEqual(l1.get_data(), {
-            'key': 'foo',
-            '$VERSION': None,
-            'items': [1, 2],
             })
 
     def test_declare_backlinks(self):
@@ -866,169 +821,6 @@ class ModelTestMixin(object):
         self.assertTrue(cache_attr not in m2.msg)
         self.assertEqual(m2.msg, m1.msg)
 
-    def _create_dynamic_instance(self, dynamic_model):
-        d1 = dynamic_model("foo", a=u"ab")
-        d1.contact_info['cellphone'] = u"+27123"
-        d1.contact_info['telephone'] = u"+2755"
-        d1.contact_info['honorific'] = u"BDFL"
-        return d1
-
-    @Manager.calls_manager
-    def test_dynamic_fields(self):
-        dynamic_model = self.manager.proxy(DynamicModel)
-        d1 = self._create_dynamic_instance(dynamic_model)
-        yield d1.save()
-
-        d2 = yield dynamic_model.load("foo")
-        self.assertEqual(d2.a, u"ab")
-        self.assertEqual(d2.contact_info['cellphone'], u"+27123")
-        self.assertEqual(d2.contact_info['telephone'], u"+2755")
-        self.assertEqual(d2.contact_info['honorific'], u"BDFL")
-
-    def test_dynamic_field_init(self):
-        dynamic_model = self.manager.proxy(DynamicModel)
-        contact_info = {'cellphone': u'+27123',
-                        'telephone': u'+2755'}
-        d1 = dynamic_model("foo", a=u"ab", contact_info=contact_info)
-        self.assertEqual(d1.contact_info.copy(), contact_info)
-
-    def test_dynamic_field_keys(self):
-        d1 = self._create_dynamic_instance(self.manager.proxy(DynamicModel))
-        keys = d1.contact_info.keys()
-        iterkeys = d1.contact_info.iterkeys()
-        self.assertTrue(keys, list)
-        self.assertTrue(hasattr(iterkeys, 'next'))
-        self.assertEqual(sorted(keys), ['cellphone', 'honorific', 'telephone'])
-        self.assertEqual(sorted(iterkeys), sorted(keys))
-
-    def test_dynamic_field_values(self):
-        d1 = self._create_dynamic_instance(self.manager.proxy(DynamicModel))
-        values = d1.contact_info.values()
-        itervalues = d1.contact_info.itervalues()
-        self.assertTrue(isinstance(values, list))
-        self.assertTrue(hasattr(itervalues, 'next'))
-        self.assertEqual(sorted(values), ["+27123", "+2755", "BDFL"])
-        self.assertEqual(sorted(itervalues), sorted(values))
-
-    def test_dynamic_field_items(self):
-        d1 = self._create_dynamic_instance(self.manager.proxy(DynamicModel))
-        items = d1.contact_info.items()
-        iteritems = d1.contact_info.iteritems()
-        self.assertTrue(isinstance(items, list))
-        self.assertTrue(hasattr(iteritems, 'next'))
-        self.assertEqual(sorted(items), [('cellphone', "+27123"),
-                                         ('honorific', "BDFL"),
-                                         ('telephone', "+2755")])
-        self.assertEqual(sorted(iteritems), sorted(items))
-
-    def test_dynamic_field_clear(self):
-        d1 = self._create_dynamic_instance(self.manager.proxy(DynamicModel))
-        d1.contact_info.clear()
-        self.assertEqual(d1.contact_info.keys(), [])
-
-    def test_dynamic_field_update(self):
-        d1 = self._create_dynamic_instance(self.manager.proxy(DynamicModel))
-        d1.contact_info.update({"cellphone": "123", "name": "foo"})
-        self.assertEqual(sorted(d1.contact_info.items()), [
-            ('cellphone', "123"), ('honorific', "BDFL"), ('name', "foo"),
-            ('telephone', "+2755")])
-
-    def test_dynamic_field_contains(self):
-        d1 = self._create_dynamic_instance(self.manager.proxy(DynamicModel))
-        self.assertTrue("cellphone" in d1.contact_info)
-        self.assertFalse("landline" in d1.contact_info)
-
-    def test_dynamic_field_del(self):
-        d1 = self._create_dynamic_instance(self.manager.proxy(DynamicModel))
-        del d1.contact_info["telephone"]
-        self.assertEqual(sorted(d1.contact_info.keys()),
-                         ['cellphone', 'honorific'])
-
-    def test_dynamic_field_setting(self):
-        d1 = self._create_dynamic_instance(self.manager.proxy(DynamicModel))
-        d1.contact_info = {u'cellphone': u'789', u'name': u'foo'}
-        self.assertEqual(sorted(d1.contact_info.items()), [
-            (u'cellphone', u'789'),
-            (u'name', u'foo'),
-        ])
-
-    @Manager.calls_manager
-    def test_listof_fields(self):
-        list_model = self.manager.proxy(ListOfModel)
-        l1 = list_model("foo")
-        l1.items.append(1)
-        l1.items.append(2)
-        yield l1.save()
-
-        l2 = yield list_model.load("foo")
-        self.assertEqual(l2.items[0], 1)
-        self.assertEqual(l2.items[1], 2)
-        self.assertEqual(list(l2.items), [1, 2])
-
-        l2.items[0] = 5
-        self.assertEqual(l2.items[0], 5)
-
-        del l2.items[0]
-        self.assertEqual(list(l2.items), [2])
-
-        l2.items.append(5)
-        self.assertEqual(list(l2.items), [2, 5])
-        l2.items.remove(5)
-        self.assertEqual(list(l2.items), [2])
-
-        l2.items.extend([3, 4, 5])
-        self.assertEqual(list(l2.items), [2, 3, 4, 5])
-
-        l2.items = [1]
-        self.assertEqual(list(l2.items), [1])
-
-    @Manager.calls_manager
-    def test_listof_fields_indexes(self):
-        list_model = self.manager.proxy(IndexedListOfModel)
-        l1 = list_model("foo")
-        l1.items.append(1)
-        l1.items.append(2)
-        yield l1.save()
-
-        assert_indexes = lambda mdl, values: self.assertEqual(
-            mdl._riak_object.get_indexes(),
-            set(('items_bin', str(v)) for v in values))
-
-        l2 = yield list_model.load("foo")
-        self.assertEqual(l2.items[0], 1)
-        self.assertEqual(l2.items[1], 2)
-        self.assertEqual(list(l2.items), [1, 2])
-        assert_indexes(l2, [1, 2])
-
-        l2.items[0] = 5
-        self.assertEqual(l2.items[0], 5)
-        assert_indexes(l2, [2, 5])
-
-        del l2.items[0]
-        self.assertEqual(list(l2.items), [2])
-        assert_indexes(l2, [2])
-
-        l2.items.append(5)
-        self.assertEqual(list(l2.items), [2, 5])
-        assert_indexes(l2, [2, 5])
-        l2.items.remove(5)
-        self.assertEqual(list(l2.items), [2])
-        assert_indexes(l2, [2])
-
-        l2.items.extend([3, 4, 5])
-        self.assertEqual(list(l2.items), [2, 3, 4, 5])
-        assert_indexes(l2, [2, 3, 4, 5])
-
-        l2.items = [1]
-        self.assertEqual(list(l2.items), [1])
-        assert_indexes(l2, [1])
-
-    def test_listof_setting(self):
-        list_model = self.manager.proxy(ListOfModel)
-        l1 = list_model("foo")
-        l1.items = [7, 8, 9]
-        self.assertEqual(list(l1.items), [7, 8, 9])
-
     @Manager.calls_manager
     def test_setof_fields(self):
         set_model = self.manager.proxy(SetOfModel)
@@ -1350,17 +1142,6 @@ class ModelTestMixin(object):
         results_p1 = yield s2.backlinks.manytomanymodel_keys()
         self.assertEqual(sorted(results_p1), ["bar1"])
         self.assertEqual(results_p1.has_next_page(), False)
-
-    def test_timestamp_field_setting(self):
-        timestamp_model = self.manager.proxy(TimestampModel)
-        t = timestamp_model("foo")
-
-        now = datetime.now()
-        t.time = now
-        self.assertEqual(t.time, now)
-
-        t.time = u"2007-01-25T12:00:00Z"
-        self.assertEqual(t.time, datetime(2007, 01, 25, 12, 0))
 
     @Manager.calls_manager
     def test_inherited_model(self):
