@@ -302,6 +302,9 @@ class TestMessageStore(TestMessageStoreBase):
 
     @inlineCallbacks
     def test_add_ack_event_with_batch_ids(self):
+        """
+        If an event is added with batch_ids provided, those batch_ids are used.
+        """
         msg_id, msg, batch_id = yield self._create_outbound()
         batch_1 = yield self.store.batch_start([])
         batch_2 = yield self.store.batch_start([])
@@ -332,7 +335,38 @@ class TestMessageStore(TestMessageStoreBase):
         ]))
 
     @inlineCallbacks
-    def test_add_ack_event_with_emtpy_batch_ids(self):
+    def test_add_ack_event_without_batch_ids_no_outbound(self):
+        """
+        If an event is added without batch_ids and no outbound message is
+        found, no batch_ids will be used.
+        """
+        msg_id, msg, batch_id = yield self._create_outbound()
+
+        ack = self.msg_helper.make_ack(msg)
+        ack_id = ack['event_id']
+        ack['user_message_id'] = "no-message"
+        yield self.store.add_event(ack)
+
+        stored_ack = yield self.store.get_event(ack_id)
+        event_keys = yield self.store.message_event_keys("no-message")
+        batch_status = yield self.store.batch_status(batch_id)
+
+        self.assertEqual(stored_ack, ack)
+        self.assertEqual(event_keys, [ack_id])
+        self.assertEqual(batch_status, self._batch_status(sent=1))
+
+        event = yield self.store.events.load(ack_id)
+        timestamp = format_vumi_date(ack["timestamp"])
+        self.assertEqual(event.message_with_status, "%s$%s$ack" % (
+            "no-message", timestamp))
+        self.assertEqual(set(event.batches_with_statuses_reverse), set())
+
+    @inlineCallbacks
+    def test_add_ack_event_with_empty_batch_ids(self):
+        """
+        If an event is added with an empty list of batch_ids, no batch_ids will
+        be used.
+        """
         msg_id, msg, batch_id = yield self._create_outbound()
         ack = self.msg_helper.make_ack(msg)
         ack_id = ack['event_id']

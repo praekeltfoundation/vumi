@@ -446,6 +446,8 @@ class MessageStore(object):
             msg_record = yield self.outbound_messages.load(msg_id)
             if msg_record is not None:
                 batch_ids = msg_record.batches.keys()
+            else:
+                batch_ids = []
 
         for batch_id in batch_ids:
             event_record.batches.add_key(batch_id)
