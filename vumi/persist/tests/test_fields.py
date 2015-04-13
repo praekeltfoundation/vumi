@@ -4,7 +4,6 @@
 
 from datetime import datetime
 from functools import wraps
-import inspect
 
 from twisted.internet.defer import inlineCallbacks, returnValue
 
@@ -41,8 +40,16 @@ class ModelFieldTestsDecorator(object):
         `@needs_riak` and replace them with wrapped versions for both
         RiakManager and TxRiakManager.
         """
-        needs_riak_methods = inspect.getmembers(
-            cls, predicate=lambda m: getattr(m, "needs_riak", False))
+        # We can't use `inspect.getmembers()` because of a bug in Python 2.6
+        # around empty slots: http://bugs.python.org/issue1162154
+        needs_riak_methods = []
+        for member_name in dir(cls):
+            # If the class has an empty slot (`__provides__` from
+            # zope.interface, in this case) we get a name for a member that
+            # does not exist.
+            member = getattr(cls, member_name, None)
+            if getattr(member, "needs_riak", False):
+                needs_riak_methods.append((member_name, member))
         for name, meth in needs_riak_methods:
             delattr(cls, name)
             setattr(cls, name + "__on_riak", deco.wrap_riak_setup(meth))
