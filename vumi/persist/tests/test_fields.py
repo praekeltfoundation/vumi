@@ -8,12 +8,12 @@ import inspect
 
 from twisted.internet.defer import inlineCallbacks
 
-from vumi.message import Message
+from vumi.message import Message, TransportUserMessage
 from vumi.persist.fields import (
     ValidationError, Field, Integer, Unicode, Tag, Timestamp, Json,
     ListOf, SetOf, Dynamic, FieldWithSubtype, Boolean, VumiMessage)
 from vumi.persist.model import Manager, Model
-from vumi.tests.helpers import VumiTestCase, import_skip
+from vumi.tests.helpers import VumiTestCase, MessageHelper, import_skip
 
 
 def needs_riak(method):
@@ -711,10 +711,32 @@ class TestListOf(VumiTestCase):
 @model_field_tests
 class TestSetOf(VumiTestCase):
     def test_validate(self):
+        """
+        By default, a SetOf field is a set of Unicode fields.
+        """
         f = SetOf()
         f.validate(set([u'foo', u'bar']))
         self.assertRaises(ValidationError, f.validate, u'this is not a set')
         self.assertRaises(ValidationError, f.validate, set(['a', 2]))
+        self.assertRaises(ValidationError, f.validate, [u'a', u'b'])
+
+    def test_validate_with_subtype(self):
+        """
+        If an explicit subtype is provided, its validation is used.
+        """
+        setof_unicode = SetOf(Unicode())
+        setof_unicode.validate(set([u"a", u"b"]))
+        self.assertRaises(ValidationError, setof_unicode.validate, set([1, 2]))
+
+        setof_int = SetOf(Integer())
+        setof_int.validate(set([1, 2]))
+        self.assertRaises(
+            ValidationError, setof_int.validate, set([u"a", u"b"]))
+
+        setof_smallint = SetOf(Integer(max=10))
+        setof_smallint.validate(set([1, 2]))
+        self.assertRaises(
+            ValidationError, setof_smallint.validate, set([1, 100]))
 
     def test_to_riak(self):
         """
@@ -730,6 +752,111 @@ class TestSetOf(VumiTestCase):
         f = SetOf()
         self.assertEqual(f.from_riak([1, 2, 3]), set([1, 2, 3]))
 
+    class SetOfModel(Model):
+        """
+        Toy model for SetOf tests.
+        """
+        items = SetOf(Integer())
+        texts = SetOf(Unicode())
+
+    class IndexedSetOfModel(Model):
+        """
+        Toy model for SetOf index tests.
+        """
+        items = SetOf(Integer(), index=True)
+
+    @needs_riak
+    def test_setof_fields_validation(self):
+        set_model = self.manager.proxy(self.SetOfModel)
+        m1 = set_model("foo")
+
+        self.assertRaises(ValidationError, m1.items.add, "foo")
+        self.assertRaises(ValidationError, m1.items.remove, "foo")
+        self.assertRaises(ValidationError, m1.items.discard, "foo")
+        self.assertRaises(ValidationError, m1.items.update, set(["foo"]))
+
+    @needs_riak
+    @Manager.calls_manager
+    def test_setof_fields(self):
+        """
+        A SetOf field can be manipulated as if it were a set.
+        """
+        set_model = self.manager.proxy(self.SetOfModel)
+        m1 = set_model("foo")
+        m1.items.add(1)
+        m1.items.add(2)
+        yield m1.save()
+
+        m2 = yield set_model.load("foo")
+        self.assertTrue(1 in m2.items)
+        self.assertTrue(2 in m2.items)
+        self.assertEqual(set(m2.items), set([1, 2]))
+
+        m2.items.add(5)
+        self.assertTrue(5 in m2.items)
+
+        m2.items.remove(1)
+        self.assertTrue(1 not in m2.items)
+        self.assertRaises(KeyError, m2.items.remove, 1)
+
+        m2.items.add(1)
+        m2.items.discard(1)
+        self.assertTrue(1 not in m2.items)
+        m2.items.discard(1)
+        self.assertTrue(1 not in m2.items)
+
+        m2.items.update([3, 4, 5])
+        self.assertEqual(set(m2.items), set([2, 3, 4, 5]))
+
+        m2.items = set([7, 8])
+        self.assertEqual(set(m2.items), set([7, 8]))
+
+    @needs_riak
+    @Manager.calls_manager
+    def test_setof_fields_indexes(self):
+        """
+        An indexed SetOf field has an index value for each item in the set.
+        """
+        set_model = self.manager.proxy(self.IndexedSetOfModel)
+        m1 = set_model("foo")
+        m1.items.add(1)
+        m1.items.add(2)
+        yield m1.save()
+
+        assert_indexes = lambda mdl, values: self.assertEqual(
+            mdl._riak_object.get_indexes(),
+            set(('items_bin', str(v)) for v in values))
+
+        m2 = yield set_model.load("foo")
+        self.assertTrue(1 in m2.items)
+        self.assertTrue(2 in m2.items)
+        self.assertEqual(set(m2.items), set([1, 2]))
+        assert_indexes(m2, [1, 2])
+
+        m2.items.add(5)
+        self.assertTrue(5 in m2.items)
+        assert_indexes(m2, [1, 2, 5])
+
+        m2.items.remove(1)
+        self.assertTrue(1 not in m2.items)
+        assert_indexes(m2, [2, 5])
+
+        m2.items.add(1)
+        m2.items.discard(1)
+        self.assertTrue(1 not in m2.items)
+        assert_indexes(m2, [2, 5])
+        m2.items.discard(1)
+        self.assertTrue(1 not in m2.items)
+        assert_indexes(m2, [2, 5])
+
+        m2.items.update([3, 4, 5])
+        self.assertEqual(set(m2.items), set([2, 3, 4, 5]))
+        assert_indexes(m2, [2, 3, 4, 5])
+
+        m2.items = set([7, 8])
+        self.assertEqual(set(m2.items), set([7, 8]))
+        assert_indexes(m2, [7, 8])
+
 
 @model_field_tests
 class TestVumiMessage(VumiTestCase):
@@ -741,3 +868,47 @@ class TestVumiMessage(VumiTestCase):
             ValidationError, f.validate, u'this is not a vumi message')
         self.assertRaises(
             ValidationError, f.validate, None)
+
+    class VumiMessageModel(Model):
+        """
+        Toy model for VumiMessage tests.
+        """
+        msg = VumiMessage(TransportUserMessage)
+
+    @needs_riak
+    @Manager.calls_manager
+    def test_vumimessage_field(self):
+        msg_helper = self.add_helper(MessageHelper())
+        msg_model = self.manager.proxy(self.VumiMessageModel)
+        msg = msg_helper.make_inbound("foo", extra="bar")
+        m1 = msg_model("foo", msg=msg)
+        yield m1.save()
+
+        m2 = yield msg_model.load("foo")
+        self.assertEqual(m1.msg, m2.msg)
+        self.assertEqual(m2.msg, msg)
+
+        self.assertRaises(ValidationError, setattr, m1, "msg", "foo")
+
+        # test extra keys are removed
+        msg2 = msg_helper.make_inbound("foo")
+        m1.msg = msg2
+        self.assertTrue("extra" not in m1.msg)
+
+    @needs_riak
+    @Manager.calls_manager
+    def test_vumimessage_field_excludes_cache(self):
+        msg_helper = self.add_helper(MessageHelper())
+        msg_model = self.manager.proxy(self.VumiMessageModel)
+        cache_attr = TransportUserMessage._CACHE_ATTRIBUTE
+        msg = msg_helper.make_inbound("foo", extra="bar")
+        msg.cache["cache"] = "me"
+        self.assertEqual(msg[cache_attr], {"cache": "me"})
+
+        m1 = msg_model("foo", msg=msg)
+        self.assertTrue(cache_attr not in m1.msg)
+        yield m1.save()
+
+        m2 = yield msg_model.load("foo")
+        self.assertTrue(cache_attr not in m2.msg)
+        self.assertEqual(m2.msg, m1.msg)

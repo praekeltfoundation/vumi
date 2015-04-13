@@ -7,9 +7,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from vumi.persist.model import (
     Model, Manager, ModelMigrator, ModelMigrationError, VumiRiakError)
 from vumi.persist.fields import (
-    ValidationError, Integer, Unicode, VumiMessage, Dynamic, SetOf,
-    ForeignKey, ManyToMany)
-from vumi.message import TransportUserMessage
+    ValidationError, Integer, Unicode, Dynamic, ForeignKey, ManyToMany)
 from vumi.tests.helpers import VumiTestCase, import_skip
 
 
@@ -24,18 +22,6 @@ class SimpleModel(Model):
 class IndexedModel(Model):
     a = Integer(index=True)
     b = Unicode(index=True, null=True)
-
-
-class VumiMessageModel(Model):
-    msg = VumiMessage(TransportUserMessage)
-
-
-class SetOfModel(Model):
-    items = SetOf(Integer())
-
-
-class IndexedSetOfModel(Model):
-    items = SetOf(Integer(), index=True)
 
 
 class ForeignKeyModel(Model):
@@ -217,14 +203,6 @@ class VersionedDynamicModel(Model):
 
 
 class ModelTestMixin(object):
-
-    # TODO: all copies of mkmsg must be unified!
-    def mkmsg(self, **kw):
-        kw.setdefault("transport_name", "sphex")
-        kw.setdefault("transport_type", "sphex_type")
-        kw.setdefault("to_addr", "1234")
-        kw.setdefault("from_addr", "5678")
-        return TransportUserMessage(**kw)
 
     @Manager.calls_manager
     def filter_tombstones(self, model_cls, keys):
@@ -786,123 +764,6 @@ class ModelTestMixin(object):
         yield self.assert_mapreduce_results(
             [], match,
             [{'key': 'b', 'pattern': 'ONE', 'flags': ''}], 'a', 1)
-
-    @Manager.calls_manager
-    def test_vumimessage_field(self):
-        msg_model = self.manager.proxy(VumiMessageModel)
-        msg = self.mkmsg(extra="bar")
-        m1 = msg_model("foo", msg=msg)
-        yield m1.save()
-
-        m2 = yield msg_model.load("foo")
-        self.assertEqual(m1.msg, m2.msg)
-        self.assertEqual(m2.msg, msg)
-
-        self.assertRaises(ValidationError, setattr, m1, "msg", "foo")
-
-        # test extra keys are removed
-        msg2 = self.mkmsg()
-        m1.msg = msg2
-        self.assertTrue("extra" not in m1.msg)
-
-    @Manager.calls_manager
-    def test_vumimessage_field_excludes_cache(self):
-        msg_model = self.manager.proxy(VumiMessageModel)
-        cache_attr = TransportUserMessage._CACHE_ATTRIBUTE
-        msg = self.mkmsg(extra="bar")
-        msg.cache["cache"] = "me"
-        self.assertEqual(msg[cache_attr], {"cache": "me"})
-
-        m1 = msg_model("foo", msg=msg)
-        self.assertTrue(cache_attr not in m1.msg)
-        yield m1.save()
-
-        m2 = yield msg_model.load("foo")
-        self.assertTrue(cache_attr not in m2.msg)
-        self.assertEqual(m2.msg, m1.msg)
-
-    @Manager.calls_manager
-    def test_setof_fields(self):
-        set_model = self.manager.proxy(SetOfModel)
-        m1 = set_model("foo")
-        m1.items.add(1)
-        m1.items.add(2)
-        yield m1.save()
-
-        m2 = yield set_model.load("foo")
-        self.assertTrue(1 in m2.items)
-        self.assertTrue(2 in m2.items)
-        self.assertEqual(set(m2.items), set([1, 2]))
-
-        m2.items.add(5)
-        self.assertTrue(5 in m2.items)
-
-        m2.items.remove(1)
-        self.assertTrue(1 not in m2.items)
-        self.assertRaises(KeyError, m2.items.remove, 1)
-
-        m2.items.add(1)
-        m2.items.discard(1)
-        self.assertTrue(1 not in m2.items)
-        m2.items.discard(1)
-        self.assertTrue(1 not in m2.items)
-
-        m2.items.update([3, 4, 5])
-        self.assertEqual(set(m2.items), set([2, 3, 4, 5]))
-
-        m2.items = set([7, 8])
-        self.assertEqual(set(m2.items), set([7, 8]))
-
-    @Manager.calls_manager
-    def test_setof_fields_indexes(self):
-        set_model = self.manager.proxy(IndexedSetOfModel)
-        m1 = set_model("foo")
-        m1.items.add(1)
-        m1.items.add(2)
-        yield m1.save()
-
-        assert_indexes = lambda mdl, values: self.assertEqual(
-            mdl._riak_object.get_indexes(),
-            set(('items_bin', str(v)) for v in values))
-
-        m2 = yield set_model.load("foo")
-        self.assertTrue(1 in m2.items)
-        self.assertTrue(2 in m2.items)
-        self.assertEqual(set(m2.items), set([1, 2]))
-        assert_indexes(m2, [1, 2])
-
-        m2.items.add(5)
-        self.assertTrue(5 in m2.items)
-        assert_indexes(m2, [1, 2, 5])
-
-        m2.items.remove(1)
-        self.assertTrue(1 not in m2.items)
-        assert_indexes(m2, [2, 5])
-
-        m2.items.add(1)
-        m2.items.discard(1)
-        self.assertTrue(1 not in m2.items)
-        assert_indexes(m2, [2, 5])
-        m2.items.discard(1)
-        self.assertTrue(1 not in m2.items)
-        assert_indexes(m2, [2, 5])
-
-        m2.items.update([3, 4, 5])
-        self.assertEqual(set(m2.items), set([2, 3, 4, 5]))
-        assert_indexes(m2, [2, 3, 4, 5])
-
-        m2.items = set([7, 8])
-        self.assertEqual(set(m2.items), set([7, 8]))
-        assert_indexes(m2, [7, 8])
-
-    def test_setof_fields_validation(self):
-        set_model = self.manager.proxy(SetOfModel)
-        m1 = set_model("foo")
-
-        self.assertRaises(ValidationError, m1.items.add, "foo")
-        self.assertRaises(ValidationError, m1.items.remove, "foo")
-        self.assertRaises(ValidationError, m1.items.discard, "foo")
-        self.assertRaises(ValidationError, m1.items.update, set(["foo"]))
 
     @Manager.calls_manager
     def test_foreignkey_fields(self):
