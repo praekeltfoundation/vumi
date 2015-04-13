@@ -6,12 +6,13 @@ from datetime import datetime
 from functools import wraps
 import inspect
 
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.message import Message, TransportUserMessage
 from vumi.persist.fields import (
     ValidationError, Field, Integer, Unicode, Tag, Timestamp, Json,
-    ListOf, SetOf, Dynamic, FieldWithSubtype, Boolean, VumiMessage)
+    ListOf, SetOf, Dynamic, FieldWithSubtype, Boolean, VumiMessage,
+    ForeignKey, ManyToMany)
 from vumi.persist.model import Manager, Model
 from vumi.tests.helpers import VumiTestCase, MessageHelper, import_skip
 
@@ -912,3 +913,329 @@ class TestVumiMessage(VumiTestCase):
         m2 = yield msg_model.load("foo")
         self.assertTrue(cache_attr not in m2.msg)
         self.assertEqual(m2.msg, m1.msg)
+
+
+class ReferencedModel(Model):
+    """
+    Toy model for testing fields that reference other models.
+    """
+    a = Integer()
+    b = Unicode()
+
+
+@model_field_tests
+class TestForeignKey(VumiTestCase):
+
+    class ForeignKeyModel(Model):
+        """
+        Toy model for ForeignKey tests.
+        """
+        referenced = ForeignKey(ReferencedModel, null=True)
+
+    @needs_riak
+    def test_get_data_with_foreign_key_proxy(self):
+        """
+        A ForeignKey field stores the referenced key in the Riak object.
+        """
+        referenced_model = self.manager.proxy(ReferencedModel)
+        s1 = referenced_model("foo", a=5, b=u'3')
+        fk_model = self.manager.proxy(self.ForeignKeyModel)
+
+        f1 = fk_model("bar1")
+        f1.referenced.set(s1)
+
+        self.assertEqual(f1.get_data(), {
+            'key': 'bar1',
+            '$VERSION': None,
+            'referenced': 'foo'
+        })
+
+    @needs_riak
+    @Manager.calls_manager
+    def test_foreignkey_fields(self):
+        """
+        ForeignKey fields can operate on both keys and model instances.
+        """
+        fk_model = self.manager.proxy(self.ForeignKeyModel)
+        referenced_model = self.manager.proxy(ReferencedModel)
+        s1 = referenced_model("foo", a=5, b=u'3')
+        f1 = fk_model("bar")
+        f1.referenced.set(s1)
+        yield s1.save()
+        yield f1.save()
+        self.assertEqual(f1._riak_object.get_data()['referenced'], s1.key)
+
+        f2 = yield fk_model.load("bar")
+        s2 = yield f2.referenced.get()
+
+        self.assertEqual(f2.referenced.key, "foo")
+        self.assertEqual(s2.a, 5)
+        self.assertEqual(s2.b, u"3")
+
+        f2.referenced.set(None)
+        s3 = yield f2.referenced.get()
+        self.assertEqual(s3, None)
+
+        f2.referenced.key = "foo"
+        s4 = yield f2.referenced.get()
+        self.assertEqual(s4.key, "foo")
+
+        f2.referenced.key = None
+        s5 = yield f2.referenced.get()
+        self.assertEqual(s5, None)
+
+        self.assertRaises(ValidationError, f2.referenced.set, object())
+
+    @needs_riak
+    @Manager.calls_manager
+    def test_old_foreignkey_fields(self):
+        """
+        Old versions of the ForeignKey field relied entirely on indexes and
+        didn't store the referenced key in the model data.
+        """
+        fk_model = self.manager.proxy(self.ForeignKeyModel)
+        referenced_model = self.manager.proxy(ReferencedModel)
+        s1 = referenced_model("foo", a=5, b=u'3')
+        f1 = fk_model("bar")
+        # Create index directly and remove data field to simulate old-style
+        # index-only implementation
+        f1._riak_object.add_index('referenced_bin', s1.key)
+        data = f1._riak_object.get_data()
+        data.pop('referenced')
+        f1._riak_object.set_data(data)
+        yield s1.save()
+        yield f1.save()
+
+        f2 = yield fk_model.load("bar")
+        s2 = yield f2.referenced.get()
+
+        self.assertEqual(f2.referenced.key, "foo")
+        self.assertEqual(s2.a, 5)
+        self.assertEqual(s2.b, u"3")
+
+        f2.referenced.set(None)
+        s3 = yield f2.referenced.get()
+        self.assertEqual(s3, None)
+
+        f2.referenced.key = "foo"
+        s4 = yield f2.referenced.get()
+        self.assertEqual(s4.key, "foo")
+
+        f2.referenced.key = None
+        s5 = yield f2.referenced.get()
+        self.assertEqual(s5, None)
+
+        self.assertRaises(ValidationError, f2.referenced.set, object())
+
+    @needs_riak
+    @Manager.calls_manager
+    def test_reverse_foreignkey_fields(self):
+        """
+        When we declare a ForeignKey field, we add both a paginated index
+        lookup method and a legacy non-paginated index lookup method to the
+        foreign model's backlinks attribute.
+        """
+        fk_model = self.manager.proxy(self.ForeignKeyModel)
+        referenced_model = self.manager.proxy(ReferencedModel)
+        s1 = referenced_model("foo", a=5, b=u'3')
+        f1 = fk_model("bar1")
+        f1.referenced.set(s1)
+        f2 = fk_model("bar2")
+        f2.referenced.set(s1)
+        yield s1.save()
+        yield f1.save()
+        yield f2.save()
+
+        s2 = yield referenced_model.load("foo")
+        results = yield s2.backlinks.foreignkeymodels()
+        self.assertEqual(sorted(results), ["bar1", "bar2"])
+
+        results_p1 = yield s2.backlinks.foreignkeymodel_keys()
+        self.assertEqual(sorted(results_p1), ["bar1", "bar2"])
+        self.assertEqual(results_p1.has_next_page(), False)
+
+
+@model_field_tests
+class TestManyToMany(VumiTestCase):
+
+    @Manager.calls_manager
+    def load_all_bunches_flat(self, m2m_field):
+        results = []
+        for result_bunch in m2m_field.load_all_bunches():
+            results.extend((yield result_bunch))
+        returnValue(results)
+
+    class ManyToManyModel(Model):
+        references = ManyToMany(ReferencedModel)
+
+    @needs_riak
+    def test_get_data_with_many_to_many_proxy(self):
+        """
+        A ManyToMany field stores the referenced keys in the Riak object.
+        """
+        referenced_model = self.manager.proxy(ReferencedModel)
+        s1 = referenced_model("foo", a=5, b=u'3')
+        mm_model = self.manager.proxy(self.ManyToManyModel)
+
+        m1 = mm_model("bar")
+        m1.references.add(s1)
+        m1.save()
+
+        self.assertEqual(m1.get_data(), {
+            'key': 'bar',
+            '$VERSION': None,
+            'references': ['foo'],
+        })
+
+    @needs_riak
+    @Manager.calls_manager
+    def test_manytomany_field(self):
+        """
+        ManyToMany fields can operate on both keys and model instances.
+        """
+        mm_model = self.manager.proxy(self.ManyToManyModel)
+        referenced_model = self.manager.proxy(ReferencedModel)
+
+        s1 = referenced_model("foo", a=5, b=u'3')
+        m1 = mm_model("bar")
+        m1.references.add(s1)
+        yield s1.save()
+        yield m1.save()
+        self.assertEqual(m1._riak_object.get_data()['references'], [s1.key])
+
+        m2 = yield mm_model.load("bar")
+        [s2] = yield self.load_all_bunches_flat(m2.references)
+
+        self.assertEqual(m2.references.keys(), ["foo"])
+        self.assertEqual(s2.a, 5)
+        self.assertEqual(s2.b, u"3")
+
+        m2.references.remove(s2)
+        references = yield self.load_all_bunches_flat(m2.references)
+        self.assertEqual(references, [])
+
+        m2.references.add_key("foo")
+        [s4] = yield self.load_all_bunches_flat(m2.references)
+        self.assertEqual(s4.key, "foo")
+
+        m2.references.remove_key("foo")
+        references = yield self.load_all_bunches_flat(m2.references)
+        self.assertEqual(references, [])
+
+        self.assertRaises(ValidationError, m2.references.add, object())
+        self.assertRaises(ValidationError, m2.references.remove, object())
+
+        t1 = referenced_model("bar1", a=3, b=u'4')
+        t2 = referenced_model("bar2", a=4, b=u'4')
+        m2.references.add(t1)
+        m2.references.add(t2)
+        yield t1.save()
+        yield t2.save()
+        references = yield self.load_all_bunches_flat(m2.references)
+        references.sort(key=lambda s: s.key)
+        self.assertEqual([s.key for s in references], ["bar1", "bar2"])
+        self.assertEqual(references[0].a, 3)
+        self.assertEqual(references[1].a, 4)
+
+        m2.references.clear()
+        m2.references.add_key("unknown")
+        self.assertEqual([], (yield self.load_all_bunches_flat(m2.references)))
+
+    @needs_riak
+    @Manager.calls_manager
+    def test_old_manytomany_field(self):
+        """
+        Old versions of the ManyToMany field relied entirely on indexes and
+        didn't store the referenced keys in the model data.
+        """
+        mm_model = self.manager.proxy(self.ManyToManyModel)
+        referenced_model = self.manager.proxy(ReferencedModel)
+
+        s1 = referenced_model("foo", a=5, b=u'3')
+        m1 = mm_model("bar")
+        # Create index directly to simulate old-style index-only implementation
+        m1._riak_object.add_index('references_bin', s1.key)
+        # Manually remove the entry from the data dict to allow it to be
+        # set from the index value in descriptor.clean()
+        data = m1._riak_object.get_data()
+        data.pop('references')
+        m1._riak_object.set_data(data)
+
+        yield s1.save()
+        yield m1.save()
+
+        m2 = yield mm_model.load("bar")
+        [s2] = yield self.load_all_bunches_flat(m2.references)
+
+        self.assertEqual(m2.references.keys(), ["foo"])
+        self.assertEqual(s2.a, 5)
+        self.assertEqual(s2.b, u"3")
+
+        m2.references.remove(s2)
+        references = yield self.load_all_bunches_flat(m2.references)
+        self.assertEqual(references, [])
+
+        m2.references.add_key("foo")
+        [s4] = yield self.load_all_bunches_flat(m2.references)
+        self.assertEqual(s4.key, "foo")
+
+        m2.references.remove_key("foo")
+        references = yield self.load_all_bunches_flat(m2.references)
+        self.assertEqual(references, [])
+
+        self.assertRaises(ValidationError, m2.references.add, object())
+        self.assertRaises(ValidationError, m2.references.remove, object())
+
+        t1 = referenced_model("bar1", a=3, b=u'4')
+        t2 = referenced_model("bar2", a=4, b=u'4')
+        m2.references.add(t1)
+        m2.references.add(t2)
+        yield t1.save()
+        yield t2.save()
+        references = yield self.load_all_bunches_flat(m2.references)
+        references.sort(key=lambda s: s.key)
+        self.assertEqual([s.key for s in references], ["bar1", "bar2"])
+        self.assertEqual(references[0].a, 3)
+        self.assertEqual(references[1].a, 4)
+
+        m2.references.clear()
+        m2.references.add_key("unknown")
+        self.assertEqual([], (yield self.load_all_bunches_flat(m2.references)))
+
+    @needs_riak
+    @Manager.calls_manager
+    def test_reverse_manytomany_fields(self):
+        """
+        When we declare a ManyToMany field, we add both a paginated index
+        lookup method and a legacy non-paginated index lookup method to the
+        foreign model's backlinks attribute.
+        """
+        mm_model = self.manager.proxy(self.ManyToManyModel)
+        referenced_model = self.manager.proxy(ReferencedModel)
+        s1 = referenced_model("foo1", a=5, b=u'3')
+        s2 = referenced_model("foo2", a=4, b=u'4')
+        m1 = mm_model("bar1")
+        m1.references.add(s1)
+        m1.references.add(s2)
+        m2 = mm_model("bar2")
+        m2.references.add(s1)
+        yield s1.save()
+        yield s2.save()
+        yield m1.save()
+        yield m2.save()
+
+        s1 = yield referenced_model.load("foo1")
+        results = yield s1.backlinks.manytomanymodels()
+        self.assertEqual(sorted(results), ["bar1", "bar2"])
+
+        results_p1 = yield s1.backlinks.manytomanymodel_keys()
+        self.assertEqual(sorted(results_p1), ["bar1", "bar2"])
+        self.assertEqual(results_p1.has_next_page(), False)
+
+        s2 = yield referenced_model.load("foo2")
+        results = yield s2.backlinks.manytomanymodels()
+        self.assertEqual(sorted(results), ["bar1"])
+
+        results_p1 = yield s2.backlinks.manytomanymodel_keys()
+        self.assertEqual(sorted(results_p1), ["bar1"])
+        self.assertEqual(results_p1.has_next_page(), False)
