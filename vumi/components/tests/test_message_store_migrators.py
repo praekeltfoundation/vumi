@@ -10,31 +10,38 @@ try:
     from vumi.components.tests.message_store_old_models import (
         OutboundMessageVNone, InboundMessageVNone, EventVNone, BatchVNone,
         OutboundMessageV1, InboundMessageV1, OutboundMessageV2,
-        InboundMessageV2, OutboundMessageV3, InboundMessageV3)
+        InboundMessageV2, OutboundMessageV3, InboundMessageV3, EventV1)
     from vumi.components.message_store import (
         to_reverse_timestamp,
         OutboundMessage as OutboundMessageV4,
         InboundMessage as InboundMessageV4,
-        Event as EventV1)
+        Event as EventV2)
     riak_import_error = None
 except ImportError, e:
     riak_import_error = e
 
 
 def mws_value(msg_id, event, status):
-    return "%s$%s$%s" % (msg_id, event['timestamp'], status)
+    return "%s$%s$%s" % (msg_id, format_vumi_date(event['timestamp']), status)
+
+
+def bwsr_value(batch_id, event, status):
+    reverse_ts = to_reverse_timestamp(format_vumi_date(event['timestamp']))
+    return "%s$%s$%s" % (batch_id, reverse_ts, status)
 
 
 def bwt_value(batch_id, msg):
-    return "%s$%s" % (batch_id, msg['timestamp'])
+    return "%s$%s" % (batch_id, format_vumi_date(msg['timestamp']))
 
 
 def bwa_in_value(batch_id, msg):
-    return "%s$%s$%s" % (batch_id, msg['timestamp'], msg['from_addr'])
+    return "%s$%s$%s" % (
+        batch_id, format_vumi_date(msg['timestamp']), msg['from_addr'])
 
 
 def bwa_out_value(batch_id, msg):
-    return "%s$%s$%s" % (batch_id, msg['timestamp'], msg['to_addr'])
+    return "%s$%s$%s" % (
+        batch_id, format_vumi_date(msg['timestamp']), msg['to_addr'])
 
 
 def bwar_in_value(batch_id, msg):
@@ -79,6 +86,7 @@ class TestEventMigrator(TestMigratorBase):
         yield super(TestEventMigrator, self).setUp()
         self.event_vnone = self.manager.proxy(EventVNone)
         self.event_v1 = self.manager.proxy(EventV1)
+        self.event_v2 = self.manager.proxy(EventV2)
 
     @inlineCallbacks
     def test_migrate_vnone_to_v1(self):
@@ -168,6 +176,89 @@ class TestEventMigrator(TestMigratorBase):
             ("message_bin", msg_id),
             ("message_with_status_bin", mws_value(msg_id, event, "ack")),
         ]))
+
+    @inlineCallbacks
+    def test_migrate_v1_to_v2(self):
+        """
+        A v1 model can be migrated to v2, but the batches field will be empty.
+        """
+        msg = self.msg_helper.make_outbound("outbound")
+        msg_id = msg["message_id"]
+        event = self.msg_helper.make_ack(msg)
+        old_record = self.event_v1(
+            event["event_id"], event=event, message=msg_id)
+        yield old_record.save()
+
+        new_record = yield self.event_v2.load(old_record.key)
+        self.assertEqual(new_record.event, event)
+        self.assertEqual(new_record.message.key, msg_id)
+        self.assertEqual(new_record.batches.keys(), [])
+        self.assertEqual(new_record.message_with_status, None)
+        self.assertEqual(set(new_record.batches_with_statuses_reverse), set())
+        self.assertEqual(new_record._riak_object.get_indexes(), set([
+            ("message_bin", msg_id),
+            ("message_with_status_bin", mws_value(msg_id, event, "ack")),
+        ]))
+
+        # Some indexes are only added at save time.
+        yield new_record.save()
+        self.assertEqual(
+            new_record.message_with_status, mws_value(msg_id, event, "ack"))
+        self.assertEqual(set(new_record.batches_with_statuses_reverse), set())
+        self.assertEqual(new_record._riak_object.get_indexes(), set([
+            ("message_bin", msg_id),
+            ("message_with_status_bin", mws_value(msg_id, event, "ack")),
+        ]))
+
+    @inlineCallbacks
+    def test_reverse_migrate_v2_v1(self):
+        """
+        A v2 model can be stored in a v1-compatible way, but batch information
+        is preserved.
+        """
+        # Configure the manager to save the older message version.
+        modelcls = self.event_v2._modelcls
+        model_name = "%s.%s" % (modelcls.__module__, modelcls.__name__)
+        self.manager.store_versions[model_name] = 1
+
+        msg = self.msg_helper.make_outbound("outbound")
+        msg_id = msg["message_id"]
+        event = self.msg_helper.make_ack(msg)
+        new_record = self.event_v2(
+            event["event_id"], event=event, message=msg_id)
+        new_record.batches.add_key(u"batch-1")
+        yield new_record.save()
+
+        old_record = yield self.event_v1.load(new_record.key)
+        self.assertEqual(old_record.event, event)
+        self.assertEqual(old_record.message.key, msg_id)
+        self.assertEqual(new_record.message_with_status, None)
+        self.assertEqual(new_record._riak_object.get_indexes(), set([
+            ("message_bin", msg_id),
+            ("batches_bin", "batch-1"),
+            ("message_with_status_bin", mws_value(msg_id, event, "ack")),
+            ("batches_with_statuses_reverse_bin",
+             bwsr_value("batch-1", event, "ack")),
+        ]))
+
+        # Some indexes are only added at save time.
+        yield old_record.save()
+        self.assertEqual(
+            old_record.message_with_status, mws_value(msg_id, event, "ack"))
+        self.assertEqual(old_record._riak_object.get_indexes(), set([
+            ("message_bin", msg_id),
+            ("batches_bin", "batch-1"),
+            ("message_with_status_bin", mws_value(msg_id, event, "ack")),
+            ("batches_with_statuses_reverse_bin",
+             bwsr_value("batch-1", event, "ack")),
+        ]))
+
+        new2_record = yield self.event_v2.load(old_record.key)
+        self.assertEqual(new2_record.event, event)
+        self.assertEqual(new2_record.message.key, msg_id)
+        self.assertEqual(new2_record.batches.keys(), [u"batch-1"])
+        self.assertEqual(new2_record.message_with_status, None)
+        self.assertEqual(set(new2_record.batches_with_statuses_reverse), set())
 
 
 class TestOutboundMessageMigrator(TestMigratorBase):

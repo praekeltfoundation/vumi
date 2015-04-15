@@ -10,7 +10,7 @@ from uuid import uuid4
 import itertools
 import warnings
 
-from twisted.internet.defer import returnValue
+from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.message import (
     TransportEvent, TransportUserMessage, parse_vumi_date, format_vumi_date)
@@ -122,24 +122,33 @@ class OutboundMessage(Model):
 
 
 class Event(Model):
-    VERSION = 1
+    VERSION = 2
     MIGRATOR = EventMigrator
 
     # key is event_id
     event = VumiMessage(TransportEvent)
     message = ForeignKey(OutboundMessage)
+    batches = ManyToMany(Batch)
 
     # Extra fields for compound indexes
     message_with_status = Unicode(index=True, null=True)
+    batches_with_statuses_reverse = ListOf(Unicode(), index=True)
 
     def save(self):
         # We override this method to set our index fields before saving.
         timestamp = self.event['timestamp']
+        if not isinstance(timestamp, basestring):
+            timestamp = format_vumi_date(timestamp)
         status = self.event['event_type']
         if status == "delivery_report":
             status = "%s.%s" % (status, self.event['delivery_status'])
         self.message_with_status = u"%s$%s$%s" % (
             self.message.key, timestamp, status)
+        self.batches_with_statuses_reverse = []
+        reverse_ts = to_reverse_timestamp(timestamp)
+        for batch_id in self.batches.keys():
+            self.batches_with_statuses_reverse.append(
+                u"%s$%s$%s" % (batch_id, reverse_ts, status))
         return super(Event, self).save()
 
 
@@ -423,7 +432,7 @@ class MessageStore(object):
         returnValue(msg.msg if msg is not None else None)
 
     @Manager.calls_manager
-    def add_event(self, event):
+    def add_event(self, event, batch_ids=None):
         event_id = event['event_id']
         msg_id = event['user_message_id']
         event_record = yield self.events.load(event_id)
@@ -431,12 +440,20 @@ class MessageStore(object):
             event_record = self.events(event_id, event=event, message=msg_id)
         else:
             event_record.event = event
-        yield event_record.save()
 
-        msg_record = yield self.outbound_messages.load(msg_id)
-        if msg_record is not None:
-            for batch_id in msg_record.batches.keys():
-                yield self.cache.add_event(batch_id, event)
+        # If we aren't given batch_ids, get them from the outbound message.
+        if batch_ids is None:
+            msg_record = yield self.outbound_messages.load(msg_id)
+            if msg_record is not None:
+                batch_ids = msg_record.batches.keys()
+            else:
+                batch_ids = []
+
+        for batch_id in batch_ids:
+            event_record.batches.add_key(batch_id)
+            yield self.cache.add_event(batch_id, event)
+
+        yield event_record.save()
 
     @Manager.calls_manager
     def get_event(self, event_id):
@@ -1102,3 +1119,22 @@ def key_with_ts_and_value_formatter(batch_id, result):
 def key_with_rts_and_value_formatter(batch_id, result):
     key, reverse_ts, value = key_with_ts_and_value_formatter(batch_id, result)
     return (key, from_reverse_timestamp(reverse_ts), value)
+
+
+@inlineCallbacks
+def add_batches_to_event(stored_event):
+    """
+    Post-migrate function to be used with `vumi_model_migrator` to add batches
+    to stored events that don't have any.
+    """
+    if stored_event.batches.keys():
+        # We already have batches, so there's no need to look them up.
+        returnValue(False)
+
+    outbound_messages = stored_event.manager.proxy(OutboundMessage)
+    msg_record = yield outbound_messages.load(stored_event.message.key)
+    if msg_record is not None:
+        for batch_id in msg_record.batches.keys():
+            stored_event.batches.add_key(batch_id)
+
+    returnValue(True)

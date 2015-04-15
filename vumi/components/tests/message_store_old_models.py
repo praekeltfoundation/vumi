@@ -6,7 +6,7 @@ from vumi.persist.model import Model
 from vumi.persist.fields import (
     VumiMessage, ForeignKey, ListOf, Dynamic, Tag, Unicode, ManyToMany)
 from vumi.components.message_store_migrators import (
-    InboundMessageMigrator, OutboundMessageMigrator)
+    InboundMessageMigrator, OutboundMessageMigrator, EventMigrator)
 
 
 class BatchVNone(Model):
@@ -163,3 +163,27 @@ class InboundMessageV3(Model):
         self.batches_with_timestamps = batches_with_timestamps
         self.batches_with_addresses = batches_with_addresses
         return super(InboundMessageV3, self).save()
+
+
+class EventV1(Model):
+    bucket = 'event'
+
+    VERSION = 1
+    MIGRATOR = EventMigrator
+
+    # key is event_id
+    event = VumiMessage(TransportEvent)
+    message = ForeignKey(OutboundMessageV3)
+
+    # Extra fields for compound indexes
+    message_with_status = Unicode(index=True, null=True)
+
+    def save(self):
+        # We override this method to set our index fields before saving.
+        timestamp = self.event['timestamp']
+        status = self.event['event_type']
+        if status == "delivery_report":
+            status = "%s.%s" % (status, self.event['delivery_status'])
+        self.message_with_status = u"%s$%s$%s" % (
+            self.message.key, timestamp, status)
+        return super(EventV1, self).save()

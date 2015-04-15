@@ -12,7 +12,8 @@ from vumi.tests.helpers import (
 
 try:
     from vumi.components.message_store import (
-        MessageStore, to_reverse_timestamp, from_reverse_timestamp)
+        MessageStore, to_reverse_timestamp, from_reverse_timestamp,
+        add_batches_to_event)
 except ImportError, e:
     import_skip(e, 'riak')
 
@@ -272,7 +273,11 @@ class TestMessageStore(TestMessageStoreBase):
         self.assertTrue(stored_dr in events)
 
     @inlineCallbacks
-    def test_add_ack_event(self):
+    def test_add_ack_event_batch_ids_from_outbound(self):
+        """
+        If the `batch_ids` param is not given, batch ids are looked up on the
+        outbound message.
+        """
         msg_id, msg, batch_id = yield self._create_outbound()
         ack = self.msg_helper.make_ack(msg)
         ack_id = ack['event_id']
@@ -287,8 +292,99 @@ class TestMessageStore(TestMessageStoreBase):
         self.assertEqual(batch_status, self._batch_status(sent=1, ack=1))
 
         event = yield self.store.events.load(ack_id)
+        self.assertEqual(event.batches.keys(), [batch_id])
+        timestamp = format_vumi_date(ack["timestamp"])
         self.assertEqual(event.message_with_status, "%s$%s$ack" % (
-            msg_id, ack["timestamp"]))
+            msg_id, timestamp))
+        self.assertEqual(set(event.batches_with_statuses_reverse), set([
+            "%s$%s$ack" % (batch_id, to_reverse_timestamp(timestamp)),
+        ]))
+
+    @inlineCallbacks
+    def test_add_ack_event_with_batch_ids(self):
+        """
+        If an event is added with batch_ids provided, those batch_ids are used.
+        """
+        msg_id, msg, batch_id = yield self._create_outbound()
+        batch_1 = yield self.store.batch_start([])
+        batch_2 = yield self.store.batch_start([])
+
+        ack = self.msg_helper.make_ack(msg)
+        ack_id = ack['event_id']
+        yield self.store.add_event(ack, batch_ids=[batch_1, batch_2])
+
+        stored_ack = yield self.store.get_event(ack_id)
+        event_keys = yield self.store.message_event_keys(msg_id)
+        batch_status = yield self.store.batch_status(batch_id)
+        batch_1_status = yield self.store.batch_status(batch_1)
+        batch_2_status = yield self.store.batch_status(batch_2)
+
+        self.assertEqual(stored_ack, ack)
+        self.assertEqual(event_keys, [ack_id])
+        self.assertEqual(batch_status, self._batch_status(sent=1))
+        self.assertEqual(batch_1_status, self._batch_status(ack=1))
+        self.assertEqual(batch_2_status, self._batch_status(ack=1))
+
+        event = yield self.store.events.load(ack_id)
+        timestamp = format_vumi_date(ack["timestamp"])
+        self.assertEqual(event.message_with_status, "%s$%s$ack" % (
+            msg_id, timestamp))
+        self.assertEqual(set(event.batches_with_statuses_reverse), set([
+            "%s$%s$ack" % (batch_1, to_reverse_timestamp(timestamp)),
+            "%s$%s$ack" % (batch_2, to_reverse_timestamp(timestamp)),
+        ]))
+
+    @inlineCallbacks
+    def test_add_ack_event_without_batch_ids_no_outbound(self):
+        """
+        If an event is added without batch_ids and no outbound message is
+        found, no batch_ids will be used.
+        """
+        msg_id, msg, batch_id = yield self._create_outbound()
+
+        ack = self.msg_helper.make_ack(msg)
+        ack_id = ack['event_id']
+        ack['user_message_id'] = "no-message"
+        yield self.store.add_event(ack)
+
+        stored_ack = yield self.store.get_event(ack_id)
+        event_keys = yield self.store.message_event_keys("no-message")
+        batch_status = yield self.store.batch_status(batch_id)
+
+        self.assertEqual(stored_ack, ack)
+        self.assertEqual(event_keys, [ack_id])
+        self.assertEqual(batch_status, self._batch_status(sent=1))
+
+        event = yield self.store.events.load(ack_id)
+        timestamp = format_vumi_date(ack["timestamp"])
+        self.assertEqual(event.message_with_status, "%s$%s$ack" % (
+            "no-message", timestamp))
+        self.assertEqual(set(event.batches_with_statuses_reverse), set())
+
+    @inlineCallbacks
+    def test_add_ack_event_with_empty_batch_ids(self):
+        """
+        If an event is added with an empty list of batch_ids, no batch_ids will
+        be used.
+        """
+        msg_id, msg, batch_id = yield self._create_outbound()
+        ack = self.msg_helper.make_ack(msg)
+        ack_id = ack['event_id']
+        yield self.store.add_event(ack, batch_ids=[])
+
+        stored_ack = yield self.store.get_event(ack_id)
+        event_keys = yield self.store.message_event_keys(msg_id)
+        batch_status = yield self.store.batch_status(batch_id)
+
+        self.assertEqual(stored_ack, ack)
+        self.assertEqual(event_keys, [ack_id])
+        self.assertEqual(batch_status, self._batch_status(sent=1))
+
+        event = yield self.store.events.load(ack_id)
+        timestamp = format_vumi_date(ack["timestamp"])
+        self.assertEqual(event.message_with_status, "%s$%s$ack" % (
+            msg_id, timestamp))
+        self.assertEqual(set(event.batches_with_statuses_reverse), set())
 
     @inlineCallbacks
     def test_add_ack_event_again(self):
@@ -1653,3 +1749,43 @@ class TestMessageStoreCache(TestMessageStoreBase):
             found = results[msg['message_id']]
             expected = time.mktime(msg['timestamp'].timetuple())
             self.assertAlmostEqual(found, expected)
+
+
+class TestMigrationFunctions(TestMessageStoreBase):
+
+    @inlineCallbacks
+    def test_add_batches_to_event_no_batches(self):
+        """
+        If the stored event has no batches, they're looked up from the outbound
+        message and added to the event.
+        """
+        msg_id, msg, batch_id = yield self._create_outbound()
+
+        ack = self.msg_helper.make_ack(msg)
+        ack_id = ack['event_id']
+        yield self.store.add_event(ack, batch_ids=[])
+
+        event = yield self.store.events.load(ack_id)
+        self.assertEqual(event.batches.keys(), [])
+
+        updated = yield add_batches_to_event(event)
+        self.assertEqual(updated, True)
+        self.assertEqual(event.batches.keys(), [batch_id])
+
+    @inlineCallbacks
+    def test_add_batches_to_event_with_batches(self):
+        """
+        If the stored event already has batches, we do nothing.
+        """
+        msg_id, msg, batch_id = yield self._create_outbound()
+
+        ack = self.msg_helper.make_ack(msg)
+        ack_id = ack['event_id']
+        yield self.store.add_event(ack, batch_ids=[batch_id])
+
+        event = yield self.store.events.load(ack_id)
+        self.assertEqual(event.batches.keys(), [batch_id])
+
+        updated = yield add_batches_to_event(event)
+        self.assertEqual(updated, False)
+        self.assertEqual(event.batches.keys(), [batch_id])

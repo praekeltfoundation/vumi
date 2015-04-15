@@ -43,6 +43,30 @@ class EventMigrator(MessageMigratorBase):
 
         return mdata
 
+    def migrate_from_1(self, mdata):
+        # If the old data contains a value for the `batches` field, it must be
+        # back-migrated from a newer version. If not, we have no way to know
+        # what batches the event belongs to, so we leave the field empty. Some
+        # external data migration tool will have to populate it.
+        mdata.set_value('$VERSION', 2)
+        self._copy_msg_field('event', mdata)
+        mdata.set_value('batches', mdata.old_data.get('batches', []))
+        mdata.copy_values('message')
+        mdata.copy_indexes('message_bin')
+
+        return mdata
+
+    def reverse_from_2(self, mdata):
+        # We copy the `batches` field even though the older model version
+        # doesn't know about it. This lets us migrate v2 -> v1 -> v2 without
+        # losing data.
+        mdata.set_value('$VERSION', 1)
+        self._copy_msg_field('event', mdata)
+        mdata.copy_values('message', 'batches')
+        mdata.copy_indexes('message_bin')
+
+        return mdata
+
 
 class OutboundMessageMigrator(MessageMigratorBase):
     def migrate_from_unversioned(self, mdata):
