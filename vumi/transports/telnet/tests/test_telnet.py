@@ -107,6 +107,8 @@ class TestTelnetServerTransport(BaseTelnetServerTransortTestCase):
         line = yield self.client.queue.get()
         self.assertEqual(line, "reply_foo")
         self.assertTrue(self.client.transport.connected)
+        [event] = self.tx_helper.get_dispatched_events()
+        self.assertEqual(event['event_type'], 'ack')
 
     @inlineCallbacks
     def test_non_ascii_outbound_reply(self):
@@ -122,9 +124,13 @@ class TestTelnetServerTransport(BaseTelnetServerTransortTestCase):
         reg['from_addr'] = 'nowhere'
         yield self.tx_helper.make_dispatch_reply(reg, NON_ASCII)
         line = yield self.client.queue.get()
-        self.assertEqual(line,
+        self.assertEqual(
+            line,
             (u"UNKNOWN ADDR [nowhere]: %s" % (NON_ASCII,)).encode('utf-8'))
         self.assertTrue(self.client.transport.connected)
+        [event] = self.tx_helper.get_dispatched_events()
+        self.assertEqual(event['event_type'], 'nack')
+        self.assertEqual(event['nack_reason'], u'Unknown address.')
 
     @inlineCallbacks
     def test_outbound_close_event(self):
@@ -145,11 +151,14 @@ class TestTelnetServerTransport(BaseTelnetServerTransortTestCase):
         line = yield self.client.queue.get()
         self.assertEqual(line, "send_foo")
         self.assertTrue(self.client.transport.connected)
+        [event] = self.tx_helper.get_dispatched_events()
+        self.assertEqual(event['event_type'], 'ack')
 
     @inlineCallbacks
     def test_to_addr_override(self):
         old_worker = self.worker
-        self.assertEqual(old_worker._to_addr,
+        self.assertEqual(
+            old_worker._to_addr,
             old_worker._format_addr(old_worker.telnet_server.getHost()))
         worker = yield self.tx_helper.get_transport({
             'telnet_port': 0,
@@ -199,8 +208,8 @@ class TestAddressedTelnetServerTransport(BaseTelnetServerTransortTestCase):
         self.assertEqual('Please provide "from_addr":', from_addr_prompt)
         self.client.transport.write('from_addr\n')
         summary = yield self.wait_for_server()
-        self.assertEqual(summary,
-            "[Sending all messages to: to_addr and from: from_addr]")
+        self.assertEqual(
+            summary, "[Sending all messages to: to_addr and from: from_addr]")
         self.client.transport.write('foo!\n')
         [reg, msg] = yield self.tx_helper.wait_for_dispatched_inbound(2)
 

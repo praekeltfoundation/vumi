@@ -63,7 +63,7 @@ class AddressedTelnetTransportProtocol(StatefulTelnetProtocol):
         if self.from_addr is None:
             self.from_addr = line
             summary = "[Sending all messages to: %s and from: %s]\n" % (
-                            self.to_addr, self.from_addr)
+                self.to_addr, self.from_addr)
             self.transport.write(summary)
 
             self.vumi_transport._to_addr = self.to_addr
@@ -186,6 +186,7 @@ class TelnetServerTransport(Transport):
         )
 
     def handle_outbound_message(self, message):
+        failed = False
         text = message['content']
         if text is None:
             text = u''
@@ -197,6 +198,7 @@ class TelnetServerTransport(Transport):
             # unknown addr, deliver to all
             clients = self._clients.values()
             text = u"UNKNOWN ADDR [%s]: %s" % (client_addr, text)
+            failed = True
         else:
             clients = [client]
 
@@ -206,6 +208,11 @@ class TelnetServerTransport(Transport):
             client.transport.write("%s\n" % text)
             if message['session_event'] == TransportUserMessage.SESSION_CLOSE:
                 client.transport.loseConnection()
+
+        if failed:
+            self.publish_nack(message['message_id'], u"Unknown address.")
+        else:
+            self.publish_ack(message['message_id'], message['message_id'])
 
 
 class AddressedTelnetServerTransport(TelnetServerTransport):
