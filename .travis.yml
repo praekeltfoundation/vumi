@@ -45,3 +45,13 @@ after_success:
 # To figure out why Riak 2.0 sometimes breaks.
 after_failure:
   - "echo 'Riak console log:'; cat /usr/lib/riak/log/console.log"
+deploy:
+  provider: pypi
+  user: Praekelt
+  password:
+    secure: "hyTE4zCmNlAT2nnKVijBRvkO/DssCHc1HcaGzPsrfYQ+qgoTmB89CyLjr4FtAh7JVB7jxEvvKSlQGcJLTcJxTb3UCll4B/hVrBjlB1NmOb2FHmVPgmrN1QSG9Tcx3nRJBfXkeCI5FTZ0nBz3EInVUUrht20ID1qqnhnWeBkvKLw="
+  python: '2.7'
+  distributions: "sdist bdist_wheel"
+  on:
+    all_branches: true
+    tags: true
