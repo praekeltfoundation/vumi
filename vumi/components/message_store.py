@@ -710,6 +710,18 @@ class MessageStore(object):
         return start_value, end_value
 
     @Manager.calls_manager
+    def _query_batch_with_addresses(self, model_proxy, batch_id, max_results,
+                                    start, end, formatter):
+        if max_results is None:
+            max_results = self.DEFAULT_MAX_RESULTS
+        start_value, end_value = self._start_end_values(batch_id, start, end)
+        results = yield model_proxy.index_keys_page(
+            'batches_with_addresses', start_value, end_value,
+            return_terms=(formatter is not None), max_results=max_results)
+        if formatter is not None:
+            results = IndexPageWrapper(formatter, self, batch_id, results)
+        returnValue(results)
+
     def batch_inbound_keys_with_timestamps(self, batch_id, max_results=None,
                                            start=None, end=None,
                                            with_timestamps=True):
@@ -734,18 +746,10 @@ class MessageStore(object):
 
         This method performs a Riak index query.
         """
-        if max_results is None:
-            max_results = self.DEFAULT_MAX_RESULTS
-        start_value, end_value = self._start_end_values(batch_id, start, end)
-        results = yield self.inbound_messages.index_keys_page(
-            'batches_with_addresses', start_value, end_value,
-            return_terms=with_timestamps, max_results=max_results)
-        if with_timestamps:
-            results = IndexPageWrapper(
-                key_with_ts_only_formatter, self, batch_id, results)
-        returnValue(results)
+        fmt = key_with_ts_only_formatter if with_timestamps else None
+        return self._query_batch_with_addresses(
+            self.inbound_messages, batch_id, max_results, start, end, fmt)
 
-    @Manager.calls_manager
     def batch_outbound_keys_with_timestamps(self, batch_id, max_results=None,
                                             start=None, end=None,
                                             with_timestamps=True):
@@ -770,18 +774,10 @@ class MessageStore(object):
 
         This method performs a Riak index query.
         """
-        if max_results is None:
-            max_results = self.DEFAULT_MAX_RESULTS
-        start_value, end_value = self._start_end_values(batch_id, start, end)
-        results = yield self.outbound_messages.index_keys_page(
-            'batches_with_addresses', start_value, end_value,
-            return_terms=with_timestamps, max_results=max_results)
-        if with_timestamps:
-            results = IndexPageWrapper(
-                key_with_ts_only_formatter, self, batch_id, results)
-        returnValue(results)
+        fmt = key_with_ts_only_formatter if with_timestamps else None
+        return self._query_batch_with_addresses(
+            self.outbound_messages, batch_id, max_results, start, end, fmt)
 
-    @Manager.calls_manager
     def batch_inbound_keys_with_addresses(self, batch_id, max_results=None,
                                           start=None, end=None):
         """
@@ -802,16 +798,10 @@ class MessageStore(object):
 
         This method performs a Riak index query.
         """
-        if max_results is None:
-            max_results = self.DEFAULT_MAX_RESULTS
-        start_value, end_value = self._start_end_values(batch_id, start, end)
-        results = yield self.inbound_messages.index_keys_page(
-            'batches_with_addresses', start_value, end_value,
-            return_terms=True, max_results=max_results)
-        returnValue(IndexPageWrapper(
-            key_with_ts_and_value_formatter, self, batch_id, results))
+        return self._query_batch_with_addresses(
+            self.inbound_messages, batch_id, max_results, start, end,
+            key_with_ts_and_value_formatter)
 
-    @Manager.calls_manager
     def batch_outbound_keys_with_addresses(self, batch_id, max_results=None,
                                            start=None, end=None):
         """
@@ -832,14 +822,9 @@ class MessageStore(object):
 
         This method performs a Riak index query.
         """
-        if max_results is None:
-            max_results = self.DEFAULT_MAX_RESULTS
-        start_value, end_value = self._start_end_values(batch_id, start, end)
-        results = yield self.outbound_messages.index_keys_page(
-            'batches_with_addresses', start_value, end_value,
-            return_terms=True, max_results=max_results)
-        returnValue(IndexPageWrapper(
-            key_with_ts_and_value_formatter, self, batch_id, results))
+        return self._query_batch_with_addresses(
+            self.outbound_messages, batch_id, max_results, start, end,
+            key_with_ts_and_value_formatter)
 
     @Manager.calls_manager
     def batch_inbound_keys_with_addresses_reverse(self, batch_id,
