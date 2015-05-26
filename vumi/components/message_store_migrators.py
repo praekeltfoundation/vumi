@@ -53,17 +53,21 @@ class EventMigrator(MessageMigratorBase):
         mdata.set_value('batches', mdata.old_data.get('batches', []))
         mdata.copy_values('message')
         mdata.copy_indexes('message_bin')
+        mdata.copy_indexes('message_with_status_bin')
 
         return mdata
 
     def reverse_from_2(self, mdata):
-        # We copy the `batches` field even though the older model version
-        # doesn't know about it. This lets us migrate v2 -> v1 -> v2 without
-        # losing data.
+        # We copy the `batches` field and related indexs even though the older
+        # model version doesn't know about them. This lets us migrate
+        # v2 -> v1 -> v2 without losing data.
         mdata.set_value('$VERSION', 1)
         self._copy_msg_field('event', mdata)
         mdata.copy_values('message', 'batches')
         mdata.copy_indexes('message_bin')
+        mdata.copy_indexes('message_with_status_bin')
+        mdata.copy_indexes('batches_bin')
+        mdata.copy_indexes('batches_with_statuses_reverse_bin')
 
         return mdata
 
@@ -83,7 +87,7 @@ class OutboundMessageMigrator(MessageMigratorBase):
         mdata.set_value('$VERSION', 2)
         self._copy_msg_field('msg', mdata)
         mdata.copy_values('batches')
-        mdata.copy_indexes('batches')
+        mdata.copy_indexes('batches_bin')
 
         return mdata
 
@@ -93,7 +97,8 @@ class OutboundMessageMigrator(MessageMigratorBase):
         mdata.set_value('$VERSION', 3)
         self._copy_msg_field('msg', mdata)
         mdata.copy_values('batches')
-        mdata.copy_indexes('batches')
+        mdata.copy_indexes('batches_bin')
+        mdata.copy_indexes('batches_with_timestamps_bin')
 
         return mdata
 
@@ -104,7 +109,8 @@ class OutboundMessageMigrator(MessageMigratorBase):
         mdata.set_value('$VERSION', 2)
         self._copy_msg_field('msg', mdata)
         mdata.copy_values('batches')
-        mdata.copy_indexes('batches')
+        mdata.copy_indexes('batches_bin')
+        mdata.copy_indexes('batches_with_timestamps_bin')
 
         return mdata
 
@@ -114,7 +120,9 @@ class OutboundMessageMigrator(MessageMigratorBase):
         mdata.set_value('$VERSION', 4)
         self._copy_msg_field('msg', mdata)
         mdata.copy_values('batches')
-        mdata.copy_indexes('batches')
+        mdata.copy_indexes('batches_bin')
+        mdata.copy_indexes('batches_with_timestamps_bin')
+        mdata.copy_indexes('batches_with_addresses_bin')
 
         return mdata
 
@@ -125,7 +133,9 @@ class OutboundMessageMigrator(MessageMigratorBase):
         mdata.set_value('$VERSION', 3)
         self._copy_msg_field('msg', mdata)
         mdata.copy_values('batches')
-        mdata.copy_indexes('batches')
+        mdata.copy_indexes('batches_bin')
+        mdata.copy_indexes('batches_with_timestamps_bin')
+        mdata.copy_indexes('batches_with_addresses_bin')
 
         return mdata
 
@@ -145,7 +155,7 @@ class InboundMessageMigrator(MessageMigratorBase):
         mdata.set_value('$VERSION', 2)
         self._copy_msg_field('msg', mdata)
         mdata.copy_values('batches')
-        mdata.copy_indexes('batches')
+        mdata.copy_indexes('batches_bin')
 
         return mdata
 
@@ -155,7 +165,8 @@ class InboundMessageMigrator(MessageMigratorBase):
         mdata.set_value('$VERSION', 3)
         self._copy_msg_field('msg', mdata)
         mdata.copy_values('batches')
-        mdata.copy_indexes('batches')
+        mdata.copy_indexes('batches_bin')
+        mdata.copy_indexes('batches_with_timestamps_bin')
 
         return mdata
 
@@ -166,7 +177,8 @@ class InboundMessageMigrator(MessageMigratorBase):
         mdata.set_value('$VERSION', 2)
         self._copy_msg_field('msg', mdata)
         mdata.copy_values('batches')
-        mdata.copy_indexes('batches')
+        mdata.copy_indexes('batches_bin')
+        mdata.copy_indexes('batches_with_timestamps_bin')
 
         return mdata
 
@@ -176,7 +188,9 @@ class InboundMessageMigrator(MessageMigratorBase):
         mdata.set_value('$VERSION', 4)
         self._copy_msg_field('msg', mdata)
         mdata.copy_values('batches')
-        mdata.copy_indexes('batches')
+        mdata.copy_indexes('batches_bin')
+        mdata.copy_indexes('batches_with_timestamps_bin')
+        mdata.copy_indexes('batches_with_addresses_bin')
 
         return mdata
 
@@ -187,6 +201,8 @@ class InboundMessageMigrator(MessageMigratorBase):
         mdata.set_value('$VERSION', 3)
         self._copy_msg_field('msg', mdata)
         mdata.copy_values('batches')
-        mdata.copy_indexes('batches')
+        mdata.copy_indexes('batches_bin')
+        mdata.copy_indexes('batches_with_timestamps_bin')
+        mdata.copy_indexes('batches_with_addresses_bin')
 
         return mdata
