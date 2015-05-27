@@ -11,7 +11,7 @@ from vumi.message import Message, TransportUserMessage
 from vumi.persist.fields import (
     ValidationError, Field, Integer, Unicode, Tag, Timestamp, Json,
     ListOf, SetOf, Dynamic, FieldWithSubtype, Boolean, VumiMessage,
-    ForeignKey, ManyToMany)
+    ForeignKey, ManyToMany, ComputedIndex)
 from vumi.persist.model import Manager, Model
 from vumi.tests.helpers import VumiTestCase, MessageHelper, import_skip
 
@@ -1246,3 +1246,73 @@ class TestManyToMany(VumiTestCase):
         results_p1 = yield s2.backlinks.manytomanymodel_keys()
         self.assertEqual(sorted(results_p1), ["bar1"])
         self.assertEqual(results_p1.has_next_page(), False)
+
+
+@model_field_tests
+class TestComputedIndex(VumiTestCase):
+
+    class ComputedIndexModel(Model):
+        """
+        Toy model for ComputedIndex tests.
+        """
+        a = Integer()
+        b = Unicode()
+        a_with_b = ComputedIndex(value_func=lambda m: "%s::%s" % (m.a, m.b))
+
+    def assert_indexes(self, mdl, values):
+        self.assertEqual(
+            mdl._riak_object.get_indexes(),
+            set(('a_with_b_bin', v) for v in values))
+
+    @needs_riak
+    @Manager.calls_manager
+    def test_computedindex_field(self):
+        """
+        A `ComputedIndex` field has its value set at save time.
+        """
+        ci_model = self.manager.proxy(self.ComputedIndexModel)
+        m1 = ci_model("foo", a=7, b=u"bar")
+
+        # Value and index are usually only computed at save time.
+        self.assertEqual(m1.a_with_b, None)
+        self.assert_indexes(m1, [])
+
+        yield m1.save()
+        self.assertEqual(m1.a_with_b, "7::bar")
+        self.assert_indexes(m1, ["7::bar"])
+
+        m2 = yield ci_model.load("foo")
+        self.assertEqual(m1.a, m2.a)
+        self.assertEqual(m1.b, m2.b)
+        self.assertEqual(m1.a_with_b, "7::bar")
+        self.assert_indexes(m2, ["7::bar"])
+
+    @needs_riak
+    @Manager.calls_manager
+    def test_computedindex_field_set_value(self):
+        """
+        A `ComputedIndex` field can have its value set manually, but that value
+        is overridden at save time.
+        """
+        ci_model = self.manager.proxy(self.ComputedIndexModel)
+        m1 = ci_model("foo", a=7, b=u"bar")
+
+        # Value and index are usually only computed at save time.
+        self.assertEqual(m1.a_with_b, None)
+        self.assert_indexes(m1, [])
+
+        # Manually setting the value is possible.
+        m1.a_with_b = "a thing"
+        self.assertEqual(m1.a_with_b, "a thing")
+        self.assert_indexes(m1, ["a thing"])
+
+        # But the save time computation overrides that.
+        yield m1.save()
+        self.assertEqual(m1.a_with_b, "7::bar")
+        self.assert_indexes(m1, ["7::bar"])
+
+        m2 = yield ci_model.load("foo")
+        self.assertEqual(m1.a, m2.a)
+        self.assertEqual(m1.b, m2.b)
+        self.assertEqual(m1.a_with_b, "7::bar")
+        self.assert_indexes(m2, ["7::bar"])

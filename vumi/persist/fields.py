@@ -71,6 +71,12 @@ class FieldDescriptor(object):
         the data from Riak."""
         pass
 
+    def pre_save(self, modelobj):
+        """
+        Do any necessary computation before saving the data to Riak.
+        """
+        pass
+
     def __repr__(self):
         return "<%s key=%s field=%r>" % (self.__class__.__name__, self.key,
                                          self.field)
@@ -957,3 +963,27 @@ class ManyToMany(ForeignKey):
 
     def __init__(self, other_model, index=None, backlink=None):
         super(ManyToMany, self).__init__(other_model, index, backlink)
+
+
+class ComputedIndexDescriptor(FieldDescriptor):
+    """A field descriptor for computed index fields."""
+
+    def pre_save(self, modelobj):
+        self.set_value(modelobj, self.field.value_func(modelobj))
+
+    def _add_index(self, modelobj, value):
+        # We override `FieldDescriptor._add_index` because we don't want `None`
+        # values.
+        if value is not None:
+            modelobj._riak_object.add_index(self.index_name, str(value))
+
+
+class ComputedIndex(Field):
+    """Field that stores a computed value for indexing."""
+
+    descriptor_class = ComputedIndexDescriptor
+
+    def __init__(self, value_func, index=True, **kw):
+        kw["null"] = True
+        super(ComputedIndex, self).__init__(index=index, **kw)
+        self.value_func = value_func
