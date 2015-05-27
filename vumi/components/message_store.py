@@ -90,7 +90,7 @@ class CurrentTag(Model):
 
 
 class OutboundMessage(Model):
-    VERSION = 4
+    VERSION = 5
     MIGRATOR = OutboundMessageMigrator
 
     # key is message_id
@@ -98,13 +98,11 @@ class OutboundMessage(Model):
     batches = ManyToMany(Batch)
 
     # Extra fields for compound indexes
-    batches_with_timestamps = ListOf(Unicode(), index=True)
     batches_with_addresses = ListOf(Unicode(), index=True)
     batches_with_addresses_reverse = ListOf(Unicode(), index=True)
 
     def save(self):
         # We override this method to set our index fields before saving.
-        self.batches_with_timestamps = []
         self.batches_with_addresses = []
         self.batches_with_addresses_reverse = []
         timestamp = self.msg['timestamp']
@@ -112,8 +110,6 @@ class OutboundMessage(Model):
             timestamp = format_vumi_date(timestamp)
         reverse_ts = to_reverse_timestamp(timestamp)
         for batch_id in self.batches.keys():
-            self.batches_with_timestamps.append(
-                u"%s$%s" % (batch_id, timestamp))
             self.batches_with_addresses.append(
                 u"%s$%s$%s" % (batch_id, timestamp, self.msg['to_addr']))
             self.batches_with_addresses_reverse.append(
@@ -153,7 +149,7 @@ class Event(Model):
 
 
 class InboundMessage(Model):
-    VERSION = 4
+    VERSION = 5
     MIGRATOR = InboundMessageMigrator
 
     # key is message_id
@@ -161,13 +157,11 @@ class InboundMessage(Model):
     batches = ManyToMany(Batch)
 
     # Extra fields for compound indexes
-    batches_with_timestamps = ListOf(Unicode(), index=True)
     batches_with_addresses = ListOf(Unicode(), index=True)
     batches_with_addresses_reverse = ListOf(Unicode(), index=True)
 
     def save(self):
         # We override this method to set our index fields before saving.
-        self.batches_with_timestamps = []
         self.batches_with_addresses = []
         self.batches_with_addresses_reverse = []
         timestamp = self.msg['timestamp']
@@ -175,8 +169,6 @@ class InboundMessage(Model):
             timestamp = format_vumi_date(timestamp)
         reverse_ts = to_reverse_timestamp(timestamp)
         for batch_id in self.batches.keys():
-            self.batches_with_timestamps.append(
-                u"%s$%s" % (batch_id, timestamp))
             self.batches_with_addresses.append(
                 u"%s$%s$%s" % (batch_id, timestamp, self.msg['from_addr']))
             self.batches_with_addresses_reverse.append(

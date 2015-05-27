@@ -236,10 +236,6 @@ class TestMessageStore(TestMessageStoreBase):
         self.assertEqual(stored_msg._riak_object.get_indexes(), set([
             ('batches_bin', batch_id_1),
             ('batches_bin', batch_id_2),
-            ('batches_with_timestamps_bin',
-             "%s$%s" % (batch_id_1, timestamp)),
-            ('batches_with_timestamps_bin',
-             "%s$%s" % (batch_id_2, timestamp)),
             ('batches_with_addresses_bin',
              "%s$%s$%s" % (batch_id_1, timestamp, msg['to_addr'])),
             ('batches_with_addresses_bin',
@@ -533,10 +529,6 @@ class TestMessageStore(TestMessageStoreBase):
         self.assertEqual(stored_msg._riak_object.get_indexes(), set([
             ('batches_bin', batch_id_1),
             ('batches_bin', batch_id_2),
-            ('batches_with_timestamps_bin',
-             "%s$%s" % (batch_id_1, timestamp)),
-            ('batches_with_timestamps_bin',
-             "%s$%s" % (batch_id_2, timestamp)),
             ('batches_with_addresses_bin',
              "%s$%s$%s" % (batch_id_1, timestamp, msg['from_addr'])),
             ('batches_with_addresses_bin',

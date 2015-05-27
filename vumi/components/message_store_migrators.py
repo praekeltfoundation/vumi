@@ -139,6 +139,31 @@ class OutboundMessageMigrator(MessageMigratorBase):
 
         return mdata
 
+    def migrate_from_4(self, mdata):
+        # We copy existing fields and indexes over except for the indexes we're
+        # removing.
+        mdata.set_value('$VERSION', 5)
+        self._copy_msg_field('msg', mdata)
+        mdata.copy_values('batches')
+        mdata.copy_indexes('batches_bin')
+        mdata.copy_indexes('batches_with_addresses_bin')
+        mdata.copy_indexes('batches_with_addresses_reverse_bin')
+
+        return mdata
+
+    def reverse_from_5(self, mdata):
+        # The only difference between v4 and v5 is an index that's computed at
+        # save time, so the reverse migration is identical to the forward
+        # migration except for the version we set.
+        mdata.set_value('$VERSION', 4)
+        self._copy_msg_field('msg', mdata)
+        mdata.copy_values('batches')
+        mdata.copy_indexes('batches_bin')
+        mdata.copy_indexes('batches_with_addresses_bin')
+        mdata.copy_indexes('batches_with_addresses_reverse_bin')
+
+        return mdata
+
 
 class InboundMessageMigrator(MessageMigratorBase):
     def migrate_from_unversioned(self, mdata):
@@ -204,5 +229,30 @@ class InboundMessageMigrator(MessageMigratorBase):
         mdata.copy_indexes('batches_bin')
         mdata.copy_indexes('batches_with_timestamps_bin')
         mdata.copy_indexes('batches_with_addresses_bin')
+
+        return mdata
+
+    def migrate_from_4(self, mdata):
+        # We copy existing fields and indexes over except for the indexes we're
+        # removing.
+        mdata.set_value('$VERSION', 5)
+        self._copy_msg_field('msg', mdata)
+        mdata.copy_values('batches')
+        mdata.copy_indexes('batches_bin')
+        mdata.copy_indexes('batches_with_addresses_bin')
+        mdata.copy_indexes('batches_with_addresses_reverse_bin')
+
+        return mdata
+
+    def reverse_from_5(self, mdata):
+        # The only difference between v4 and v5 is an index that's computed at
+        # save time, so the reverse migration is identical to the forward
+        # migration except for the version we set.
+        mdata.set_value('$VERSION', 4)
+        self._copy_msg_field('msg', mdata)
+        mdata.copy_values('batches')
+        mdata.copy_indexes('batches_bin')
+        mdata.copy_indexes('batches_with_addresses_bin')
+        mdata.copy_indexes('batches_with_addresses_reverse_bin')
 
         return mdata
