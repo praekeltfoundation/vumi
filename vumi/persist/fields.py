@@ -979,7 +979,14 @@ class ComputedIndexDescriptor(FieldDescriptor):
 
 
 class ComputedIndex(Field):
-    """Field that stores a computed value for indexing."""
+    """
+    Field that stores a computed value for indexing.
+
+    :param value_func:
+        A function that takes a model instance as its only parameter and
+        returns a value for the field. This is called at save time to compute
+        the field value.
+    """
 
     descriptor_class = ComputedIndexDescriptor
 
