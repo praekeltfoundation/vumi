@@ -133,6 +133,43 @@ class VersionedModelMigrator(ModelMigrator):
         migration_data.set_value('text', migration_data.old_data['text'])
         return migration_data
 
+    def migrate_from_3(self, migration_data):
+        # Migrator assertions
+        assert self.data_version == 3
+        assert self.model_class is IndexRemovedVersionedModel
+        assert isinstance(self.manager, Manager)
+
+        # Data assertions
+        assert set(migration_data.old_data.keys()) == set(
+            ['$VERSION', 'c', 'text'])
+        assert migration_data.old_data['$VERSION'] == 3
+        assert migration_data.old_index == {"text_bin": ["hi"]}
+
+        # Actual migration
+        migration_data.set_value('$VERSION', 4)
+        migration_data.copy_values('c')
+        migration_data.set_value('text', migration_data.old_data['text'])
+        return migration_data
+
+    def reverse_from_4(self, migration_data):
+        # Migrator assertions
+        assert self.data_version == 4
+        assert self.model_class is IndexRemovedVersionedModel
+        assert isinstance(self.manager, Manager)
+
+        # Data assertions
+        assert set(migration_data.old_data.keys()) == set(
+            ['$VERSION', 'c', 'text'])
+        assert migration_data.old_data['$VERSION'] == 4
+        assert migration_data.old_index == {}
+
+        # Actual migration
+        migration_data.set_value('$VERSION', 3)
+        migration_data.copy_values('c')
+        migration_data.set_value(
+            'text', migration_data.old_data['text'], index='text_bin')
+        return migration_data
+
 
 class UnversionedModel(Model):
     bucket = 'versionedmodel'
@@ -160,8 +197,16 @@ class IndexedVersionedModel(Model):
     text = Unicode(null=True, index=True)
 
 
-class UnknownVersionedModel(Model):
+class IndexRemovedVersionedModel(Model):
     VERSION = 4
+    MIGRATOR = VersionedModelMigrator
+    bucket = 'versionedmodel'
+    c = Integer()
+    text = Unicode(null=True)
+
+
+class UnknownVersionedModel(Model):
+    VERSION = 5
     bucket = 'versionedmodel'
     d = Integer()
 
@@ -827,8 +872,8 @@ class ModelTestMixin(object):
         foo_old = yield old_model.load("foo")
         self.assertEqual(foo_old.c, 1)
         self.assertEqual(foo_old.text, "hi")
-        # Old indexes are kept across migrations.
-        self.assertEqual(self.get_model_indexes(foo_old), {"text_bin": ["hi"]})
+        # Old indexes are no longer kept across migrations.
+        self.assertEqual(self.get_model_indexes(foo_old), {})
         self.assertEqual(foo_old.was_migrated, False)
 
     @Manager.calls_manager
@@ -858,6 +903,40 @@ class ModelTestMixin(object):
         self.assertEqual(self.get_model_indexes(foo_new), {})
 
     @Manager.calls_manager
+    def test_version_migration_remove_index(self):
+        """
+        An index can be removed in a migration.
+        """
+        old_model = self.manager.proxy(IndexedVersionedModel)
+        new_model = self.manager.proxy(IndexRemovedVersionedModel)
+        foo_old = old_model("foo", c=1, text=u"hi")
+        yield foo_old.save()
+
+        foo_new = yield new_model.load("foo")
+        self.assertEqual(foo_new.c, 1)
+        self.assertEqual(foo_new.text, "hi")
+        self.assertEqual(self.get_model_indexes(foo_new), {})
+        self.assertEqual(foo_new.was_migrated, True)
+
+    @Manager.calls_manager
+    def test_version_reverse_migration_remove_index(self):
+        """
+        A removed index can be restored in a reverse migration.
+        """
+        old_model = self.manager.proxy(IndexedVersionedModel)
+        new_model = self.manager.proxy(IndexRemovedVersionedModel)
+        foo_new = new_model("foo", c=1, text=u"hi")
+        model_name = "%s.%s" % (
+            VersionedModel.__module__, IndexRemovedVersionedModel.__name__)
+        self.manager.store_versions[model_name] = IndexedVersionedModel.VERSION
+        yield foo_new.save()
+
+        foo_old = yield old_model.load("foo")
+        self.assertEqual(foo_old.c, 1)
+        self.assertEqual(foo_old.text, "hi")
+        self.assertEqual(self.get_model_indexes(foo_new), {"text_bin": ["hi"]})
+
+    @Manager.calls_manager
     def test_version_migration_failure(self):
         odd_model = self.manager.proxy(UnknownVersionedModel)
         new_model = self.manager.proxy(VersionedModel)
@@ -869,7 +948,7 @@ class ModelTestMixin(object):
             self.fail('Expected ModelMigrationError.')
         except ModelMigrationError, e:
             self.assertEqual(
-                e.args[0], 'No migrators defined for VersionedModel version 4')
+                e.args[0], 'No migrators defined for VersionedModel version 5')
 
     @Manager.calls_manager
     def test_dynamic_field_migration(self):

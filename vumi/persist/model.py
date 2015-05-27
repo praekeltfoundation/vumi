@@ -139,7 +139,9 @@ class MigrationData(object):
 
     def get_riak_object(self):
         self.riak_object.set_data(self.new_data)
-        # Note: This keeps old indexes.
+        # We need to explicitly remove old indexes before adding new ones.
+        for field in self.old_index:
+            self.riak_object.remove_index(field)
         for field, values in self.new_index.iteritems():
             for value in values:
                 self.riak_object.add_index(field, value)
