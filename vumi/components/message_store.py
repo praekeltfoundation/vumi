@@ -90,7 +90,7 @@ class CurrentTag(Model):
 
 
 class OutboundMessage(Model):
-    VERSION = 4
+    VERSION = 5
     MIGRATOR = OutboundMessageMigrator
 
     # key is message_id
@@ -98,13 +98,11 @@ class OutboundMessage(Model):
     batches = ManyToMany(Batch)
 
     # Extra fields for compound indexes
-    batches_with_timestamps = ListOf(Unicode(), index=True)
     batches_with_addresses = ListOf(Unicode(), index=True)
     batches_with_addresses_reverse = ListOf(Unicode(), index=True)
 
     def save(self):
         # We override this method to set our index fields before saving.
-        self.batches_with_timestamps = []
         self.batches_with_addresses = []
         self.batches_with_addresses_reverse = []
         timestamp = self.msg['timestamp']
@@ -112,8 +110,6 @@ class OutboundMessage(Model):
             timestamp = format_vumi_date(timestamp)
         reverse_ts = to_reverse_timestamp(timestamp)
         for batch_id in self.batches.keys():
-            self.batches_with_timestamps.append(
-                u"%s$%s" % (batch_id, timestamp))
             self.batches_with_addresses.append(
                 u"%s$%s$%s" % (batch_id, timestamp, self.msg['to_addr']))
             self.batches_with_addresses_reverse.append(
@@ -153,7 +149,7 @@ class Event(Model):
 
 
 class InboundMessage(Model):
-    VERSION = 4
+    VERSION = 5
     MIGRATOR = InboundMessageMigrator
 
     # key is message_id
@@ -161,13 +157,11 @@ class InboundMessage(Model):
     batches = ManyToMany(Batch)
 
     # Extra fields for compound indexes
-    batches_with_timestamps = ListOf(Unicode(), index=True)
     batches_with_addresses = ListOf(Unicode(), index=True)
     batches_with_addresses_reverse = ListOf(Unicode(), index=True)
 
     def save(self):
         # We override this method to set our index fields before saving.
-        self.batches_with_timestamps = []
         self.batches_with_addresses = []
         self.batches_with_addresses_reverse = []
         timestamp = self.msg['timestamp']
@@ -175,8 +169,6 @@ class InboundMessage(Model):
             timestamp = format_vumi_date(timestamp)
         reverse_ts = to_reverse_timestamp(timestamp)
         for batch_id in self.batches.keys():
-            self.batches_with_timestamps.append(
-                u"%s$%s" % (batch_id, timestamp))
             self.batches_with_addresses.append(
                 u"%s$%s$%s" % (batch_id, timestamp, self.msg['from_addr']))
             self.batches_with_addresses_reverse.append(
@@ -710,6 +702,18 @@ class MessageStore(object):
         return start_value, end_value
 
     @Manager.calls_manager
+    def _query_batch_index(self, model_proxy, batch_id, index, max_results,
+                           start, end, formatter):
+        if max_results is None:
+            max_results = self.DEFAULT_MAX_RESULTS
+        start_value, end_value = self._start_end_values(batch_id, start, end)
+        results = yield model_proxy.index_keys_page(
+            index, start_value, end_value, max_results=max_results,
+            return_terms=(formatter is not None))
+        if formatter is not None:
+            results = IndexPageWrapper(formatter, self, batch_id, results)
+        returnValue(results)
+
     def batch_inbound_keys_with_timestamps(self, batch_id, max_results=None,
                                            start=None, end=None,
                                            with_timestamps=True):
@@ -734,18 +738,11 @@ class MessageStore(object):
 
         This method performs a Riak index query.
         """
-        if max_results is None:
-            max_results = self.DEFAULT_MAX_RESULTS
-        start_value, end_value = self._start_end_values(batch_id, start, end)
-        results = yield self.inbound_messages.index_keys_page(
-            'batches_with_timestamps', start_value, end_value,
-            return_terms=with_timestamps, max_results=max_results)
-        if with_timestamps:
-            results = IndexPageWrapper(
-                key_with_timestamp_formatter, self, batch_id, results)
-        returnValue(results)
+        formatter = key_with_ts_only_formatter if with_timestamps else None
+        return self._query_batch_index(
+            self.inbound_messages, batch_id, 'batches_with_addresses',
+            max_results, start, end, formatter)
 
-    @Manager.calls_manager
     def batch_outbound_keys_with_timestamps(self, batch_id, max_results=None,
                                             start=None, end=None,
                                             with_timestamps=True):
@@ -770,18 +767,11 @@ class MessageStore(object):
 
         This method performs a Riak index query.
         """
-        if max_results is None:
-            max_results = self.DEFAULT_MAX_RESULTS
-        start_value, end_value = self._start_end_values(batch_id, start, end)
-        results = yield self.outbound_messages.index_keys_page(
-            'batches_with_timestamps', start_value, end_value,
-            return_terms=with_timestamps, max_results=max_results)
-        if with_timestamps:
-            results = IndexPageWrapper(
-                key_with_timestamp_formatter, self, batch_id, results)
-        returnValue(results)
+        formatter = key_with_ts_only_formatter if with_timestamps else None
+        return self._query_batch_index(
+            self.outbound_messages, batch_id, 'batches_with_addresses',
+            max_results, start, end, formatter)
 
-    @Manager.calls_manager
     def batch_inbound_keys_with_addresses(self, batch_id, max_results=None,
                                           start=None, end=None):
         """
@@ -802,16 +792,10 @@ class MessageStore(object):
 
         This method performs a Riak index query.
         """
-        if max_results is None:
-            max_results = self.DEFAULT_MAX_RESULTS
-        start_value, end_value = self._start_end_values(batch_id, start, end)
-        results = yield self.inbound_messages.index_keys_page(
-            'batches_with_addresses', start_value, end_value,
-            return_terms=True, max_results=max_results)
-        returnValue(IndexPageWrapper(
-            key_with_ts_and_value_formatter, self, batch_id, results))
+        return self._query_batch_index(
+            self.inbound_messages, batch_id, 'batches_with_addresses',
+            max_results, start, end, key_with_ts_and_value_formatter)
 
-    @Manager.calls_manager
     def batch_outbound_keys_with_addresses(self, batch_id, max_results=None,
                                            start=None, end=None):
         """
@@ -832,16 +816,10 @@ class MessageStore(object):
 
         This method performs a Riak index query.
         """
-        if max_results is None:
-            max_results = self.DEFAULT_MAX_RESULTS
-        start_value, end_value = self._start_end_values(batch_id, start, end)
-        results = yield self.outbound_messages.index_keys_page(
-            'batches_with_addresses', start_value, end_value,
-            return_terms=True, max_results=max_results)
-        returnValue(IndexPageWrapper(
-            key_with_ts_and_value_formatter, self, batch_id, results))
+        return self._query_batch_index(
+            self.outbound_messages, batch_id, 'batches_with_addresses',
+            max_results, start, end, key_with_ts_and_value_formatter)
 
-    @Manager.calls_manager
     def batch_inbound_keys_with_addresses_reverse(self, batch_id,
                                                   max_results=None,
                                                   start=None, end=None):
@@ -863,8 +841,6 @@ class MessageStore(object):
 
         This method performs a Riak index query.
         """
-        if max_results is None:
-            max_results = self.DEFAULT_MAX_RESULTS
         # We're using reverse timestamps, so swap start and end and convert to
         # reverse timestamps.
         if start is not None:
@@ -872,14 +848,10 @@ class MessageStore(object):
         if end is not None:
             end = to_reverse_timestamp(end)
         start, end = end, start
-        start_value, end_value = self._start_end_values(batch_id, start, end)
-        results = yield self.inbound_messages.index_keys_page(
-            'batches_with_addresses_reverse', start_value, end_value,
-            return_terms=True, max_results=max_results)
-        returnValue(IndexPageWrapper(
-            key_with_rts_and_value_formatter, self, batch_id, results))
+        return self._query_batch_index(
+            self.inbound_messages, batch_id, 'batches_with_addresses_reverse',
+            max_results, start, end, key_with_rts_and_value_formatter)
 
-    @Manager.calls_manager
     def batch_outbound_keys_with_addresses_reverse(self, batch_id,
                                                    max_results=None,
                                                    start=None, end=None):
@@ -901,8 +873,6 @@ class MessageStore(object):
 
         This method performs a Riak index query.
         """
-        if max_results is None:
-            max_results = self.DEFAULT_MAX_RESULTS
         # We're using reverse timestamps, so swap start and end and convert to
         # reverse timestamps.
         if start is not None:
@@ -910,12 +880,9 @@ class MessageStore(object):
         if end is not None:
             end = to_reverse_timestamp(end)
         start, end = end, start
-        start_value, end_value = self._start_end_values(batch_id, start, end)
-        results = yield self.outbound_messages.index_keys_page(
-            'batches_with_addresses_reverse', start_value, end_value,
-            return_terms=True, max_results=max_results)
-        returnValue(IndexPageWrapper(
-            key_with_rts_and_value_formatter, self, batch_id, results))
+        return self._query_batch_index(
+            self.outbound_messages, batch_id, 'batches_with_addresses_reverse',
+            max_results, start, end, key_with_rts_and_value_formatter)
 
     @Manager.calls_manager
     def message_event_keys_with_statuses(self, msg_id, max_results=None):
@@ -1091,16 +1058,6 @@ class IndexPageWrapper(object):
         return (self._formatter(self._batch_id, r) for r in self._index_page)
 
 
-def key_with_timestamp_formatter(batch_id, result):
-    value, key = result
-    prefix = batch_id + "$"
-    if not value.startswith(prefix):
-        raise ValueError(
-            "Index value %r does not begin with expected prefix %r." % (
-                value, prefix))
-    return (key, value[len(prefix):])
-
-
 def key_with_ts_and_value_formatter(batch_id, result):
     value, key = result
     prefix = batch_id + "$"
@@ -1119,6 +1076,11 @@ def key_with_ts_and_value_formatter(batch_id, result):
 def key_with_rts_and_value_formatter(batch_id, result):
     key, reverse_ts, value = key_with_ts_and_value_formatter(batch_id, result)
     return (key, from_reverse_timestamp(reverse_ts), value)
+
+
+def key_with_ts_only_formatter(batch_id, result):
+    key, timestamp, value = key_with_ts_and_value_formatter(batch_id, result)
+    return (key, timestamp)
 
 
 @inlineCallbacks
