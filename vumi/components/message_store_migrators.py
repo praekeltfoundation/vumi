@@ -58,7 +58,7 @@ class EventMigrator(MessageMigratorBase):
         return mdata
 
     def reverse_from_2(self, mdata):
-        # We copy the `batches` field and related indexs even though the older
+        # We copy the `batches` field and related indexes even though the older
         # model version doesn't know about them. This lets us migrate
         # v2 -> v1 -> v2 without losing data.
         mdata.set_value('$VERSION', 1)
