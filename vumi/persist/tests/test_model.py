@@ -2,12 +2,21 @@
 
 """Tests for vumi.persist.model."""
 
+import json
+import sys
+
+from eliot import add_destination
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.persist.model import (
     Model, Manager, ModelMigrator, ModelMigrationError, VumiRiakError)
 from vumi.persist.fields import ValidationError, Integer, Unicode, Dynamic
 from vumi.tests.helpers import VumiTestCase, import_skip
+
+
+def stdout(message):
+    sys.stdout.write(json.dumps(message) + "\n")
+add_destination(stdout)
 
 
 class SimpleModel(Model):

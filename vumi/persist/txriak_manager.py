@@ -4,6 +4,8 @@
 
 import json
 
+from eliot import start_action
+from eliot.twisted import DeferredContext
 from riak import RiakClient, RiakObject, RiakMapReduce, RiakError
 from twisted.internet.threads import deferToThread
 from twisted.internet.defer import (
@@ -71,10 +73,19 @@ class VumiTxIndexPage(object):
         """
         if not self.has_next_page():
             return succeed(None)
-        d = deferToThread(self._index_page.next_page)
-        d.addCallback(type(self))
-        d.addErrback(riakErrorHandler)
-        return d
+        ip = self._index_page
+        action = start_action(
+            action_type="riak_manager:INDEX", index_name=ip.index,
+            start_value=ip.startkey, end_value=ip.endkey,
+            max_results=ip.max_results, continuation=ip.continuation,
+            from_page=True)
+        with action.context():
+            d = DeferredContext(deferToThread(self._index_page.next_page))
+            d.addCallback(_add_index_success_fields, action)
+            d.addCallback(type(self))
+            d.addErrback(riakErrorHandler)
+            d.addActionFinish()
+            return d.result
 
 
 class VumiTxRiakBucket(object):
@@ -95,13 +106,26 @@ class VumiTxRiakBucket(object):
 
     def get_index_page(self, index_name, start_value, end_value=None,
                        return_terms=None, max_results=None, continuation=None):
-        d = deferToThread(
-            self._riak_bucket.get_index, index_name, start_value, end_value,
-            return_terms=return_terms, max_results=max_results,
-            continuation=continuation)
-        d.addCallback(VumiTxIndexPage)
-        d.addErrback(riakErrorHandler)
-        return d
+        action = start_action(
+            action_type="txriak_manager:INDEX", index_name=index_name,
+            start_value=start_value, end_value=end_value,
+            max_results=max_results, continuation=continuation,
+            from_page=False)
+        with action.context():
+            d = DeferredContext(deferToThread(
+                self._riak_bucket.get_index, index_name, start_value,
+                end_value, return_terms=return_terms, max_results=max_results,
+                continuation=continuation))
+            d.addCallback(_add_index_success_fields, action)
+            d.addCallback(VumiTxIndexPage)
+            d.addErrback(riakErrorHandler)
+            d.addActionFinish()
+            return d.result
+
+
+def _add_index_success_fields(result, action):
+    action.add_success_fields(has_next_page=result.has_next_page())
+    return result
 
 
 class VumiTxRiakObject(object):
@@ -157,22 +181,34 @@ class VumiTxRiakObject(object):
     def get_bucket(self):
         return VumiTxRiakBucket(self._riak_obj.bucket)
 
+    def _log_action(self, action_type, **kw):
+        return start_action(
+            action_type=action_type, riak_key=self.key,
+            riak_bucket=self.get_bucket().get_name(), **kw)
+
     # Methods that touch the network.
 
     def store(self):
-        d = deferToThread(self._riak_obj.store)
-        d.addCallback(type(self))
-        return d
+        with self._log_action(u"txriak_manager:PUT"):
+            d = deferToThread(self._riak_obj.store)
+            d.addCallback(type(self))
+            return d
 
     def reload(self):
-        d = deferToThread(self._riak_obj.reload)
-        d.addCallback(type(self))
-        return d
+        with self._log_action(u"txriak_manager:GET"):
+            d = deferToThread(self._riak_obj.reload)
+            d.addCallback(type(self))
+            return d
 
     def delete(self):
-        d = deferToThread(self._riak_obj.delete)
-        d.addCallback(type(self))
-        return d
+        with self._log_action(u"txriak_manager:DELETE"):
+            d = deferToThread(self._riak_obj.delete)
+            d.addCallback(type(self))
+            return d
+
+
+def model_name(modelcls):
+    return "%s.%s" % (modelcls.__module__, modelcls.__name__)
 
 
 class TxRiakManager(Manager):
@@ -249,45 +285,69 @@ class TxRiakManager(Manager):
             riak_object.set_data({'$VERSION': modelcls.VERSION})
         return riak_object
 
+    def _log_action(self, action_type, modelcls, **kw):
+        return start_action(
+            action_type=action_type, modelcls=model_name(modelcls), **kw)
+
     def store(self, modelobj):
-        riak_object = modelobj._riak_object
-        modelcls = type(modelobj)
-        model_name = "%s.%s" % (modelcls.__module__, modelcls.__name__)
-        store_version = self.store_versions.get(model_name, modelcls.VERSION)
-        # Run reverse migrators until we have the correct version of the data.
-        data_version = riak_object.get_data().get('$VERSION', None)
-        while data_version != store_version:
-            migrator = modelcls.MIGRATOR(
-                modelcls, self, data_version, reverse=True)
-            riak_object = migrator(riak_object).get_riak_object()
+        action = self._log_action(u"txriak_manager:store", type(modelobj))
+        with action.context():
+            riak_object = modelobj._riak_object
+            modelcls = type(modelobj)
+            store_version = self.store_versions.get(
+                model_name(modelcls), modelcls.VERSION)
+            # Run reverse migrators until we have the correct version of the
+            # data.
+            action.add_success_fields(was_migrated=False)
             data_version = riak_object.get_data().get('$VERSION', None)
-        d = riak_object.store()
-        d.addCallback(lambda _: modelobj)
-        return d
+            while data_version != store_version:
+                migrator = modelcls.MIGRATOR(
+                    modelcls, self, data_version, reverse=True)
+                riak_object = migrator(riak_object).get_riak_object()
+                data_version = riak_object.get_data().get('$VERSION', None)
+                action.add_success_fields(was_migrated=True)
+            d = DeferredContext(riak_object.store())
+            d.addCallback(lambda _: modelobj)
+            d.addActionFinish()
+            return d.result
 
     def delete(self, modelobj):
-        d = modelobj._riak_object.delete()
-        d.addCallback(lambda _: None)
-        return d
+        action = self._log_action(u"txriak_manager:store", type(modelobj))
+        with action.context():
+            d = DeferredContext(modelobj._riak_object.delete())
+            d.addCallback(lambda _: None)
+            d.addActionFinish()
+            return d.result
 
-    @inlineCallbacks
     def load(self, modelcls, key, result=None):
-        riak_object = self.riak_object(modelcls, key, result)
-        if not result:
-            yield riak_object.reload()
-        was_migrated = False
+        action = self._log_action(u"txriak_manager:load", modelcls)
+        with action.context():
+            riak_object = self.riak_object(modelcls, key, result)
+            d = DeferredContext(succeed(riak_object))
+            if not result:
+                d.addCallback(lambda ro: ro.reload())
+                d.addCallback(lambda _: riak_object)
+            d.addCallback(self._perform_migrations, modelcls, key, action)
+            d.addActionFinish()
+            return d.result
 
+    def _perform_migrations(self, riak_object, modelcls, key, action):
+        was_migrated = False
         # Run migrators until we have the correct version of the data.
         while riak_object.get_data() is not None:
             data_version = riak_object.get_data().get('$VERSION', None)
             if data_version == modelcls.VERSION:
                 obj = modelcls(self, key, _riak_object=riak_object)
                 obj.was_migrated = was_migrated
-                returnValue(obj)
+                action.add_success_fields(
+                    was_migrated=was_migrated, object_found=True)
+                return obj
             migrator = modelcls.MIGRATOR(modelcls, self, data_version)
             riak_object = migrator(riak_object).get_riak_object()
             was_migrated = True
-        returnValue(None)
+        action.add_success_fields(
+            was_migrated=was_migrated, object_found=False)
+        return None
 
     def _load_multiple(self, modelcls, keys):
         d = gatherResults([self.load(modelcls, key) for key in keys])

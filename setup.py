@@ -44,6 +44,7 @@ setup(
         'treq',
         'confmodel>=0.2.0',
         'hyperloglog',
+        'eliot>=0.7.1',
     ],
     classifiers=[
         'Development Status :: 4 - Beta',

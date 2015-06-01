@@ -4,6 +4,7 @@
 
 import json
 
+from eliot import start_action
 from riak import RiakClient, RiakObject, RiakMapReduce, RiakError
 
 from vumi.persist.model import Manager, VumiRiakError
@@ -64,11 +65,19 @@ class VumiIndexPage(object):
         """
         if not self.has_next_page():
             return None
-        try:
-            result = self._index_page.next_page()
-        except RiakError as e:
-            raise VumiRiakError(e)
-        return type(self)(result)
+        ip = self._index_page
+        action = start_action(
+            action_type="riak_manager:INDEX", index_name=ip.index,
+            start_value=ip.startkey, end_value=ip.endkey,
+            max_results=ip.max_results, continuation=ip.continuation,
+            from_page=True)
+        with action:
+            try:
+                result = self._index_page.next_page()
+                action.add_success_fields(has_next_page=result.has_next_page())
+            except RiakError as e:
+                raise VumiRiakError(e)
+            return type(self)(result)
 
 
 class VumiRiakBucket(object):
@@ -88,13 +97,21 @@ class VumiRiakBucket(object):
 
     def get_index_page(self, index_name, start_value, end_value=None,
                        return_terms=None, max_results=None, continuation=None):
-        try:
-            result = self._riak_bucket.get_index(
-                index_name, start_value, end_value, return_terms=return_terms,
-                max_results=max_results, continuation=continuation)
-        except RiakError as e:
-            raise VumiRiakError(e)
-        return VumiIndexPage(result)
+        action = start_action(
+            action_type="riak_manager:INDEX", index_name=index_name,
+            start_value=start_value, end_value=end_value,
+            max_results=max_results, continuation=continuation,
+            from_page=False)
+        with action:
+            try:
+                result = self._riak_bucket.get_index(
+                    index_name, start_value, end_value,
+                    return_terms=return_terms, max_results=max_results,
+                    continuation=continuation)
+                action.add_success_fields(has_next_page=result.has_next_page())
+            except RiakError as e:
+                raise VumiRiakError(e)
+            return VumiIndexPage(result)
 
 
 class VumiRiakObject(object):
@@ -150,16 +167,28 @@ class VumiRiakObject(object):
     def get_bucket(self):
         return VumiRiakBucket(self._riak_obj.bucket)
 
+    def _log_action(self, action_type, **kw):
+        return start_action(
+            action_type=action_type, riak_key=self.key,
+            riak_bucket=self.get_bucket().get_name(), **kw)
+
     # Methods that touch the network.
 
     def store(self):
-        return type(self)(self._riak_obj.store())
+        with self._log_action(u"riak_manager:PUT"):
+            return type(self)(self._riak_obj.store())
 
     def reload(self):
-        return type(self)(self._riak_obj.reload())
+        with self._log_action(u"riak_manager:GET"):
+            return type(self)(self._riak_obj.reload())
 
     def delete(self):
-        return type(self)(self._riak_obj.delete())
+        with self._log_action(u"riak_manager:DELETE"):
+            return type(self)(self._riak_obj.delete())
+
+
+def model_name(modelcls):
+    return "%s.%s" % (modelcls.__module__, modelcls.__name__)
 
 
 class RiakManager(Manager):
@@ -236,41 +265,55 @@ class RiakManager(Manager):
             riak_object.set_data({'$VERSION': modelcls.VERSION})
         return riak_object
 
+    def _log_action(self, action_type, modelcls, **kw):
+        return start_action(
+            action_type=action_type, modelcls=model_name(modelcls), **kw)
+
     def store(self, modelobj):
-        riak_object = modelobj._riak_object
-        modelcls = type(modelobj)
-        model_name = "%s.%s" % (modelcls.__module__, modelcls.__name__)
-        store_version = self.store_versions.get(model_name, modelcls.VERSION)
-        # Run reverse migrators until we have the correct version of the data.
-        data_version = riak_object.get_data().get('$VERSION', None)
-        while data_version != store_version:
-            migrator = modelcls.MIGRATOR(
-                modelcls, self, data_version, reverse=True)
-            riak_object = migrator(riak_object).get_riak_object()
+        with self._log_action(u"riak_manager:store", type(modelobj)) as action:
+            riak_object = modelobj._riak_object
+            modelcls = type(modelobj)
+            store_version = self.store_versions.get(
+                model_name(modelcls), modelcls.VERSION)
+            # Run reverse migrators until we have the correct version of the
+            # data.
+            action.add_success_fields(was_migrated=False)
             data_version = riak_object.get_data().get('$VERSION', None)
-        riak_object.store()
-        return modelobj
+            while data_version != store_version:
+                migrator = modelcls.MIGRATOR(
+                    modelcls, self, data_version, reverse=True)
+                riak_object = migrator(riak_object).get_riak_object()
+                data_version = riak_object.get_data().get('$VERSION', None)
+                action.add_success_fields(was_migrated=True)
+            riak_object.store()
+            return modelobj
 
     def delete(self, modelobj):
-        modelobj._riak_object.delete()
+        with self._log_action(u"riak_manager:delete", type(modelobj)):
+            modelobj._riak_object.delete()
 
     def load(self, modelcls, key, result=None):
-        riak_object = self.riak_object(modelcls, key, result)
-        if not result:
-            riak_object.reload()
-        was_migrated = False
+        with self._log_action(u"riak_manager:load", modelcls) as action:
+            riak_object = self.riak_object(modelcls, key, result)
+            if not result:
+                riak_object.reload()
 
-        # Run migrators until we have the correct version of the data.
-        while riak_object.get_data() is not None:
-            data_version = riak_object.get_data().get('$VERSION', None)
-            if data_version == modelcls.VERSION:
-                obj = modelcls(self, key, _riak_object=riak_object)
-                obj.was_migrated = was_migrated
-                return obj
-            migrator = modelcls.MIGRATOR(modelcls, self, data_version)
-            riak_object = migrator(riak_object).get_riak_object()
-            was_migrated = True
-        return None
+            was_migrated = False
+            # Run migrators until we have the correct version of the data.
+            while riak_object.get_data() is not None:
+                data_version = riak_object.get_data().get('$VERSION', None)
+                if data_version == modelcls.VERSION:
+                    obj = modelcls(self, key, _riak_object=riak_object)
+                    obj.was_migrated = was_migrated
+                    action.add_success_fields(
+                        was_migrated=was_migrated, object_found=True)
+                    return obj
+                migrator = modelcls.MIGRATOR(modelcls, self, data_version)
+                riak_object = migrator(riak_object).get_riak_object()
+                was_migrated = True
+            action.add_success_fields(
+                was_migrated=was_migrated, object_found=False)
+            return None
 
     def _load_multiple(self, modelcls, keys):
         objs = (self.load(modelcls, key) for key in keys)

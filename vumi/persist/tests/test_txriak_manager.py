@@ -1,9 +1,18 @@
 """Tests for vumi.persist.txriak_manager."""
 
+import json
+import sys
+
+from eliot import add_destination
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.persist.model import Manager
 from vumi.tests.helpers import VumiTestCase, import_skip
+
+
+def stdout(message):
+    sys.stdout.write(json.dumps(message) + "\n")
+add_destination(stdout)
 
 
 class DummyModel(object):
