@@ -4,10 +4,10 @@
 
 import json
 
-from eliot import start_action
 from riak import RiakClient, RiakObject, RiakMapReduce, RiakError
 
 from vumi.persist.model import Manager, VumiRiakError
+from vumi.persist import model_logging as ml
 from vumi.utils import flatten_generator
 
 
@@ -66,9 +66,9 @@ class VumiIndexPage(object):
         if not self.has_next_page():
             return None
         ip = self._index_page
-        action = start_action(
-            action_type="riak_manager:INDEX", index_name=ip.index,
-            start_value=ip.startkey, end_value=ip.endkey,
+        action = ml.LOG_RIAK_INDEX(
+            manager="riak_manager", riak_bucket=ip.bucket.name,
+            index_name=ip.index, start_value=ip.startkey, end_value=ip.endkey,
             max_results=ip.max_results, continuation=ip.continuation,
             from_page=True)
         with action:
@@ -97,11 +97,11 @@ class VumiRiakBucket(object):
 
     def get_index_page(self, index_name, start_value, end_value=None,
                        return_terms=None, max_results=None, continuation=None):
-        action = start_action(
-            action_type="riak_manager:INDEX", index_name=index_name,
-            start_value=start_value, end_value=end_value,
-            max_results=max_results, continuation=continuation,
-            from_page=False)
+        action = ml.LOG_RIAK_INDEX(
+            manager="riak_manager", riak_bucket=self.get_name(),
+            index_name=index_name, start_value=start_value,
+            end_value=end_value, max_results=max_results,
+            continuation=continuation, from_page=False)
         with action:
             try:
                 result = self._riak_bucket.get_index(
@@ -168,22 +168,22 @@ class VumiRiakObject(object):
         return VumiRiakBucket(self._riak_obj.bucket)
 
     def _log_action(self, action_type, **kw):
-        return start_action(
-            action_type=action_type, riak_key=self.key,
+        return action_type(
+            manager="riak_manager", riak_key=self.key,
             riak_bucket=self.get_bucket().get_name(), **kw)
 
     # Methods that touch the network.
 
     def store(self):
-        with self._log_action(u"riak_manager:PUT"):
+        with self._log_action(ml.LOG_RIAK_PUT):
             return type(self)(self._riak_obj.store())
 
     def reload(self):
-        with self._log_action(u"riak_manager:GET"):
+        with self._log_action(ml.LOG_RIAK_GET):
             return type(self)(self._riak_obj.reload())
 
     def delete(self):
-        with self._log_action(u"riak_manager:DELETE"):
+        with self._log_action(ml.LOG_RIAK_DELETE):
             return type(self)(self._riak_obj.delete())
 
 
@@ -265,12 +265,15 @@ class RiakManager(Manager):
             riak_object.set_data({'$VERSION': modelcls.VERSION})
         return riak_object
 
-    def _log_action(self, action_type, modelcls, **kw):
-        return start_action(
-            action_type=action_type, modelcls=model_name(modelcls), **kw)
+    def _log_action(self, action_type, modelcls, model_key, **kw):
+        return action_type(
+            manager="riak_manager", modelcls=model_name(modelcls),
+            model_key=model_key, **kw)
 
     def store(self, modelobj):
-        with self._log_action(u"riak_manager:store", type(modelobj)) as action:
+        action = self._log_action(
+            ml.LOG_MODEL_STORE, type(modelobj), modelobj.key)
+        with action:
             riak_object = modelobj._riak_object
             modelcls = type(modelobj)
             store_version = self.store_versions.get(
@@ -289,11 +292,13 @@ class RiakManager(Manager):
             return modelobj
 
     def delete(self, modelobj):
-        with self._log_action(u"riak_manager:delete", type(modelobj)):
+        action = self._log_action(
+            ml.LOG_MODEL_DELETE, type(modelobj), modelobj.key)
+        with action:
             modelobj._riak_object.delete()
 
     def load(self, modelcls, key, result=None):
-        with self._log_action(u"riak_manager:load", modelcls) as action:
+        with self._log_action(ml.LOG_MODEL_LOAD, modelcls, key) as action:
             riak_object = self.riak_object(modelcls, key, result)
             if not result:
                 riak_object.reload()

@@ -1,18 +1,11 @@
 """Tests for vumi.persist.txriak_manager."""
 
-import json
-import sys
-
-from eliot import add_destination
+from eliot.testing import capture_logging, assertHasAction
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.persist.model import Manager
+from vumi.persist import model_logging as ml
 from vumi.tests.helpers import VumiTestCase, import_skip
-
-
-def stdout(message):
-    sys.stdout.write(json.dumps(message) + "\n")
-add_destination(stdout)
 
 
 class DummyModel(object):
@@ -141,31 +134,85 @@ class CommonRiakManagerTests(object):
             riak_object.get_bucket().get_name(), "test.dummy_model")
         self.assertEqual(riak_object.key, "foo")
 
+    def assert_riak_action_logged(self, logger, action, modelcls, key,
+                                  extra_fields=None, end_fields=None):
+        start_fields = {
+            "riak_bucket": self.manager.bucket_name(modelcls),
+            "riak_key": key,
+        }
+        start_fields.update(extra_fields or {})
+        assertHasAction(self, logger, action, True, start_fields, end_fields)
+
+    def assert_model_action_logged(self, logger, action, modelcls, key,
+                                   extra_fields=None, end_fields=None):
+        start_fields = {
+            "modelcls": "%s.%s" % (modelcls.__module__, modelcls.__name__),
+            "model_key": key,
+        }
+        start_fields.update(extra_fields or {})
+        assertHasAction(self, logger, action, True, start_fields, end_fields)
+
+    @capture_logging(None)
     @Manager.calls_manager
-    def test_store_and_load(self):
+    def test_store_and_load(self, logger):
         dummy1 = self.mkdummy("foo", {"a": 1})
         result1 = yield self.manager.store(dummy1)
         self.assertEqual(dummy1, result1)
 
+        self.assert_riak_action_logged(
+            logger, ml.LOG_RIAK_PUT, DummyModel, "foo")
+        self.assert_model_action_logged(
+            logger, ml.LOG_MODEL_STORE, DummyModel, "foo")
+
         dummy2 = yield self.manager.load(DummyModel, "foo")
         self.assertEqual(dummy2.get_data(), {"a": 1})
 
+        self.assert_riak_action_logged(
+            logger, ml.LOG_RIAK_GET, DummyModel, "foo")
+        self.assert_model_action_logged(
+            logger, ml.LOG_MODEL_LOAD, DummyModel, "foo",
+            end_fields={"object_found": True})
+
+    @capture_logging(None)
     @Manager.calls_manager
-    def test_delete(self):
+    def test_delete(self, logger):
         dummy1 = self.mkdummy("foo", {"a": 1})
         yield self.manager.store(dummy1)
+
+        self.assert_riak_action_logged(
+            logger, ml.LOG_RIAK_PUT, DummyModel, "foo")
+        self.assert_model_action_logged(
+            logger, ml.LOG_MODEL_STORE, DummyModel, "foo")
 
         dummy2 = yield self.manager.load(DummyModel, "foo")
         yield self.manager.delete(dummy2)
 
+        self.assert_riak_action_logged(
+            logger, ml.LOG_RIAK_GET, DummyModel, "foo")
+        self.assert_model_action_logged(
+            logger, ml.LOG_MODEL_LOAD, DummyModel, "foo",
+            end_fields={"object_found": True})
+
         dummy3 = yield self.manager.load(DummyModel, "foo")
         self.assertEqual(dummy3, None)
 
+        self.assert_riak_action_logged(
+            logger, ml.LOG_RIAK_DELETE, DummyModel, "foo")
+        self.assert_model_action_logged(
+            logger, ml.LOG_MODEL_DELETE, DummyModel, "foo")
+
+    @capture_logging(None)
     @Manager.calls_manager
-    def test_load_missing(self):
+    def test_load_missing(self, logger):
         dummy = self.mkdummy("unknown")
         result = yield self.manager.load(DummyModel, dummy.key)
         self.assertEqual(result, None)
+
+        self.assert_riak_action_logged(
+            logger, ml.LOG_RIAK_GET, DummyModel, "unknown")
+        self.assert_model_action_logged(
+            logger, ml.LOG_MODEL_LOAD, DummyModel, "unknown",
+            end_fields={"object_found": False})
 
     @Manager.calls_manager
     def test_load_all_bunches(self):

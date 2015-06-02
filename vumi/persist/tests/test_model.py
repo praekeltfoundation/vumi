@@ -2,21 +2,14 @@
 
 """Tests for vumi.persist.model."""
 
-import json
-import sys
-
-from eliot import add_destination
+from eliot.testing import capture_logging, assertHasAction
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.persist.model import (
     Model, Manager, ModelMigrator, ModelMigrationError, VumiRiakError)
 from vumi.persist.fields import ValidationError, Integer, Unicode, Dynamic
+from vumi.persist import model_logging as ml
 from vumi.tests.helpers import VumiTestCase, import_skip
-
-
-def stdout(message):
-    sys.stdout.write(json.dumps(message) + "\n")
-add_destination(stdout)
 
 
 class SimpleModel(Model):
@@ -260,6 +253,20 @@ class ModelTestMixin(object):
         for name, value in model._riak_object.get_indexes():
             indexes.setdefault(name, []).append(value)
         return indexes
+
+    def assert_index_action_logged(self, logger, action, modelcls, index_name,
+                                   extra_fields=None, end_fields=None):
+        start_fields = {
+            "riak_bucket": self.manager.bucket_name(modelcls),
+            "index_name": index_name,
+        }
+        start_fields.update(extra_fields or {})
+        return assertHasAction(
+            self, logger, action, True, start_fields, end_fields)
+
+    def assert_valid_and_reset(self, logger):
+        logger.validate()
+        logger.reset()
 
     def test_simple_class(self):
         field_names = SimpleModel.field_descriptors.keys()
@@ -653,8 +660,9 @@ class ModelTestMixin(object):
         keys = yield self.filter_tombstones(simple_model, keys)
         self.assertEqual(sorted(keys), [u"foo-1", u"foo-2"])
 
+    @capture_logging(None)
     @Manager.calls_manager
-    def test_index_keys_page(self):
+    def test_index_keys_page(self, logger):
         indexed_model = self.manager.proxy(IndexedModel)
         yield indexed_model("foo1", a=1, b=u"one").save()
         yield indexed_model("foo2", a=1, b=u"one").save()
@@ -665,19 +673,43 @@ class ModelTestMixin(object):
         self.assertEqual(sorted(keys1), ["foo1", "foo2"])
         self.assertEqual(keys1.has_next_page(), True)
 
+        def index_fields(**kw):
+            fields = {"start_value": "1", "max_results": 2}
+            fields.update(kw)
+            return fields
+
+        self.assert_index_action_logged(
+            logger, ml.LOG_RIAK_INDEX, IndexedModel, "a_bin",
+            index_fields(continuation=None, from_page=False),
+            end_fields={"has_next_page": True})
+        self.assert_valid_and_reset(logger)
+
         keys2 = yield keys1.next_page()
         self.assertEqual(sorted(keys2), ["foo3", "foo4"])
         self.assertEqual(keys2.has_next_page(), True)
+
+        self.assert_index_action_logged(
+            logger, ml.LOG_RIAK_INDEX, IndexedModel, "a_bin",
+            index_fields(continuation=keys1.continuation, from_page=True),
+            end_fields={"has_next_page": True})
+        self.assert_valid_and_reset(logger)
 
         keys3 = yield keys2.next_page()
         self.assertEqual(sorted(keys3), [])
         self.assertEqual(keys3.has_next_page(), False)
 
+        self.assert_index_action_logged(
+            logger, ml.LOG_RIAK_INDEX, IndexedModel, "a_bin",
+            index_fields(continuation=keys2.continuation, from_page=True),
+            end_fields={"has_next_page": False})
+        self.assert_valid_and_reset(logger)
+
         no_keys = yield keys3.next_page()
         self.assertEqual(no_keys, None)
 
+    @capture_logging(None)
     @Manager.calls_manager
-    def test_index_keys_page_explicit_continuation(self):
+    def test_index_keys_page_explicit_continuation(self, logger):
         indexed_model = self.manager.proxy(IndexedModel)
         yield indexed_model("foo1", a=1, b=u"one").save()
         yield indexed_model("foo2", a=1, b=u"one").save()
@@ -689,17 +721,41 @@ class ModelTestMixin(object):
         self.assertEqual(keys1.has_next_page(), True)
         self.assertTrue(isinstance(keys1.continuation, unicode))
 
+        def index_fields(**kw):
+            fields = {"start_value": "1", "max_results": 2}
+            fields.update(kw)
+            return fields
+
+        self.assert_index_action_logged(
+            logger, ml.LOG_RIAK_INDEX, IndexedModel, "a_bin",
+            index_fields(max_results=1, continuation=None, from_page=False),
+            end_fields={"has_next_page": True})
+        self.assert_valid_and_reset(logger)
+
         keys2 = yield indexed_model.index_keys_page(
             'a', 1, max_results=2, continuation=keys1.continuation)
         self.assertEqual(sorted(keys2), ["foo2", "foo3"])
         self.assertEqual(keys2.has_next_page(), True)
 
+        self.assert_index_action_logged(
+            logger, ml.LOG_RIAK_INDEX, IndexedModel, "a_bin",
+            index_fields(continuation=keys1.continuation, from_page=False),
+            end_fields={"has_next_page": True})
+        self.assert_valid_and_reset(logger)
+
         keys3 = yield keys2.next_page()
         self.assertEqual(sorted(keys3), ["foo4"])
         self.assertEqual(keys3.has_next_page(), False)
 
+        self.assert_index_action_logged(
+            logger, ml.LOG_RIAK_INDEX, IndexedModel, "a_bin",
+            index_fields(continuation=keys2.continuation, from_page=True),
+            end_fields={"has_next_page": False})
+        self.assert_valid_and_reset(logger)
+
+    @capture_logging(None)
     @Manager.calls_manager
-    def test_index_keys_page_none_continuation(self):
+    def test_index_keys_page_none_continuation(self, logger):
         indexed_model = self.manager.proxy(IndexedModel)
         yield indexed_model("foo1", a=1, b=u'one').save()
 
@@ -707,6 +763,11 @@ class ModelTestMixin(object):
         self.assertEqual(sorted(keys1), ['foo1'])
         self.assertEqual(keys1.has_next_page(), False)
         self.assertEqual(keys1.continuation, None)
+
+        self.assert_index_action_logged(
+            logger, ml.LOG_RIAK_INDEX, IndexedModel, "a_bin",
+            {"continuation": None, "from_page": False},
+            end_fields={"has_next_page": False})
 
     @Manager.calls_manager
     def test_index_keys_page_bad_continutation(self):

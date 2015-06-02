@@ -4,7 +4,6 @@
 
 import json
 
-from eliot import start_action
 from eliot.twisted import DeferredContext
 from riak import RiakClient, RiakObject, RiakMapReduce, RiakError
 from twisted.internet.threads import deferToThread
@@ -12,6 +11,7 @@ from twisted.internet.defer import (
     inlineCallbacks, returnValue, gatherResults, maybeDeferred, succeed)
 
 from vumi.persist.model import Manager, VumiRiakError
+from vumi.persist import model_logging as ml
 
 
 def to_unicode(text, encoding='utf-8'):
@@ -74,9 +74,9 @@ class VumiTxIndexPage(object):
         if not self.has_next_page():
             return succeed(None)
         ip = self._index_page
-        action = start_action(
-            action_type="riak_manager:INDEX", index_name=ip.index,
-            start_value=ip.startkey, end_value=ip.endkey,
+        action = ml.LOG_RIAK_INDEX(
+            manager="txriak_manager", riak_bucket=ip.bucket.name,
+            index_name=ip.index, start_value=ip.startkey, end_value=ip.endkey,
             max_results=ip.max_results, continuation=ip.continuation,
             from_page=True)
         with action.context():
@@ -106,11 +106,11 @@ class VumiTxRiakBucket(object):
 
     def get_index_page(self, index_name, start_value, end_value=None,
                        return_terms=None, max_results=None, continuation=None):
-        action = start_action(
-            action_type="txriak_manager:INDEX", index_name=index_name,
-            start_value=start_value, end_value=end_value,
-            max_results=max_results, continuation=continuation,
-            from_page=False)
+        action = ml.LOG_RIAK_INDEX(
+            manager="txriak_manager", riak_bucket=self.get_name(),
+            index_name=index_name, start_value=start_value,
+            end_value=end_value, max_results=max_results,
+            continuation=continuation, from_page=False)
         with action.context():
             d = DeferredContext(deferToThread(
                 self._riak_bucket.get_index, index_name, start_value,
@@ -182,26 +182,26 @@ class VumiTxRiakObject(object):
         return VumiTxRiakBucket(self._riak_obj.bucket)
 
     def _log_action(self, action_type, **kw):
-        return start_action(
-            action_type=action_type, riak_key=self.key,
+        return action_type(
+            manager="txriak_manager", riak_key=self.key,
             riak_bucket=self.get_bucket().get_name(), **kw)
 
     # Methods that touch the network.
 
     def store(self):
-        with self._log_action(u"txriak_manager:PUT"):
+        with self._log_action(ml.LOG_RIAK_PUT):
             d = deferToThread(self._riak_obj.store)
             d.addCallback(type(self))
             return d
 
     def reload(self):
-        with self._log_action(u"txriak_manager:GET"):
+        with self._log_action(ml.LOG_RIAK_GET):
             d = deferToThread(self._riak_obj.reload)
             d.addCallback(type(self))
             return d
 
     def delete(self):
-        with self._log_action(u"txriak_manager:DELETE"):
+        with self._log_action(ml.LOG_RIAK_DELETE):
             d = deferToThread(self._riak_obj.delete)
             d.addCallback(type(self))
             return d
@@ -285,12 +285,14 @@ class TxRiakManager(Manager):
             riak_object.set_data({'$VERSION': modelcls.VERSION})
         return riak_object
 
-    def _log_action(self, action_type, modelcls, **kw):
-        return start_action(
-            action_type=action_type, modelcls=model_name(modelcls), **kw)
+    def _log_action(self, action_type, modelcls, model_key, **kw):
+        return action_type(
+            manager="txriak_manager", modelcls=model_name(modelcls),
+            model_key=model_key, **kw)
 
     def store(self, modelobj):
-        action = self._log_action(u"txriak_manager:store", type(modelobj))
+        action = self._log_action(
+            ml.LOG_MODEL_STORE, type(modelobj), modelobj.key)
         with action.context():
             riak_object = modelobj._riak_object
             modelcls = type(modelobj)
@@ -312,7 +314,8 @@ class TxRiakManager(Manager):
             return d.result
 
     def delete(self, modelobj):
-        action = self._log_action(u"txriak_manager:store", type(modelobj))
+        action = self._log_action(
+            ml.LOG_MODEL_DELETE, type(modelobj), modelobj.key)
         with action.context():
             d = DeferredContext(modelobj._riak_object.delete())
             d.addCallback(lambda _: None)
@@ -320,7 +323,7 @@ class TxRiakManager(Manager):
             return d.result
 
     def load(self, modelcls, key, result=None):
-        action = self._log_action(u"txriak_manager:load", modelcls)
+        action = self._log_action(ml.LOG_MODEL_LOAD, modelcls, key)
         with action.context():
             riak_object = self.riak_object(modelcls, key, result)
             d = DeferredContext(succeed(riak_object))
