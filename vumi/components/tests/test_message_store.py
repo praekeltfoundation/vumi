@@ -271,8 +271,8 @@ class TestMessageStore(TestMessageStoreBase):
     @inlineCallbacks
     def test_add_ack_event_batch_ids_from_outbound(self):
         """
-        If the `batch_ids` param is not given, batch ids are looked up on the
-        outbound message.
+        If the `batch_ids` param is not given, and the event doesn't exist,
+        batch ids are looked up on the outbound message.
         """
         msg_id, msg, batch_id = yield self._create_outbound()
         ack = self.msg_helper.make_ack(msg)
@@ -286,6 +286,42 @@ class TestMessageStore(TestMessageStoreBase):
         self.assertEqual(stored_ack, ack)
         self.assertEqual(event_keys, [ack_id])
         self.assertEqual(batch_status, self._batch_status(sent=1, ack=1))
+
+        event = yield self.store.events.load(ack_id)
+        self.assertEqual(event.batches.keys(), [batch_id])
+        timestamp = format_vumi_date(ack["timestamp"])
+        self.assertEqual(event.message_with_status, "%s$%s$ack" % (
+            msg_id, timestamp))
+        self.assertEqual(set(event.batches_with_statuses_reverse), set([
+            "%s$%s$ack" % (batch_id, to_reverse_timestamp(timestamp)),
+        ]))
+
+    @inlineCallbacks
+    def test_add_ack_event_uses_existing_batches(self):
+        """
+        If the `batch_ids` param is not given, and the event already
+        exists, batch ids should not be looked up on the outbound message.
+        """
+        # create a message but don't store it
+        msg = self.msg_helper.make_outbound('outbound text')
+        msg_id = msg['message_id']
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+
+        # create an event and store it
+        ack = self.msg_helper.make_ack(msg)
+        ack_id = ack['event_id']
+        yield self.store.add_event(ack, [batch_id])
+
+        # now store the event again without specifying batches
+        yield self.store.add_event(ack)
+
+        stored_ack = yield self.store.get_event(ack_id)
+        event_keys = yield self.store.message_event_keys(msg_id)
+        batch_status = yield self.store.batch_status(batch_id)
+
+        self.assertEqual(stored_ack, ack)
+        self.assertEqual(event_keys, [ack_id])
+        self.assertEqual(batch_status, self._batch_status(sent=0, ack=1))
 
         event = yield self.store.events.load(ack_id)
         self.assertEqual(event.batches.keys(), [batch_id])
