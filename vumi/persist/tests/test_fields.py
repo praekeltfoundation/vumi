@@ -11,7 +11,7 @@ from vumi.message import Message, TransportUserMessage
 from vumi.persist.fields import (
     ValidationError, Field, Integer, Unicode, Tag, Timestamp, Json,
     ListOf, SetOf, Dynamic, FieldWithSubtype, Boolean, VumiMessage,
-    ForeignKey, ManyToMany, ComputedIndex)
+    ForeignKey, ManyToMany, ComputedValue)
 from vumi.persist.model import Manager, Model
 from vumi.tests.helpers import VumiTestCase, MessageHelper, import_skip
 
@@ -1249,70 +1249,111 @@ class TestManyToMany(VumiTestCase):
 
 
 @model_field_tests
-class TestComputedIndex(VumiTestCase):
+class TestComputedValue(VumiTestCase):
 
-    class ComputedIndexModel(Model):
+    def test_validate_default_unicode(self):
         """
-        Toy model for ComputedIndex tests.
+        By default, a ComputedValue field has a Unicode value.
+        """
+        comp = ComputedValue(lambda m: NotImplemented)
+        comp.validate(u"")
+        comp.validate(u"a")
+        comp.validate(u"æ")
+        comp.validate(u"foé")
+        self.assertRaises(ValidationError, comp.validate, "")
+        self.assertRaises(ValidationError, comp.validate, "foo")
+        self.assertRaises(ValidationError, comp.validate, 3)
+
+    def test_validate_listof(self):
+        """
+        If an explicit subtype is provided, its validation is used.
+        """
+        comp = ComputedValue(lambda m: NotImplemented, ListOf())
+        comp.validate([u'foo', u'bar'])
+        self.assertRaises(ValidationError, comp.validate,
+                          u'this is not a list')
+        self.assertRaises(ValidationError, comp.validate, ['a', 2])
+        self.assertRaises(ValidationError, comp.validate, [1, 2])
+
+    class ComputedValueModel(Model):
+        """
+        Toy model for ComputedValue tests.
         """
         a = Integer()
         b = Unicode()
-        a_with_b = ComputedIndex(value_func=lambda m: "%s::%s" % (m.a, m.b))
+        c = ListOf(Unicode())
+        a_with_b = ComputedValue(
+            lambda m: u"%s::%s" % (m.a, m.b), Unicode(index=True))
+        b_with_a = ComputedValue(lambda m: u"%s::%s" % (m.b, m.a), Unicode())
+        a_with_c = ComputedValue(
+            lambda m: [u"%s::%s" % (m.a, c) for c in m.c],
+            ListOf(Unicode(), index=True))
 
-    def assert_indexes(self, mdl, values):
+    def assert_indexes(self, mdl, indexes):
         self.assertEqual(
             mdl._riak_object.get_indexes(),
-            set(('a_with_b_bin', v) for v in values))
+            set((k, v) for k, vs in indexes.items() for v in vs))
 
     @needs_riak
     @Manager.calls_manager
     def test_computedindex_field(self):
         """
-        A `ComputedIndex` field has its value set at save time.
+        A `ComputedValue` field has its value set at save time.
         """
-        ci_model = self.manager.proxy(self.ComputedIndexModel)
-        m1 = ci_model("foo", a=7, b=u"bar")
+        ci_model = self.manager.proxy(self.ComputedValueModel)
+        m1 = ci_model("foo", a=7, b=u"bar", c=[u"thing1", u"thing2"])
 
         # Value and index are usually only computed at save time.
         self.assertEqual(m1.a_with_b, None)
-        self.assert_indexes(m1, [])
+        self.assertEqual(m1.b_with_a, None)
+        self.assertEqual(list(m1.a_with_c), [])
+        self.assert_indexes(m1, {})
 
         yield m1.save()
-        self.assertEqual(m1.a_with_b, "7::bar")
-        self.assert_indexes(m1, ["7::bar"])
+        self.assertEqual(m1.a_with_b, u"7::bar")
+        self.assertEqual(m1.b_with_a, u"bar::7")
+        self.assertEqual(list(m1.a_with_c), [u"7::thing1", u"7::thing2"])
+        self.assert_indexes(m1, {
+            "a_with_b_bin": ["7::bar"],
+            "a_with_c_bin": ["7::thing1", "7::thing2"],
+        })
 
         m2 = yield ci_model.load("foo")
         self.assertEqual(m1.a, m2.a)
         self.assertEqual(m1.b, m2.b)
         self.assertEqual(m1.a_with_b, "7::bar")
-        self.assert_indexes(m2, ["7::bar"])
+        self.assertEqual(list(m1.a_with_c), ["7::thing1", "7::thing2"])
+        self.assert_indexes(m1, {
+            "a_with_b_bin": ["7::bar"],
+            "a_with_c_bin": ["7::thing1", "7::thing2"],
+        })
 
     @needs_riak
     @Manager.calls_manager
     def test_computedindex_field_set_value(self):
         """
-        A `ComputedIndex` field can have its value set manually, but that value
+        A `ComputedValue` field can have its value set manually, but that value
         is overridden at save time.
         """
-        ci_model = self.manager.proxy(self.ComputedIndexModel)
+        ci_model = self.manager.proxy(self.ComputedValueModel)
         m1 = ci_model("foo", a=7, b=u"bar")
 
         # Value and index are usually only computed at save time.
         self.assertEqual(m1.a_with_b, None)
-        self.assert_indexes(m1, [])
+        self.assert_indexes(m1, {})
 
         # Manually setting the value is possible.
-        m1.a_with_b = "a thing"
-        self.assertEqual(m1.a_with_b, "a thing")
-        self.assert_indexes(m1, ["a thing"])
+        m1.a_with_b = u"a thing"
+        self.assertEqual(m1.a_with_b, u"a thing")
+        self.assert_indexes(m1, {"a_with_b_bin": ["a thing"]})
 
         # But the save time computation overrides that.
         yield m1.save()
-        self.assertEqual(m1.a_with_b, "7::bar")
-        self.assert_indexes(m1, ["7::bar"])
+        self.assertEqual(m1.a_with_b, u"7::bar")
+        self.assert_indexes(m1, {"a_with_b_bin": ["7::bar"]})
 
         m2 = yield ci_model.load("foo")
         self.assertEqual(m1.a, m2.a)
         self.assertEqual(m1.b, m2.b)
         self.assertEqual(m1.a_with_b, "7::bar")
-        self.assert_indexes(m2, ["7::bar"])
+        self.assert_indexes(m2, {"a_with_b_bin": ["7::bar"]})

@@ -965,32 +965,54 @@ class ManyToMany(ForeignKey):
         super(ManyToMany, self).__init__(other_model, index, backlink)
 
 
-class ComputedIndexDescriptor(FieldDescriptor):
-    """A field descriptor for computed index fields."""
+class ComputedValueDescriptor(FieldDescriptor):
+    """A field descriptor for computed value fields."""
+
+    def __init__(self, key, field):
+        super(ComputedValueDescriptor, self).__init__(key, field)
+        self.subfield_descriptor = field.field_type.get_descriptor(key)
 
     def pre_save(self, modelobj):
         self.set_value(modelobj, self.field.value_func(modelobj))
 
-    def _add_index(self, modelobj, value):
-        # We override `FieldDescriptor._add_index` because we don't want `None`
-        # values.
-        if value is not None:
-            modelobj._riak_object.add_index(self.index_name, str(value))
+    def set_value(self, modelobj, value):
+        print repr(modelobj), repr(value)
+        return self.subfield_descriptor.set_value(modelobj, value)
+
+    def get_value(self, modelobj):
+        return self.subfield_descriptor.get_value(modelobj)
 
 
-class ComputedIndex(Field):
+class ComputedValue(Field):
     """
-    Field that stores a computed value for indexing.
+    Field that stores a computed value.
 
     :param value_func:
         A function that takes a model instance as its only parameter and
         returns a value for the field. This is called at save time to compute
         the field value.
+
+    :param Field field_type:
+        The field specification for the computed value. Default is Unicode().
     """
 
-    descriptor_class = ComputedIndexDescriptor
+    descriptor_class = ComputedValueDescriptor
+    initializable = False
 
-    def __init__(self, value_func, index=True, **kw):
-        kw["null"] = True
-        super(ComputedIndex, self).__init__(index=index, **kw)
+    def __init__(self, value_func, field_type=None):
+        super(ComputedValue, self).__init__()
+        if field_type is None:
+            field_type = Unicode()
+        if not isinstance(field_type, Field):
+            raise TypeError("field_type must be a Field object.")
+        self.field_type = field_type
         self.value_func = value_func
+
+    def validate(self, value):
+        return self.field_type.validate(value)
+
+    def to_riak(self, value):
+        return self.field_type.to_riak(value)
+
+    def from_riak(self, value):
+        return self.field_type.from_riak(value)
