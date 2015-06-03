@@ -50,10 +50,10 @@ class FieldDescriptor(object):
         # XXX: The underlying libraries call str() on whatever index values we
         # provide, so we do this explicitly here and special-case None.
         if value is None:
-            value = ''
             if STORE_NONE_FOR_EMPTY_INDEX:
-                # FIXME: We still rely on this being "None" in places. :-(
-                value = 'None'
+                # Hackery for things that need "None" index values.
+                modelobj._riak_object.add_index(self.index_name, "None")
+            return
         modelobj._riak_object.add_index(self.index_name, str(value))
 
     def set_value(self, modelobj, value):
