@@ -595,7 +595,7 @@ class ModelTestMixin(object):
         keys = yield indexed_model.index_keys('b', u"one", return_terms=True)
         self.assertEqual(sorted(keys), [(u"one", "foo1"), (u"one", "foo2")])
 
-        keys = yield indexed_model.index_keys('b', None)
+        keys = yield indexed_model.index_keys('b', None, return_terms=True)
         self.assertEqual(list(keys), [])
 
     @Manager.calls_manager
@@ -612,8 +612,8 @@ class ModelTestMixin(object):
         keys = yield indexed_model.index_keys('b', u"one", return_terms=True)
         self.assertEqual(sorted(keys), [(u"one", "foo1"), (u"one", "foo2")])
 
-        keys = yield indexed_model.index_keys('b', None)
-        self.assertEqual(list(keys), ["foo3"])
+        keys = yield indexed_model.index_keys('b', None, return_terms=True)
+        self.assertEqual(list(keys), [(u"None", "foo3")])
 
     @Manager.calls_manager
     def test_index_keys_range(self):
