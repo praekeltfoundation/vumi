@@ -9,6 +9,16 @@ from vumi.message import format_vumi_date, parse_vumi_date
 from vumi.utils import to_kwargs
 
 
+# Index values in Riak have to be non-empty, so a zero-length string
+# counts as "no value". Since we still have legacy data that was
+# inadvertantly indexed with "None" because of the str() call in the
+# library and we still have legacy code that relies on an index search
+# for a value of "None", fixing this properly here will break existing
+# functionality. Once we have rewritten the offending code to not use
+# "None" in the index, we can remove the hack below and be happier.
+STORE_NONE_FOR_EMPTY_INDEX = False
+
+
 class ValidationError(Exception):
     """Raised when a value assigned to a field is invalid."""
 
@@ -39,18 +49,11 @@ class FieldDescriptor(object):
     def _add_index(self, modelobj, value):
         # XXX: The underlying libraries call str() on whatever index values we
         # provide, so we do this explicitly here and special-case None.
-        #
-        # Index values in Riak have to be non-empty, so a zero-length string
-        # counts as "no value". Since we still have legacy data that was
-        # inadvertantly indexed with "None" because of the str() call in the
-        # library and we still have legacy code that relies on an index search
-        # for a value of "None", fixing this properly here will break existing
-        # functionality. Once we have rewritten the offending code to not use
-        # "None" in the index, we can remove the hack below and be happier.
         if value is None:
             value = ''
-            # FIXME: We still rely on this being "None" in places. :-(
-            value = 'None'
+            if STORE_NONE_FOR_EMPTY_INDEX:
+                # FIXME: We still rely on this being "None" in places. :-(
+                value = 'None'
         modelobj._riak_object.add_index(self.index_name, str(value))
 
     def set_value(self, modelobj, value):
