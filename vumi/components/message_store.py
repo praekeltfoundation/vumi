@@ -443,7 +443,6 @@ class MessageStore(object):
                 # If we aren't given batch_ids, get them from the outbound
                 # message.
                 batch_ids = yield self._get_batches_from_outbound(msg_id)
-                print batch_ids
         else:
             event_record.event = event
 
