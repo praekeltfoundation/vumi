@@ -252,7 +252,7 @@ class TxRiakManager(Manager):
 
     def close_manager(self):
         d = self.deferToThread(self.client.close)
-        d.addCallback(lambda _: self._threadpool.stop)
+        d.addCallback(lambda _: self._threadpool.stop())
         return d
 
     def riak_bucket(self, bucket_name):
