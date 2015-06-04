@@ -5,8 +5,7 @@
 import json
 
 from riak import RiakClient, RiakObject, RiakMapReduce, RiakError
-from twisted.python.threadpool import ThreadPool
-from twisted.internet.threads import deferToThreadPool
+from twisted.internet.threads import deferToThread
 from twisted.internet.defer import (
     inlineCallbacks, returnValue, gatherResults, maybeDeferred, succeed)
 
@@ -35,9 +34,8 @@ class VumiTxIndexPage(object):
     Iterating over this object will return the results for the current page.
     """
 
-    def __init__(self, index_page, manager):
+    def __init__(self, index_page):
         self._index_page = index_page
-        self._manager = manager
 
     def __iter__(self):
         if self._index_page.stream:
@@ -73,16 +71,15 @@ class VumiTxIndexPage(object):
         """
         if not self.has_next_page():
             return succeed(None)
-        d = self._manager.deferToThread(self._index_page.next_page)
-        d.addCallback(type(self), self._manager)
+        d = deferToThread(self._index_page.next_page)
+        d.addCallback(type(self))
         d.addErrback(riakErrorHandler)
         return d
 
 
 class VumiTxRiakBucket(object):
-    def __init__(self, riak_bucket, manager):
+    def __init__(self, riak_bucket):
         self._riak_bucket = riak_bucket
-        self._manager = manager
 
     def get_name(self):
         return self._riak_bucket.name
@@ -98,19 +95,18 @@ class VumiTxRiakBucket(object):
 
     def get_index_page(self, index_name, start_value, end_value=None,
                        return_terms=None, max_results=None, continuation=None):
-        d = self._manager.deferToThread(
+        d = deferToThread(
             self._riak_bucket.get_index, index_name, start_value, end_value,
             return_terms=return_terms, max_results=max_results,
             continuation=continuation)
-        d.addCallback(VumiTxIndexPage, self._manager)
+        d.addCallback(VumiTxIndexPage)
         d.addErrback(riakErrorHandler)
         return d
 
 
 class VumiTxRiakObject(object):
-    def __init__(self, riak_obj, manager):
+    def __init__(self, riak_obj):
         self._riak_obj = riak_obj
-        self._manager = manager
 
     @property
     def key(self):
@@ -159,59 +155,30 @@ class VumiTxRiakObject(object):
         self._riak_obj.usermeta = usermeta
 
     def get_bucket(self):
-        return VumiTxRiakBucket(self._riak_obj.bucket, self._manager)
+        return VumiTxRiakBucket(self._riak_obj.bucket)
 
     # Methods that touch the network.
 
     def store(self):
-        d = self._manager.deferToThread(self._riak_obj.store)
-        d.addCallback(type(self), self._manager)
+        d = deferToThread(self._riak_obj.store)
+        d.addCallback(type(self))
         return d
 
     def reload(self):
-        d = self._manager.deferToThread(self._riak_obj.reload)
-        d.addCallback(type(self), self._manager)
+        d = deferToThread(self._riak_obj.reload)
+        d.addCallback(type(self))
         return d
 
     def delete(self):
-        d = self._manager.deferToThread(self._riak_obj.delete)
-        d.addCallback(type(self), self._manager)
+        d = deferToThread(self._riak_obj.delete)
+        d.addCallback(type(self))
         return d
-
-
-def _daemon_threadpool(*args, **kw):
-    """
-    Create a threadpool that sets its threads to daemon mode so they don't
-    block process exit if they aren't properly cleaned up.
-    """
-    threadpool = ThreadPool(minthreads=2, maxthreads=2)
-    thread_factory = threadpool.threadFactory
-
-    def daemon_thread_factory(*args, **kw):
-        thread = thread_factory(*args, **kw)
-        thread.daemon = True
-        return thread
-
-    threadpool.threadFactory = daemon_thread_factory
-    return threadpool
 
 
 class TxRiakManager(Manager):
     """An async persistence manager for the riak Python package."""
 
     call_decorator = staticmethod(inlineCallbacks)
-
-    def _setup_manager(self):
-        from twisted.internet import reactor
-        self._reactor = reactor
-        self._threadpool = _daemon_threadpool(minthreads=2, maxthreads=2)
-        self._threadpool.start()
-
-    def deferToThread(self, f, *args, **kw):
-        if self._threadpool.joined:
-            raise RuntimeError("Can't use a closed TxRiakManager.")
-        return deferToThreadPool(
-            self._reactor, self._threadpool, f, *args, **kw)
 
     @classmethod
     def from_config(cls, config):
@@ -253,22 +220,17 @@ class TxRiakManager(Manager):
             mapreduce_timeout=mapreduce_timeout, store_versions=store_versions)
 
     def close_manager(self):
-        if self._threadpool.joined:
-            return succeed(None)
-        d = self.deferToThread(self.client.close)
-        d.addCallback(lambda _: self._threadpool.stop())
-        return d
+        return deferToThread(self.client.close)
 
     def riak_bucket(self, bucket_name):
         bucket = self.client.bucket(bucket_name)
         if bucket is not None:
-            bucket = VumiTxRiakBucket(bucket, self)
+            bucket = VumiTxRiakBucket(bucket)
         return bucket
 
     def riak_object(self, modelcls, key, result=None):
         bucket = self.bucket_for_modelcls(modelcls)._riak_bucket
-        riak_object = VumiTxRiakObject(
-            RiakObject(self.client, bucket, key), self)
+        riak_object = VumiTxRiakObject(RiakObject(self.client, bucket, key))
         if result:
             metadata = result['metadata']
             indexes = metadata['index']
@@ -333,15 +295,15 @@ class TxRiakManager(Manager):
         return d
 
     def riak_map_reduce(self):
-        mr = RiakMapReduce(self.client)
+        mapreduce = RiakMapReduce(self.client)
         # Hack: We replace the two methods that hit the network with
         #       deferToThread wrappers to prevent accidental sync calls in
         #       other code.
-        run = mr.run
-        stream = mr.stream
-        mr.run = lambda *a, **kw: self.deferToThread(run, *a, **kw)
-        mr.stream = lambda *a, **kw: self.deferToThread(stream, *a, **kw)
-        return mr
+        run = mapreduce.run
+        stream = mapreduce.stream
+        mapreduce.run = lambda *a, **kw: deferToThread(run, *a, **kw)
+        mapreduce.stream = lambda *a, **kw: deferToThread(stream, *a, **kw)
+        return mapreduce
 
     def run_map_reduce(self, mapreduce, mapper_func=None, reducer_func=None):
         def map_results(raw_results):
@@ -358,7 +320,7 @@ class TxRiakManager(Manager):
         return mapreduce_done
 
     def _search_iteration(self, bucket, query, rows, start):
-        d = self.deferToThread(bucket.search, query, rows=rows, start=start)
+        d = deferToThread(bucket.search, query, rows=rows, start=start)
         d.addCallback(lambda r: [doc["id"] for doc in r["docs"]])
         return d
 
@@ -381,26 +343,18 @@ class TxRiakManager(Manager):
     def riak_enable_search(self, modelcls):
         bucket_name = self.bucket_name(modelcls)
         bucket = self.client.bucket(bucket_name)
-        return self.deferToThread(bucket.enable_search)
+        return deferToThread(bucket.enable_search)
 
     def riak_search_enabled(self, modelcls):
         bucket_name = self.bucket_name(modelcls)
         bucket = self.client.bucket(bucket_name)
-        return self.deferToThread(bucket.search_enabled)
+        return deferToThread(bucket.search_enabled)
 
     def should_quote_index_values(self):
         return False
 
     @inlineCallbacks
     def purge_all(self):
-        # This may be called after the manager has been closed. In that case,
-        # we restart the threadpool and close the manager again when we're
-        # done.
-
-        was_closed = self._threadpool.joined
-        if was_closed:
-            self._threadpool.start()
-
         def delete_obj(bucket, key):
             # These are sync operations
             obj = bucket.get(key)
@@ -409,18 +363,14 @@ class TxRiakManager(Manager):
         def purge_bucket(bucket):
             key_deletes = []
             for key in bucket.get_keys():
-                key_deletes.append(self.deferToThread(delete_obj, bucket, key))
+                key_deletes.append(deferToThread(delete_obj, bucket, key))
             d = gatherResults(key_deletes)
-            d.addCallback(
-                lambda _: self.deferToThread(bucket.clear_properties))
+            d.addCallback(lambda _: deferToThread(bucket.clear_properties))
             return d
 
         bucket_deletes = []
-        buckets = yield self.deferToThread(self.client.get_buckets)
+        buckets = yield deferToThread(self.client.get_buckets)
         for bucket in buckets:
             if bucket.name.startswith(self.bucket_prefix):
                 bucket_deletes.append(purge_bucket(bucket))
         yield gatherResults(bucket_deletes)
-
-        if was_closed:
-            yield self.close_manager()
