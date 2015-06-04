@@ -67,6 +67,7 @@ class CommonRiakManagerTests(object):
     def test_from_config(self):
         manager_cls = self.manager.__class__
         manager = manager_cls.from_config({'bucket_prefix': 'test.'})
+        self.add_cleanup(manager.close_manager)
         self.assertEqual(manager.__class__, manager_cls)
         self.assertEqual(manager.load_bunch_size,
                          manager.DEFAULT_LOAD_BUNCH_SIZE)
@@ -78,6 +79,7 @@ class CommonRiakManagerTests(object):
         manager = manager_cls.from_config({'bucket_prefix': 'test.',
                                            'load_bunch_size': 10,
                                            })
+        self.add_cleanup(manager.close_manager)
         self.assertEqual(manager.load_bunch_size, 10)
 
     def test_from_config_with_mapreduce_timeout(self):
@@ -85,6 +87,7 @@ class CommonRiakManagerTests(object):
         manager = manager_cls.from_config({'bucket_prefix': 'test.',
                                            'mapreduce_timeout': 1000,
                                            })
+        self.add_cleanup(manager.close_manager)
         self.assertEqual(manager.mapreduce_timeout, 1000)
 
     def test_from_config_with_store_versions(self):
@@ -96,6 +99,7 @@ class CommonRiakManagerTests(object):
                 'bar.Bar': None,
             },
         })
+        self.add_cleanup(manager.close_manager)
         self.assertEqual(manager.store_versions, {
             'foo.Foo': 3,
             'bar.Bar': None,
@@ -103,6 +107,7 @@ class CommonRiakManagerTests(object):
 
     def test_sub_manager(self):
         sub_manager = self.manager.sub_manager("foo.")
+        self.add_cleanup(sub_manager.close_manager)
         self.assertEqual(sub_manager.client, self.manager.client)
         self.assertEqual(sub_manager.bucket_prefix, 'test.foo.')
 
@@ -295,6 +300,7 @@ class TestTxRiakManager(CommonRiakManagerTests, VumiTestCase):
         except ImportError, e:
             import_skip(e, 'riak', 'riak')
         self.manager = TxRiakManager.from_config({'bucket_prefix': 'test.'})
+        self.add_cleanup(self.manager.close_manager)
         self.add_cleanup(self.manager.purge_all)
         yield self.manager.purge_all()
 
@@ -307,6 +313,7 @@ class TestTxRiakManager(CommonRiakManagerTests, VumiTestCase):
             'transport_type': 'pbc',
             'bucket_prefix': 'test.',
             })
+        self.add_cleanup(manager.close_manager)
         self.assertEqual(manager.client.protocol, 'pbc')
 
     def test_transport_class_http(self):
@@ -315,6 +322,7 @@ class TestTxRiakManager(CommonRiakManagerTests, VumiTestCase):
             'transport_type': 'http',
             'bucket_prefix': 'test.',
             })
+        self.add_cleanup(manager.close_manager)
         self.assertEqual(manager.client.protocol, 'http')
 
     def test_transport_class_default(self):
@@ -322,4 +330,15 @@ class TestTxRiakManager(CommonRiakManagerTests, VumiTestCase):
         manager = manager_class.from_config({
             'bucket_prefix': 'test.',
             })
+        self.add_cleanup(manager.close_manager)
         self.assertEqual(manager.client.protocol, 'http')
+
+    @Manager.calls_manager
+    def test_cannot_use_closed_manager(self):
+        """
+        We can't use a manager that is already closed.
+        """
+        yield self.manager.close_manager()
+        dummy = self.mkdummy("unknown")
+        yield self.assertFailure(
+            self.manager.load(DummyModel, dummy.key), RuntimeError)
