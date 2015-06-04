@@ -332,3 +332,13 @@ class TestTxRiakManager(CommonRiakManagerTests, VumiTestCase):
             })
         self.add_cleanup(manager.close_manager)
         self.assertEqual(manager.client.protocol, 'http')
+
+    @Manager.calls_manager
+    def test_cannot_use_closed_manager(self):
+        """
+        We can't use a manager that is already closed.
+        """
+        yield self.manager.close_manager()
+        dummy = self.mkdummy("unknown")
+        yield self.assertFailure(
+            self.manager.load(DummyModel, dummy.key), RuntimeError)

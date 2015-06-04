@@ -208,6 +208,8 @@ class TxRiakManager(Manager):
         self._threadpool.start()
 
     def deferToThread(self, f, *args, **kw):
+        if not self._threadpool.started:
+            raise RuntimeError("Can't use a closed TxRiakManager.")
         return deferToThreadPool(
             self._reactor, self._threadpool, f, *args, **kw)
 
@@ -251,6 +253,8 @@ class TxRiakManager(Manager):
             mapreduce_timeout=mapreduce_timeout, store_versions=store_versions)
 
     def close_manager(self):
+        if not self._threadpool.started:
+            return succeed(None)
         d = self.deferToThread(self.client.close)
         d.addCallback(lambda _: self._threadpool.stop())
         return d
@@ -389,6 +393,14 @@ class TxRiakManager(Manager):
 
     @inlineCallbacks
     def purge_all(self):
+        # This may be called after the manager has been closed. In that case,
+        # we restart the threadpool and close the manager again when we're
+        # done.
+
+        was_closed = not self._threadpool.started
+        if was_closed:
+            self._threadpool.start()
+
         def delete_obj(bucket, key):
             # These are sync operations
             obj = bucket.get(key)
@@ -409,3 +421,6 @@ class TxRiakManager(Manager):
             if bucket.name.startswith(self.bucket_prefix):
                 bucket_deletes.append(purge_bucket(bucket))
         yield gatherResults(bucket_deletes)
+
+        if was_closed:
+            yield self.close_manager()
