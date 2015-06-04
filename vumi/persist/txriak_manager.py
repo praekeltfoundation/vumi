@@ -208,7 +208,7 @@ class TxRiakManager(Manager):
         self._threadpool.start()
 
     def deferToThread(self, f, *args, **kw):
-        if not self._threadpool.started:
+        if self._threadpool.joined:
             raise RuntimeError("Can't use a closed TxRiakManager.")
         return deferToThreadPool(
             self._reactor, self._threadpool, f, *args, **kw)
@@ -253,7 +253,7 @@ class TxRiakManager(Manager):
             mapreduce_timeout=mapreduce_timeout, store_versions=store_versions)
 
     def close_manager(self):
-        if not self._threadpool.started:
+        if self._threadpool.joined:
             return succeed(None)
         d = self.deferToThread(self.client.close)
         d.addCallback(lambda _: self._threadpool.stop())
@@ -397,7 +397,7 @@ class TxRiakManager(Manager):
         # we restart the threadpool and close the manager again when we're
         # done.
 
-        was_closed = not self._threadpool.started
+        was_closed = self._threadpool.joined
         if was_closed:
             self._threadpool.start()
 
