@@ -179,6 +179,23 @@ class VumiTxRiakObject(object):
         return d
 
 
+def _daemon_threadpool(*args, **kw):
+    """
+    Create a threadpool that sets its threads to daemon mode so they don't
+    block process exit if they aren't properly cleaned up.
+    """
+    threadpool = ThreadPool(minthreads=2, maxthreads=2)
+    thread_factory = threadpool.threadFactory
+
+    def daemon_thread_factory(*args, **kw):
+        thread = thread_factory(*args, **kw)
+        thread.daemon = True
+        return thread
+
+    threadpool.threadFactory = daemon_thread_factory
+    return threadpool
+
+
 class TxRiakManager(Manager):
     """An async persistence manager for the riak Python package."""
 
@@ -187,7 +204,7 @@ class TxRiakManager(Manager):
     def _setup_manager(self):
         from twisted.internet import reactor
         self._reactor = reactor
-        self._threadpool = ThreadPool(minthreads=2, maxthreads=2)
+        self._threadpool = _daemon_threadpool(minthreads=2, maxthreads=2)
         self._threadpool.start()
 
     def deferToThread(self, f, *args, **kw):
@@ -234,7 +251,9 @@ class TxRiakManager(Manager):
             mapreduce_timeout=mapreduce_timeout, store_versions=store_versions)
 
     def close_manager(self):
-        return self.deferToThread(self.client.close)
+        d = self.deferToThread(self.client.close)
+        d.addCallback(lambda _: self._threadpool.stop)
+        return d
 
     def riak_bucket(self, bucket_name):
         bucket = self.client.bucket(bucket_name)
