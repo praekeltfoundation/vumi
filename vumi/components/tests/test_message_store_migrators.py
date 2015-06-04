@@ -10,11 +10,12 @@ try:
     from vumi.components.tests.message_store_old_models import (
         OutboundMessageVNone, InboundMessageVNone, EventVNone, BatchVNone,
         OutboundMessageV1, InboundMessageV1, OutboundMessageV2,
-        InboundMessageV2, OutboundMessageV3, InboundMessageV3, EventV1)
+        InboundMessageV2, OutboundMessageV3, InboundMessageV3, EventV1,
+        OutboundMessageV4, InboundMessageV4)
     from vumi.components.message_store import (
         to_reverse_timestamp,
-        OutboundMessage as OutboundMessageV4,
-        InboundMessage as InboundMessageV4,
+        OutboundMessage as OutboundMessageV5,
+        InboundMessage as InboundMessageV5,
         Event as EventV2)
     riak_import_error = None
 except ImportError, e:
@@ -270,6 +271,7 @@ class TestOutboundMessageMigrator(TestMigratorBase):
         self.outbound_v2 = self.manager.proxy(OutboundMessageV2)
         self.outbound_v3 = self.manager.proxy(OutboundMessageV3)
         self.outbound_v4 = self.manager.proxy(OutboundMessageV4)
+        self.outbound_v5 = self.manager.proxy(OutboundMessageV5)
         self.batch_vnone = self.manager.proxy(BatchVNone)
 
     @inlineCallbacks
@@ -600,6 +602,128 @@ class TestOutboundMessageMigrator(TestMigratorBase):
         self.assertEqual(old_record.msg, msg)
         self.assertEqual(old_record.batches.keys(), [batch_1.key, batch_2.key])
 
+    @inlineCallbacks
+    def test_migrate_v4_to_v5_no_batches(self):
+        """
+        A v4 model with no batches has no fewer indexes when migrated to v5.
+        """
+        msg = self.msg_helper.make_outbound("outbound")
+        old_record = self.outbound_v4(msg["message_id"], msg=msg)
+        yield old_record.save()
+        new_record = yield self.outbound_v5.load(old_record.key)
+        self.assertEqual(new_record.msg, msg)
+        self.assertEqual(new_record.batches.keys(), [])
+
+        # The migration doesn't set the new fields and indexes, that only
+        # happens at save time.
+        self.assertEqual(set(new_record.batches_with_addresses), set([]))
+        self.assertEqual(
+            set(new_record.batches_with_addresses_reverse), set([]))
+        self.assertEqual(new_record._riak_object.get_indexes(), set([]))
+
+        yield new_record.save()
+        self.assertEqual(set(new_record.batches_with_addresses), set([]))
+        self.assertEqual(
+            set(new_record.batches_with_addresses_reverse), set([]))
+        self.assertEqual(new_record._riak_object.get_indexes(), set([]))
+
+    @inlineCallbacks
+    def test_migrate_v4_to_v5_one_batch(self):
+        """
+        A v4 model with one batch gets one fewer index when migrated to v5.
+        """
+        msg = self.msg_helper.make_outbound("outbound")
+        old_batch = self.batch_vnone(key=u"batch-1")
+        old_record = self.outbound_v4(msg["message_id"], msg=msg)
+        old_record.batches.add_key(old_batch.key)
+        yield old_record.save()
+        new_record = yield self.outbound_v5.load(old_record.key)
+        self.assertEqual(new_record.msg, msg)
+        self.assertEqual(new_record.batches.keys(), [old_batch.key])
+
+        # The migration doesn't set the new fields and indexes, that only
+        # happens at save time.
+
+        self.assertEqual(
+            set(new_record.batches_with_addresses_reverse), set([]))
+        self.assertEqual(new_record._riak_object.get_indexes(), set([
+            batch_index("batch-1"),
+            bwa_index(bwa_out_value("batch-1", msg)),
+            bwar_index(bwar_out_value("batch-1", msg)),
+        ]))
+
+        yield new_record.save()
+        self.assertEqual(
+            set(new_record.batches_with_addresses),
+            set([bwa_out_value("batch-1", msg)]))
+        self.assertEqual(
+            set(new_record.batches_with_addresses_reverse),
+            set([bwar_out_value("batch-1", msg)]))
+        self.assertEqual(new_record._riak_object.get_indexes(), set([
+            batch_index("batch-1"),
+            bwa_index(bwa_out_value("batch-1", msg)),
+            bwar_index(bwar_out_value("batch-1", msg)),
+        ]))
+
+    @inlineCallbacks
+    def test_migrate_v4_to_v5_two_batches(self):
+        """
+        A v4 model with two batches gets two fewer indexes when migrated to v5.
+        """
+        msg = self.msg_helper.make_outbound("outbound")
+        batch_1 = self.batch_vnone(key=u"batch-1")
+        batch_2 = self.batch_vnone(key=u"batch-2")
+        old_record = self.outbound_v4(msg["message_id"], msg=msg)
+        old_record.batches.add_key(batch_1.key)
+        old_record.batches.add_key(batch_2.key)
+        yield old_record.save()
+        new_record = yield self.outbound_v5.load(old_record.key)
+        self.assertEqual(new_record.msg, msg)
+        self.assertEqual(new_record.batches.keys(), [batch_1.key, batch_2.key])
+
+        # The migration doesn't set the new fields and indexes, that only
+        # happens at save time.
+        self.assertEqual(new_record._riak_object.get_indexes(), set([
+            batch_index("batch-1"),
+            batch_index("batch-2"),
+            bwa_index(bwa_out_value("batch-1", msg)),
+            bwa_index(bwa_out_value("batch-2", msg)),
+            bwar_index(bwar_out_value("batch-1", msg)),
+            bwar_index(bwar_out_value("batch-2", msg)),
+        ]))
+
+        yield new_record.save()
+        self.assertEqual(new_record._riak_object.get_indexes(), set([
+            batch_index("batch-1"),
+            batch_index("batch-2"),
+            bwa_index(bwa_out_value("batch-1", msg)),
+            bwa_index(bwa_out_value("batch-2", msg)),
+            bwar_index(bwar_out_value("batch-1", msg)),
+            bwar_index(bwar_out_value("batch-2", msg)),
+        ]))
+
+    @inlineCallbacks
+    def test_reverse_migrate_v5_to_v4(self):
+        """
+        A v5 model can be stored in a v4-compatible way.
+        """
+        # Configure the manager to save the older message version.
+        modelcls = self.outbound_v5._modelcls
+        model_name = "%s.%s" % (modelcls.__module__, modelcls.__name__)
+        self.manager.store_versions[model_name] = 4
+
+        msg = self.msg_helper.make_outbound("outbound")
+        batch_1 = self.batch_vnone(key=u"batch-1")
+        batch_2 = self.batch_vnone(key=u"batch-2")
+        new_record = self.outbound_v5(msg["message_id"], msg=msg)
+        new_record.batches.add_key(batch_1.key)
+        new_record.batches.add_key(batch_2.key)
+        yield new_record.save()
+
+        old_record = yield self.outbound_v4.load(new_record.key)
+        self.assertEqual(old_record.msg, msg)
+        self.assertEqual(old_record.batches.keys(), [batch_1.key, batch_2.key])
+
 
 class TestInboundMessageMigrator(TestMigratorBase):
 
@@ -611,6 +735,7 @@ class TestInboundMessageMigrator(TestMigratorBase):
         self.inbound_v2 = self.manager.proxy(InboundMessageV2)
         self.inbound_v3 = self.manager.proxy(InboundMessageV3)
         self.inbound_v4 = self.manager.proxy(InboundMessageV4)
+        self.inbound_v5 = self.manager.proxy(InboundMessageV5)
         self.batch_vnone = self.manager.proxy(BatchVNone)
 
     @inlineCallbacks
@@ -938,5 +1063,127 @@ class TestInboundMessageMigrator(TestMigratorBase):
         yield new_record.save()
 
         old_record = yield self.inbound_v3.load(new_record.key)
+        self.assertEqual(old_record.msg, msg)
+        self.assertEqual(old_record.batches.keys(), [batch_1.key, batch_2.key])
+
+    @inlineCallbacks
+    def test_migrate_v4_to_v5_no_batches(self):
+        """
+        A v4 model with no batches gets no fewer indexes when migrated to v5.
+        """
+        msg = self.msg_helper.make_inbound("inbound")
+        old_record = self.inbound_v4(msg["message_id"], msg=msg)
+        yield old_record.save()
+        new_record = yield self.inbound_v5.load(old_record.key)
+        self.assertEqual(new_record.msg, msg)
+        self.assertEqual(new_record.batches.keys(), [])
+
+        # The migration doesn't set the new fields and indexes, that only
+        # happens at save time.
+        self.assertEqual(set(new_record.batches_with_addresses), set([]))
+        self.assertEqual(
+            set(new_record.batches_with_addresses_reverse), set([]))
+        self.assertEqual(new_record._riak_object.get_indexes(), set([]))
+
+        yield new_record.save()
+        self.assertEqual(set(new_record.batches_with_addresses), set([]))
+        self.assertEqual(
+            set(new_record.batches_with_addresses_reverse), set([]))
+        self.assertEqual(new_record._riak_object.get_indexes(), set([]))
+
+    @inlineCallbacks
+    def test_migrate_v4_to_v5_one_batch(self):
+        """
+        A v4 model with one batch gets one fewer index when migrated to v5.
+        """
+        msg = self.msg_helper.make_inbound("inbound")
+        old_batch = self.batch_vnone(key=u"batch-1")
+        old_record = self.inbound_v4(msg["message_id"], msg=msg)
+        old_record.batches.add_key(old_batch.key)
+        yield old_record.save()
+        new_record = yield self.inbound_v5.load(old_record.key)
+        self.assertEqual(new_record.msg, msg)
+        self.assertEqual(new_record.batches.keys(), [old_batch.key])
+
+        # The migration doesn't set the new fields and indexes, that only
+        # happens at save time.
+
+        self.assertEqual(
+            set(new_record.batches_with_addresses_reverse), set([]))
+        self.assertEqual(new_record._riak_object.get_indexes(), set([
+            batch_index("batch-1"),
+            bwa_index(bwa_in_value("batch-1", msg)),
+            bwar_index(bwar_in_value("batch-1", msg)),
+        ]))
+
+        yield new_record.save()
+        self.assertEqual(
+            set(new_record.batches_with_addresses),
+            set([bwa_in_value("batch-1", msg)]))
+        self.assertEqual(
+            set(new_record.batches_with_addresses_reverse),
+            set([bwar_in_value("batch-1", msg)]))
+        self.assertEqual(new_record._riak_object.get_indexes(), set([
+            batch_index("batch-1"),
+            bwa_index(bwa_in_value("batch-1", msg)),
+            bwar_index(bwar_in_value("batch-1", msg)),
+        ]))
+
+    @inlineCallbacks
+    def test_migrate_v4_to_v5_two_batches(self):
+        """
+        A v4 model with two batches gets two fewer indexes when migrated to v5.
+        """
+        msg = self.msg_helper.make_inbound("inbound")
+        batch_1 = self.batch_vnone(key=u"batch-1")
+        batch_2 = self.batch_vnone(key=u"batch-2")
+        old_record = self.inbound_v4(msg["message_id"], msg=msg)
+        old_record.batches.add_key(batch_1.key)
+        old_record.batches.add_key(batch_2.key)
+        yield old_record.save()
+        new_record = yield self.inbound_v5.load(old_record.key)
+        self.assertEqual(new_record.msg, msg)
+        self.assertEqual(new_record.batches.keys(), [batch_1.key, batch_2.key])
+
+        # The migration doesn't set the new fields and indexes, that only
+        # happens at save time.
+        self.assertEqual(new_record._riak_object.get_indexes(), set([
+            batch_index("batch-1"),
+            batch_index("batch-2"),
+            bwa_index(bwa_in_value("batch-1", msg)),
+            bwa_index(bwa_in_value("batch-2", msg)),
+            bwar_index(bwar_in_value("batch-1", msg)),
+            bwar_index(bwar_in_value("batch-2", msg)),
+        ]))
+
+        yield new_record.save()
+        self.assertEqual(new_record._riak_object.get_indexes(), set([
+            batch_index("batch-1"),
+            batch_index("batch-2"),
+            bwa_index(bwa_in_value("batch-1", msg)),
+            bwa_index(bwa_in_value("batch-2", msg)),
+            bwar_index(bwar_in_value("batch-1", msg)),
+            bwar_index(bwar_in_value("batch-2", msg)),
+        ]))
+
+    @inlineCallbacks
+    def test_reverse_migrate_v5_to_v4(self):
+        """
+        A v5 model can be stored in a v4-compatible way.
+        """
+        # Configure the manager to save the older message version.
+        modelcls = self.inbound_v5._modelcls
+        model_name = "%s.%s" % (modelcls.__module__, modelcls.__name__)
+        self.manager.store_versions[model_name] = 4
+
+        msg = self.msg_helper.make_inbound("inbound")
+        batch_1 = self.batch_vnone(key=u"batch-1")
+        batch_2 = self.batch_vnone(key=u"batch-2")
+        new_record = self.inbound_v5(msg["message_id"], msg=msg)
+        new_record.batches.add_key(batch_1.key)
+        new_record.batches.add_key(batch_2.key)
+        yield new_record.save()
+
+        old_record = yield self.inbound_v4.load(new_record.key)
         self.assertEqual(old_record.msg, msg)
         self.assertEqual(old_record.batches.keys(), [batch_1.key, batch_2.key])

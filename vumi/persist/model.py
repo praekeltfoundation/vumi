@@ -669,6 +669,11 @@ class Manager(object):
         self._bucket_cache = {}
         self.store_versions = store_versions or {}
 
+        self._setup_manager()
+
+    def _setup_manager(self):
+        pass
+
     def proxy(self, modelcls):
         return ModelProxy(self, modelcls)
 

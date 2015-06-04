@@ -6,6 +6,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.persist.model import (
     Model, Manager, ModelMigrator, ModelMigrationError, VumiRiakError)
+from vumi.persist import fields
 from vumi.persist.fields import ValidationError, Integer, Unicode, Dynamic
 from vumi.tests.helpers import VumiTestCase, import_skip
 
@@ -560,6 +561,25 @@ class ModelTestMixin(object):
         self.assertEqual(sorted(keys), ["foo1", "foo2"])
 
         keys = yield indexed_model.index_keys('b', None)
+        self.assertEqual(keys, [])
+
+    @Manager.calls_manager
+    def test_index_keys_store_none_for_empty(self):
+        self.patch(fields, "STORE_NONE_FOR_EMPTY_INDEX", True)
+        indexed_model = self.manager.proxy(IndexedModel)
+        yield indexed_model("foo1", a=1, b=u"one").save()
+        yield indexed_model("foo2", a=2, b=u"one").save()
+        yield indexed_model("foo3", a=2, b=None).save()
+
+        keys = yield indexed_model.index_keys('a', 1)
+        self.assertEqual(keys, ["foo1"])
+        # We should get a list object, not an IndexPage wrapper.
+        self.assertTrue(isinstance(keys, list))
+
+        keys = yield indexed_model.index_keys('b', u"one")
+        self.assertEqual(sorted(keys), ["foo1", "foo2"])
+
+        keys = yield indexed_model.index_keys('b', None)
         self.assertEqual(keys, ["foo3"])
 
     @Manager.calls_manager
@@ -575,8 +595,25 @@ class ModelTestMixin(object):
         keys = yield indexed_model.index_keys('b', u"one", return_terms=True)
         self.assertEqual(sorted(keys), [(u"one", "foo1"), (u"one", "foo2")])
 
-        keys = yield indexed_model.index_keys('b', None)
-        self.assertEqual(list(keys), ["foo3"])
+        keys = yield indexed_model.index_keys('b', None, return_terms=True)
+        self.assertEqual(list(keys), [])
+
+    @Manager.calls_manager
+    def test_index_keys_return_terms_store_none_for_empty(self):
+        self.patch(fields, "STORE_NONE_FOR_EMPTY_INDEX", True)
+        indexed_model = self.manager.proxy(IndexedModel)
+        yield indexed_model("foo1", a=1, b=u"one").save()
+        yield indexed_model("foo2", a=2, b=u"one").save()
+        yield indexed_model("foo3", a=2, b=None).save()
+
+        keys = yield indexed_model.index_keys('a', 1, return_terms=True)
+        self.assertEqual(keys, [("1", "foo1")])
+
+        keys = yield indexed_model.index_keys('b', u"one", return_terms=True)
+        self.assertEqual(sorted(keys), [(u"one", "foo1"), (u"one", "foo2")])
+
+        keys = yield indexed_model.index_keys('b', None, return_terms=True)
+        self.assertEqual(list(keys), [(u"None", "foo3")])
 
     @Manager.calls_manager
     def test_index_keys_range(self):
@@ -725,6 +762,23 @@ class ModelTestMixin(object):
         self.assertEqual(sorted(keys), ["foo2"])
 
         keys = yield indexed_model.index_keys('b', None)
+        self.assertEqual(keys, [])
+
+    @Manager.calls_manager
+    def test_index_keys_quoting_store_none_for_empty(self):
+        self.patch(fields, "STORE_NONE_FOR_EMPTY_INDEX", True)
+        indexed_model = self.manager.proxy(IndexedModel)
+        yield indexed_model("foo1", a=1, b=u"+one").save()
+        yield indexed_model("foo2", a=2, b=u"one").save()
+        yield indexed_model("foo3", a=2, b=None).save()
+
+        keys = yield indexed_model.index_keys('b', u"+one")
+        self.assertEqual(sorted(keys), ["foo1"])
+
+        keys = yield indexed_model.index_keys('b', u"one")
+        self.assertEqual(sorted(keys), ["foo2"])
+
+        keys = yield indexed_model.index_keys('b', None)
         self.assertEqual(keys, ["foo3"])
 
     @Manager.calls_manager
@@ -738,10 +792,54 @@ class ModelTestMixin(object):
         yield self.assert_mapreduce_results(["foo1"], lookup, 'a', 1)
         yield self.assert_mapreduce_results(
             ["foo1", "foo2"], lookup, 'b', u"one")
+        yield self.assert_mapreduce_results([], lookup, 'b', None)
+
+    @Manager.calls_manager
+    def test_index_lookup_store_none_for_empty(self):
+        self.patch(fields, "STORE_NONE_FOR_EMPTY_INDEX", True)
+        indexed_model = self.manager.proxy(IndexedModel)
+        yield indexed_model("foo1", a=1, b=u"one").save()
+        yield indexed_model("foo2", a=2, b=u"one").save()
+        yield indexed_model("foo3", a=2, b=None).save()
+
+        lookup = indexed_model.index_lookup
+        yield self.assert_mapreduce_results(["foo1"], lookup, 'a', 1)
+        yield self.assert_mapreduce_results(
+            ["foo1", "foo2"], lookup, 'b', u"one")
         yield self.assert_mapreduce_results(["foo3"], lookup, 'b', None)
 
     @Manager.calls_manager
     def test_index_match(self):
+        indexed_model = self.manager.proxy(IndexedModel)
+        yield indexed_model("foo1", a=1, b=u"one").save()
+        yield indexed_model("foo2", a=2, b=u"one").save()
+        yield indexed_model("foo3", a=2, b=None).save()
+
+        match = indexed_model.index_match
+        yield self.assert_mapreduce_results(
+            ["foo1"], match,
+            [{'key': 'b', 'pattern': 'one', 'flags': 'i'}], 'a', 1)
+        yield self.assert_mapreduce_results(
+            ["foo1", "foo2"], match,
+            [{'key': 'b', 'pattern': 'one', 'flags': 'i'}], 'b', u"one")
+        yield self.assert_mapreduce_results(
+            [], match,
+            [{'key': 'a', 'pattern': '2', 'flags': 'i'}], 'b', None)
+        # test with non-existent key
+        yield self.assert_mapreduce_results(
+            [], match,
+            [{'key': 'foo', 'pattern': 'one', 'flags': 'i'}], 'a', 1)
+        # test case sensitivity
+        yield self.assert_mapreduce_results(
+            ['foo1'], match,
+            [{'key': 'b', 'pattern': 'ONE', 'flags': 'i'}], 'a', 1)
+        yield self.assert_mapreduce_results(
+            [], match,
+            [{'key': 'b', 'pattern': 'ONE', 'flags': ''}], 'a', 1)
+
+    @Manager.calls_manager
+    def test_index_match_store_none_for_empty(self):
+        self.patch(fields, "STORE_NONE_FOR_EMPTY_INDEX", True)
         indexed_model = self.manager.proxy(IndexedModel)
         yield indexed_model("foo1", a=1, b=u"one").save()
         yield indexed_model("foo2", a=2, b=u"one").save()
