@@ -119,6 +119,7 @@ class StartWorkerOptions(VumiOptions):
         ["worker_class", None, None, "Deprecated. See --worker-class instead"],
         ["config", None, None, "YAML config file for worker configuration"
          " options"],
+        ["maxthreads", None, None, "Maximum size of reactor thread pool", int],
     ]
 
     longdesc = """Launch an instance of a vumi worker process."""
@@ -176,6 +177,9 @@ class StartWorkerOptions(VumiOptions):
             read_yaml_config(config_file),
             self.set_options)
 
+    def get_maxthreads(self):
+        return self.opts.pop("maxthreads")
+
     def postOptions(self):
         VumiOptions.postOptions(self)
 
@@ -185,6 +189,8 @@ class StartWorkerOptions(VumiOptions):
             self.do_worker_help()
 
         self.worker_config = self.get_worker_config()
+
+        self.maxthreads = self.get_maxthreads()
 
 
 class VumiWorkerServiceMaker(object):
@@ -197,12 +203,20 @@ class VumiWorkerServiceMaker(object):
     # what command line options does this service expose
     options = StartWorkerOptions
 
+    def set_maxthreads(self, options):
+        from twisted.internet import reactor
+
+        if options.maxthreads is not None:
+            reactor.suggestThreadPoolSize(options.maxthreads)
+
     def makeService(self, options):
         sentry_dsn = options.vumi_options.pop('sentry', None)
         class_name = options.worker_class.rpartition('.')[2].lower()
         logger_name = options.worker_config.get('worker_name', class_name)
         system_id = options.vumi_options.get('system-id', 'global')
         worker_id = generate_worker_id(system_id, logger_name)
+
+        self.set_maxthreads(options)
 
         worker_creator = WorkerCreator(options.vumi_options)
         worker = worker_creator.create_worker(options.worker_class,
