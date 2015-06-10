@@ -230,3 +230,39 @@ class TestVumiWorkerServiceMaker(OptionsTestCase):
                   'global:echoworker'), {})
         ])
         self.assertTrue(dummy_service in worker.services)
+
+    def test_make_worker_with_threadpool_size(self):
+        """
+        The reactor threadpool can be resized with a command line option.
+        """
+        from twisted.internet import reactor
+
+        old_maxthreads = reactor.getThreadPool().max
+        self.add_cleanup(reactor.suggestThreadPoolSize, old_maxthreads)
+        # Explicitly set the threadpool size to something different from the
+        # value we're testing with.
+        reactor.suggestThreadPoolSize(5)
+
+        self.mk_config_file('worker', ["transport_name: sphex"])
+        maker = VumiWorkerServiceMaker()
+
+        # By default, we don't touch the threadpool.
+        options = StartWorkerOptions()
+        options.parseOptions([
+            '--worker-class', 'vumi.demos.words.EchoWorker',
+            '--config', self.config_file['worker'],
+        ])
+        worker = maker.makeService(options)
+        self.assertEqual({'transport_name': 'sphex'}, worker.config)
+        self.assertEqual(reactor.getThreadPool().max, 5)
+
+        # If asked, we set the threadpool's maximum size.
+        options_mt = StartWorkerOptions()
+        options_mt.parseOptions([
+            '--worker-class', 'vumi.demos.words.EchoWorker',
+            '--config', self.config_file['worker'],
+            '--maxthreads', '2',
+        ])
+        worker = maker.makeService(options_mt)
+        self.assertEqual({'transport_name': 'sphex'}, worker.config)
+        self.assertEqual(reactor.getThreadPool().max, 2)
