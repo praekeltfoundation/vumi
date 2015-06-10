@@ -203,11 +203,11 @@ class VumiWorkerServiceMaker(object):
     # what command line options does this service expose
     options = StartWorkerOptions
 
-    def set_maxthreads(self, options):
+    def set_maxthreads(self, maxthreads):
         from twisted.internet import reactor
 
-        if options.maxthreads is not None:
-            reactor.suggestThreadPoolSize(options.maxthreads)
+        if maxthreads is not None:
+            reactor.suggestThreadPoolSize(maxthreads)
 
     def makeService(self, options):
         sentry_dsn = options.vumi_options.pop('sentry', None)
@@ -216,7 +216,7 @@ class VumiWorkerServiceMaker(object):
         system_id = options.vumi_options.get('system-id', 'global')
         worker_id = generate_worker_id(system_id, logger_name)
 
-        self.set_maxthreads(options)
+        self.set_maxthreads(options.maxthreads)
 
         worker_creator = WorkerCreator(options.vumi_options)
         worker = worker_creator.create_worker(options.worker_class,
