@@ -23,7 +23,7 @@ class StubbedMessageLister(MessageLister):
         self.output.append(s)
 
     def get_riak_manager(self, riak_config):
-        return self.testcase.get_sub_riak(riak_config)
+        return self.testcase.get_riak_manager(riak_config)
 
 
 class TestMessageLister(VumiTestCase):
@@ -35,13 +35,12 @@ class TestMessageLister(VumiTestCase):
         self.msg_helper = self.add_helper(MessageHelper())
         # Since we're never loading the actual objects, we can't detect
         # tombstones. Therefore, each test needs its own bucket prefix.
-        config = self.persistence_helper.mk_config({})["riak_manager"].copy()
-        config["bucket_prefix"] = "%s-%s" % (
-            uuid4().hex, config["bucket_prefix"])
-        self.riak_manager = self.persistence_helper.get_riak_manager(config)
+        self.expected_bucket_prefix = "bucket-%s" % (uuid4().hex,)
+        self.riak_manager = self.persistence_helper.get_riak_manager({
+            "bucket_prefix": self.expected_bucket_prefix,
+        })
         self.redis_manager = yield self.persistence_helper.get_redis_manager()
         self.mdb = MessageStore(self.riak_manager, self.redis_manager)
-        self.expected_bucket_prefix = "bucket"
         self.default_args = [
             "-b", self.expected_bucket_prefix,
         ]
@@ -60,10 +59,9 @@ class TestMessageLister(VumiTestCase):
         options.parseOptions(args)
         return StubbedMessageLister(self, options)
 
-    def get_sub_riak(self, config):
-        self.assertEqual(config.get('bucket_prefix'),
-                         self.expected_bucket_prefix)
-        return self.riak_manager
+    def get_riak_manager(self, config):
+        self.assertEqual(config["bucket_prefix"], self.expected_bucket_prefix)
+        return self.persistence_helper.get_riak_manager(config)
 
     def make_inbound(self, batch_id, from_addr, timestamp=None):
         if timestamp is None:
