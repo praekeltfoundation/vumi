@@ -1720,6 +1720,25 @@ class TestPersistenceHelper(VumiTestCase):
         self.assertIsInstance(manager, self._TxRiakManager)
         self.assertEqual(persistence_helper._riak_managers, [manager])
 
+    def test_get_riak_manager_with_config(self):
+        """
+        .get_riak_manager(config) returns a manager created using the provided
+        config, with "vumitest" prepended to the bucket_prefix field.
+        """
+        persistence_helper = self.add_helper(PersistenceHelper(use_riak=True))
+        manager = persistence_helper.get_riak_manager({"bucket_prefix": "foo"})
+        self.assertEqual(manager.bucket_prefix, "vumitestfoo")
+
+    def test_get_riak_manager_with_config_no_prepend(self):
+        """
+        .get_riak_manager(config, False) returns a manager created using the
+        provided config, with the bucket_prefix field unmodified.
+        """
+        persistence_helper = self.add_helper(PersistenceHelper(use_riak=True))
+        manager = persistence_helper.get_riak_manager(
+            {"bucket_prefix": "foo"}, prepend_bucket_prefix=False)
+        self.assertEqual(manager.bucket_prefix, "foo")
+
     def test_get_redis_manager_sync(self):
         """
         .get_redis_manager() should return a RedisManager if ``is_sync`` is
