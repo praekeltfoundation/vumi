@@ -1447,6 +1447,28 @@ class PersistenceHelper(object):
 
         return RiakManager.from_config(config)
 
+    def record_load_and_store(self, riak_manager, loads, stores):
+        """
+        Patch a Riak manager to capture load and store operations.
+
+        :param riak_manager: The manager object to patch.
+        :param list loads: A list to append the keys of loaded objects to.
+        :param list stores: A list to append the keys of stored objects to.
+        """
+        orig_load = riak_manager.load
+        orig_store = riak_manager.store
+
+        def record_load(modelcls, key, result=None):
+            loads.append(key)
+            return orig_load(modelcls, key, result=result)
+
+        def record_store(obj):
+            stores.append(obj.key)
+            return orig_store(obj)
+
+        self._patch(riak_manager, "load", record_load)
+        self._patch(riak_manager, "store", record_store)
+
     @proxyable
     def get_redis_manager(self, config=None):
         """

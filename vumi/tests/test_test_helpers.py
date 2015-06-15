@@ -1885,3 +1885,38 @@ class TestPersistenceHelper(VumiTestCase):
         success_result_of(persistence_helper.cleanup())
         self.assertEqual(manager.fake_conns, [])
         self.assertEqual([conn1.closed, conn2.closed], [True, True])
+
+    def test_record_load_and_store(self):
+        """
+        .record_load_and_store() patches the manager it's given to record load
+        and store operations.
+        """
+        persistence_helper = self.add_helper(PersistenceHelper())
+
+        class FakeModelObject(object):
+            def __init__(self, key):
+                self.key = key
+
+        class FakeRiakManager(object):
+            def load(self, modelcls, key, result=None):
+                return ("loaded", modelcls, key, result)
+
+            def store(self, obj):
+                return ("stored", obj.key)
+
+        manager = FakeRiakManager()
+        loads, stores = [], []
+        persistence_helper.record_load_and_store(manager, loads, stores)
+
+        self.assertEqual(
+            manager.load("foocls", "foo"), ("loaded", "foocls", "foo", None))
+        self.assertEqual(loads, ["foo"])
+
+        self.assertEqual(
+            manager.store(FakeModelObject("bar")), ("stored", "bar"))
+        self.assertEqual(stores, ["bar"])
+
+        self.assertEqual(
+            manager.load("bazcls", "baz", result="res"),
+            ("loaded", "bazcls", "baz", "res"))
+        self.assertEqual(loads, ["foo", "baz"])
