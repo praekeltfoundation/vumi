@@ -1232,13 +1232,14 @@ class PersistenceHelper(object):
         self._patches = []
         self._riak_managers = []
         self._redis_managers = []
+        self._test_prefix = 'vumitest'
         self._config_overrides = {
             'redis_manager': {
                 'FAKE_REDIS': 'yes',
-                'key_prefix': 'vumitest',
+                'key_prefix': self._test_prefix,
             },
             'riak_manager': {
-                'bucket_prefix': 'vumitest',
+                'bucket_prefix': self._test_prefix,
             },
         }
         if not self.use_riak:
@@ -1414,7 +1415,11 @@ class PersistenceHelper(object):
         """
         self._check_patches_applied()
         if config is None:
-            config = self._config_overrides['riak_manager'].copy()
+            config = self._config_overrides["riak_manager"].copy()
+        else:
+            config = config.copy()
+            config["bucket_prefix"] = "%s%s" % (
+                self._test_prefix, config["bucket_prefix"])
 
         if self.is_sync:
             return self._get_sync_riak_manager(config)
@@ -1435,6 +1440,28 @@ class PersistenceHelper(object):
             import_skip(e, 'riak')
 
         return RiakManager.from_config(config)
+
+    def record_load_and_store(self, riak_manager, loads, stores):
+        """
+        Patch a Riak manager to capture load and store operations.
+
+        :param riak_manager: The manager object to patch.
+        :param list loads: A list to append the keys of loaded objects to.
+        :param list stores: A list to append the keys of stored objects to.
+        """
+        orig_load = riak_manager.load
+        orig_store = riak_manager.store
+
+        def record_load(modelcls, key, result=None):
+            loads.append(key)
+            return orig_load(modelcls, key, result=result)
+
+        def record_store(obj):
+            stores.append(obj.key)
+            return orig_store(obj)
+
+        self._patch(riak_manager, "load", record_load)
+        self._patch(riak_manager, "store", record_store)
 
     @proxyable
     def get_redis_manager(self, config=None):
