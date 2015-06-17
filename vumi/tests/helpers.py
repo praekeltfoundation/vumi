@@ -1232,13 +1232,14 @@ class PersistenceHelper(object):
         self._patches = []
         self._riak_managers = []
         self._redis_managers = []
+        self._test_prefix = 'vumitest'
         self._config_overrides = {
             'redis_manager': {
                 'FAKE_REDIS': 'yes',
-                'key_prefix': 'vumitest',
+                'key_prefix': self._test_prefix,
             },
             'riak_manager': {
-                'bucket_prefix': 'vumitest',
+                'bucket_prefix': self._test_prefix,
             },
         }
         if not self.use_riak:
@@ -1399,7 +1400,7 @@ class PersistenceHelper(object):
                 "setup() must be called before performing this operation.")
 
     @proxyable
-    def get_riak_manager(self, config=None, prepend_bucket_prefix=True):
+    def get_riak_manager(self, config=None):
         """
         Build and return a Riak manager.
 
@@ -1407,25 +1408,18 @@ class PersistenceHelper(object):
             Riak manager config. (Not a complete worker config.) If ``None``,
             the one used by :meth:`mk_config` will be used.
 
-        :param bool prepend_bucket_prefix:
-            If ``True`` (the default), the ``bucket_prefix`` field in the given
-            config (if any) will have the test prefix prepended to it. To keep
-            the ``bucket_prefix`` unmodified, set this to ``False``.
-
         :returns:
             A :class:`~vumi.persist.riak_manager.RiakManager` or
             :class:`~vumi.persist.riak_manager.TxRiakManager`, depending on the
             value of :attr:`is_sync`.
         """
         self._check_patches_applied()
-        default_config = self._config_overrides["riak_manager"].copy()
         if config is None:
-            config = default_config
+            config = self._config_overrides["riak_manager"].copy()
         else:
             config = config.copy()
-            if prepend_bucket_prefix:
-                config["bucket_prefix"] = "%s%s" % (
-                    default_config["bucket_prefix"], config["bucket_prefix"])
+            config["bucket_prefix"] = "%s%s" % (
+                self._test_prefix, config["bucket_prefix"])
 
         if self.is_sync:
             return self._get_sync_riak_manager(config)
