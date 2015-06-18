@@ -208,6 +208,7 @@ class CommonRiakManagerTests(object):
                 var curDate = null;
                 do { curDate = new Date(); }
                 while(curDate-date < 11);
+                return value;
             }
             """)
 
