@@ -197,7 +197,7 @@ class CommonRiakManagerTests(object):
             yield self.manager.store(dummy)
 
         # override mapreduce_timeout for testing
-        self.manager.mapreduce_timeout = 10  # millisecond
+        self.manager.mapreduce_timeout = 10  # milliseconds
 
         mr = self.manager.riak_map_reduce()
         mr.index('test.dummy_model', 'test_index_bin', 'test_key')
@@ -206,6 +206,7 @@ class CommonRiakManagerTests(object):
             function(value, keyData) {
                 var date = new Date();
                 var curDate = null;
+                // Wait 11ms so we run past the 10ms timeout.
                 do { curDate = new Date(); }
                 while(curDate-date < 11);
                 return value;
