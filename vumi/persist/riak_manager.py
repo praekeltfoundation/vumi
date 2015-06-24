@@ -152,17 +152,7 @@ class RiakManager(Manager):
         return riak_object
 
     def store(self, modelobj):
-        riak_object = modelobj._riak_object
-        modelcls = type(modelobj)
-        model_name = "%s.%s" % (modelcls.__module__, modelcls.__name__)
-        store_version = self.store_versions.get(model_name, modelcls.VERSION)
-        # Run reverse migrators until we have the correct version of the data.
-        data_version = riak_object.get_data().get('$VERSION', None)
-        while data_version != store_version:
-            migrator = modelcls.MIGRATOR(
-                modelcls, self, data_version, reverse=True)
-            riak_object = migrator(riak_object).get_riak_object()
-            data_version = riak_object.get_data().get('$VERSION', None)
+        riak_object = self._reverse_migrate_riak_object(modelobj)
         riak_object.store()
         return modelobj
 
@@ -173,19 +163,7 @@ class RiakManager(Manager):
         riak_object = self.riak_object(modelcls, key, result)
         if not result:
             riak_object.reload()
-        was_migrated = False
-
-        # Run migrators until we have the correct version of the data.
-        while riak_object.get_data() is not None:
-            data_version = riak_object.get_data().get('$VERSION', None)
-            if data_version == modelcls.VERSION:
-                obj = modelcls(self, key, _riak_object=riak_object)
-                obj.was_migrated = was_migrated
-                return obj
-            migrator = modelcls.MIGRATOR(modelcls, self, data_version)
-            riak_object = migrator(riak_object).get_riak_object()
-            was_migrated = True
-        return None
+        return self._migrate_riak_object(modelcls, key, riak_object)
 
     def _load_multiple(self, modelcls, keys):
         objs = (self.load(modelcls, key) for key in keys)
