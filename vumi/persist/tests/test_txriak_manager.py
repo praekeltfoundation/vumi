@@ -2,7 +2,7 @@
 
 from twisted.internet.defer import inlineCallbacks
 
-from vumi.persist.model import Manager
+from vumi.persist.model import Manager, VumiRiakError
 from vumi.tests.helpers import VumiTestCase, import_skip
 
 
@@ -285,6 +285,26 @@ class CommonRiakManagerTests(object):
             MyDummy, '$bucket', self.manager.bucket_name(MyDummy), None)
         self.assertEqual(key, u"foo")
         self.assertTrue(isinstance(key, unicode))
+
+    @Manager.calls_manager
+    def test_error_when_closed(self):
+        """
+        We get an exception if we try to use a closed manager.
+        """
+        # Load a missing object while open, no exception.
+        dummy = self.mkdummy("unknown")
+        result = yield self.manager.load(DummyModel, dummy.key)
+        self.assertEqual(result, None)
+
+        # Load a missing object while closed.
+        yield self.manager.close_manager()
+        try:
+            yield self.manager.load(DummyModel, dummy.key)
+        except VumiRiakError, err:
+            self.assertEqual(err.args[0], "Can't use closed Riak client.")
+        else:
+            self.fail(
+                "Expected VumiRiakError using closed manager, nothing raised.")
 
 
 class TestTxRiakManager(CommonRiakManagerTests, VumiTestCase):
