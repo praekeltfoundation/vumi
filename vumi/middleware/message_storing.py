@@ -68,14 +68,15 @@ class StoringMiddleware(BaseMiddleware):
         store_prefix = self.config.store_prefix
         r_config = self.config.redis_manager
         self.redis = yield TxRedisManager.from_config(r_config)
-        manager = TxRiakManager.from_config(self.config.riak_manager)
-        self.store = MessageStore(manager,
-                                  self.redis.sub_manager(store_prefix))
+        self.manager = TxRiakManager.from_config(self.config.riak_manager)
+        self.store = MessageStore(
+            self.manager, self.redis.sub_manager(store_prefix))
         self.store_on_consume = self.config.store_on_consume
 
     @inlineCallbacks
     def teardown_middleware(self):
         yield self.redis.close_manager()
+        yield self.manager.close_manager()
 
     def handle_consume_inbound(self, message, connector_name):
         if not self.store_on_consume:

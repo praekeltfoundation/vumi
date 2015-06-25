@@ -61,6 +61,7 @@ class TestMessageStoreBase(VumiTestCase):
             PersistenceHelper(use_riak=True))
         self.redis = yield self.persistence_helper.get_redis_manager()
         self.manager = self.persistence_helper.get_riak_manager()
+        self.add_cleanup(self.manager.close_manager)
         self.store = MessageStore(self.manager, self.redis)
         self.msg_helper = self.add_helper(MessageHelper())
 

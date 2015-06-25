@@ -204,17 +204,20 @@ class MessageStoreAPIWorker(Worker):
         web_port = int(self.config['web_port'])
         health_path = self.config['health_path']
 
-        riak = yield TxRiakManager.from_config(self.config['riak_manager'])
+        self._riak = yield TxRiakManager.from_config(
+            self.config['riak_manager'])
         redis = yield TxRedisManager.from_config(self.config['redis_manager'])
-        self.store = MessageStore(riak, redis)
+        self.store = MessageStore(self._riak, redis)
 
         self.webserver = self.start_web_resources([
             (MessageStoreAPI(self.store), web_path),
             (httprpc.HttpRpcHealthResource(self), health_path),
             ], web_port)
 
+    @inlineCallbacks
     def stopWorker(self):
-        self.webserver.loseConnection()
+        yield self.webserver.loseConnection()
+        yield self._riak.close_manager()
 
     def get_health_response(self):
         """Called by the HttpRpcHealthResource"""

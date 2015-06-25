@@ -78,6 +78,7 @@ class TestMigratorBase(VumiTestCase):
         if riak_import_error is not None:
             import_skip(riak_import_error, 'riak')
         self.manager = self.persistence_helper.get_riak_manager()
+        self.add_cleanup(self.manager.close_manager)
         self.msg_helper = self.add_helper(MessageHelper())
 
 

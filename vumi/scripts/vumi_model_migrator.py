@@ -87,8 +87,8 @@ class ModelMigrator(object):
         riak_config = {
             'bucket_prefix': options['bucket-prefix'],
         }
-        manager = self.get_riak_manager(riak_config)
-        self.model = manager.proxy(model_cls)
+        self.manager = self.get_riak_manager(riak_config)
+        self.model = self.manager.proxy(model_cls)
 
         # The default post-migrate-function does nothing and returns True if
         # and only if the object was migrated.
@@ -96,6 +96,9 @@ class ModelMigrator(object):
         if options['post-migrate-function'] is not None:
             self.post_migrate_function = load_class_by_string(
                 options['post-migrate-function'])
+
+    def cleanup(self):
+        return self.manager.close_manager()
 
     def get_riak_manager(self, riak_config):
         return TxRiakManager.from_config(riak_config)
@@ -186,11 +189,14 @@ class ModelMigrator(object):
             continuation=continuation)
         yield self.migrate_pages(index_page, emit_progress)
 
-    def run(self):
+    def _run(self):
         if self.options["keys"] is not None:
             return self.migrate_specified_keys(self.options["keys"].split(","))
         else:
             return self.migrate_all_keys(self.options["continuation-token"])
+
+    def run(self):
+        return self._run().addBoth(lambda _: self.cleanup())
 
 
 def main(_reactor, name, *args):

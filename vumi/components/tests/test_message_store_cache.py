@@ -25,6 +25,7 @@ class MessageStoreCacheTestCase(VumiTestCase):
             import_skip(e, 'riak')
         self.redis = yield self.persistence_helper.get_redis_manager()
         self.manager = yield self.persistence_helper.get_riak_manager()
+        self.add_cleanup(self.manager.close_manager)
         self.store = yield MessageStore(self.manager, self.redis)
         self.cache = self.store.cache
         self.batch_id = 'a-batch-id'
