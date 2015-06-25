@@ -5,13 +5,13 @@ import json
 from riak import RiakClient
 
 
-def to_unicode(text, encoding='utf-8'):
+def _to_unicode(text, encoding='utf-8'):
     # If we already have unicode or `None`, there's nothing to do.
     if isinstance(text, (unicode, type(None))):
         return text
     # If we have a tuple, we need to do our thing with every element in it.
     if isinstance(text, tuple):
-        return tuple(to_unicode(item, encoding) for item in text)
+        return tuple(_to_unicode(item, encoding) for item in text)
     # If we get here, then we should have a bytestring.
     return text.decode(encoding)
 
@@ -86,7 +86,7 @@ class VumiIndexPageBase(object):
     def __iter__(self):
         if self._index_page.stream:
             raise NotImplementedError("Streaming is not currently supported.")
-        return (to_unicode(item) for item in self._index_page)
+        return (_to_unicode(item) for item in self._index_page)
 
     def __eq__(self, other):
         return self._index_page.__eq__(other)
@@ -103,7 +103,7 @@ class VumiIndexPageBase(object):
 
     @property
     def continuation(self):
-        return to_unicode(self._index_page.continuation)
+        return _to_unicode(self._index_page.continuation)
 
     # Methods that touch the network.
 
