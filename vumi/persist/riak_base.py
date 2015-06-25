@@ -6,13 +6,14 @@ from riak import RiakClient
 
 
 def to_unicode(text, encoding='utf-8'):
-    if text is None:
+    # If we already have unicode or `None`, there's nothing to do.
+    if isinstance(text, (unicode, type(None))):
         return text
+    # If we have a tuple, we need to do our thing with every element in it.
     if isinstance(text, tuple):
         return tuple(to_unicode(item, encoding) for item in text)
-    if not isinstance(text, unicode):
-        return text.decode(encoding)
-    return text
+    # If we get here, then we should have a bytestring.
+    return text.decode(encoding)
 
 
 class VumiRiakClientBase(object):
