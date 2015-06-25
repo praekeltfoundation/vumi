@@ -91,9 +91,36 @@ class CommonRiakManagerTests(object):
         })
 
     def test_sub_manager(self):
+        """
+        A sub-manager shares its parent's client object, but has an additional
+        suffix on its bucket_prefix.
+        """
         sub_manager = self.manager.sub_manager("foo.")
         self.assertEqual(sub_manager.client, self.manager.client)
+        self.assertEqual(sub_manager._parent, self.manager)
         self.assertEqual(sub_manager.bucket_prefix, 'test.foo.')
+
+    def test_sub_manager_unclosed(self):
+        """
+        A sub-manager is never "unclosed", because the parent is responsible
+        for managing the client object.
+        """
+        sub_manager = self.manager.sub_manager("foo.")
+        self.assertEqual(sub_manager.client, self.manager.client)
+        self.assertEqual(sub_manager.client._closed, False)
+        self.assertEqual(sub_manager._is_unclosed(), False)
+
+    @Manager.calls_manager
+    def test_sub_manager_close(self):
+        """
+        A sub-manager does not close its client object, because the parent is
+        responsible for managing the client object.
+        """
+        sub_manager = self.manager.sub_manager("foo.")
+        self.assertEqual(sub_manager.client, self.manager.client)
+        self.assertEqual(sub_manager.client._closed, False)
+        yield sub_manager.close_manager()
+        self.assertEqual(sub_manager.client._closed, False)
 
     def test_bucket_name_on_modelcls(self):
         dummy = self.mkdummy("bar")
