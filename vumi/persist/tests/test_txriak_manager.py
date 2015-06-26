@@ -39,17 +39,6 @@ def get_link_key(link):
     return link[1]
 
 
-def unrepr_string(text):
-    if text.startswith("'"):
-        # Strip and unescape single quotes
-        return text[1:-1].replace("\\'", "'")
-    if text.startswith('"'):
-        # Strip and unescape double quotes
-        return text[1:-1].replace('\\"', '"')
-    # Nothing to strip.
-    return text
-
-
 class CommonRiakManagerTests(object):
     """Common tests for Riak managers.
 
@@ -67,7 +56,6 @@ class CommonRiakManagerTests(object):
     def test_from_config(self):
         manager_cls = self.manager.__class__
         manager = manager_cls.from_config({'bucket_prefix': 'test.'})
-        self.add_cleanup(manager.close_manager)
         self.assertEqual(manager.__class__, manager_cls)
         self.assertEqual(manager.load_bunch_size,
                          manager.DEFAULT_LOAD_BUNCH_SIZE)
@@ -79,7 +67,6 @@ class CommonRiakManagerTests(object):
         manager = manager_cls.from_config({'bucket_prefix': 'test.',
                                            'load_bunch_size': 10,
                                            })
-        self.add_cleanup(manager.close_manager)
         self.assertEqual(manager.load_bunch_size, 10)
 
     def test_from_config_with_mapreduce_timeout(self):
@@ -87,7 +74,6 @@ class CommonRiakManagerTests(object):
         manager = manager_cls.from_config({'bucket_prefix': 'test.',
                                            'mapreduce_timeout': 1000,
                                            })
-        self.add_cleanup(manager.close_manager)
         self.assertEqual(manager.mapreduce_timeout, 1000)
 
     def test_from_config_with_store_versions(self):
@@ -99,7 +85,6 @@ class CommonRiakManagerTests(object):
                 'bar.Bar': None,
             },
         })
-        self.add_cleanup(manager.close_manager)
         self.assertEqual(manager.store_versions, {
             'foo.Foo': 3,
             'bar.Bar': None,
@@ -107,7 +92,6 @@ class CommonRiakManagerTests(object):
 
     def test_sub_manager(self):
         sub_manager = self.manager.sub_manager("foo.")
-        self.add_cleanup(sub_manager.close_manager)
         self.assertEqual(sub_manager.client, self.manager.client)
         self.assertEqual(sub_manager.bucket_prefix, 'test.foo.')
 
@@ -213,19 +197,31 @@ class CommonRiakManagerTests(object):
             yield self.manager.store(dummy)
 
         # override mapreduce_timeout for testing
-        self.manager.mapreduce_timeout = 1  # millisecond
+        self.manager.mapreduce_timeout = 10  # milliseconds
 
         mr = self.manager.riak_map_reduce()
         mr.index('test.dummy_model', 'test_index_bin', 'test_key')
+        mr.map(
+            """
+            function(value, keyData) {
+                var date = new Date();
+                var curDate = null;
+                // Wait 11ms so we run past the 10ms timeout.
+                do { curDate = new Date(); }
+                while(curDate-date < 11);
+                return value;
+            }
+            """)
 
         try:
             yield self.manager.run_map_reduce(mr, lambda m, l: None)
         except Exception, err:
-            msg = unrepr_string(str(err))
-            self.assertTrue(msg.startswith(
-                "Error running MapReduce operation."))
-            self.assertTrue(msg.endswith(
-                "Body: '{\"error\":\"timeout\"}'"))
+            msg = str(err)[1:-1].decode("string-escape")
+            if not all([
+                    msg.startswith("Error running MapReduce operation."),
+                    msg.endswith("Body: '{\"error\":\"timeout\"}'")]):
+                # This doesn't look like a timeout error, reraise it.
+                raise
         else:
             self.fail("Map reduce operation did not timeout")
 
@@ -300,7 +296,6 @@ class TestTxRiakManager(CommonRiakManagerTests, VumiTestCase):
         except ImportError, e:
             import_skip(e, 'riak', 'riak')
         self.manager = TxRiakManager.from_config({'bucket_prefix': 'test.'})
-        self.add_cleanup(self.manager.close_manager)
         self.add_cleanup(self.manager.purge_all)
         yield self.manager.purge_all()
 
@@ -313,7 +308,6 @@ class TestTxRiakManager(CommonRiakManagerTests, VumiTestCase):
             'transport_type': 'pbc',
             'bucket_prefix': 'test.',
             })
-        self.add_cleanup(manager.close_manager)
         self.assertEqual(manager.client.protocol, 'pbc')
 
     def test_transport_class_http(self):
@@ -322,7 +316,6 @@ class TestTxRiakManager(CommonRiakManagerTests, VumiTestCase):
             'transport_type': 'http',
             'bucket_prefix': 'test.',
             })
-        self.add_cleanup(manager.close_manager)
         self.assertEqual(manager.client.protocol, 'http')
 
     def test_transport_class_default(self):
@@ -330,15 +323,4 @@ class TestTxRiakManager(CommonRiakManagerTests, VumiTestCase):
         manager = manager_class.from_config({
             'bucket_prefix': 'test.',
             })
-        self.add_cleanup(manager.close_manager)
         self.assertEqual(manager.client.protocol, 'http')
-
-    @Manager.calls_manager
-    def test_cannot_use_closed_manager(self):
-        """
-        We can't use a manager that is already closed.
-        """
-        yield self.manager.close_manager()
-        dummy = self.mkdummy("unknown")
-        yield self.assertFailure(
-            self.manager.load(DummyModel, dummy.key), RuntimeError)

@@ -29,7 +29,7 @@ class StubbedModelCounter(ModelCounter):
         self.output.append(s)
 
     def get_riak_manager(self, riak_config):
-        return self.testcase.get_sub_riak(riak_config)
+        return self.testcase.get_riak_manager(riak_config)
 
 
 class TestModelCounter(VumiTestCase):
@@ -39,14 +39,13 @@ class TestModelCounter(VumiTestCase):
             PersistenceHelper(use_riak=True, is_sync=False))
         # Since we're never loading the actual objects, we can't detect
         # tombstones. Therefore, each test needs its own bucket prefix.
-        config = self.persistence_helper.mk_config({})["riak_manager"].copy()
-        config["bucket_prefix"] = "%s-%s" % (
-            uuid4().hex, config["bucket_prefix"])
-        self.riak_manager = self.persistence_helper.get_riak_manager(config)
+        self.expected_bucket_prefix = "bucket-%s" % (uuid4().hex,)
+        self.riak_manager = self.persistence_helper.get_riak_manager({
+            "bucket_prefix": self.expected_bucket_prefix,
+        })
         self.model = self.riak_manager.proxy(SimpleModel)
         self.model_cls_path = ".".join([
             SimpleModel.__module__, SimpleModel.__name__])
-        self.expected_bucket_prefix = "bucket"
         self.default_args = [
             "-m", self.model_cls_path,
             "-b", self.expected_bucket_prefix,
@@ -71,10 +70,9 @@ class TestModelCounter(VumiTestCase):
         options.parseOptions(args)
         return StubbedModelCounter(self, options)
 
-    def get_sub_riak(self, config):
-        self.assertEqual(config.get('bucket_prefix'),
-                         self.expected_bucket_prefix)
-        return self.riak_manager
+    def get_riak_manager(self, config):
+        self.assertEqual(config["bucket_prefix"], self.expected_bucket_prefix)
+        return self.persistence_helper.get_riak_manager(config)
 
     @inlineCallbacks
     def mk_simple_models(self, n, start=0):

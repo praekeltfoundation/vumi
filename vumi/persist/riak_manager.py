@@ -2,55 +2,27 @@
 
 """A manager implementation on top of the riak Python package."""
 
-import json
-
-from riak import RiakClient, RiakObject, RiakMapReduce, RiakError
+from riak import RiakObject, RiakMapReduce, RiakError
 
 from vumi.persist.model import Manager, VumiRiakError
+from vumi.persist.riak_base import (
+    VumiRiakClientBase, VumiIndexPageBase, VumiRiakBucketBase,
+    VumiRiakObjectBase)
 from vumi.utils import flatten_generator
 
 
-def to_unicode(text, encoding='utf-8'):
-    if text is None:
-        return text
-    if isinstance(text, tuple):
-        return tuple(to_unicode(item, encoding) for item in text)
-    if not isinstance(text, unicode):
-        return text.decode(encoding)
-    return text
+class VumiRiakClient(VumiRiakClientBase):
+    """
+    Wrapper around a RiakClient to manage resources better.
+    """
 
 
-class VumiIndexPage(object):
+class VumiIndexPage(VumiIndexPageBase):
     """
     Wrapper around a page of index query results.
 
     Iterating over this object will return the results for the current page.
     """
-
-    def __init__(self, index_page):
-        self._index_page = index_page
-
-    def __iter__(self):
-        if self._index_page.stream:
-            raise NotImplementedError("Streaming is not currently supported.")
-        return (to_unicode(item) for item in self._index_page)
-
-    def __eq__(self, other):
-        return self._index_page.__eq__(other)
-
-    def has_next_page(self):
-        """
-        Indicate whether there are more results to follow.
-
-        :returns:
-            ``True`` if there are more results, ``False`` if this is the last
-            page.
-        """
-        return self._index_page.has_next_page()
-
-    @property
-    def continuation(self):
-        return to_unicode(self._index_page.continuation)
 
     # Methods that touch the network.
 
@@ -71,12 +43,10 @@ class VumiIndexPage(object):
         return type(self)(result)
 
 
-class VumiRiakBucket(object):
-    def __init__(self, riak_bucket):
-        self._riak_bucket = riak_bucket
-
-    def get_name(self):
-        return self._riak_bucket.name
+class VumiRiakBucket(VumiRiakBucketBase):
+    """
+    Wrapper around a RiakBucket to manage network access better.
+    """
 
     # Methods that touch the network.
 
@@ -97,69 +67,22 @@ class VumiRiakBucket(object):
         return VumiIndexPage(result)
 
 
-class VumiRiakObject(object):
-    def __init__(self, riak_obj):
-        self._riak_obj = riak_obj
-
-    @property
-    def key(self):
-        return self._riak_obj.key
-
-    def get_key(self):
-        return self.key
-
-    def get_content_type(self):
-        return self._riak_obj.content_type
-
-    def set_content_type(self, content_type):
-        self._riak_obj.content_type = content_type
-
-    def get_data(self):
-        return self._riak_obj.data
-
-    def set_data(self, data):
-        self._riak_obj.data = data
-
-    def set_encoded_data(self, encoded_data):
-        self._riak_obj.encoded_data = encoded_data
-
-    def set_data_field(self, key, value):
-        self._riak_obj.data[key] = value
-
-    def delete_data_field(self, key):
-        del self._riak_obj.data[key]
-
-    def get_indexes(self):
-        return self._riak_obj.indexes
-
-    def set_indexes(self, indexes):
-        self._riak_obj.indexes = indexes
-
-    def add_index(self, index_name, index_value):
-        self._riak_obj.add_index(index_name, index_value)
-
-    def remove_index(self, index_name, index_value=None):
-        self._riak_obj.remove_index(index_name, index_value)
-
-    def get_user_metadata(self):
-        return self._riak_obj.usermeta
-
-    def set_user_metadata(self, usermeta):
-        self._riak_obj.usermeta = usermeta
+class VumiRiakObject(VumiRiakObjectBase):
+    """
+    Wrapper around a RiakObject to manage network access better.
+    """
 
     def get_bucket(self):
         return VumiRiakBucket(self._riak_obj.bucket)
 
     # Methods that touch the network.
 
-    def store(self):
-        return type(self)(self._riak_obj.store())
-
-    def reload(self):
-        return type(self)(self._riak_obj.reload())
-
-    def delete(self):
-        return type(self)(self._riak_obj.delete())
+    def _call_and_wrap(self, func):
+        """
+        Call a function that touches the network and wrap the result in this
+        class.
+        """
+        return type(self)(func())
 
 
 class RiakManager(Manager):
@@ -193,15 +116,7 @@ class RiakManager(Manager):
         if port is not None:
             client_args['port'] = port
 
-        client = RiakClient(**client_args)
-        # Some versions of the riak client library use simplejson by
-        # preference, which breaks some of our unicode assumptions. This makes
-        # sure we're using stdlib json which doesn't sometimes return
-        # bytestrings instead of unicode.
-        client.set_encoder('application/json', json.dumps)
-        client.set_encoder('text/json', json.dumps)
-        client.set_decoder('application/json', json.loads)
-        client.set_decoder('text/json', json.loads)
+        client = VumiRiakClient(**client_args)
         return cls(
             client, bucket_prefix, load_bunch_size=load_bunch_size,
             mapreduce_timeout=mapreduce_timeout, store_versions=store_versions)
@@ -237,17 +152,7 @@ class RiakManager(Manager):
         return riak_object
 
     def store(self, modelobj):
-        riak_object = modelobj._riak_object
-        modelcls = type(modelobj)
-        model_name = "%s.%s" % (modelcls.__module__, modelcls.__name__)
-        store_version = self.store_versions.get(model_name, modelcls.VERSION)
-        # Run reverse migrators until we have the correct version of the data.
-        data_version = riak_object.get_data().get('$VERSION', None)
-        while data_version != store_version:
-            migrator = modelcls.MIGRATOR(
-                modelcls, self, data_version, reverse=True)
-            riak_object = migrator(riak_object).get_riak_object()
-            data_version = riak_object.get_data().get('$VERSION', None)
+        riak_object = self._reverse_migrate_riak_object(modelobj)
         riak_object.store()
         return modelobj
 
@@ -258,19 +163,7 @@ class RiakManager(Manager):
         riak_object = self.riak_object(modelcls, key, result)
         if not result:
             riak_object.reload()
-        was_migrated = False
-
-        # Run migrators until we have the correct version of the data.
-        while riak_object.get_data() is not None:
-            data_version = riak_object.get_data().get('$VERSION', None)
-            if data_version == modelcls.VERSION:
-                obj = modelcls(self, key, _riak_object=riak_object)
-                obj.was_migrated = was_migrated
-                return obj
-            migrator = modelcls.MIGRATOR(modelcls, self, data_version)
-            riak_object = migrator(riak_object).get_riak_object()
-            was_migrated = True
-        return None
+        return self._migrate_riak_object(modelcls, key, riak_object)
 
     def _load_multiple(self, modelcls, keys):
         objs = (self.load(modelcls, key) for key in keys)
@@ -318,10 +211,4 @@ class RiakManager(Manager):
         return False
 
     def purge_all(self):
-        buckets = self.client.get_buckets()
-        for bucket in buckets:
-            if bucket.name.startswith(self.bucket_prefix):
-                for key in bucket.get_keys():
-                    obj = bucket.get(key)
-                    obj.delete()
-                bucket.clear_properties()
+        self.client._purge_all(self.bucket_prefix)

@@ -2,25 +2,15 @@
 
 """An async manager implementation on top of the riak Python package."""
 
-import json
-
-from riak import RiakClient, RiakObject, RiakMapReduce, RiakError
-from twisted.python.threadpool import ThreadPool
-from twisted.internet.threads import deferToThreadPool
+from riak import RiakObject, RiakMapReduce, RiakError
+from twisted.internet.threads import deferToThread
 from twisted.internet.defer import (
     inlineCallbacks, returnValue, gatherResults, maybeDeferred, succeed)
 
 from vumi.persist.model import Manager, VumiRiakError
-
-
-def to_unicode(text, encoding='utf-8'):
-    if text is None:
-        return text
-    if isinstance(text, tuple):
-        return tuple(to_unicode(item, encoding) for item in text)
-    if not isinstance(text, unicode):
-        return text.decode(encoding)
-    return text
+from vumi.persist.riak_base import (
+    VumiRiakClientBase, VumiIndexPageBase, VumiRiakBucketBase,
+    VumiRiakObjectBase)
 
 
 def riakErrorHandler(failure):
@@ -28,38 +18,18 @@ def riakErrorHandler(failure):
     raise VumiRiakError(e)
 
 
-class VumiTxIndexPage(object):
+class VumiTxRiakClient(VumiRiakClientBase):
+    """
+    Wrapper around a RiakClient to manage resources better.
+    """
+
+
+class VumiTxIndexPage(VumiIndexPageBase):
     """
     Wrapper around a page of index query results.
 
     Iterating over this object will return the results for the current page.
     """
-
-    def __init__(self, index_page, manager):
-        self._index_page = index_page
-        self._manager = manager
-
-    def __iter__(self):
-        if self._index_page.stream:
-            raise NotImplementedError("Streaming is not currently supported.")
-        return (to_unicode(item) for item in self._index_page)
-
-    def __eq__(self, other):
-        return self._index_page.__eq__(other)
-
-    def has_next_page(self):
-        """
-        Indicate whether there are more results to follow.
-
-        :returns:
-            ``True`` if there are more results, ``False`` if this is the last
-            page.
-        """
-        return self._index_page.has_next_page()
-
-    @property
-    def continuation(self):
-        return to_unicode(self._index_page.continuation)
 
     # Methods that touch the network.
 
@@ -73,19 +43,16 @@ class VumiTxIndexPage(object):
         """
         if not self.has_next_page():
             return succeed(None)
-        d = self._manager.deferToThread(self._index_page.next_page)
-        d.addCallback(type(self), self._manager)
+        d = deferToThread(self._index_page.next_page)
+        d.addCallback(type(self))
         d.addErrback(riakErrorHandler)
         return d
 
 
-class VumiTxRiakBucket(object):
-    def __init__(self, riak_bucket, manager):
-        self._riak_bucket = riak_bucket
-        self._manager = manager
-
-    def get_name(self):
-        return self._riak_bucket.name
+class VumiTxRiakBucket(VumiRiakBucketBase):
+    """
+    Wrapper around a RiakBucket to manage network access better.
+    """
 
     # Methods that touch the network.
 
@@ -98,120 +65,39 @@ class VumiTxRiakBucket(object):
 
     def get_index_page(self, index_name, start_value, end_value=None,
                        return_terms=None, max_results=None, continuation=None):
-        d = self._manager.deferToThread(
+        d = deferToThread(
             self._riak_bucket.get_index, index_name, start_value, end_value,
             return_terms=return_terms, max_results=max_results,
             continuation=continuation)
-        d.addCallback(VumiTxIndexPage, self._manager)
+        d.addCallback(VumiTxIndexPage)
         d.addErrback(riakErrorHandler)
         return d
 
 
-class VumiTxRiakObject(object):
-    def __init__(self, riak_obj, manager):
-        self._riak_obj = riak_obj
-        self._manager = manager
-
-    @property
-    def key(self):
-        return self._riak_obj.key
-
-    def get_key(self):
-        return self.key
-
-    def get_content_type(self):
-        return self._riak_obj.content_type
-
-    def set_content_type(self, content_type):
-        self._riak_obj.content_type = content_type
-
-    def get_data(self):
-        return self._riak_obj.data
-
-    def set_data(self, data):
-        self._riak_obj.data = data
-
-    def set_encoded_data(self, encoded_data):
-        self._riak_obj.encoded_data = encoded_data
-
-    def set_data_field(self, key, value):
-        self._riak_obj.data[key] = value
-
-    def delete_data_field(self, key):
-        del self._riak_obj.data[key]
-
-    def get_indexes(self):
-        return self._riak_obj.indexes
-
-    def set_indexes(self, indexes):
-        self._riak_obj.indexes = indexes
-
-    def add_index(self, index_name, index_value):
-        self._riak_obj.add_index(index_name, index_value)
-
-    def remove_index(self, index_name, index_value=None):
-        self._riak_obj.remove_index(index_name, index_value)
-
-    def get_user_metadata(self):
-        return self._riak_obj.usermeta
-
-    def set_user_metadata(self, usermeta):
-        self._riak_obj.usermeta = usermeta
+class VumiTxRiakObject(VumiRiakObjectBase):
+    """
+    Wrapper around a RiakObject to manage network access better.
+    """
 
     def get_bucket(self):
-        return VumiTxRiakBucket(self._riak_obj.bucket, self._manager)
+        return VumiTxRiakBucket(self._riak_obj.bucket)
 
     # Methods that touch the network.
 
-    def store(self):
-        d = self._manager.deferToThread(self._riak_obj.store)
-        d.addCallback(type(self), self._manager)
+    def _call_and_wrap(self, func):
+        """
+        Call a function that touches the network and wrap the result in this
+        class.
+        """
+        d = deferToThread(func)
+        d.addCallback(type(self))
         return d
-
-    def reload(self):
-        d = self._manager.deferToThread(self._riak_obj.reload)
-        d.addCallback(type(self), self._manager)
-        return d
-
-    def delete(self):
-        d = self._manager.deferToThread(self._riak_obj.delete)
-        d.addCallback(type(self), self._manager)
-        return d
-
-
-def _daemon_threadpool(*args, **kw):
-    """
-    Create a threadpool that sets its threads to daemon mode so they don't
-    block process exit if they aren't properly cleaned up.
-    """
-    threadpool = ThreadPool(minthreads=2, maxthreads=2)
-    thread_factory = threadpool.threadFactory
-
-    def daemon_thread_factory(*args, **kw):
-        thread = thread_factory(*args, **kw)
-        thread.daemon = True
-        return thread
-
-    threadpool.threadFactory = daemon_thread_factory
-    return threadpool
 
 
 class TxRiakManager(Manager):
     """An async persistence manager for the riak Python package."""
 
     call_decorator = staticmethod(inlineCallbacks)
-
-    def _setup_manager(self):
-        from twisted.internet import reactor
-        self._reactor = reactor
-        self._threadpool = _daemon_threadpool(minthreads=2, maxthreads=2)
-        self._threadpool.start()
-
-    def deferToThread(self, f, *args, **kw):
-        if self._threadpool.joined:
-            raise RuntimeError("Can't use a closed TxRiakManager.")
-        return deferToThreadPool(
-            self._reactor, self._threadpool, f, *args, **kw)
 
     @classmethod
     def from_config(cls, config):
@@ -239,36 +125,23 @@ class TxRiakManager(Manager):
         if port is not None:
             client_args['port'] = port
 
-        client = RiakClient(**client_args)
-        # Some versions of the riak client library use simplejson by
-        # preference, which breaks some of our unicode assumptions. This makes
-        # sure we're using stdlib json which doesn't sometimes return
-        # bytestrings instead of unicode.
-        client.set_encoder('application/json', json.dumps)
-        client.set_encoder('text/json', json.dumps)
-        client.set_decoder('application/json', json.loads)
-        client.set_decoder('text/json', json.loads)
+        client = VumiTxRiakClient(**client_args)
         return cls(
             client, bucket_prefix, load_bunch_size=load_bunch_size,
             mapreduce_timeout=mapreduce_timeout, store_versions=store_versions)
 
     def close_manager(self):
-        if self._threadpool.joined:
-            return succeed(None)
-        d = self.deferToThread(self.client.close)
-        d.addCallback(lambda _: self._threadpool.stop())
-        return d
+        return deferToThread(self.client.close)
 
     def riak_bucket(self, bucket_name):
         bucket = self.client.bucket(bucket_name)
         if bucket is not None:
-            bucket = VumiTxRiakBucket(bucket, self)
+            bucket = VumiTxRiakBucket(bucket)
         return bucket
 
     def riak_object(self, modelcls, key, result=None):
         bucket = self.bucket_for_modelcls(modelcls)._riak_bucket
-        riak_object = VumiTxRiakObject(
-            RiakObject(self.client, bucket, key), self)
+        riak_object = VumiTxRiakObject(RiakObject(self.client, bucket, key))
         if result:
             metadata = result['metadata']
             indexes = metadata['index']
@@ -288,17 +161,7 @@ class TxRiakManager(Manager):
         return riak_object
 
     def store(self, modelobj):
-        riak_object = modelobj._riak_object
-        modelcls = type(modelobj)
-        model_name = "%s.%s" % (modelcls.__module__, modelcls.__name__)
-        store_version = self.store_versions.get(model_name, modelcls.VERSION)
-        # Run reverse migrators until we have the correct version of the data.
-        data_version = riak_object.get_data().get('$VERSION', None)
-        while data_version != store_version:
-            migrator = modelcls.MIGRATOR(
-                modelcls, self, data_version, reverse=True)
-            riak_object = migrator(riak_object).get_riak_object()
-            data_version = riak_object.get_data().get('$VERSION', None)
+        riak_object = self._reverse_migrate_riak_object(modelobj)
         d = riak_object.store()
         d.addCallback(lambda _: modelobj)
         return d
@@ -313,19 +176,7 @@ class TxRiakManager(Manager):
         riak_object = self.riak_object(modelcls, key, result)
         if not result:
             yield riak_object.reload()
-        was_migrated = False
-
-        # Run migrators until we have the correct version of the data.
-        while riak_object.get_data() is not None:
-            data_version = riak_object.get_data().get('$VERSION', None)
-            if data_version == modelcls.VERSION:
-                obj = modelcls(self, key, _riak_object=riak_object)
-                obj.was_migrated = was_migrated
-                returnValue(obj)
-            migrator = modelcls.MIGRATOR(modelcls, self, data_version)
-            riak_object = migrator(riak_object).get_riak_object()
-            was_migrated = True
-        returnValue(None)
+        returnValue(self._migrate_riak_object(modelcls, key, riak_object))
 
     def _load_multiple(self, modelcls, keys):
         d = gatherResults([self.load(modelcls, key) for key in keys])
@@ -333,15 +184,15 @@ class TxRiakManager(Manager):
         return d
 
     def riak_map_reduce(self):
-        mr = RiakMapReduce(self.client)
+        mapreduce = RiakMapReduce(self.client)
         # Hack: We replace the two methods that hit the network with
         #       deferToThread wrappers to prevent accidental sync calls in
         #       other code.
-        run = mr.run
-        stream = mr.stream
-        mr.run = lambda *a, **kw: self.deferToThread(run, *a, **kw)
-        mr.stream = lambda *a, **kw: self.deferToThread(stream, *a, **kw)
-        return mr
+        run = mapreduce.run
+        stream = mapreduce.stream
+        mapreduce.run = lambda *a, **kw: deferToThread(run, *a, **kw)
+        mapreduce.stream = lambda *a, **kw: deferToThread(stream, *a, **kw)
+        return mapreduce
 
     def run_map_reduce(self, mapreduce, mapper_func=None, reducer_func=None):
         def map_results(raw_results):
@@ -358,7 +209,7 @@ class TxRiakManager(Manager):
         return mapreduce_done
 
     def _search_iteration(self, bucket, query, rows, start):
-        d = self.deferToThread(bucket.search, query, rows=rows, start=start)
+        d = deferToThread(bucket.search, query, rows=rows, start=start)
         d.addCallback(lambda r: [doc["id"] for doc in r["docs"]])
         return d
 
@@ -381,46 +232,15 @@ class TxRiakManager(Manager):
     def riak_enable_search(self, modelcls):
         bucket_name = self.bucket_name(modelcls)
         bucket = self.client.bucket(bucket_name)
-        return self.deferToThread(bucket.enable_search)
+        return deferToThread(bucket.enable_search)
 
     def riak_search_enabled(self, modelcls):
         bucket_name = self.bucket_name(modelcls)
         bucket = self.client.bucket(bucket_name)
-        return self.deferToThread(bucket.search_enabled)
+        return deferToThread(bucket.search_enabled)
 
     def should_quote_index_values(self):
         return False
 
-    @inlineCallbacks
     def purge_all(self):
-        # This may be called after the manager has been closed. In that case,
-        # we restart the threadpool and close the manager again when we're
-        # done.
-
-        was_closed = self._threadpool.joined
-        if was_closed:
-            self._threadpool.start()
-
-        def delete_obj(bucket, key):
-            # These are sync operations
-            obj = bucket.get(key)
-            obj.delete()
-
-        def purge_bucket(bucket):
-            key_deletes = []
-            for key in bucket.get_keys():
-                key_deletes.append(self.deferToThread(delete_obj, bucket, key))
-            d = gatherResults(key_deletes)
-            d.addCallback(
-                lambda _: self.deferToThread(bucket.clear_properties))
-            return d
-
-        bucket_deletes = []
-        buckets = yield self.deferToThread(self.client.get_buckets)
-        for bucket in buckets:
-            if bucket.name.startswith(self.bucket_prefix):
-                bucket_deletes.append(purge_bucket(bucket))
-        yield gatherResults(bucket_deletes)
-
-        if was_closed:
-            yield self.close_manager()
+        return deferToThread(self.client._purge_all, self.bucket_prefix)

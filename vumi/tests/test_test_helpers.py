@@ -1720,6 +1720,15 @@ class TestPersistenceHelper(VumiTestCase):
         self.assertIsInstance(manager, self._TxRiakManager)
         self.assertEqual(persistence_helper._riak_managers, [manager])
 
+    def test_get_riak_manager_with_config(self):
+        """
+        .get_riak_manager(config) returns a manager created using the provided
+        config, with "vumitest" prepended to the bucket_prefix field.
+        """
+        persistence_helper = self.add_helper(PersistenceHelper(use_riak=True))
+        manager = persistence_helper.get_riak_manager({"bucket_prefix": "foo"})
+        self.assertEqual(manager.bucket_prefix, "vumitestfoo")
+
     def test_get_redis_manager_sync(self):
         """
         .get_redis_manager() should return a RedisManager if ``is_sync`` is
@@ -1866,3 +1875,38 @@ class TestPersistenceHelper(VumiTestCase):
         success_result_of(persistence_helper.cleanup())
         self.assertEqual(manager.fake_conns, [])
         self.assertEqual([conn1.closed, conn2.closed], [True, True])
+
+    def test_record_load_and_store(self):
+        """
+        .record_load_and_store() patches the manager it's given to record load
+        and store operations.
+        """
+        persistence_helper = self.add_helper(PersistenceHelper())
+
+        class FakeModelObject(object):
+            def __init__(self, key):
+                self.key = key
+
+        class FakeRiakManager(object):
+            def load(self, modelcls, key, result=None):
+                return ("loaded", modelcls, key, result)
+
+            def store(self, obj):
+                return ("stored", obj.key)
+
+        manager = FakeRiakManager()
+        loads, stores = [], []
+        persistence_helper.record_load_and_store(manager, loads, stores)
+
+        self.assertEqual(
+            manager.load("foocls", "foo"), ("loaded", "foocls", "foo", None))
+        self.assertEqual(loads, ["foo"])
+
+        self.assertEqual(
+            manager.store(FakeModelObject("bar")), ("stored", "bar"))
+        self.assertEqual(stores, ["bar"])
+
+        self.assertEqual(
+            manager.load("bazcls", "baz", result="res"),
+            ("loaded", "bazcls", "baz", "res"))
+        self.assertEqual(loads, ["foo", "baz"])
