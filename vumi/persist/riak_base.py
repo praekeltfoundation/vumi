@@ -4,6 +4,8 @@ import json
 
 from riak import RiakClient
 
+from vumi.persist.model import VumiRiakError
+
 
 def _to_unicode(text, encoding='utf-8'):
     # If we already have unicode or `None`, there's nothing to do.
@@ -22,7 +24,8 @@ class VumiRiakClientBase(object):
     """
 
     def __init__(self, **client_args):
-        self._client = RiakClient(**client_args)
+        self._closed = False
+        self._raw_client = RiakClient(**client_args)
         # Some versions of the riak client library use simplejson by
         # preference, which breaks some of our unicode assumptions. This makes
         # sure we're using stdlib json which doesn't sometimes return
@@ -32,15 +35,22 @@ class VumiRiakClientBase(object):
         self._client.set_decoder('application/json', json.loads)
         self._client.set_decoder('text/json', json.loads)
 
-        self._closed = False
-
     @property
     def protocol(self):
-        return self._client.protocol
+        return self._raw_client.protocol
+
+    @property
+    def _client(self):
+        """
+        Raise an exception if closed, otherwise return underlying client.
+        """
+        if self._closed:
+            raise VumiRiakError("Can't use closed Riak client.")
+        return self._raw_client
 
     def close(self):
         self._closed = True
-        return self._client.close()
+        return self._raw_client.close()
 
     def bucket(self, bucket_name):
         return self._client.bucket(bucket_name)
@@ -64,13 +74,17 @@ class VumiRiakClientBase(object):
 
         NOTE: This operation should *ONLY* be used in tests.
         """
-        buckets = self._client.get_buckets()
+        # We need to use a potentially closed client here, so we bypass the
+        # check and reclose afterwards if necessary.
+        buckets = self._raw_client.get_buckets()
         for bucket in buckets:
             if bucket.name.startswith(bucket_prefix):
                 for key in bucket.get_keys():
                     obj = bucket.get(key)
                     obj.delete()
                 bucket.clear_properties()
+        if self._closed:
+            self.close()
 
 
 class VumiIndexPageBase(object):

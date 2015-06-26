@@ -77,8 +77,11 @@ class ModelCounter(object):
         riak_config = {
             'bucket_prefix': options['bucket-prefix'],
         }
-        manager = self.get_riak_manager(riak_config)
-        self.model = manager.proxy(model_cls)
+        self.manager = self.get_riak_manager(riak_config)
+        self.model = self.manager.proxy(model_cls)
+
+    def cleanup(self):
+        return self.manager.close_manager()
 
     def get_riak_manager(self, riak_config):
         return TxRiakManager.from_config(riak_config)
@@ -139,11 +142,18 @@ class ModelCounter(object):
             return_terms=True)
         yield self.count_pages(index_page, filter_regex=filter_regex)
 
-    def run(self):
+    def _run(self):
         if self.options["index-field"] is None:
             return self.count_all_keys()
         else:
             return self.count_index_keys()
+
+    @inlineCallbacks
+    def run(self):
+        try:
+            yield self._run()
+        finally:
+            yield self.cleanup()
 
 
 def main(_reactor, name, *args):

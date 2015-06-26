@@ -2,6 +2,8 @@ import json
 import os
 from functools import wraps
 from inspect import CO_GENERATOR
+from itertools import dropwhile
+import traceback
 
 from twisted.internet.defer import succeed, inlineCallbacks, Deferred
 from twisted.internet.error import ConnectionRefusedError
@@ -167,6 +169,43 @@ def get_timeout():
     """
     timeout_str = os.environ.get('VUMI_TEST_TIMEOUT', '5')
     return float(timeout_str)
+
+
+def get_stack_trace(exclude_last=0):
+    """
+    Get a stack trace that can be stored and referred to later.
+
+    The inside of this function is excluded from the stack trace, because it's
+    not relevant. Additionally, all entries prior to the first occurrence of
+    "twisted/trial/_asynctest.py" or "django/test/testcases.py" are removed to
+    avoid unnecessary test runner noise.
+
+    :param int exclude_last:
+        Number of entries to remove from the end of the stack trace. Use this
+        to get rid of wrapper functions or implementation details irrelevant to
+        the purpose of the stack trace.
+
+    :return:
+        A list of strings, each representing a stack frame, in the same format
+        as ``traceback.format_stack()``.
+    """
+    stack = traceback.format_stack()
+
+    def is_boring(entry):
+        return all(pathfrag not in entry for pathfrag in [
+            "twisted/trial/_asynctest.py",
+            "django/test/testcases.py",
+        ])
+
+    filtered_stack = list(dropwhile(is_boring, stack))
+    if filtered_stack:
+        # We haven't accidentally devoured everything.
+        lines_removed = len(stack) - len(filtered_stack)
+        stack = filtered_stack
+        stack.insert(0, "%s test runner lines removed.\n" % lines_removed)
+    # Remove the current stack frame and any extra stack frames we've been
+    # asked to remove.
+    return stack[:-(exclude_last + 1)]
 
 
 class VumiTestCase(TestCase):
@@ -1200,6 +1239,12 @@ def maybe_async_return(value, maybe_deferred):
     return value
 
 
+class PersistenceHelperError(Exception):
+    """
+    Exception thrown by a PersistenceHelper when it sees something wrong.
+    """
+
+
 class PersistenceHelper(object):
     """
     Test helper for managing persistent storage.
@@ -1226,7 +1271,11 @@ class PersistenceHelper(object):
 
     _patches_applied = False
 
-    def __init__(self, use_riak=False, is_sync=False):
+    def __init__(self, use_riak=False, is_sync=False, assert_closed=False):
+        self._assert_closed = assert_closed
+        if os.environ.get('VUMI_TEST_ASSERT_CLOSED', ''):
+            # Override from environment
+            self._assert_closed = True
         self.use_riak = use_riak
         self.is_sync = is_sync
         self._patches = []
@@ -1245,6 +1294,8 @@ class PersistenceHelper(object):
         if not self.use_riak:
             self._config_overrides['riak_manager'] = RiakDisabledForTest()
 
+        self._riak_stacks = {}
+
     def setup(self):
         self._patch_riak()
         self._patch_txriak()
@@ -1254,7 +1305,11 @@ class PersistenceHelper(object):
 
     @maybe_async
     def cleanup(self):
+        unclosed_managers = []
+
         for purge, manager in self._get_riak_managers_for_cleanup():
+            if manager._is_unclosed():
+                unclosed_managers.append(manager)
             if purge:
                 try:
                     yield self._purge_riak(manager)
@@ -1268,6 +1323,19 @@ class PersistenceHelper(object):
             yield manager.close_manager()
 
         self._unpatch()
+
+        if unclosed_managers and self._assert_closed:
+            # We have unclosed managers and we've been asked to assert that we
+            # don't.
+            for manager in unclosed_managers:
+                stack = self._riak_stacks.get(
+                    manager, ["No stack trace found.\n"])
+                print "========= %r =========" % manager
+                print "".join(stack)
+            print "Unclosed Riak managers:", len(unclosed_managers)
+            raise PersistenceHelperError(
+                "Unclosed Riak managers found during cleanup: %s %s" % (
+                    len(unclosed_managers), unclosed_managers))
 
     def _get_riak_managers_for_cleanup(self):
         """
@@ -1335,7 +1403,7 @@ class PersistenceHelper(object):
 
         def wrapper(obj, *args, **kw):
             orig_init(obj, *args, **kw)
-            self._riak_managers.append(obj)
+            self._collect_riak_manager(obj)
 
         self._patch(RiakManager, '__init__', wrapper)
 
@@ -1350,9 +1418,14 @@ class PersistenceHelper(object):
 
         def wrapper(obj, *args, **kw):
             orig_init(obj, *args, **kw)
-            self._riak_managers.append(obj)
+            self._collect_riak_manager(obj)
 
         self._patch(TxRiakManager, '__init__', wrapper)
+
+    def _collect_riak_manager(self, manager):
+        self._riak_managers.append(manager)
+        if self._assert_closed:
+            self._riak_stacks[manager] = get_stack_trace(2)
 
     def _patch_redis(self):
         try:
@@ -1396,7 +1469,7 @@ class PersistenceHelper(object):
 
     def _check_patches_applied(self):
         if not self._patches_applied:
-            raise Exception(
+            raise PersistenceHelperError(
                 "setup() must be called before performing this operation.")
 
     @proxyable

@@ -10,7 +10,7 @@ from vumi.tests.fake_amqp import FakeAMQPBroker, FakeAMQClient
 from vumi.tests.helpers import (
     VumiTestCase, proxyable, generate_proxies, IHelper, import_skip,
     MessageHelper, WorkerHelper, MessageDispatchHelper, PersistenceHelper,
-    success_result_of, RiakDisabledForTest)
+    success_result_of, RiakDisabledForTest, PersistenceHelperError)
 from vumi.worker import BaseWorker
 
 
@@ -1532,18 +1532,23 @@ class TestMessageDispatchHelper(VumiTestCase):
 class FakeRiakManagerForCleanup(object):
     purged = False
 
-    def __init__(self, bucket_prefix, conns=None):
+    def __init__(self, bucket_prefix, conns=None, client_closed=True):
         self.bucket_prefix = bucket_prefix
         self.fake_conns = conns or []
+        self._client_closed = client_closed
 
     def purge_all(self):
         self.purged = True
         return 'maybe async'
 
     def close_manager(self):
+        self._client_closed = True
         for conn in self.fake_conns:
             conn.close()
         self.fake_conns = []
+
+    def _is_unclosed(self):
+        return not self._client_closed
 
 
 class FakeRiakClientConnection(object):
@@ -1679,7 +1684,7 @@ class TestPersistenceHelper(VumiTestCase):
         """
         persistence_helper = PersistenceHelper()
         err = self.assertRaises(
-            Exception, persistence_helper.get_redis_manager)
+            PersistenceHelperError, persistence_helper.get_redis_manager)
         self.assertTrue('setup() must be called' in str(err))
 
     def test_mk_config_unpatched(self):
@@ -1687,7 +1692,8 @@ class TestPersistenceHelper(VumiTestCase):
         .mk_config() should fail if .setup() has not been called.
         """
         persistence_helper = PersistenceHelper()
-        err = self.assertRaises(Exception, persistence_helper.mk_config, {})
+        err = self.assertRaises(
+            PersistenceHelperError, persistence_helper.mk_config, {})
         self.assertTrue('setup() must be called' in str(err))
 
     def test_get_riak_manager_no_riak(self):
@@ -1695,7 +1701,8 @@ class TestPersistenceHelper(VumiTestCase):
         .get_riak_manager() should fail if ``use_riak`` is ``False``.
         """
         persistence_helper = self.add_helper(PersistenceHelper())
-        err = self.assertRaises(Exception, persistence_helper.get_riak_manager)
+        err = self.assertRaises(
+            RuntimeError, persistence_helper.get_riak_manager)
         self.assertTrue(
             'Use of Riak has been disabled for this test.' in str(err))
 
@@ -1707,6 +1714,7 @@ class TestPersistenceHelper(VumiTestCase):
         persistence_helper = self.add_helper(
             PersistenceHelper(use_riak=True, is_sync=True))
         manager = persistence_helper.get_riak_manager()
+        self.add_cleanup(manager.close_manager)
         self.assertIsInstance(manager, self._RiakManager)
         self.assertEqual(persistence_helper._riak_managers, [manager])
 
@@ -1717,6 +1725,7 @@ class TestPersistenceHelper(VumiTestCase):
         """
         persistence_helper = self.add_helper(PersistenceHelper(use_riak=True))
         manager = persistence_helper.get_riak_manager()
+        self.add_cleanup(manager.close_manager)
         self.assertIsInstance(manager, self._TxRiakManager)
         self.assertEqual(persistence_helper._riak_managers, [manager])
 
@@ -1727,6 +1736,7 @@ class TestPersistenceHelper(VumiTestCase):
         """
         persistence_helper = self.add_helper(PersistenceHelper(use_riak=True))
         manager = persistence_helper.get_riak_manager({"bucket_prefix": "foo"})
+        self.add_cleanup(manager.close_manager)
         self.assertEqual(manager.bucket_prefix, "vumitestfoo")
 
     def test_get_redis_manager_sync(self):
@@ -1736,6 +1746,7 @@ class TestPersistenceHelper(VumiTestCase):
         """
         persistence_helper = self.add_helper(PersistenceHelper(is_sync=True))
         manager = persistence_helper.get_redis_manager()
+        self.add_cleanup(manager.close_manager)
         self.assertIsInstance(manager, self._RedisManager)
         self.assertEqual(persistence_helper._redis_managers, [manager])
 
@@ -1749,6 +1760,7 @@ class TestPersistenceHelper(VumiTestCase):
         manager_d = persistence_helper.get_redis_manager()
         self.assertIsInstance(manager_d, Deferred)
         manager = yield manager_d
+        self.add_cleanup(manager.close_manager)
         self.assertIsInstance(manager, self._TxRedisManager)
         self.assertEqual(persistence_helper._redis_managers, [manager])
 
@@ -1910,3 +1922,13 @@ class TestPersistenceHelper(VumiTestCase):
             manager.load("bazcls", "baz", result="res"),
             ("loaded", "bazcls", "baz", "res"))
         self.assertEqual(loads, ["foo", "baz"])
+
+    def test_cleanup_asserts_riak_managers_closed(self):
+        """
+        .cleanup() asserts that Riak managers are closed.
+        """
+        persistence_helper = PersistenceHelper(assert_closed=True)
+        manager = FakeRiakManagerForCleanup('bucket1', [], client_closed=False)
+        persistence_helper._riak_managers.append(manager)
+        return self.assertFailure(
+            persistence_helper.cleanup(), PersistenceHelperError)
