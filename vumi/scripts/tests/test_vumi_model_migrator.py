@@ -86,7 +86,7 @@ class StubbedModelMigrator(ModelMigrator):
         return manager
 
 
-class TestModelMigrator(VumiTestCase):
+class TestVumiModelMigrator(VumiTestCase):
 
     def setUp(self):
         self.persistence_helper = self.add_helper(
@@ -95,6 +95,7 @@ class TestModelMigrator(VumiTestCase):
         self.riak_manager = self.persistence_helper.get_riak_manager({
             "bucket_prefix": self.expected_bucket_prefix,
         })
+        self.add_cleanup(self.riak_manager.close_manager)
         self.old_model = self.riak_manager.proxy(SimpleModelOld)
         self.model = self.riak_manager.proxy(SimpleModel)
         self.model_cls_path = fqpn(SimpleModel)

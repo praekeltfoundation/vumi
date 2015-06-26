@@ -43,6 +43,7 @@ class TestModelMigrator(VumiTestCase):
         self.riak_manager = self.persistence_helper.get_riak_manager({
             "bucket_prefix": self.expected_bucket_prefix,
         })
+        self.add_cleanup(self.riak_manager.close_manager)
         self.model = self.riak_manager.proxy(SimpleModel)
         self.model_cls_path = ".".join([
             SimpleModel.__module__, SimpleModel.__name__])

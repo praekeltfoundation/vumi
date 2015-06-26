@@ -652,7 +652,7 @@ class Manager(object):
     USE_MAPREDUCE_BUNCH_LOADING = False
 
     def __init__(self, client, bucket_prefix, load_bunch_size=None,
-                 mapreduce_timeout=None, store_versions=None):
+                 mapreduce_timeout=None, store_versions=None, parent=None):
         self.client = client
         self.bucket_prefix = bucket_prefix
         self.load_bunch_size = load_bunch_size or self.DEFAULT_LOAD_BUNCH_SIZE
@@ -660,12 +660,14 @@ class Manager(object):
                                   self.DEFAULT_MAPREDUCE_TIMEOUT)
         self._bucket_cache = {}
         self.store_versions = store_versions or {}
+        self._parent = parent
 
     def proxy(self, modelcls):
         return ModelProxy(self, modelcls)
 
     def sub_manager(self, sub_prefix):
-        return self.__class__(self.client, self.bucket_prefix + sub_prefix)
+        return self.__class__(
+            self.client, self.bucket_prefix + sub_prefix, parent=self)
 
     def bucket_name(self, modelcls_or_obj):
         return self.bucket_prefix + modelcls_or_obj.bucket
@@ -711,7 +713,7 @@ class Manager(object):
                                   " .from_config(...)")
 
     def close_manager(self):
-        """Close the client underlying this manager instance.
+        """Close the client underlying this manager instance, if necessary.
         """
         raise NotImplementedError("Sub-classes of Manager should implement"
                                   " .close_manager(...)")

@@ -39,6 +39,7 @@ class TestMessageLister(VumiTestCase):
         self.riak_manager = self.persistence_helper.get_riak_manager({
             "bucket_prefix": self.expected_bucket_prefix,
         })
+        self.add_cleanup(self.riak_manager.close_manager)
         self.redis_manager = yield self.persistence_helper.get_redis_manager()
         self.mdb = MessageStore(self.riak_manager, self.redis_manager)
         self.default_args = [

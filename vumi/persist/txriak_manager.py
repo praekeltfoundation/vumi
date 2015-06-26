@@ -131,7 +131,18 @@ class TxRiakManager(Manager):
             mapreduce_timeout=mapreduce_timeout, store_versions=store_versions)
 
     def close_manager(self):
-        return deferToThread(self.client.close)
+        if self._parent is None:
+            # Only top-level managers may close the client.
+            return deferToThread(self.client.close)
+        return succeed(None)
+
+    def _is_unclosed(self):
+        # This returns `True` if the manager needs to be explicitly closed and
+        # hasn't been closed yet. It should only be used in tests that ensure
+        # client objects aren't leaked.
+        if self._parent is not None:
+            return False
+        return not self.client._closed
 
     def riak_bucket(self, bucket_name):
         bucket = self.client.bucket(bucket_name)

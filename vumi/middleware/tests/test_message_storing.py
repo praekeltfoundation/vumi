@@ -15,7 +15,8 @@ class TestStoringMiddleware(VumiTestCase):
 
         # Create and stash a riak manager to clean up afterwards, because we
         # don't get access to the one inside the middleware.
-        self.persistence_helper.get_riak_manager()
+        manager = self.persistence_helper.get_riak_manager()
+        self.add_cleanup(manager.close_manager)
 
     @inlineCallbacks
     def setup_middleware(self, config={}):

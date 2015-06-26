@@ -62,8 +62,11 @@ class ModelMigrator(object):
         riak_config = {
             'bucket_prefix': options['bucket-prefix'],
         }
-        manager = self.get_riak_manager(riak_config)
-        self.model = manager.proxy(model_cls)
+        self.manager = self.get_riak_manager(riak_config)
+        self.model = self.manager.proxy(model_cls)
+
+    def cleanup(self):
+        self.manager.close_manager()
 
     def get_riak_manager(self, riak_config):
         return RiakManager.from_config(riak_config)
@@ -71,7 +74,7 @@ class ModelMigrator(object):
     def emit(self, s):
         print s
 
-    def run(self):
+    def _run(self):
         dry_run = self.options["dry-run"]
         if self.options["keys"] is not None:
             keys = self.options["keys"].split(",")
@@ -99,6 +102,12 @@ class ModelMigrator(object):
                 self.emit("  %s: %s" % (type(e).__name__, e))
             progress.update(i)
         self.emit("Done.")
+
+    def run(self):
+        try:
+            self._run()
+        finally:
+            self.cleanup()
 
 
 if __name__ == '__main__':

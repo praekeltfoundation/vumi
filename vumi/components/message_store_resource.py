@@ -250,9 +250,9 @@ class MessageStoreResourceWorker(BaseWorker):
     @inlineCallbacks
     def setup_worker(self):
         config = self.get_static_config()
-        riak = yield TxRiakManager.from_config(config.riak_manager)
+        self._riak = yield TxRiakManager.from_config(config.riak_manager)
         redis = yield TxRedisManager.from_config(config.redis_manager)
-        self.store = MessageStore(riak, redis)
+        self.store = MessageStore(self._riak, redis)
 
         site = build_web_site({
             config.web_path: MessageStoreResource(self.store),
@@ -261,8 +261,9 @@ class MessageStoreResourceWorker(BaseWorker):
         self.addService(
             StreamServerEndpointService(config.twisted_endpoint, site))
 
+    @inlineCallbacks
     def teardown_worker(self):
-        pass
+        yield self._riak.close_manager()
 
     def setup_connectors(self):
         # NOTE: not doing anything AMQP

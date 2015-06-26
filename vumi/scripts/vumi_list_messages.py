@@ -47,6 +47,9 @@ class MessageLister(object):
         self.manager = self.get_riak_manager(riak_config)
         self.mdb = MessageStore(self.manager, None)
 
+    def cleanup(self):
+        return self.manager.close_manager()
+
     def get_riak_manager(self, riak_config):
         return TxRiakManager.from_config(riak_config)
 
@@ -62,7 +65,7 @@ class MessageLister(object):
             index_page = yield next_page_d
 
     @inlineCallbacks
-    def run(self):
+    def _run(self):
         index_func = {
             "inbound": self.mdb.batch_inbound_keys_with_addresses,
             "outbound": self.mdb.batch_outbound_keys_with_addresses,
@@ -70,6 +73,13 @@ class MessageLister(object):
         index_page = yield index_func(
             self.options["batch"], max_results=self.options["index-page-size"])
         yield self.list_pages(index_page)
+
+    @inlineCallbacks
+    def run(self):
+        try:
+            yield self._run()
+        finally:
+            yield self.cleanup()
 
 
 def main(_reactor, name, *args):
