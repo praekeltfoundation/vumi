@@ -244,6 +244,14 @@ class Model(object):
         for field_name, descriptor in self.field_descriptors.iteritems():
             descriptor.pre_save(self)
 
+    def _field_changed(self, changed_field_name):
+        """
+        Called when a field value changes.
+        """
+        for field_name, descriptor in self.field_descriptors.iteritems():
+            if field_name != changed_field_name:
+                descriptor.model_field_changed(self, changed_field_name)
+
     def get_data(self):
         """
         Returns a dictionary with for all known field names & values.

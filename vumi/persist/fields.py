@@ -44,7 +44,8 @@ class FieldDescriptor(object):
         self.field.validate(value)
 
     def initialize(self, modelobj, value):
-        self.__set__(modelobj, value)
+        self.validate(value)
+        self.set_value(modelobj, value)
 
     def _add_index(self, modelobj, value):
         # XXX: The underlying libraries call str() on whatever index values we
@@ -58,11 +59,14 @@ class FieldDescriptor(object):
 
     def set_value(self, modelobj, value):
         """Set the value associated with this descriptor."""
+        old_raw_value = modelobj._riak_object.get_data().get(self.key)
         raw_value = self.field.to_riak(value)
         modelobj._riak_object.set_data_field(self.key, raw_value)
         if self.index_name is not None:
             modelobj._riak_object.remove_index(self.index_name)
             self._add_index(modelobj, raw_value)
+        if old_raw_value != raw_value:
+            modelobj._field_changed(self.key)
 
     def get_value(self, modelobj):
         """Get the value associated with this descriptor."""
@@ -77,6 +81,12 @@ class FieldDescriptor(object):
     def pre_save(self, modelobj):
         """
         Do any necessary computation before saving the data to Riak.
+        """
+        pass
+
+    def model_field_changed(self, modelobj, changed_field_name):
+        """
+        Do any necessary computation when a field changes.
         """
         pass
 
@@ -975,15 +985,17 @@ class ComputedValueDescriptor(FieldDescriptor):
         super(ComputedValueDescriptor, self).__init__(key, field)
         self.subfield_descriptor = field.field_type.get_descriptor(key)
 
-    def pre_save(self, modelobj):
+    def model_field_changed(self, modelobj, changed_field_name):
         self.set_value(modelobj, self.field.value_func(modelobj))
 
     def set_value(self, modelobj, value):
-        print repr(modelobj), repr(value)
         return self.subfield_descriptor.set_value(modelobj, value)
 
     def get_value(self, modelobj):
         return self.subfield_descriptor.get_value(modelobj)
+
+    def __set__(self, instance, value):
+        raise RuntimeError("Can't set value of computed field.")
 
 
 class ComputedValue(Field):
