@@ -57,16 +57,19 @@ class FieldDescriptor(object):
             return
         modelobj._riak_object.add_index(self.index_name, str(value))
 
+    def set_data_field(self, modelobj, raw_value):
+        old_raw_value = modelobj._riak_object.get_data().get(self.key)
+        modelobj._riak_object.set_data_field(self.key, raw_value)
+        if old_raw_value != raw_value:
+            modelobj._field_changed(self.key)
+
     def set_value(self, modelobj, value):
         """Set the value associated with this descriptor."""
-        old_raw_value = modelobj._riak_object.get_data().get(self.key)
         raw_value = self.field.to_riak(value)
-        modelobj._riak_object.set_data_field(self.key, raw_value)
+        self.set_data_field(modelobj, raw_value)
         if self.index_name is not None:
             modelobj._riak_object.remove_index(self.index_name)
             self._add_index(modelobj, raw_value)
-        if old_raw_value != raw_value:
-            modelobj._field_changed(self.key)
 
     def get_value(self, modelobj):
         """Get the value associated with this descriptor."""
@@ -537,7 +540,7 @@ class ListOfDescriptor(FieldDescriptor):
         return self.field.subfield_from_riak(raw_item)
 
     def _set_model_data(self, modelobj, raw_values):
-        modelobj._riak_object.set_data_field(self.key, raw_values)
+        self.set_data_field(modelobj, raw_values)
         if self.index_name is not None:
             modelobj._riak_object.remove_index(self.index_name)
             for value in raw_values:
@@ -645,7 +648,7 @@ class SetOfDescriptor(FieldDescriptor):
 
     def _set_model_data(self, modelobj, raw_values):
         raw_values = sorted(set(raw_values))
-        modelobj._riak_object.set_data_field(self.key, raw_values)
+        self.set_data_field(modelobj, raw_values)
         if self.index_name is not None:
             modelobj._riak_object.remove_index(self.index_name)
             for value in raw_values:
@@ -794,7 +797,7 @@ class ForeignKeyDescriptor(FieldDescriptor):
         return modelobj._riak_object.get_data().get(self.key)
 
     def set_foreign_key(self, modelobj, foreign_key):
-        modelobj._riak_object.set_data_field(self.key, foreign_key)
+        self.set_data_field(modelobj, foreign_key)
         modelobj._riak_object.remove_index(self.index_name)
         if foreign_key is not None:
             self._add_index(modelobj, foreign_key)
@@ -890,7 +893,7 @@ class ManyToManyDescriptor(ForeignKeyDescriptor):
             indexes = [
                 value for name, value in modelobj._riak_object.get_indexes()
                 if name == self.index_name]
-            modelobj._riak_object.set_data_field(self.key, indexes[:])
+            self.set_data_field(modelobj, indexes[:])
 
     def get_foreign_keys(self, modelobj):
         return modelobj._riak_object.get_data()[self.key][:]
@@ -899,14 +902,14 @@ class ManyToManyDescriptor(ForeignKeyDescriptor):
         if foreign_key not in self.get_foreign_keys(modelobj):
             field_list = modelobj._riak_object.get_data().get(self.key, [])
             field_list.append(foreign_key)
-            modelobj._riak_object.set_data_field(self.key, field_list)
+            self.set_data_field(modelobj, field_list)
         self._add_index(modelobj, foreign_key)
 
     def remove_foreign_key(self, modelobj, foreign_key):
         if foreign_key in self.get_foreign_keys(modelobj):
             field_list = modelobj._riak_object.get_data().get(self.key, [])
             field_list.remove(foreign_key)
-            modelobj._riak_object.set_data_field(self.key, field_list)
+            self.set_data_field(modelobj, field_list)
         modelobj._riak_object.remove_index(self.index_name, foreign_key)
 
     def load_foreign_objects(self, modelobj, manager=None):
@@ -924,7 +927,7 @@ class ManyToManyDescriptor(ForeignKeyDescriptor):
         self.remove_foreign_key(modelobj, otherobj.key)
 
     def clear_keys(self, modelobj):
-        modelobj._riak_object.set_data_field(self.key, [])
+        self.set_data_field(modelobj, [])
         modelobj._riak_object.remove_index(self.index_name)
 
 
