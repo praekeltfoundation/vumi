@@ -57,24 +57,38 @@ class FieldDescriptor(object):
             return
         modelobj._riak_object.add_index(self.index_name, str(value))
 
-    def set_data_field(self, modelobj, raw_value):
-        old_raw_value = modelobj._riak_object.get_data().get(self.key)
-        modelobj._riak_object.set_data_field(self.key, raw_value)
+    def get_riak_data(self, modelobj, default=None, key=None):
+        if key is None:
+            key = self.key
+        return modelobj._riak_object.get_data().get(key, default)
+
+    def set_riak_data(self, modelobj, raw_value, key=None):
+        if key is None:
+            key = self.key
+        old_raw_value = modelobj._riak_object.get_data().get(key)
+        modelobj._riak_object.set_data_field(key, raw_value)
         if old_raw_value != raw_value:
+            modelobj._field_changed(self.key)
+
+    def delete_riak_data(self, modelobj, key=None):
+        if key is None:
+            key = self.key
+        old_raw_value = modelobj._riak_object.get_data().get(key)
+        modelobj._riak_object.delete_data_field(key)
+        if old_raw_value is not None:
             modelobj._field_changed(self.key)
 
     def set_value(self, modelobj, value):
         """Set the value associated with this descriptor."""
         raw_value = self.field.to_riak(value)
-        self.set_data_field(modelobj, raw_value)
+        self.set_riak_data(modelobj, raw_value)
         if self.index_name is not None:
             modelobj._riak_object.remove_index(self.index_name)
             self._add_index(modelobj, raw_value)
 
     def get_value(self, modelobj):
         """Get the value associated with this descriptor."""
-        raw_value = modelobj._riak_object.get_data().get(self.key)
-        return self.field.from_riak(raw_value)
+        return self.field.from_riak(self.get_riak_data(modelobj))
 
     def clean(self, modelobj):
         """Do any cleanup of the model data for this descriptor after loading
@@ -295,7 +309,7 @@ class VumiMessageDescriptor(FieldDescriptor):
     def _clear_keys(self, modelobj):
         for key in modelobj._riak_object.get_data().keys():
             if key.startswith(self.prefix):
-                modelobj._riak_object.delete_data_field(key)
+                self.delete_riak_data(modelobj, key)
 
     def _timestamp_to_json(self, dt):
         return format_vumi_date(dt)
@@ -315,7 +329,7 @@ class VumiMessageDescriptor(FieldDescriptor):
             if key == "timestamp":
                 value = self._timestamp_to_json(value)
             full_key = "%s%s" % (self.prefix, key)
-            modelobj._riak_object.set_data_field(full_key, value)
+            self.set_riak_data(modelobj, value, full_key)
 
     def get_value(self, modelobj):
         """Get the value associated with this descriptor."""
@@ -435,22 +449,19 @@ class DynamicDescriptor(FieldDescriptor):
         items = [(self.prefix + key, self.field.subfield_to_riak(value))
                  for key, value in otherdict.iteritems()]
         for key, value in items:
-            modelobj._riak_object.set_data_field(key, value)
+            self.set_riak_data(modelobj, value, key=key)
 
     def get_dynamic_value(self, modelobj, dynamic_key):
-        key = self.prefix + dynamic_key
         return self.field.subfield_from_riak(
-            modelobj._riak_object.get_data().get(key))
+            self.get_riak_data(modelobj, key=(self.prefix + dynamic_key)))
 
     def set_dynamic_value(self, modelobj, dynamic_key, value):
         self.field.validate_subfield(value)
-        key = self.prefix + dynamic_key
         value = self.field.subfield_to_riak(value)
-        modelobj._riak_object.set_data_field(key, value)
+        self.set_riak_data(modelobj, value, self.prefix + dynamic_key)
 
     def delete_dynamic_value(self, modelobj, dynamic_key):
-        key = self.prefix + dynamic_key
-        modelobj._riak_object.delete_data_field(key)
+        self.delete_riak_data(modelobj, self.prefix + dynamic_key)
 
     def has_dynamic_key(self, modelobj, dynamic_key):
         key = self.prefix + dynamic_key
@@ -535,12 +546,11 @@ class ListOfDescriptor(FieldDescriptor):
         return ListProxy(self, modelobj)
 
     def get_list_item(self, modelobj, list_idx):
-        raw_list = modelobj._riak_object.get_data().get(self.key, [])
-        raw_item = raw_list[list_idx]
+        raw_item = self.get_riak_data(modelobj, [])[list_idx]
         return self.field.subfield_from_riak(raw_item)
 
     def _set_model_data(self, modelobj, raw_values):
-        self.set_data_field(modelobj, raw_values)
+        self.set_riak_data(modelobj, raw_values)
         if self.index_name is not None:
             modelobj._riak_object.remove_index(self.index_name)
             for value in raw_values:
@@ -554,38 +564,38 @@ class ListOfDescriptor(FieldDescriptor):
     def set_list_item(self, modelobj, list_idx, value):
         self.field.validate_subfield(value)
         raw_value = self.field.subfield_to_riak(value)
-        field_list = modelobj._riak_object.get_data().get(self.key, [])
+        field_list = self.get_riak_data(modelobj, [])
         field_list[list_idx] = raw_value
         self._set_model_data(modelobj, field_list)
 
     def del_list_item(self, modelobj, list_idx):
-        field_list = modelobj._riak_object.get_data().get(self.key, [])
+        field_list = self.get_riak_data(modelobj, [])
         del field_list[list_idx]
         self._set_model_data(modelobj, field_list)
 
     def append_list_item(self, modelobj, value):
         self.field.validate_subfield(value)
         raw_value = self.field.subfield_to_riak(value)
-        field_list = modelobj._riak_object.get_data().get(self.key, [])
+        field_list = self.get_riak_data(modelobj, [])
         field_list.append(raw_value)
         self._set_model_data(modelobj, field_list)
 
     def remove_list_item(self, modelobj, value):
         self.field.validate_subfield(value)
         raw_value = self.field.subfield_to_riak(value)
-        field_list = modelobj._riak_object.get_data().get(self.key, [])
+        field_list = self.get_riak_data(modelobj, [])
         field_list.remove(raw_value)
         self._set_model_data(modelobj, field_list)
 
     def extend_list(self, modelobj, values):
         map(self.field.validate_subfield, values)
         raw_values = [self.field.subfield_to_riak(value) for value in values]
-        field_list = modelobj._riak_object.get_data().get(self.key, [])
+        field_list = self.get_riak_data(modelobj, [])
         field_list.extend(raw_values)
         self._set_model_data(modelobj, field_list)
 
     def iter_list(self, modelobj):
-        raw_list = modelobj._riak_object.get_data().get(self.key, [])
+        raw_list = self.get_riak_data(modelobj, [])
         for raw_value in raw_list:
             yield self.field.subfield_from_riak(raw_value)
 
@@ -644,11 +654,11 @@ class SetOfDescriptor(FieldDescriptor):
         return SetProxy(self, modelobj)
 
     def _get_model_data(self, modelobj):
-        return set(modelobj._riak_object.get_data().get(self.key, []))
+        return set(self.get_riak_data(modelobj, []))
 
     def _set_model_data(self, modelobj, raw_values):
         raw_values = sorted(set(raw_values))
-        self.set_data_field(modelobj, raw_values)
+        self.set_riak_data(modelobj, raw_values)
         if self.index_name is not None:
             modelobj._riak_object.remove_index(self.index_name)
             for value in raw_values:
@@ -787,17 +797,16 @@ class ForeignKeyDescriptor(FieldDescriptor):
             indexes = [
                 value for name, value in modelobj._riak_object.get_indexes()
                 if name == self.index_name]
-            modelobj._riak_object.set_data_field(
-                self.key, (indexes or [None])[0])
+            self.set_riak_data(modelobj, (indexes or [None])[0])
 
     def get_value(self, modelobj):
         return ForeignKeyProxy(self, modelobj)
 
     def get_foreign_key(self, modelobj):
-        return modelobj._riak_object.get_data().get(self.key)
+        return self.get_riak_data(modelobj)
 
     def set_foreign_key(self, modelobj, foreign_key):
-        self.set_data_field(modelobj, foreign_key)
+        self.set_riak_data(modelobj, foreign_key)
         modelobj._riak_object.remove_index(self.index_name)
         if foreign_key is not None:
             self._add_index(modelobj, foreign_key)
@@ -893,23 +902,23 @@ class ManyToManyDescriptor(ForeignKeyDescriptor):
             indexes = [
                 value for name, value in modelobj._riak_object.get_indexes()
                 if name == self.index_name]
-            self.set_data_field(modelobj, indexes[:])
+            self.set_riak_data(modelobj, indexes[:])
 
     def get_foreign_keys(self, modelobj):
-        return modelobj._riak_object.get_data()[self.key][:]
+        return self.get_riak_data(modelobj, [])[:]
 
     def add_foreign_key(self, modelobj, foreign_key):
         if foreign_key not in self.get_foreign_keys(modelobj):
-            field_list = modelobj._riak_object.get_data().get(self.key, [])
+            field_list = self.get_riak_data(modelobj, [])
             field_list.append(foreign_key)
-            self.set_data_field(modelobj, field_list)
+            self.set_riak_data(modelobj, field_list)
         self._add_index(modelobj, foreign_key)
 
     def remove_foreign_key(self, modelobj, foreign_key):
         if foreign_key in self.get_foreign_keys(modelobj):
-            field_list = modelobj._riak_object.get_data().get(self.key, [])
+            field_list = self.get_riak_data(modelobj, [])
             field_list.remove(foreign_key)
-            self.set_data_field(modelobj, field_list)
+            self.set_riak_data(modelobj, field_list)
         modelobj._riak_object.remove_index(self.index_name, foreign_key)
 
     def load_foreign_objects(self, modelobj, manager=None):
@@ -927,7 +936,7 @@ class ManyToManyDescriptor(ForeignKeyDescriptor):
         self.remove_foreign_key(modelobj, otherobj.key)
 
     def clear_keys(self, modelobj):
-        self.set_data_field(modelobj, [])
+        self.set_riak_data(modelobj, [])
         modelobj._riak_object.remove_index(self.index_name)
 
 
