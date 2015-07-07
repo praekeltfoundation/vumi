@@ -1329,7 +1329,7 @@ class TestComputedValue(VumiTestCase):
 
     @needs_riak
     @Manager.calls_manager
-    def test_computedindex_field(self):
+    def test_computedvalue_field(self):
         """
         A `ComputedValue` field gets its value from the function it's given.
         """
@@ -1367,7 +1367,7 @@ class TestComputedValue(VumiTestCase):
         })
 
     @needs_riak
-    def test_computedindex_field_update(self):
+    def test_computedvalue_field_update(self):
         """
         A `ComputedValue` field's value (and index) are updated when a field
         value changes.

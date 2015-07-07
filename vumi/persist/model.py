@@ -238,13 +238,6 @@ class Model(object):
         for field_name, descriptor in self.field_descriptors.iteritems():
             descriptor.clean(self)
 
-    def pre_save(self):
-        """
-        Called before saving to allow computed fields to do their thing.
-        """
-        for field_name, descriptor in self.field_descriptors.iteritems():
-            descriptor.pre_save(self)
-
     def _field_changed(self, changed_field_name):
         """
         Called when a field value changes.
@@ -288,7 +281,6 @@ class Model(object):
             A deferred that fires once the data is saved (or None if
             using a synchronous manager).
         """
-        self.pre_save()
         return self.manager.store(self)
 
     def delete(self):

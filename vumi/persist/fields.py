@@ -95,12 +95,6 @@ class FieldDescriptor(object):
         the data from Riak."""
         pass
 
-    def pre_save(self, modelobj):
-        """
-        Do any necessary computation before saving the data to Riak.
-        """
-        pass
-
     def model_field_changed(self, modelobj, changed_field_name):
         """
         Do any necessary computation when a field changes.
@@ -1016,8 +1010,8 @@ class ComputedValue(Field):
 
     :param value_func:
         A function that takes a model instance as its only parameter and
-        returns a value for the field. This is called at save time to compute
-        the field value.
+        returns a value for the field. This is called whenever the value of
+        another field changes to compute the value of this field.
 
     :param Field field_type:
         The field specification for the computed value. Default is Unicode().
