@@ -673,7 +673,7 @@ class ModelTestMixin(object):
         while keys_page is not None:
             keys.extend(list(keys_page))
             if keys_page.has_next_page():
-                self.assertEqual(len(list(keys_page)), 1)
+                self.assertEqual(len(keys_page), 1)
                 keys_page = yield keys_page.next_page()
             else:
                 keys_page = None
