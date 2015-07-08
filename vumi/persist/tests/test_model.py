@@ -673,7 +673,7 @@ class ModelTestMixin(object):
         while keys_page is not None:
             keys.extend(list(keys_page))
             if keys_page.has_next_page():
-                self.assertEqual(len(list(keys_page)), 1)
+                self.assertEqual(len(keys_page), 1)
                 keys_page = yield keys_page.next_page()
             else:
                 keys_page = None
@@ -747,6 +747,35 @@ class ModelTestMixin(object):
             self.fail('Expected VumiRiakError.')
         except VumiRiakError:
             pass
+
+    @Manager.calls_manager
+    def test_index_keys_page_length(self):
+        """
+        The length function for the page returns the correct length for two
+        pages of different length.
+        """
+        indexed_model = self.manager.proxy(IndexedModel)
+        yield indexed_model("foo1", a=1, b=u"one").save()
+        yield indexed_model("foo2", a=1, b=u"one").save()
+        yield indexed_model("foo3", a=1, b=None).save()
+
+        keys1 = yield indexed_model.index_keys_page('a', 1, max_results=2)
+        self.assertEqual(len(keys1), 2)
+
+        keys2 = yield keys1.next_page()
+        self.assertEqual(len(keys2), 1)
+
+    @Manager.calls_manager
+    def test_index_keys_empty_page_length(self):
+        """
+        The length function for the page returns a length of 0 for an empty
+        page.
+        """
+        indexed_model = self.manager.proxy(IndexedModel)
+        yield indexed_model("foo1", a=2, b=u"one").save()
+
+        keys1 = yield indexed_model.index_keys_page('a', 1)
+        self.assertEqual(len(keys1), 0)
 
     @Manager.calls_manager
     def test_index_keys_quoting(self):
