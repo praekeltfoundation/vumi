@@ -66,6 +66,8 @@ class FieldDescriptor(object):
         if key is None:
             key = self.key
         old_raw_value = modelobj._riak_object.get_data().get(key)
+        # We set this even if it's "unmodified" because we want explicit `None`
+        # values rather than missing fields.
         modelobj._riak_object.set_data_field(key, raw_value)
         if old_raw_value != raw_value:
             modelobj._field_changed(self.key)
