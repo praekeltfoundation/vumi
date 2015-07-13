@@ -102,6 +102,9 @@ class VumiIndexPageBase(object):
             raise NotImplementedError("Streaming is not currently supported.")
         return (_to_unicode(item) for item in self._index_page)
 
+    def __len__(self):
+        return len(self._index_page)
+
     def __eq__(self, other):
         return self._index_page.__eq__(other)
 

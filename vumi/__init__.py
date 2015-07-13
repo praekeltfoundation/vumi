@@ -2,4 +2,4 @@
 Vumi scalable text messaging engine.
 """
 
-__version__ = "0.5.21a0"
+__version__ = "0.5.22a0"
