@@ -11,7 +11,7 @@ from vumi.message import Message, TransportUserMessage
 from vumi.persist.fields import (
     ValidationError, Field, Integer, Unicode, Tag, Timestamp, Json,
     ListOf, SetOf, Dynamic, FieldWithSubtype, Boolean, VumiMessage,
-    ForeignKey, ManyToMany)
+    ForeignKey, ManyToMany, ComputedValue)
 from vumi.persist.model import Manager, Model
 from vumi.tests.helpers import VumiTestCase, MessageHelper, import_skip
 
@@ -113,6 +113,18 @@ class ModelFieldTestsDecorator(object):
 model_field_tests = ModelFieldTestsDecorator()
 
 
+def watch_model_changes(modelobj):
+    changed_field_names = []
+    old_field_changed = modelobj._field_changed
+
+    def new_field_changed(changed_field_name):
+        changed_field_names.append(changed_field_name)
+        return old_field_changed
+
+    modelobj._field_changed = new_field_changed
+    return changed_field_names
+
+
 @model_field_tests
 class TestBaseField(VumiTestCase):
     def test_validate(self):
@@ -169,6 +181,27 @@ class TestBaseField(VumiTestCase):
         self.assertEqual(m_list.f, ["string", 1])
         m_dict = yield base_model.load("m_dict")
         self.assertEqual(m_dict.f, {"key": "val"})
+
+    @needs_riak
+    @Manager.calls_manager
+    def test_field_changed_notification(self):
+        """
+        The model object is notified about changes to the field value.
+        """
+        base_model = self.manager.proxy(self.BaseFieldModel)
+        m_str = base_model("m_str", f="string")
+        field_changes = watch_model_changes(m_str)
+
+        self.assertEqual(field_changes, [])
+        # Field set to previous value, no notification.
+        m_str.f = "string"
+        self.assertEqual(field_changes, [])
+        # Field set to new value, notification sent.
+        m_str.f = "string2"
+        self.assertEqual(field_changes, ["f"])
+        # Model saved, no notification.
+        yield m_str.save()
+        self.assertEqual(field_changes, ["f"])
 
 
 @model_field_tests
@@ -1246,3 +1279,134 @@ class TestManyToMany(VumiTestCase):
         results_p1 = yield s2.backlinks.manytomanymodel_keys()
         self.assertEqual(sorted(results_p1), ["bar1"])
         self.assertEqual(results_p1.has_next_page(), False)
+
+
+@model_field_tests
+class TestComputedValue(VumiTestCase):
+
+    def test_validate_default_unicode(self):
+        """
+        By default, a ComputedValue field has a Unicode value.
+        """
+        comp = ComputedValue(lambda m: NotImplemented)
+        comp.validate(u"")
+        comp.validate(u"a")
+        comp.validate(u"æ")
+        comp.validate(u"foé")
+        self.assertRaises(ValidationError, comp.validate, "")
+        self.assertRaises(ValidationError, comp.validate, "foo")
+        self.assertRaises(ValidationError, comp.validate, 3)
+
+    def test_validate_listof(self):
+        """
+        If an explicit subtype is provided, its validation is used.
+        """
+        comp = ComputedValue(lambda m: NotImplemented, ListOf())
+        comp.validate([u'foo', u'bar'])
+        self.assertRaises(ValidationError, comp.validate,
+                          u'this is not a list')
+        self.assertRaises(ValidationError, comp.validate, ['a', 2])
+        self.assertRaises(ValidationError, comp.validate, [1, 2])
+
+    class ComputedValueModel(Model):
+        """
+        Toy model for ComputedValue tests.
+        """
+        a = Integer()
+        b = Unicode()
+        c = ListOf(Unicode())
+        a_with_b = ComputedValue(
+            lambda m: u"%s::%s" % (m.a, m.b), Unicode(index=True))
+        b_with_a = ComputedValue(lambda m: u"%s::%s" % (m.b, m.a), Unicode())
+        a_with_c = ComputedValue(
+            lambda m: [u"%s::%s" % (m.a, c) for c in m.c],
+            ListOf(Unicode(), index=True))
+
+    def assert_indexes(self, mdl, indexes):
+        self.assertEqual(
+            mdl._riak_object.get_indexes(),
+            set((k, v) for k, vs in indexes.items() for v in vs))
+
+    @needs_riak
+    @Manager.calls_manager
+    def test_computedvalue_field(self):
+        """
+        A `ComputedValue` field gets its value from the function it's given.
+        """
+        ci_model = self.manager.proxy(self.ComputedValueModel)
+        m1 = ci_model("foo", a=7, b=u"bar", c=[u"thing1", u"thing2"])
+
+        # Value and index are computed at creation time.
+        self.assertEqual(m1.a_with_b, u"7::bar")
+        self.assertEqual(m1.b_with_a, u"bar::7")
+        self.assertEqual(list(m1.a_with_c), [u"7::thing1", u"7::thing2"])
+        self.assert_indexes(m1, {
+            "a_with_b_bin": ["7::bar"],
+            "a_with_c_bin": ["7::thing1", "7::thing2"],
+        })
+
+        # Value and index are correct after save.
+        yield m1.save()
+        self.assertEqual(m1.a_with_b, u"7::bar")
+        self.assertEqual(m1.b_with_a, u"bar::7")
+        self.assertEqual(list(m1.a_with_c), [u"7::thing1", u"7::thing2"])
+        self.assert_indexes(m1, {
+            "a_with_b_bin": ["7::bar"],
+            "a_with_c_bin": ["7::thing1", "7::thing2"],
+        })
+
+        # Value and index are correct after load.
+        m2 = yield ci_model.load("foo")
+        self.assertEqual(m1.a, m2.a)
+        self.assertEqual(m1.b, m2.b)
+        self.assertEqual(m1.a_with_b, "7::bar")
+        self.assertEqual(list(m1.a_with_c), ["7::thing1", "7::thing2"])
+        self.assert_indexes(m1, {
+            "a_with_b_bin": ["7::bar"],
+            "a_with_c_bin": ["7::thing1", "7::thing2"],
+        })
+
+    @needs_riak
+    def test_computedvalue_field_update(self):
+        """
+        A `ComputedValue` field's value (and index) are updated when a field
+        value changes.
+
+        This test needs a Riak manager, but never actually calls Riak.
+        """
+        ci_model = self.manager.proxy(self.ComputedValueModel)
+        m1 = ci_model("foo", a=7, b=u"bar", c=[u"thing1", u"thing2"])
+
+        # Value and index are computed at creation time.
+        self.assertEqual(m1.a_with_b, u"7::bar")
+        self.assertEqual(m1.b_with_a, u"bar::7")
+        self.assertEqual(list(m1.a_with_c), [u"7::thing1", u"7::thing2"])
+        self.assert_indexes(m1, {
+            "a_with_b_bin": ["7::bar"],
+            "a_with_c_bin": ["7::thing1", "7::thing2"],
+        })
+
+        # Value and index are recomputed after a field changes.
+        m1.a = 8
+        self.assertEqual(m1.a_with_b, u"8::bar")
+        self.assertEqual(m1.b_with_a, u"bar::8")
+        self.assertEqual(list(m1.a_with_c), [u"8::thing1", u"8::thing2"])
+        self.assert_indexes(m1, {
+            "a_with_b_bin": ["8::bar"],
+            "a_with_c_bin": ["8::thing1", "8::thing2"],
+        })
+
+    @needs_riak
+    def test_computedindex_field_cannot_set_value(self):
+        """
+        A `ComputedValue` field cannot have its value set manually.
+
+        This test needs a Riak manager, but never actually calls Riak.
+        """
+        ci_model = self.manager.proxy(self.ComputedValueModel)
+        m1 = ci_model("foo", a=7, b=u"bar")
+
+        # Manually setting the value is impossible.
+        def set_value():
+            m1.a_with_b = u"a thing"
+        self.assertRaises(RuntimeError, set_value)

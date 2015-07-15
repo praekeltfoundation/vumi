@@ -207,6 +207,7 @@ class Model(object):
     #       or .by_<index-name> method
 
     def __init__(self, manager, key, _riak_object=None, **field_values):
+        self._fields_changed = []
         self.manager = manager
         self.key = key
         if _riak_object is not None:
@@ -236,6 +237,28 @@ class Model(object):
     def clean(self):
         for field_name, descriptor in self.field_descriptors.iteritems():
             descriptor.clean(self)
+
+    def _field_changed(self, changed_field_name):
+        """
+        Called when a field value changes.
+        """
+        already_notifying = bool(self._fields_changed)
+        if changed_field_name not in self._fields_changed:
+            self._fields_changed.append(changed_field_name)
+        if not already_notifying:
+            self._notify_fields_changed()
+
+    def _notify_fields_changed(self):
+        while self._fields_changed:
+            # We only update self._fields_changed after processing, because
+            # we're also using it to track whether we're currently processing.
+            self._notify_field_changed(self._fields_changed[0])
+            self._fields_changed[:1] = []
+
+    def _notify_field_changed(self, changed_field_name):
+        for field_name, descriptor in self.field_descriptors.iteritems():
+            if field_name != changed_field_name:
+                descriptor.model_field_changed(self, changed_field_name)
 
     def get_data(self):
         """

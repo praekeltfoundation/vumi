@@ -7,7 +7,8 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from vumi.persist.model import (
     Model, Manager, ModelMigrator, ModelMigrationError, VumiRiakError)
 from vumi.persist import fields
-from vumi.persist.fields import ValidationError, Integer, Unicode, Dynamic
+from vumi.persist.fields import (
+    ValidationError, Integer, Unicode, Dynamic, Field, FieldDescriptor)
 from vumi.tests.helpers import VumiTestCase, import_skip
 
 
@@ -1091,6 +1092,67 @@ class ModelTestMixin(object):
         self.assertEqual(new.keep['bar'], u"bar-val")
         self.assertEqual(new.keep['baz'], u"baz-val")
         self.assertFalse("bar" in new.drop)
+
+    def test_update_if_field_changed(self):
+        """
+        If a field value changes, model_field_changed() is called on other
+        field descriptors.
+        """
+        mfc_called_fields = []
+
+        class DetectChangedFieldDescripor(FieldDescriptor):
+            def model_field_changed(self, modelobj, changed_field_name):
+                mfc_called_fields.append((self.key, changed_field_name))
+
+        class DetectChangedField(Field):
+            descriptor_class = DetectChangedFieldDescripor
+
+        class DetectChangedFieldModel(Model):
+            a = DetectChangedField(null=True)
+            b = DetectChangedField(null=True)
+
+        dcf_model = self.manager.proxy(DetectChangedFieldModel)
+        dcf = dcf_model("foo")
+
+        self.assertEqual(mfc_called_fields, [])
+        # Change .a to a new value and assert that .b was notified.
+        dcf.a = "aval"
+        self.assertEqual(mfc_called_fields, [("b", "a")])
+        # Change .b to a new value and assert that .a was notified.
+        dcf.b = "bval"
+        self.assertEqual(mfc_called_fields, [("b", "a"), ("a", "b")])
+
+    def test_no_update_if_field_unchanged(self):
+        """
+        If a field value is set to its previous value, model_field_changed() is
+        not called on other field descriptors.
+        """
+        mfc_called_fields = []
+
+        class DetectChangedFieldDescripor(FieldDescriptor):
+            def model_field_changed(self, modelobj, changed_field_name):
+                mfc_called_fields.append((self.key, changed_field_name))
+
+        class DetectChangedField(Field):
+            descriptor_class = DetectChangedFieldDescripor
+
+        class DetectChangedFieldModel(Model):
+            a = DetectChangedField(null=True)
+            b = DetectChangedField(null=True)
+
+        dcf_model = self.manager.proxy(DetectChangedFieldModel)
+        dcf = dcf_model("foo")
+
+        self.assertEqual(mfc_called_fields, [])
+        # Change .a to a new value and assert that .b was notified.
+        dcf.a = "aval"
+        self.assertEqual(mfc_called_fields, [("b", "a")])
+        # Change .a to its existing value and assert that .b was not notified.
+        dcf.a = "aval"
+        self.assertEqual(mfc_called_fields, [("b", "a")])
+        # Change .a to another new value and assert that .b was notified.
+        dcf.a = "aval2"
+        self.assertEqual(mfc_called_fields, [("b", "a"), ("b", "a")])
 
 
 class TestModelOnTxRiak(VumiTestCase, ModelTestMixin):
