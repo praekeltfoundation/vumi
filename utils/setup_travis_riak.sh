@@ -21,7 +21,6 @@ case "${RIAK_VERSION}" in
         ;;
     1.4.*)
         echo "Using Riak ${RIAK_VERSION} with v1.4 config..."
-        install_riak
         cp utils/app.config riak/etc/
         ;;
     *)
