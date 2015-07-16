@@ -24,8 +24,9 @@ matrix:
       env: TWISTED_VERSION="Twisted" RIAK_VERSION="1.4.12" NO_COVERAGE="1"
 
 cache:
-  - $HOME/.cache/pip
-  - $HOME/downloads
+  directories:
+    - $HOME/.cache/pip
+    - $HOME/downloads
 services:
   - redis-server
 
