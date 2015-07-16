@@ -1,36 +1,28 @@
-#!/bin/bash
-
-# NOTE: This needs to be run as root.
+#!/bin/bash -e
 
 RIAK_VERSION="${1?Please provide Riak version.}"
+RIAK_FILENAME=riak-${RIAK_VERSION}-precise.tgz
+RIAK_DOWNLOAD=$HOME/download/$RIAK_FILENAME
 
 echo "Setting up Riak with RIAK_VERSION='${RIAK_VERSION}'"
 
-# Stop Riak (if it's running) so we can change stuff underneath it.
-service riak stop
+if [ ! -f $RIAK_DOWNLOAD ]; then
+    mkdir -p $HOME/download
+    wget -O $RIAK_DOWNLOAD http://jerith.za.net/files/riak/$RIAK_FILENAME
+fi
 
-
-function install_riak() {
-    # We're installing our own Riak version, so we add Basho's repo.
-    curl http://apt.basho.com/gpg/basho.apt.key | apt-key add -
-    bash -c "echo deb http://apt.basho.com $(lsb_release -sc) main > /etc/apt/sources.list.d/basho.list"
-    apt-get -qq update
-    apt-get install -qq -y --force-yes riak="${RIAK_VERSION}"
-}
+tar xzf $RIAK_DOWNLOAD
 
 
 case "${RIAK_VERSION}" in
-    current)
-        # We want to use the existing Riak (2.0.something at time of writing).
-        # We need to copy over our own advanced config to enable legacy search.
-        echo "Using installed Riak with v2.0 extra config for legacy search..."
-        cp utils/advanced.config /etc/riak/advanced.config
+    2.1.*)
+        echo "Using Riak ${RIAK_VERSION} with v2.1 config..."
+        cp utils/advanced.config riak/etc/
         ;;
     1.4.*)
-        # We want Riak 1.4.x, so install it and copy over a suitable config.
-        echo "Installing Riak ${RIAK_VERSION} with v1.4 config..."
+        echo "Using Riak ${RIAK_VERSION} with v1.4 config..."
         install_riak
-        cp utils/app.config /etc/riak/app.config
+        cp utils/app.config riak/etc/
         ;;
     *)
         # Unexpected version.
@@ -39,18 +31,4 @@ case "${RIAK_VERSION}" in
         ;;
 esac
 
-
-# Set the default ulimit if it isn't already set.
-if [ -e /etc/default/riak ]; then
-    echo "/etc/default/riak already exists and contains the following:"
-    cat /etc/default/riak
-    echo "-------"
-else
-    echo "/etc/default/riak does not exist, creating it."
-    echo "ulimit -n 65536" > /etc/default/riak
-fi
-
-
-# Get rid of all the existing Riak data so we start fresh and then start fresh.
-rm -rf /var/lib/riak/*
-service riak start
+riak/bin/riak start
