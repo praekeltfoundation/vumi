@@ -12,7 +12,7 @@ env:
 matrix:
   include:
     # Test against the oldest version of Twisted that we claim to support.
-    # Also test against the Travis-provided version of Riak (currently 2.0.x).
+    # Also test against Riak 2.1.1.
     # This is a separate matrix inclusion to avoid spawning unnecessary builds.
     # Although there are two different things we're testing against here, they
     # are orthogonal and any failures should be easily attributable to either
