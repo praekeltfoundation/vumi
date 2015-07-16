@@ -1,3 +1,5 @@
+sudo: false # We want container builds.
+
 language: python
 python:
   - "2.6"
@@ -21,6 +23,9 @@ matrix:
     - python: "pypy"
       env: TWISTED_VERSION="Twisted" RIAK_VERSION="1.4.12" NO_COVERAGE="1"
 
+cache:
+  - $HOME/.cache/pip
+  - $HOME/downloads
 services:
   - redis-server
 
