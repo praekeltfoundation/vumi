@@ -14,6 +14,6 @@ if [ ! -f $RIAK_DOWNLOAD ]; then
     wget -O $RIAK_DOWNLOAD $BASE_URL/$RIAK_FILENAME
 fi
 
-tar xzf $RIAK_DOWNLOAD -C $HOME/
+tar xjf $RIAK_DOWNLOAD -C $HOME/
 
 $HOME/riak/bin/riak start
