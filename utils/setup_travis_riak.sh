@@ -17,6 +17,7 @@ tar xzf $RIAK_DOWNLOAD -C $HOME/
 case "${RIAK_VERSION}" in
     2.1.*)
         echo "Using Riak ${RIAK_VERSION} with v2.1 config..."
+        cp utils/riak.conf $HOME/riak/etc/
         cp utils/advanced.config $HOME/riak/etc/
         ;;
     1.4.*)
