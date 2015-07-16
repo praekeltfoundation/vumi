@@ -34,6 +34,8 @@ before_install:
   # Set up an appropriate version of Riak.
   - utils/setup_travis_riak.sh "${RIAK_VERSION}"
 install:
+  # Travis seems to have pip 6.x, which doesn't build and cache wheels.
+  - "pip install 'pip>=7.1.0'"
   - "pip install ${TWISTED_VERSION}"
   - "pip install -r requirements.pip"
   - "pip install coveralls"
