@@ -18,14 +18,10 @@ matrix:
     # are orthogonal and any failures should be easily attributable to either
     # Twisted version or Riak version without adding an additional build job.
     - python: "2.7"
-      ## Riak 2.0 sometimes doesn't have enough file descriptors:
-      ## https://github.com/travis-ci/travis-ci/issues/3328
-      ## Until that's fixed, don't build against new Riak.
       env: TWISTED_VERSION="Twisted==13.1.0" RIAK_VERSION="2.1.1"
-      # env: TWISTED_VERSION="Twisted==13.1.0" RIAK_VERSION="1.4.12-1"
     # Test on pypy without coverage, because it's unnecessary and very slow.
     - python: "pypy"
-      env: TWISTED_VERSION="Twisted" RIAK_VERSION="1.4.12-1" NO_COVERAGE="1"
+      env: TWISTED_VERSION="Twisted" RIAK_VERSION="1.4.12" NO_COVERAGE="1"
 
 cache:
   - $HOME/.cache/pip
