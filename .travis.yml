@@ -8,7 +8,7 @@ node_js:
   - "0.10"
 env:
   # Test against the latest version of Twisted using Riak 1.4.
-  - TWISTED_VERSION="Twisted" RIAK_VERSION="1.4.12-1"
+  - TWISTED_VERSION="Twisted" RIAK_VERSION="1.4.12"
 matrix:
   include:
     # Test against the oldest version of Twisted that we claim to support.
@@ -21,8 +21,8 @@ matrix:
       ## Riak 2.0 sometimes doesn't have enough file descriptors:
       ## https://github.com/travis-ci/travis-ci/issues/3328
       ## Until that's fixed, don't build against new Riak.
-      # env: TWISTED_VERSION="Twisted==13.1.0" RIAK_VERSION="current"
-      env: TWISTED_VERSION="Twisted==13.1.0" RIAK_VERSION="1.4.12-1"
+      env: TWISTED_VERSION="Twisted==13.1.0" RIAK_VERSION="2.1.1"
+      # env: TWISTED_VERSION="Twisted==13.1.0" RIAK_VERSION="1.4.12-1"
     # Test on pypy without coverage, because it's unnecessary and very slow.
     - python: "pypy"
       env: TWISTED_VERSION="Twisted" RIAK_VERSION="1.4.12-1" NO_COVERAGE="1"
