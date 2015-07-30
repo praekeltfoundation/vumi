@@ -1,5 +1,5 @@
+from hypothesis.strategies import text
 from twisted.internet.defer import inlineCallbacks
-
 from zope.interface import implements
 
 from vumi.transports.failures import FailureMessage
@@ -88,3 +88,9 @@ class TransportHelper(object):
             instances.
         """
         return self.get_dispatched(connector_name, 'failures', FailureMessage)
+
+
+def gen_content(alphabet=None, min_size=0, average_size=100, max_size=200):
+    return text(
+        alphabet=alphabet, min_size=min_size, average_size=average_size,
+        max_size=max_size)

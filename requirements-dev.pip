@@ -4,3 +4,4 @@ junitxml
 pep8
 pyflakes
 supervisor
+hypothesis

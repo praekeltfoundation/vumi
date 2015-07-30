@@ -6,6 +6,9 @@ class TestXMLStream(object):
     def __init__(self):
         self.outbox = []
 
+    def clear(self):
+        self.outbox = []
+
     def send(self, message):
         self.outbox.append(message)
 
