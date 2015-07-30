@@ -38,6 +38,7 @@ install:
   - "pip install 'pip>=7.1.0'"
   - "pip install ${TWISTED_VERSION}"
   - "pip install -r requirements.pip"
+  - "pip install -r requirements-dev.pip"
   - "pip install coveralls"
 
 before_script:
