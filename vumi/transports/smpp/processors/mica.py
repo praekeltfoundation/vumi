@@ -75,7 +75,8 @@ class DeliverShortMessageProcessor(default.DeliverShortMessageProcessor):
             session = yield self.session_manager.load_session(
                 vumi_session_identifier)
             ussd_code = session['ussd_code']
-            content = pdu_params['short_message']
+            content = self.dcs_decode(
+                pdu_params['short_message'], pdu_params['data_coding'])
 
         # This is stashed on the message and available when replying
         # with a `submit_sm`
@@ -84,13 +85,10 @@ class DeliverShortMessageProcessor(default.DeliverShortMessageProcessor):
             'session_identifier': mica_session_identifier,
         }
 
-        decoded_msg = self.dcs_decode(content,
-                                      pdu_params['data_coding'])
-
         result = yield self.handle_short_message_content(
             source_addr=pdu_params['source_addr'],
             destination_addr=ussd_code,
-            short_message=decoded_msg,
+            short_message=content,
             message_type='ussd',
             session_event=session_event,
             session_info=session_info)

@@ -214,6 +214,44 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.assertEqual(msg['transport_type'], 'sms')
 
     @inlineCallbacks
+    def test_mo_sms_empty_sms_allowed(self):
+        smpp_helper = yield self.get_smpp_helper()
+        smpp_helper.send_mo(
+            sequence_number=1, short_message='', source_addr='123',
+            destination_addr='456')
+        [deliver_sm_resp] = yield smpp_helper.wait_for_pdus(1)
+        self.assertTrue(pdu_ok(deliver_sm_resp))
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        self.assertEqual(msg['content'], '')
+
+    @inlineCallbacks
+    def test_mo_sms_empty_sms_disallowed(self):
+        smpp_helper = yield self.get_smpp_helper({
+            'deliver_short_message_processor_config': {
+                'allow_empty_messages': False,
+            }
+        })
+        with LogCatcher(message=r"^(Not all parts|WARNING)") as lc:
+            smpp_helper.send_mo(
+                sequence_number=1, short_message='', source_addr='123',
+                destination_addr='456')
+            [deliver_sm_resp] = yield smpp_helper.wait_for_pdus(1)
+
+        self.assertFalse(pdu_ok(deliver_sm_resp))
+
+        # check that failure to process delivery report was logged
+        self.assertEqual(lc.messages(), [
+            "WARNING: Not decoding `None` message with data_coding=1",
+            "Not all parts of the PDU were able to be decoded. "
+            "Responding with ESME_RDELIVERYFAILURE.",
+        ])
+
+        inbound = self.tx_helper.get_dispatched_inbound()
+        self.assertEqual(inbound, [])
+        events = self.tx_helper.get_dispatched_events()
+        self.assertEqual(events, [])
+
+    @inlineCallbacks
     def test_mo_delivery_report_pdu_opt_params(self):
         """
         We always treat a message with the optional PDU params set as a
