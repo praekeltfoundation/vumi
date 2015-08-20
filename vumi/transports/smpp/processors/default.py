@@ -201,6 +201,7 @@ class DeliveryReportProcessor(object):
 
 
 class DeliverShortMessageProcessorConfig(Config):
+
     data_coding_overrides = ConfigDict(
         "Overrides for data_coding character set mapping. This is useful for "
         "setting the default encoding (0), adding additional undefined "
@@ -208,6 +209,11 @@ class DeliverShortMessageProcessorConfig(Config):
         "the SMSC is violating the spec (which happens a lot). Keys should "
         "be integers, values should be strings containing valid Python "
         "character encoding names.", default={}, static=True)
+
+    allow_empty_messages = ConfigBool(
+        "If True, send on empty messages as an empty unicode string. "
+        "If False, reject empty messages as invalid.",
+        default=True, static=True)
 
 
 class DeliverShortMessageProcessor(object):
@@ -260,6 +266,7 @@ class DeliverShortMessageProcessor(object):
             10: 'iso2022_jp'
         }
         self.data_coding_map.update(self.config.data_coding_overrides)
+        self.allow_empty_messages = self.config.allow_empty_messages
 
     def dcs_decode(self, obj, data_coding):
         codec_name = self.data_coding_map.get(data_coding, None)
@@ -268,6 +275,8 @@ class DeliverShortMessageProcessor(object):
                     data_coding,))
             return obj
         elif obj is None:
+            if self.allow_empty_messages:
+                return u''
             log.msg(
                 "WARNING: Not decoding `None` message with data_coding=%s" % (
                     data_coding,))
