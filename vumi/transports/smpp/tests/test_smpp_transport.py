@@ -215,7 +215,11 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_mo_sms_empty_sms_allowed(self):
-        smpp_helper = yield self.get_smpp_helper()
+        smpp_helper = yield self.get_smpp_helper({
+            'deliver_short_message_processor_config': {
+                'allow_empty_messages': True,
+            }
+        })
         smpp_helper.send_mo(
             sequence_number=1, short_message='', source_addr='123',
             destination_addr='456')
@@ -226,11 +230,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_mo_sms_empty_sms_disallowed(self):
-        smpp_helper = yield self.get_smpp_helper({
-            'deliver_short_message_processor_config': {
-                'allow_empty_messages': False,
-            }
-        })
+        smpp_helper = yield self.get_smpp_helper()
         with LogCatcher(message=r"^(Not all parts|WARNING)") as lc:
             smpp_helper.send_mo(
                 sequence_number=1, short_message='', source_addr='123',
