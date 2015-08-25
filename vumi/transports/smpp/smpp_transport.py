@@ -404,9 +404,9 @@ class SmppTransceiverTransport(Transport):
         if not self._check_address_valid(message, 'from_addr'):
             yield self._reject_for_invalid_address(message, 'from_addr')
             return
+        yield self.message_stash.cache_message(message)
         yield self.submit_sm_processor.handle_outbound_message(
             message, protocol)
-        yield self.message_stash.cache_message(message)
 
     @inlineCallbacks
     def process_submit_sm_event(self, message_id, event_type, remote_id,
