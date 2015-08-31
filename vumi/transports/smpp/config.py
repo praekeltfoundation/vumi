@@ -30,9 +30,8 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
     disable_ack = ConfigBool(
         'Disable publishing of `ack` events. In some cases this event '
         'causes more noise than signal. It can optionally be turned off. '
-        'Defaults to True.',
-        default=False, static=True
-    )
+        'Defaults to False.',
+        default=False, static=True)
     third_party_id_expiry = ConfigInt(
         'How long (in seconds) to keep 3rd party message IDs around to allow '
         'for matching submit_sm_resp and delivery report messages. Defaults '
