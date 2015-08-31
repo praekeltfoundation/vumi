@@ -320,7 +320,7 @@ class SmppTransceiverTransport(Transport):
             self, config.deliver_short_message_processor_config)
         self.submit_sm_processor = config.submit_short_message_processor(
             self, config.submit_short_message_processor_config)
-
+        self.disable_ack = config.disable_ack
         self.sequence_generator = self.sequence_class(self.redis)
         self.message_stash = SmppMessageDataStash(self.redis, config)
         self.throttled = None
@@ -412,7 +412,8 @@ class SmppTransceiverTransport(Transport):
     def process_submit_sm_event(self, message_id, event_type, remote_id,
                                 command_status):
         if event_type == 'ack':
-            yield self.publish_ack(message_id, remote_id)
+            if not self.disable_ack:
+                yield self.publish_ack(message_id, remote_id)
             yield self.message_stash.delete_cached_message(message_id)
         else:
             if event_type != 'fail':

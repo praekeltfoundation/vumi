@@ -757,6 +757,28 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.assertEqual(event['sent_message_id'], 'foo')
 
     @inlineCallbacks
+    def test_mt_sms_disabled_ack(self):
+        smpp_helper = yield self.get_smpp_helper({
+            'disable_ack': True,
+        })
+        msg = self.tx_helper.make_outbound('hello world')
+        yield self.tx_helper.dispatch_outbound(msg)
+        [submit_sm_pdu] = yield smpp_helper.wait_for_pdus(1)
+        smpp_helper.send_pdu(
+            SubmitSMResp(sequence_number=seq_no(submit_sm_pdu),
+                         message_id='foo'))
+        # NOTE: We can't test for the absence of an event in isolation but we
+        #       can test that for the presence of a second event only.
+        fail_msg = self.tx_helper.make_outbound('hello fail')
+        yield self.tx_helper.dispatch_outbound(fail_msg)
+        [submit_sm_fail_pdu] = yield smpp_helper.wait_for_pdus(1)
+        smpp_helper.send_pdu(
+            SubmitSMResp(sequence_number=seq_no(submit_sm_fail_pdu),
+                         message_id='foo', command_status='ESME_RINVDSTADR'))
+        [fail] = yield self.tx_helper.wait_for_dispatched_events(1)
+        self.assertEqual(fail['event_type'], 'nack')
+
+    @inlineCallbacks
     def test_mt_sms_nack(self):
         smpp_helper = yield self.get_smpp_helper()
         msg = self.tx_helper.make_outbound('hello world')
