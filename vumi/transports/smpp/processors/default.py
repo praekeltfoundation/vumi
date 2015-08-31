@@ -213,7 +213,7 @@ class DeliverShortMessageProcessorConfig(Config):
     allow_empty_messages = ConfigBool(
         "If True, send on empty messages as an empty unicode string. "
         "If False, reject empty messages as invalid.",
-        default=True, static=True)
+        default=False, static=True)
 
 
 class DeliverShortMessageProcessor(object):
