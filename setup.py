@@ -1,9 +1,18 @@
+import platform
+import sys
 from setuptools import setup, find_packages
+
+
+# cryptography>=1.0 requires pypy>=2.6.0 because of the new cffi stuff.
+cryptography = 'cryptography'
+if platform.python_implementation() == "PyPy":
+    if sys.pypy_version_info < (2, 6):
+        cryptography = 'cryptography<1.0'
 
 
 setup(
     name="vumi",
-    version="0.5.23a",
+    version="0.5.25a",
     url='http://github.com/praekelt/vumi',
     license='BSD',
     description="Super-scalable messaging engine for the delivery of SMS, "
@@ -25,6 +34,7 @@ setup(
         'vumi/scripts/vumi_list_messages.py',
     ],
     install_requires=[
+        cryptography,  # See above for pypy-version-dependent requirement.
         'zope.interface',
         'Twisted>=13.1.0',
         'txAMQP>=0.6.2',
