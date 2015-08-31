@@ -11,7 +11,7 @@ from twisted.internet.task import LoopingCall
 from vumi.reconnecting_client import ReconnectingClientService
 from vumi.transports.base import Transport
 
-from vumi.message import TransportUserMessage, TransportEvent
+from vumi.message import TransportUserMessage
 
 from vumi.transports.smpp.config import SmppTransportConfig
 from vumi.transports.smpp.deprecated.transport import (
@@ -353,20 +353,6 @@ class SmppTransceiverTransport(Transport):
             self.mt_tps_lc.stop()
         yield self.redis._close()
 
-    def publish_ack(self, user_message_id, sent_message_id, **kw):
-        """
-        Helper method for publishing an ``ack`` event.
-        """
-        if self.disable_ack:
-            return succeed(
-                TransportEvent(user_message_id=user_message_id,
-                               transport_name=self.transport_name,
-                               transport_metadata={},
-                               **kw))
-
-        return super(SmppTransceiverTransport, self).publish_ack(
-            user_message_id, sent_message_id, **kw)
-
     def reset_mt_tps(self):
         if self.throttled and self.need_mt_throttling():
             if not self.service.is_bound():
@@ -426,7 +412,8 @@ class SmppTransceiverTransport(Transport):
     def process_submit_sm_event(self, message_id, event_type, remote_id,
                                 command_status):
         if event_type == 'ack':
-            yield self.publish_ack(message_id, remote_id)
+            if not self.disable_ack:
+                yield self.publish_ack(message_id, remote_id)
             yield self.message_stash.delete_cached_message(message_id)
         else:
             if event_type != 'fail':
