@@ -320,7 +320,7 @@ class SmppTransceiverTransport(Transport):
             self, config.deliver_short_message_processor_config)
         self.submit_sm_processor = config.submit_short_message_processor(
             self, config.submit_short_message_processor_config)
-
+        self.disable_ack = config.disable_ack
         self.sequence_generator = self.sequence_class(self.redis)
         self.message_stash = SmppMessageDataStash(self.redis, config)
         self.throttled = None
@@ -352,6 +352,20 @@ class SmppTransceiverTransport(Transport):
         if self.mt_tps_lc and self.mt_tps_lc.running:
             self.mt_tps_lc.stop()
         yield self.redis._close()
+
+    def publish_ack(self, user_message_id, sent_message_id, **kw):
+        """
+        Helper method for publishing an ``ack`` event.
+        """
+        if self.disable_ack:
+            return succeed(TransportEvent(user_message_id=user_message_id, **kw)
+            return         kw.setdefault('transport_name', self.transport_name)
+                    kw.setdefault('transport_metadata', {})
+
+
+
+        return super(SmppTransceiverTransport, self).publish_ack(
+            user_message_id, sent_message_id, **kw)
 
     def reset_mt_tps(self):
         if self.throttled and self.need_mt_throttling():

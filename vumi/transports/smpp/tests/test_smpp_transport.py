@@ -757,6 +757,20 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.assertEqual(event['sent_message_id'], 'foo')
 
     @inlineCallbacks
+    def test_mt_sms_disabled_ack(self):
+        smpp_helper = yield self.get_smpp_helper({
+            'disable_ack': True,
+        })
+        msg = self.tx_helper.make_outbound('hello world')
+        yield self.tx_helper.dispatch_outbound(msg)
+        [submit_sm_pdu] = yield smpp_helper.wait_for_pdus(1)
+        smpp_helper.send_pdu(
+            SubmitSMResp(sequence_number=seq_no(submit_sm_pdu),
+                         message_id='foo'))
+        events = yield self.tx_helper.get_dispatched_events()
+        self.assertEqual(events, [])
+
+    @inlineCallbacks
     def test_mt_sms_nack(self):
         smpp_helper = yield self.get_smpp_helper()
         msg = self.tx_helper.make_outbound('hello world')

@@ -27,6 +27,12 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
         'How long (in seconds) to wait for the SMSC to return with a '
         '`submit_sm_resp`. Defaults to 24 hours.',
         default=(60 * 60 * 24), static=True)
+    disable_ack = ConfigBool(
+        'Disable publishing of `ack` events. In some cases this event '
+        'causes more noise than signal. It can optionally be turned off. '
+        'Defaults to True.',
+        default=False, static=True
+    )
     third_party_id_expiry = ConfigInt(
         'How long (in seconds) to keep 3rd party message IDs around to allow '
         'for matching submit_sm_resp and delivery report messages. Defaults '
