@@ -11,7 +11,7 @@ from twisted.internet.task import LoopingCall
 from vumi.reconnecting_client import ReconnectingClientService
 from vumi.transports.base import Transport
 
-from vumi.message import TransportUserMessage
+from vumi.message import TransportUserMessage, TransportEvent
 
 from vumi.transports.smpp.config import SmppTransportConfig
 from vumi.transports.smpp.deprecated.transport import (
@@ -358,11 +358,11 @@ class SmppTransceiverTransport(Transport):
         Helper method for publishing an ``ack`` event.
         """
         if self.disable_ack:
-            return succeed(TransportEvent(user_message_id=user_message_id, **kw)
-            return         kw.setdefault('transport_name', self.transport_name)
-                    kw.setdefault('transport_metadata', {})
-
-
+            return succeed(
+                TransportEvent(user_message_id=user_message_id,
+                               transport_name=self.transport_name,
+                               transport_metadata={},
+                               **kw))
 
         return super(SmppTransceiverTransport, self).publish_ack(
             user_message_id, sent_message_id, **kw)
