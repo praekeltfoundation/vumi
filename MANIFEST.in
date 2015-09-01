@@ -22,6 +22,7 @@ include twisted/plugins/*.py
 include vumi/demos/tests/wikipedia_sample.xml
 include vumi/scripts/tests/sample-smpp-output.log
 recursive-include vumi/resources *
+recursive-include vumi *.xml
 
 # Prune stray bytecode files.
 global-exclude *.pyc
