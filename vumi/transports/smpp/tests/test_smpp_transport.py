@@ -63,9 +63,7 @@ class SmppTransportTestCase(VumiTestCase):
 
     @inlineCallbacks
     def get_smpp_helper(self, config={}, bind=True):
-        cfg = self.default_config.copy()
-        cfg.update(config)
-        transport = yield self._get_transport(cfg)
+        transport = yield self._get_transport(config)
         smpp_helper = SMPPHelper(transport)
         if bind:
             yield smpp_helper.bind()
