@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 from twisted.test import proto_helpers
-from twisted.internet import reactor
 from twisted.internet.defer import (
-    inlineCallbacks, gatherResults, Deferred, returnValue, succeed)
+    inlineCallbacks, gatherResults, returnValue, succeed)
 from twisted.internet.error import ConnectionDone
 from twisted.internet.task import Clock
 
@@ -12,22 +11,16 @@ from vumi.transports.smpp.smpp_transport import SmppTransceiverTransport
 from vumi.transports.smpp.protocol import (
     EsmeTransceiver, EsmeTransceiverFactory,
     EsmeTransmitterFactory, EsmeReceiverFactory)
-from vumi.transports.smpp.processors import DeliverShortMessageProcessor
 from vumi.transports.smpp.pdu_utils import (
-    seq_no, command_status, command_id, chop_pdu_stream, short_message)
+    seq_no, command_status, command_id, short_message)
 from vumi.transports.smpp.smpp_utils import unpacked_pdu_opts
 from vumi.transports.smpp.sequence import RedisSequence
+from vumi.transports.smpp.tests.helpers import bind_protocol, wait_for_pdus
 from vumi.transports.tests.helpers import TransportHelper
 
 from smpp.pdu import unpack_pdu
 from smpp.pdu_builder import (
-    Unbind, UnbindResp,
-    BindTransceiver, BindTransceiverResp,
-    BindTransmitter, BindTransmitterResp,
-    BindReceiver, BindReceiverResp,
-    SubmitSMResp,
-    DeliverSM,
-    EnquireLink, EnquireLinkResp)
+    Unbind, UnbindResp, SubmitSMResp, DeliverSM, EnquireLink, EnquireLinkResp)
 
 
 def connect_transport(protocol, system_id='', password='', system_type=''):
@@ -36,48 +29,6 @@ def connect_transport(protocol, system_id='', password='', system_type=''):
     d = protocol.bind(system_id=system_id, password=password,
                       system_type=system_type)
     d.addCallback(lambda _: transport)
-    return d
-
-
-@inlineCallbacks
-def bind_protocol(transport, protocol, clear=True, bind_pdu=None):
-    if bind_pdu is None:
-        [bind_pdu] = yield wait_for_pdus(transport, 1)
-    resp_pdu_class = {
-        BindTransceiver: BindTransceiverResp,
-        BindReceiver: BindReceiverResp,
-        BindTransmitter: BindTransmitterResp,
-    }.get(protocol.bind_pdu)
-    protocol.dataReceived(
-        resp_pdu_class(seq_no(bind_pdu)).get_bin())
-    [enquire_link] = yield wait_for_pdus(transport, 1)
-    protocol.dataReceived(
-        EnquireLinkResp(seq_no(enquire_link)).get_bin())
-    if clear:
-        transport.clear()
-    returnValue(bind_pdu)
-
-
-def wait_for_pdus(transport, count):
-    d = Deferred()
-
-    def cb(pdus):
-        data_stream = transport.value()
-        pdu_found = chop_pdu_stream(data_stream)
-        if pdu_found is not None:
-            pdu_data, remainder = pdu_found
-            pdu = unpack_pdu(pdu_data)
-            pdus.append(pdu)
-            transport.clear()
-            transport.write(remainder)
-
-        if len(pdus) == count:
-            d.callback(pdus)
-        else:
-            reactor.callLater(0, cb, pdus)
-
-    cb([])
-
     return d
 
 
@@ -105,9 +56,7 @@ class EsmeTestCase(VumiTestCase):
         self.patch(EsmeTransceiver, 'clock', self.clock)
 
     @inlineCallbacks
-    def get_protocol(self, config={},
-                     deliver_sm_processor=None, dr_processor=None,
-                     factory_class=None):
+    def get_protocol(self, config={}, factory_class=None):
 
         factory_class = factory_class or EsmeTransceiverFactory
 
@@ -118,14 +67,6 @@ class EsmeTestCase(VumiTestCase):
             'password': 'password',
             'smpp_bind_timeout': 30,
         }
-
-        if deliver_sm_processor:
-            default_config['deliver_short_message_processor'] = (
-                deliver_sm_processor)
-
-        if dr_processor:
-            default_config['delivery_report_processor'] = (
-                dr_processor)
 
         default_config.update(config)
 
