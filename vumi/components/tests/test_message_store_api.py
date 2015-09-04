@@ -120,6 +120,9 @@ class TestMessageStoreAPI(VumiTestCase):
         returnValue(token)
 
     def assertResultCount(self, response, count):
+        in_progress = response.headers.getRawHeaders(
+            self.match_resource.RESP_IN_PROGRESS_HEADER)[0]
+        assert in_progress == "0", "Query still in progress."
         self.assertEqual(
             response.headers.getRawHeaders(
                 self.match_resource.RESP_COUNT_HEADER),
@@ -199,7 +202,8 @@ class TestMessageStoreAPI(VumiTestCase):
 
     @inlineCallbacks
     def test_empty_inbound_match_resource(self):
-        expected_token = yield self.do_query('inbound', self.batch_id, '.*')
+        expected_token = yield self.do_query(
+            'inbound', self.batch_id, '.*', wait=True)
         response = yield self.do_get('batch/%s/inbound/match/?token=%s' % (
             self.batch_id, expected_token))
         self.assertResultCount(response, 0)
@@ -249,7 +253,8 @@ class TestMessageStoreAPI(VumiTestCase):
 
     @inlineCallbacks
     def test_empty_outbound_match_resource(self):
-        expected_token = yield self.do_query('outbound', self.batch_id, '.*')
+        expected_token = yield self.do_query(
+            'outbound', self.batch_id, '.*', wait=True)
         response = yield self.do_get('batch/%s/outbound/match/?token=%s' % (
             self.batch_id, expected_token))
         self.assertResultCount(response, 0)
