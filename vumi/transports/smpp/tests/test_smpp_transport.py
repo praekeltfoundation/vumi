@@ -2,7 +2,6 @@
 
 import logging
 
-from twisted.test import proto_helpers
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet.task import Clock
 
@@ -19,7 +18,6 @@ from vumi.transports.smpp.smpp_transport import (
 from vumi.transports.smpp.pdu_utils import (
     pdu_ok, short_message, command_id, seq_no, pdu_tlv, unpacked_pdu_opts)
 from vumi.transports.smpp.processors import SubmitShortMessageProcessor
-from vumi.transports.smpp.tests.test_protocol import bind_protocol
 from vumi.transports.smpp.tests.helpers import DummyService, SMPPHelper
 from vumi.transports.tests.helpers import TransportHelper
 
@@ -36,8 +34,6 @@ class SmppTransportTestCase(VumiTestCase):
         self.clock = Clock()
         self.patch(self.transport_class, 'service_class', DummyService)
         self.patch(self.transport_class, 'clock', self.clock)
-
-        self.string_transport = proto_helpers.StringTransport()
 
         self.tx_helper = self.add_helper(TransportHelper(self.transport_class))
         self.default_config = {
@@ -57,34 +53,27 @@ class SmppTransportTestCase(VumiTestCase):
             }
         }
 
-    @inlineCallbacks
-    def get_transport(self, config={}, bind=True):
-        cfg = self.default_config.copy()
-        cfg.update(config)
-        transport = yield self.tx_helper.get_transport(cfg)
-        if bind:
-            yield self.create_smpp_bind(transport)
-        returnValue(transport)
-
-    def create_smpp_bind(self, smpp_transport):
-        d = smpp_transport.service.get_protocol()
-
-        def cb(protocol):
-            protocol.makeConnection(self.string_transport)
-            return bind_protocol(self.string_transport, protocol)
-
-        d.addCallback(cb)
-        return d
-
     def send_pdu(self, transport, pdu):
         protocol = transport.service.get_protocol()
         protocol.dataReceived(pdu.get_bin())
 
+    def _get_transport(self, config):
+        """
+        This is overridden in a subclass.
+        """
+        cfg = self.default_config.copy()
+        cfg.update(config)
+        return self.tx_helper.get_transport(cfg)
+
     @inlineCallbacks
-    def get_smpp_helper(self, *args, **kwargs):
-        transport = yield self.get_transport(*args, **kwargs)
-        protocol = yield transport.service.get_protocol()
-        returnValue(SMPPHelper(self.string_transport, transport, protocol))
+    def get_smpp_helper(self, config={}, bind=True):
+        cfg = self.default_config.copy()
+        cfg.update(config)
+        transport = yield self._get_transport(cfg)
+        smpp_helper = SMPPHelper(transport)
+        if bind:
+            yield smpp_helper.bind()
+        returnValue(smpp_helper)
 
 
 class SmppTransceiverTransportTestCase(SmppTransportTestCase):
@@ -93,8 +82,8 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_setup_transport(self):
-        transport = yield self.get_transport()
-        protocol = yield transport.service.get_protocol()
+        smpp_helper = yield self.get_smpp_helper()
+        protocol = yield smpp_helper.transport.service.get_protocol()
         self.assertTrue(protocol.is_bound())
 
     @inlineCallbacks
@@ -103,9 +92,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         Testing the real service because these tests use the
         fake DummyService implementation
         """
-
-        transport = yield self.get_transport()
-        protocol = yield transport.service.get_protocol()
+        smpp_helper = yield self.get_smpp_helper()
 
         service = SmppService(None, None)
         self.assertEqual(service._protocol, None)
@@ -113,9 +100,9 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
         d = service.get_protocol()
         self.assertEqual(len(service.wait_on_protocol_deferreds), 1)
-        service.clientConnected(protocol)
+        service.clientConnected(smpp_helper.protocol)
         received_protocol = yield d
-        self.assertEqual(received_protocol, protocol)
+        self.assertEqual(received_protocol, smpp_helper.protocol)
         self.assertEqual(len(service.wait_on_protocol_deferreds), 0)
         self.assertEqual(service.is_bound(), True)
 
@@ -126,12 +113,11 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
     @inlineCallbacks
     def test_setup_transport_host_port_fallback(self):
         self.default_config.pop('twisted_endpoint')
-        transport = yield self.get_transport({
+        smpp_helper = yield self.get_smpp_helper({
             'host': '127.0.0.1',
             'port': 0,
         })
-        protocol = yield transport.service.get_protocol()
-        self.assertTrue(protocol.is_bound())
+        self.assertTrue(smpp_helper.protocol.is_bound())
 
     @inlineCallbacks
     def test_mo_sms(self):
@@ -621,7 +607,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_mt_sms_bad_to_addr(self):
-        yield self.get_transport()
+        yield self.get_smpp_helper()
         msg = yield self.tx_helper.make_dispatch_outbound(
             'hello world', to_addr=u'+\u2000')
         [event] = self.tx_helper.get_dispatched_events()
@@ -631,7 +617,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_mt_sms_bad_from_addr(self):
-        yield self.get_transport()
+        yield self.get_smpp_helper()
         msg = yield self.tx_helper.make_dispatch_outbound(
             'hello world', from_addr=u'+\u2000')
         [event] = self.tx_helper.get_dispatched_events()
@@ -884,7 +870,6 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         connection is in a suitable state.
         """
         smpp_helper = yield self.get_smpp_helper()
-        smpp_service = smpp_helper.transport.service
         transport_config = smpp_helper.transport.get_static_config()
         msg = self.tx_helper.make_outbound('hello world')
         yield self.tx_helper.dispatch_outbound(msg)
@@ -896,7 +881,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
         # Drop SMPP connection and check throttling.
         with LogCatcher(message="Can't check throttling while unbound") as lc:
-            smpp_service.stopService()
+            smpp_helper.disconnect()
             self.clock.advance(transport_config.throttle_delay)
         [logmsg] = lc.logs
         self.assertEqual(
@@ -905,9 +890,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
         # Reconnect (but don't bind) and check throttling.
         with LogCatcher(message="Can't check throttling while unbound") as lc:
-            smpp_helper.transport.service.startService()
-            protocol = yield smpp_service.get_protocol()
-            protocol.makeConnection(self.string_transport)
+            smpp_helper.connect()
             [bind_pdu] = yield smpp_helper.wait_for_pdus(1)
             self.assertTrue(
                 bind_pdu["header"]["command_id"].startswith("bind_"))
@@ -919,8 +902,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
         # Bind and check throttling.
         with LogCatcher(message="Can't check throttling while unbound") as lc:
-            yield bind_protocol(
-                self.string_transport, protocol, bind_pdu=bind_pdu)
+            yield smpp_helper.bind(bind_pdu)
             self.clock.advance(transport_config.throttle_delay)
 
         [ssm_pdu_retry] = yield smpp_helper.wait_for_pdus(1)
@@ -974,7 +956,6 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         smpp_helper = yield self.get_smpp_helper(config={
             'mt_tps': 2,
         })
-        transport = smpp_helper.transport
 
         with LogCatcher(message="Throttling outbound messages.") as lc:
             yield self.tx_helper.make_dispatch_outbound('hello world 1')
@@ -983,7 +964,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         [logmsg] = lc.logs
         self.assertEqual(logmsg['logLevel'], logging.INFO)
 
-        self.assertTrue(transport.throttled)
+        self.assertTrue(smpp_helper.transport.throttled)
         [submit_sm_pdu1, submit_sm_pdu2] = yield smpp_helper.wait_for_pdus(2)
         self.assertEqual(short_message(submit_sm_pdu1), 'hello world 1')
         self.assertEqual(short_message(submit_sm_pdu2), 'hello world 2')
@@ -991,34 +972,31 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
         # Drop SMPP connection and check throttling.
         with LogCatcher(message="Can't stop throttling while unbound") as lc:
-            transport.service.stopService()
+            smpp_helper.disconnect()
             self.clock.advance(1)
         [logmsg] = lc.logs
         self.assertEqual(logmsg['logLevel'], logging.INFO)
-        self.assertTrue(transport.throttled)
+        self.assertTrue(smpp_helper.transport.throttled)
 
         # Reconnect (but don't bind) and check throttling.
         with LogCatcher(message="Can't stop throttling while unbound") as lc:
-            smpp_helper.transport.service.startService()
-            protocol = yield transport.service.get_protocol()
-            protocol.makeConnection(self.string_transport)
+            smpp_helper.connect()
             [bind_pdu] = yield smpp_helper.wait_for_pdus(1)
             self.assertTrue(
                 bind_pdu["header"]["command_id"].startswith("bind_"))
             self.clock.advance(1)
         [logmsg] = lc.logs
         self.assertEqual(logmsg['logLevel'], logging.INFO)
-        self.assertTrue(transport.throttled)
+        self.assertTrue(smpp_helper.transport.throttled)
 
         # Bind and check throttling.
         with LogCatcher(message="No longer throttling outbound") as lc:
-            yield bind_protocol(
-                self.string_transport, protocol, bind_pdu=bind_pdu)
+            yield smpp_helper.bind(bind_pdu)
             self.clock.advance(1)
         [logmsg] = lc.logs
         self.assertEqual(logmsg['logLevel'], logging.INFO)
 
-        self.assertFalse(transport.throttled)
+        self.assertFalse(smpp_helper.transport.throttled)
         [submit_sm_pdu2] = yield smpp_helper.wait_for_pdus(1)
         self.assertEqual(short_message(submit_sm_pdu2), 'hello world 3')
 
@@ -1340,15 +1318,20 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         smpp_helper = yield self.get_smpp_helper(bind=False)
         transport = smpp_helper.transport
         connector = transport.connectors[transport.transport_name]
-        self.assertTrue(connector._consumers['outbound'].paused)
-        yield self.create_smpp_bind(transport)
-        self.assertFalse(connector._consumers['outbound'].paused)
-        transport.service.stopService()
-        self.assertTrue(connector._consumers['outbound'].paused)
-        transport.service.startService()
-        self.assertTrue(connector._consumers['outbound'].paused)
-        yield self.create_smpp_bind(transport)
-        self.assertFalse(connector._consumers['outbound'].paused)
+        # Unbound and disconnected.
+        self.assertEqual(connector._consumers['outbound'].paused, True)
+        # Connect and bind.
+        yield smpp_helper.bind()
+        self.assertEqual(connector._consumers['outbound'].paused, False)
+        # Disconnect.
+        smpp_helper.disconnect()
+        self.assertEqual(connector._consumers['outbound'].paused, True)
+        # Connect, but don't bind.
+        smpp_helper.connect()
+        self.assertEqual(connector._consumers['outbound'].paused, True)
+        # Bind.
+        yield smpp_helper.bind()
+        self.assertEqual(connector._consumers['outbound'].paused, False)
 
     @inlineCallbacks
     def test_bind_params(self):
@@ -1359,8 +1342,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
             'interface_version': '33',
             'address_range': '*12345',
         })
-        transport = smpp_helper.transport
-        bind_pdu = yield self.create_smpp_bind(transport)
+        bind_pdu = yield smpp_helper.bind()
         # This test runs for multiple bind types, so we only assert on the
         # common prefix of the command.
         self.assertEqual(bind_pdu['header']['command_id'][:5], 'bind_')
@@ -1383,10 +1365,9 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
             'interface_version': '33',
             'address_range': '*12345',
         })
-        transport = smpp_helper.transport
         lc = LogCatcher(message="Password longer than 8 characters,")
         with lc:
-            bind_pdu = yield self.create_smpp_bind(transport)
+            bind_pdu = yield smpp_helper.bind()
         # This test runs for multiple bind types, so we only assert on the
         # common prefix of the command.
         self.assertEqual(bind_pdu['header']['command_id'][:5], 'bind_')
@@ -1408,8 +1389,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
     @inlineCallbacks
     def test_default_bind_params(self):
         smpp_helper = yield self.get_smpp_helper(bind=False, config={})
-        transport = smpp_helper.transport
-        bind_pdu = yield self.create_smpp_bind(transport)
+        bind_pdu = yield smpp_helper.bind()
         # This test runs for multiple bind types, so we only assert on the
         # common prefix of the command.
         self.assertEqual(bind_pdu['header']['command_id'][:5], 'bind_')
@@ -1427,11 +1407,13 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
     def test_startup_with_backlog(self):
         smpp_helper = yield self.get_smpp_helper(bind=False)
 
+        # Disconnected.
         for i in range(2):
             msg = self.tx_helper.make_outbound('hello world %s' % (i,))
             yield self.tx_helper.dispatch_outbound(msg)
 
-        yield self.create_smpp_bind(smpp_helper.transport)
+        # Connect and bind.
+        yield smpp_helper.bind()
         [submit_sm1, submit_sm2] = yield smpp_helper.wait_for_pdus(2)
         self.assertEqual(short_message(submit_sm1), 'hello world 0')
         self.assertEqual(short_message(submit_sm2), 'hello world 1')
@@ -1456,8 +1438,6 @@ class SmppTransceiverTransportWithOldConfigTestCase(
         self.patch(self.transport_class, 'service_class', DummyService)
         self.patch(self.transport_class, 'clock', self.clock)
 
-        self.string_transport = proto_helpers.StringTransport()
-
         self.tx_helper = self.add_helper(TransportHelper(self.transport_class))
         self.default_config = {
             'transport_name': self.tx_helper.transport_name,
@@ -1469,8 +1449,7 @@ class SmppTransceiverTransportWithOldConfigTestCase(
             }
         }
 
-    @inlineCallbacks
-    def get_transport(self, config={}, bind=True):
+    def _get_transport(self, config):
         """
         The test cases assume the new config, this flattens the
         config key word arguments value to match an old config
@@ -1492,10 +1471,7 @@ class SmppTransceiverTransportWithOldConfigTestCase(
 
         # Update with all remaining (non-processor) config values
         cfg.update(config)
-        transport = yield self.tx_helper.get_transport(cfg)
-        if bind:
-            yield self.create_smpp_bind(transport)
-        returnValue(transport)
+        return self.tx_helper.get_transport(cfg)
 
 
 class TataUssdSmppTransportTestCase(SmppTransportTestCase):

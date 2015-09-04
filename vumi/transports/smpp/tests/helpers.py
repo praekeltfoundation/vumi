@@ -1,9 +1,11 @@
+from twisted.application.service import Service
 from twisted.internet.defer import Deferred, succeed
 from twisted.internet.error import ConnectionDone
-from twisted.application.service import Service
+from twisted.test import proto_helpers
 
 from smpp.pdu_builder import DeliverSM
-from vumi.transports.smpp.tests.test_protocol import wait_for_pdus
+from vumi.transports.smpp.tests.test_protocol import (
+    bind_protocol, wait_for_pdus)
 
 
 class DummyService(Service):
@@ -23,6 +25,7 @@ class DummyService(Service):
         if self.protocol and self.protocol.transport:
             self.protocol.transport.loseConnection()
             self.protocol.connectionLost(reason=ConnectionDone)
+        self.protocol = None
 
     def get_protocol(self):
         if self.protocol is not None:
@@ -39,10 +42,35 @@ class DummyService(Service):
 
 
 class SMPPHelper(object):
-    def __init__(self, string_transport, transport, protocol):
-        self.string_transport = string_transport
+    def __init__(self, transport):
+        assert isinstance(transport.service, DummyService)
+        self.string_transport = proto_helpers.StringTransport()
         self.transport = transport
-        self.protocol = protocol
+        self.protocol = transport.service.protocol
+
+    def disconnect(self):
+        """
+        Stop the service.
+        """
+        self.transport.service.stopService()
+        self.protocol = self.transport.service.protocol
+
+    def connect(self):
+        """
+        Start the service and make a connection to the string transport.
+        """
+        self.transport.service.startService()
+        self.protocol = self.transport.service.protocol
+        self.protocol.makeConnection(self.string_transport)
+
+    def bind(self, bind_pdu=None):
+        """
+        Reply to a waiting (or given) bind PDU. Will connect if necessary.
+        """
+        if self.protocol.state == self.protocol.CLOSED_STATE:
+            self.protocol.makeConnection(self.string_transport)
+        return bind_protocol(
+            self.string_transport, self.protocol, bind_pdu=bind_pdu)
 
     def send_pdu(self, pdu):
         """put it on the wire and don't wait for a response"""
