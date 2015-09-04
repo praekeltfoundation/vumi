@@ -5,7 +5,8 @@ from datetime import datetime
 from urllib import urlencode
 
 from twisted.internet import reactor
-from twisted.internet.defer import inlineCallbacks, Deferred, succeed
+from twisted.internet.defer import (
+    inlineCallbacks, Deferred, succeed, gatherResults)
 from twisted.web.server import Site
 
 from vumi.components.message_formatters import JsonFormatter
@@ -176,24 +177,23 @@ class TestMessageStoreResource(VumiTestCase):
         from vumi.components.message_store_resource import InboundResource
 
         batch_id = yield self.make_batch(('foo', 'bar'))
-        msg1 = yield self.make_inbound(batch_id, 'føø')
-        msg2 = yield self.make_inbound(batch_id, 'føø')
-        msg3 = yield self.make_inbound(batch_id, 'føø')
-        msg4 = yield self.make_inbound(batch_id, 'føø')
+        msgs = [(yield self.make_inbound(batch_id, 'føø'))
+                for _ in range(6)]
 
         class PausingInboundResource(InboundResource):
             def __init__(self, *args, **kw):
                 InboundResource.__init__(self, *args, **kw)
-                self.pause_after = 2
+                self.pause_after = 3
                 self.pause_d = Deferred()
                 self.resume_d = Deferred()
-                self.fetched = set()
+                self.fetch = {}
 
-            def add_fetched(self, msg):
-                self.fetched.add(msg['message_id'])
+            def _finish_fetching(self, msg):
+                self.fetch[msg['message_id']].callback(msg['message_id'])
                 return msg
 
             def get_message(self, message_store, message_id):
+                self.fetch[message_id] = Deferred()
                 d = succeed(None)
                 if self.pause_after > 0:
                     self.pause_after -= 1
@@ -203,7 +203,7 @@ class TestMessageStoreResource(VumiTestCase):
                     d.addCallback(lambda _: self.resume_d)
                 d.addCallback(lambda _: InboundResource.get_message(
                     self, message_store, message_id))
-                d.addCallback(self.add_fetched)
+                d.addCallback(self._finish_fetching)
                 return d
 
         res = PausingInboundResource(self.store, batch_id, JsonFormatter())
@@ -225,9 +225,11 @@ class TestMessageStoreResource(VumiTestCase):
         # about the exception, so we swallow it and move on.
         yield resp_d.addErrback(lambda _: None)
 
-        sorted_message_ids = sorted(
-            msg['message_id'] for msg in [msg1, msg2, msg3, msg4])
-        self.assertEqual(res.fetched, set(sorted_message_ids[:2]))
+        # Wait for all the in-progress loads to finish.
+        fetched_msg_ids = yield gatherResults(res.fetch.values())
+
+        sorted_message_ids = sorted(msg['message_id'] for msg in msgs)
+        self.assertEqual(set(fetched_msg_ids), set(sorted_message_ids[:4]))
 
     @inlineCallbacks
     def test_get_inbound_for_time_range(self):
