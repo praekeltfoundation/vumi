@@ -12,7 +12,6 @@ from vumi.transports.smpp.smpp_transport import SmppTransceiverTransport
 from vumi.transports.smpp.protocol import (
     EsmeTransceiver, EsmeTransceiverFactory,
     EsmeTransmitterFactory, EsmeReceiverFactory)
-from vumi.transports.smpp.processors import DeliverShortMessageProcessor
 from vumi.transports.smpp.pdu_utils import (
     seq_no, command_status, command_id, chop_pdu_stream, short_message)
 from vumi.transports.smpp.smpp_utils import unpacked_pdu_opts
