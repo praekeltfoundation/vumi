@@ -56,9 +56,7 @@ class EsmeTestCase(VumiTestCase):
         self.patch(EsmeTransceiver, 'clock', self.clock)
 
     @inlineCallbacks
-    def get_protocol(self, config={},
-                     deliver_sm_processor=None, dr_processor=None,
-                     factory_class=None):
+    def get_protocol(self, config={}, factory_class=None):
 
         factory_class = factory_class or EsmeTransceiverFactory
 
@@ -69,14 +67,6 @@ class EsmeTestCase(VumiTestCase):
             'password': 'password',
             'smpp_bind_timeout': 30,
         }
-
-        if deliver_sm_processor:
-            default_config['deliver_short_message_processor'] = (
-                deliver_sm_processor)
-
-        if dr_processor:
-            default_config['delivery_report_processor'] = (
-                dr_processor)
 
         default_config.update(config)
 

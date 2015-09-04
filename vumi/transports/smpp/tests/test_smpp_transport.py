@@ -53,10 +53,6 @@ class SmppTransportTestCase(VumiTestCase):
             }
         }
 
-    def send_pdu(self, transport, pdu):
-        protocol = transport.service.get_protocol()
-        protocol.dataReceived(pdu.get_bin())
-
     def _get_transport(self, config):
         """
         This is overridden in a subclass.

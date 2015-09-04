@@ -143,6 +143,3 @@ class SMPPHelper(object):
 
     def wait_for_pdus(self, count):
         return wait_for_pdus(self.string_transport, count)
-
-    def no_pdus(self):
-        return self.string_transport.value() == ''
