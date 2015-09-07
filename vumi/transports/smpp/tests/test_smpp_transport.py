@@ -1049,6 +1049,10 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_mt_sms_multipart_udh(self):
+        """
+        Sufficiently long messages are split into multiple PDUs with a UDH at
+        the front of each.
+        """
         smpp_helper = yield self.get_smpp_helper(config={
             'submit_short_message_processor_config': {
                 'send_multipart_udh': True,
@@ -1076,6 +1080,18 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
             ord(octet) for octet in short_message(submit_sm2)[:6]]
         self.assertEqual(ref_to_udh_ref, udh_ref)
         self.assertEqual(udh_seq, 2)
+
+        # Our multipart_info Redis hash should contain the number of parts and
+        # have an appropriate TTL.
+        from vumi.transports.smpp.smpp_transport import multipart_info_key
+        mstash = smpp_helper.transport.message_stash
+        multipart_info = yield mstash.get_multipart_info(msg['message_id'])
+        self.assertEqual(multipart_info, {"parts": "2"})
+        mpi_ttl = yield mstash.redis.ttl(multipart_info_key(msg['message_id']))
+        self.assertTrue(
+            mpi_ttl <= mstash.config.submit_sm_expiry,
+            "mpi_ttl (%s) > submit_sm_expiry (%s)" % (
+                mpi_ttl, mstash.config.submit_sm_expiry))
 
     @inlineCallbacks
     def test_mt_sms_multipart_udh_one_part(self):

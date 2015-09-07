@@ -160,7 +160,7 @@ class SmppMessageDataStash(object):
 
     def init_multipart_info(self, message_id, part_count):
         key = multipart_info_key(message_id)
-        expiry = self.config.third_party_id_expiry
+        expiry = self.config.submit_sm_expiry
         d = self.redis.hmset(key, {
             'parts': part_count,
         })
