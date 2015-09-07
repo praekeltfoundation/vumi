@@ -14,7 +14,8 @@ from vumi.transports.smpp.smpp_transport import (
     SmppTransceiverTransport,
     SmppTransceiverTransportWithOldConfig,
     SmppTransmitterTransport, SmppReceiverTransport,
-    message_key, remote_message_key, SmppService)
+    message_key, remote_message_key, SmppService,
+    multipart_info_key)
 from vumi.transports.smpp.pdu_utils import (
     pdu_ok, short_message, command_id, seq_no, pdu_tlv, unpacked_pdu_opts)
 from vumi.transports.smpp.processors import SubmitShortMessageProcessor
@@ -1083,7 +1084,6 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
         # Our multipart_info Redis hash should contain the number of parts and
         # have an appropriate TTL.
-        from vumi.transports.smpp.smpp_transport import multipart_info_key
         mstash = smpp_helper.transport.message_stash
         multipart_info = yield mstash.get_multipart_info(msg['message_id'])
         self.assertEqual(multipart_info, {"parts": "2"})
@@ -1152,6 +1152,10 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_mt_sms_multipart_ack(self):
+        """
+        When all PDUs of a multipart message have been acknowledged, we clean
+        up the relevant transient state.
+        """
         smpp_helper = yield self.get_smpp_helper(config={
             'submit_short_message_processor_config': {
                 'send_multipart_udh': True,
@@ -1161,6 +1165,20 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         msg = self.tx_helper.make_outbound(content)
         yield self.tx_helper.dispatch_outbound(msg)
         [submit_sm1, submit_sm2] = yield smpp_helper.wait_for_pdus(2)
+
+        # Our multipart_info Redis hash should contain the number of parts and
+        # have an appropriate TTL.
+        mstash = smpp_helper.transport.message_stash
+        multipart_info = yield mstash.get_multipart_info(msg['message_id'])
+        self.assertEqual(multipart_info, {"parts": "2"})
+        mpi_ttl = yield mstash.redis.ttl(multipart_info_key(msg['message_id']))
+        self.assertTrue(
+            mpi_ttl <= mstash.config.submit_sm_expiry,
+            "mpi_ttl (%s) > submit_sm_expiry (%s)" % (
+                mpi_ttl, mstash.config.submit_sm_expiry))
+
+        # We get one response per PDU, so we only send the ack after receiving
+        # both responses.
         smpp_helper.send_pdu(
             SubmitSMResp(sequence_number=seq_no(submit_sm1), message_id='foo'))
         smpp_helper.send_pdu(
@@ -1169,6 +1187,22 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.assertEqual(event['event_type'], 'ack')
         self.assertEqual(event['user_message_id'], msg['message_id'])
         self.assertEqual(event['sent_message_id'], 'bar,foo')
+
+        # After all parts are acknowledged, our multipart_info hash should have
+        # the details of the responses and a much shorter TTL.
+        mstash = smpp_helper.transport.message_stash
+        multipart_info = yield mstash.get_multipart_info(msg['message_id'])
+        self.assertEqual(multipart_info, {
+            "parts": "2",
+            "event_counter": "2",
+            "part:foo": "ack",
+            "part:bar": "ack",
+        })
+        mpi_ttl = yield mstash.redis.ttl(multipart_info_key(msg['message_id']))
+        self.assertTrue(
+            mpi_ttl <= mstash.config.completed_multipart_info_expiry,
+            "mpi_ttl (%s) > completed_multipart_info_expiry (%s)" % (
+                mpi_ttl, mstash.config.completed_multipart_info_expiry))
 
     @inlineCallbacks
     def test_mt_sms_multipart_fail_first_part(self):

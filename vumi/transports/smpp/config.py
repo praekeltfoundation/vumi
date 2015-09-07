@@ -37,6 +37,11 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
         'for matching submit_sm_resp and delivery report messages. Defaults '
         'to 1 week.',
         default=(60 * 60 * 24 * 7), static=True)
+    completed_multipart_info_expiry = ConfigInt(
+        'How long (in seconds) to keep multipart message info for completed '
+        'multipart messages around to avoid pending operations accidentally '
+        'recreating them without an expiry time. Defaults to 1 hour.',
+        default=(60 * 60), static=True)
     redis_manager = ConfigDict(
         'How to connect to Redis.', default={}, static=True)
     split_bind_prefix = ConfigText(
