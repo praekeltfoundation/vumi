@@ -421,10 +421,10 @@ class SmppTransceiverTransport(Transport):
     def process_submit_sm_event(self, message_id, event_type, remote_id,
                                 command_status):
         if event_type == 'ack':
-            if not self.disable_ack:
-                yield self.publish_ack(message_id, remote_id)
             yield self.message_stash.delete_cached_message(message_id)
             yield self.message_stash.expire_multipart_info(message_id)
+            if not self.disable_ack:
+                yield self.publish_ack(message_id, remote_id)
         else:
             if event_type != 'fail':
                 log.warning(
