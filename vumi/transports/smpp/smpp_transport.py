@@ -160,7 +160,7 @@ class SmppMessageDataStash(object):
 
     def init_multipart_info(self, message_id, part_count):
         key = multipart_info_key(message_id)
-        expiry = self.config.third_party_id_expiry
+        expiry = self.config.submit_sm_expiry
         d = self.redis.hmset(key, {
             'parts': part_count,
         })
@@ -252,6 +252,15 @@ class SmppMessageDataStash(object):
             self._determine_multipart_event_cb, message_id, event_type,
             remote_id)
         return d
+
+    def expire_multipart_info(self, message_id):
+        """
+        Set the TTL on multipart info hash to something small. We don't delete
+        this in case there's still an in-flight operation that will recreate it
+        without a TTL.
+        """
+        expiry = self.config.completed_multipart_info_expiry
+        return self.redis.expire(multipart_info_key(message_id), expiry)
 
     def set_sequence_number_message_id(self, sequence_number, message_id):
         key = sequence_number_key(sequence_number)
@@ -412,9 +421,10 @@ class SmppTransceiverTransport(Transport):
     def process_submit_sm_event(self, message_id, event_type, remote_id,
                                 command_status):
         if event_type == 'ack':
+            yield self.message_stash.delete_cached_message(message_id)
+            yield self.message_stash.expire_multipart_info(message_id)
             if not self.disable_ack:
                 yield self.publish_ack(message_id, remote_id)
-            yield self.message_stash.delete_cached_message(message_id)
         else:
             if event_type != 'fail':
                 log.warning(
@@ -427,6 +437,7 @@ class SmppTransceiverTransport(Transport):
                     "Could not retrieve failed message: %s" % (message_id,))
             else:
                 yield self.message_stash.delete_cached_message(message_id)
+                yield self.message_stash.expire_multipart_info(message_id)
                 yield self.publish_nack(message_id, command_status)
                 yield self.failure_publisher.publish_message(
                     FailureMessage(message=err_msg.payload,
