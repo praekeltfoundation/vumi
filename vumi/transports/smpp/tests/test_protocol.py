@@ -22,13 +22,10 @@ from smpp.pdu_builder import (
     Unbind, UnbindResp, SubmitSMResp, DeliverSM, EnquireLink, EnquireLinkResp)
 
 
-def connect_transport(protocol, system_id='', password='', system_type=''):
+def connect_transport(protocol):
     transport = proto_helpers.StringTransport()
     protocol.makeConnection(transport)
-    d = protocol.bind(system_id=system_id, password=password,
-                      system_type=system_type)
-    d.addCallback(lambda _: transport)
-    return d
+    return transport
 
 
 class ForwardableRedisSequence(RedisSequence):
@@ -96,7 +93,7 @@ class TestEsmeProtocol(VumiTestCase):
     @inlineCallbacks
     def setup_bind(self, config={}, clear=True, bind_type='TRX'):
         protocol = yield self.get_protocol(config, bind_type=bind_type)
-        transport = yield connect_transport(protocol)
+        transport = connect_transport(protocol)
         yield bind_protocol(transport, protocol, clear=clear)
         returnValue((transport, protocol))
 
@@ -109,8 +106,7 @@ class TestEsmeProtocol(VumiTestCase):
     def test_on_connection_made(self):
         protocol = yield self.get_protocol()
         self.assertEqual(protocol.state, EsmeProtocol.CLOSED_STATE)
-        transport = yield connect_transport(
-            protocol, system_id='system_id', password='password')
+        transport = connect_transport(protocol)
         self.assertEqual(protocol.state, EsmeProtocol.OPEN_STATE)
         [bind_pdu] = yield wait_for_pdus(transport, 1)
         self.assertCommand(
@@ -125,7 +121,7 @@ class TestEsmeProtocol(VumiTestCase):
     @inlineCallbacks
     def test_drop_link(self):
         protocol = yield self.get_protocol()
-        transport = yield connect_transport(protocol)
+        transport = connect_transport(protocol)
         [bind_pdu] = yield wait_for_pdus(transport, 1)
         self.assertCommand(bind_pdu, 'bind_transceiver')
         self.assertFalse(protocol.is_bound())
@@ -141,7 +137,7 @@ class TestEsmeProtocol(VumiTestCase):
     @inlineCallbacks
     def test_on_smpp_bind(self):
         protocol = yield self.get_protocol()
-        transport = yield connect_transport(protocol)
+        transport = connect_transport(protocol)
         yield bind_protocol(transport, protocol)
         self.assertEqual(protocol.state, EsmeProtocol.BOUND_STATE_TRX)
         self.assertTrue(protocol.is_bound())

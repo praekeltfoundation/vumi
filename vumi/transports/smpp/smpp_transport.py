@@ -42,68 +42,6 @@ def remote_message_key(message_id):
     return 'remote_message:%s' % (message_id,)
 
 
-class SmppTransceiverProtocol(EsmeProtocolFactory.protocol):
-
-    def connectionMade(self):
-        EsmeProtocolFactory.protocol.connectionMade(self)
-        config = self.vumi_transport.get_static_config()
-        password = config.password
-        # Overly long passwords should be truncated.
-        if len(password) > 8:
-            password = password[:8]
-            log.warning("Password longer than 8 characters, truncating.")
-        self.bind(
-            system_id=config.system_id,
-            password=password,
-            system_type=config.system_type,
-            interface_version=config.interface_version,
-            address_range=config.address_range)
-
-    def connectionLost(self, reason):
-        d = maybeDeferred(self.vumi_transport.pause_connectors)
-        d.addCallback(
-            lambda _: EsmeProtocolFactory.protocol.connectionLost(
-                self, reason))
-        return d
-
-    def on_smpp_bind(self, sequence_number):
-        d = maybeDeferred(EsmeProtocolFactory.protocol.on_smpp_bind,
-                          self, sequence_number)
-        d.addCallback(lambda _: self.vumi_transport.unpause_connectors())
-        return d
-
-    def on_submit_sm_resp(self, sequence_number, smpp_message_id,
-                          command_status):
-        cb = {
-            'ESME_ROK': self.vumi_transport.handle_submit_sm_success,
-            'ESME_RTHROTTLED': self.vumi_transport.handle_submit_sm_throttled,
-            'ESME_RMSGQFUL': self.vumi_transport.handle_submit_sm_throttled,
-        }.get(command_status, self.vumi_transport.handle_submit_sm_failure)
-        message_stash = self.vumi_transport.message_stash
-        d = message_stash.get_sequence_number_message_id(sequence_number)
-        d.addCallback(
-            message_stash.set_remote_message_id, smpp_message_id)
-        d.addCallback(
-            self._handle_submit_sm_resp_callback, smpp_message_id,
-            command_status, cb)
-        return d
-
-    def _handle_submit_sm_resp_callback(self, message_id, smpp_message_id,
-                                        command_status, cb):
-        if message_id is None:
-            # We have no message_id, so log a warning instead of calling the
-            # callback.
-            log.warning("Failed to retrieve message id for deliver_sm_resp."
-                        " ack/nack from %s discarded."
-                        % self.vumi_transport.transport_name)
-        else:
-            return cb(message_id, smpp_message_id, command_status)
-
-
-class SmppTransceiverClientFactory(EsmeProtocolFactory):
-    protocol = SmppTransceiverProtocol
-
-
 class SmppService(ReconnectingClientService):
 
     def __init__(self, endpoint, factory):
@@ -296,7 +234,7 @@ class SmppTransceiverTransport(Transport):
     CONFIG_CLASS = SmppTransportConfig
 
     bind_type = 'TRX'
-    factory_class = SmppTransceiverClientFactory
+    factory_class = EsmeProtocolFactory
     service_class = SmppService
     sequence_class = RedisSequence
     clock = reactor

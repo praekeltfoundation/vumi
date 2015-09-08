@@ -93,6 +93,12 @@ class EsmeProtocol(Protocol):
     def connectionMade(self):
         self.state = self.OPEN_STATE
         log.msg('Connection made, current state: %s' % (self.state,))
+        self.bind(
+            system_id=self.config.system_id,
+            password=self.config.password,
+            system_type=self.config.system_type,
+            interface_version=self.config.interface_version,
+            address_range=self.config.address_range)
 
     @inlineCallbacks
     def bind(self,
@@ -110,8 +116,9 @@ class EsmeProtocol(Protocol):
         :param str system_id:
             Identifies the ESME system requesting to bind.
         :param str password:
-            The password may be used by the SMSC to authenticate the
-            ESME requesting to bind.
+            The password may be used by the SMSC to authenticate the ESME
+            requesting to bind. If this is longer than 8 characters, it will be
+            truncated and a warning will be logged.
         :param str system_type:
             Identifies the type of ESME system requesting to bind
             with the SMSC.
@@ -125,6 +132,11 @@ class EsmeProtocol(Protocol):
         :param str address_range:
             The ESME address.
         """
+        # Overly long passwords should be truncated.
+        if len(password) > 8:
+            password = password[:8]
+            log.warning("Password longer than 8 characters, truncating.")
+
         sequence_number = yield self.sequence_generator.next()
         pdu = self.bind_pdu(
             sequence_number, system_id=system_id, password=password,
@@ -180,6 +192,7 @@ class EsmeProtocol(Protocol):
             self.drop_link_call.cancel()
         if self.disconnect_call.active():
             self.disconnect_call.cancel()
+        return self.vumi_transport.pause_connectors()
 
     def is_bound(self):
         """
@@ -279,6 +292,7 @@ class EsmeProtocol(Protocol):
         """Called when the bind has been setup"""
         self.drop_link_call.cancel()
         self.enquire_link_call.start(self.config.smpp_enquire_link_interval)
+        return self.vumi_transport.unpause_connectors()
 
     def handle_unbind(self, pdu):
         return self.send_pdu(UnbindResp(seq_no(pdu)))
@@ -303,10 +317,31 @@ class EsmeProtocol(Protocol):
             The SMPP command_status for this command. Will determine if
             the ``submit_sm`` command was successful or not. Refer to the
             SMPP specification for full list of options.
-
         """
-        log.warning(
-            'onSubmitSMResp called but not implemented by ESME class.')
+        cb = {
+            'ESME_ROK': self.vumi_transport.handle_submit_sm_success,
+            'ESME_RTHROTTLED': self.vumi_transport.handle_submit_sm_throttled,
+            'ESME_RMSGQFUL': self.vumi_transport.handle_submit_sm_throttled,
+        }.get(command_status, self.vumi_transport.handle_submit_sm_failure)
+        message_stash = self.vumi_transport.message_stash
+        d = message_stash.get_sequence_number_message_id(sequence_number)
+        d.addCallback(
+            message_stash.set_remote_message_id, smpp_message_id)
+        d.addCallback(
+            self._handle_submit_sm_resp_callback, smpp_message_id,
+            command_status, cb)
+        return d
+
+    def _handle_submit_sm_resp_callback(self, message_id, smpp_message_id,
+                                        command_status, cb):
+        if message_id is None:
+            # We have no message_id, so log a warning instead of calling the
+            # callback.
+            log.warning("Failed to retrieve message id for deliver_sm_resp."
+                        " ack/nack from %s discarded."
+                        % self.vumi_transport.transport_name)
+        else:
+            return cb(message_id, smpp_message_id, command_status)
 
     @inlineCallbacks
     def handle_deliver_sm(self, pdu):
