@@ -37,9 +37,8 @@ class EsmeProtocolError(Exception):
     pass
 
 
-class EsmeTransceiver(Protocol):
+class EsmeProtocol(Protocol):
 
-    bind_pdu = BindTransceiver
     clock = reactor
     noisy = True
     unbind_timeout = 2
@@ -54,8 +53,13 @@ class EsmeTransceiver(Protocol):
         BOUND_STATE_TX,
         BOUND_STATE_TRX,
     ])
+    _BIND_PDU = {
+        'TX': BindTransmitter,
+        'RX': BindReceiver,
+        'TRX': BindTransceiver,
+    }
 
-    def __init__(self, vumi_transport):
+    def __init__(self, vumi_transport, bind_type):
         """
         An SMPP 3.4 client suitable for use by a Vumi Transport.
 
@@ -64,6 +68,7 @@ class EsmeTransceiver(Protocol):
             with an SMSC.
         """
         self.vumi_transport = vumi_transport
+        self.bind_pdu = self._BIND_PDU[bind_type]
         self.config = self.vumi_transport.get_static_config()
 
         self.buffer = b''
@@ -699,30 +704,15 @@ class EsmeTransceiver(Protocol):
         self.unbind_resp_queue.put(pdu)
 
 
-class EsmeTransceiverFactory(ClientFactory):
+class EsmeProtocolFactory(ClientFactory):
 
-    protocol = EsmeTransceiver
+    protocol = EsmeProtocol
 
-    def __init__(self, transport):
+    def __init__(self, transport, bind_type):
         self.transport = transport
+        self.bind_type = bind_type
 
     def buildProtocol(self, addr):
-        proto = self.protocol(self.transport)
+        proto = self.protocol(self.transport, self.bind_type)
         proto.factory = self
         return proto
-
-
-class EsmeReceiver(EsmeTransceiver):
-    bind_pdu = BindReceiver
-
-
-class EsmeReceiverFactory(EsmeTransceiverFactory):
-    protocol = EsmeReceiver
-
-
-class EsmeTransmitter(EsmeTransceiver):
-    bind_pdu = BindTransmitter
-
-
-class EsmeTransmitterFactory(EsmeTransceiverFactory):
-    protocol = EsmeTransmitter
