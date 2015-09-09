@@ -49,7 +49,6 @@ class TestEsmeProtocol(VumiTestCase):
         self.persistence_helper = self.add_helper(PersistenceHelper())
         self.redis = yield self.persistence_helper.get_redis_manager()
         self.clock = Clock()
-        self.patch(EsmeProtocol, 'clock', self.clock)
 
     @inlineCallbacks
     def get_protocol(self, config={}, bind_type='TRX'):
@@ -64,6 +63,7 @@ class TestEsmeProtocol(VumiTestCase):
         default_config.update(config)
 
         smpp_transport = yield self.tx_helper.get_transport(default_config)
+        smpp_transport.clock = self.clock
 
         factory = EsmeProtocolFactory(smpp_transport, bind_type)
         proto = factory.buildProtocol(('127.0.0.1', 0))
@@ -224,7 +224,8 @@ class TestEsmeProtocol(VumiTestCase):
     def test_enquire_link_no_response(self):
         transport, protocol = yield self.setup_bind(clear=False)
         protocol.clock.advance(protocol.idle_timeout)
-        [unbind_pdu] = yield wait_for_pdus(transport, 1)
+        [enquire_link_pdu, unbind_pdu] = yield wait_for_pdus(transport, 2)
+        self.assertCommand(enquire_link_pdu, 'enquire_link')
         self.assertCommand(unbind_pdu, 'unbind')
         self.clock.advance(protocol.unbind_timeout)
         self.assertTrue(transport.disconnecting)
@@ -232,12 +233,18 @@ class TestEsmeProtocol(VumiTestCase):
     @inlineCallbacks
     def test_enquire_link_looping(self):
         transport, protocol = yield self.setup_bind(clear=False)
-        enquire_link_resp = EnquireLinkResp(1)
 
-        protocol.clock.advance(protocol.idle_timeout - 1)
-        protocol.dataReceived(enquire_link_resp.get_bin())
+        # Respond to a few enquire_link cycles.
+        for i in range(5):
+            protocol.clock.advance(protocol.idle_timeout - 1)
+            [pdu] = yield wait_for_pdus(transport, 1)
+            self.assertCommand(pdu, 'enquire_link')
+            protocol.dataReceived(EnquireLinkResp(seq_no(pdu)).get_bin())
 
+        # Fail to respond, so we disconnect.
         protocol.clock.advance(protocol.idle_timeout - 1)
+        [pdu] = yield wait_for_pdus(transport, 1)
+        self.assertCommand(pdu, 'enquire_link')
         self.assertFalse(transport.disconnecting)
         protocol.clock.advance(1)
 

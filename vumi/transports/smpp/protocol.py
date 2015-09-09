@@ -80,10 +80,7 @@ class EsmeProtocol(Protocol):
         self.enquire_link_call = LoopingCall(self.enquire_link)
         self.drop_link_call = None
         self.idle_timeout = self.config.smpp_enquire_link_interval * 2
-        self.disconnect_call = self.clock.callLater(
-            self.idle_timeout, self.disconnect,
-            'Disconnecting, no response from SMSC for longer '
-            'than %s seconds' % (self.idle_timeout,))
+        self.disconnect_call = None
         self.unbind_resp_queue = DeferredQueue()
 
     def emit(self, msg):
@@ -190,7 +187,7 @@ class EsmeProtocol(Protocol):
             self.enquire_link_call.stop()
         if self.drop_link_call is not None and self.drop_link_call.active():
             self.drop_link_call.cancel()
-        if self.disconnect_call.active():
+        if self.disconnect_call is not None and self.disconnect_call.active():
             self.disconnect_call.cancel()
         return self.vumi_transport.pause_connectors()
 
@@ -291,6 +288,11 @@ class EsmeProtocol(Protocol):
     def on_smpp_bind(self, sequence_number):
         """Called when the bind has been setup"""
         self.drop_link_call.cancel()
+        self.disconnect_call = self.clock.callLater(
+            self.idle_timeout, self.disconnect,
+            'Disconnecting, no response from SMSC for longer '
+            'than %s seconds' % (self.idle_timeout,))
+        self.enquire_link_call.clock = self.clock
         self.enquire_link_call.start(self.config.smpp_enquire_link_interval)
         return self.vumi_transport.unpause_connectors()
 
@@ -750,4 +752,5 @@ class EsmeProtocolFactory(ClientFactory):
     def buildProtocol(self, addr):
         proto = self.protocol(self.transport, self.bind_type)
         proto.factory = self
+        proto.clock = self.transport.clock
         return proto

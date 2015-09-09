@@ -69,7 +69,11 @@ class ConfigClientEndpoint(ConfigField):
 
     def clean(self, value):
         from twisted.internet.endpoints import clientFromString
+        from twisted.internet.interfaces import IStreamClientEndpoint
         from twisted.internet import reactor
+        if IStreamClientEndpoint.providedBy(value):
+            # We got an actual endpoint object, useful for testing.
+            return value
         try:
             return clientFromString(reactor, value)
         except ValueError:

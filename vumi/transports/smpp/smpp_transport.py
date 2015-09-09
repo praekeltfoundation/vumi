@@ -279,6 +279,7 @@ class SmppTransceiverTransport(Transport):
     def start_service(self, factory):
         config = self.get_static_config()
         service = self.service_class(config.twisted_endpoint, factory)
+        service.clock = self.clock
         service.startService()
         return service
 
