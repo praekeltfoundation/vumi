@@ -5,7 +5,7 @@ from uuid import uuid4
 
 from twisted.internet import reactor
 from twisted.internet.defer import (
-    inlineCallbacks, maybeDeferred, returnValue, Deferred, succeed)
+    inlineCallbacks, returnValue, Deferred, succeed)
 from twisted.internet.task import LoopingCall
 
 from vumi.reconnecting_client import ReconnectingClientService

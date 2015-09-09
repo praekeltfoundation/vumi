@@ -51,7 +51,7 @@ class TestFakeSMSC(VumiTestCase):
         """
         A transport can connect to a FakeSMSC and send a bind request.
         """
-        fake_smsc = FakeSMSC(auto_bind=False)
+        fake_smsc = FakeSMSC()
         self.assertEqual(fake_smsc._client_protocol, None)
         yield self.connect_transport(fake_smsc)
         yield fake_smsc.await_connected()
@@ -64,7 +64,7 @@ class TestFakeSMSC(VumiTestCase):
         """
         A FakeSMSC can make the transport wait before accepting the connection.
         """
-        fake_smsc = FakeSMSC(auto_accept=False, auto_bind=False)
+        fake_smsc = FakeSMSC(auto_accept=False)
         self.assertEqual(fake_smsc._client_protocol, None)
         yield self.connect_transport(fake_smsc)
         # The connection has been started, but is not yet completed.
@@ -85,17 +85,13 @@ class TestFakeSMSC(VumiTestCase):
         """
         A FakeSMSC can reply to a bind PDU.
         """
-        fake_smsc = FakeSMSC(auto_bind=False)
+        fake_smsc = FakeSMSC()
         self.assertEqual(fake_smsc._client_protocol, None)
         yield self.connect_transport(fake_smsc)
         yield fake_smsc.await_connected()
         self.assertEqual(fake_smsc._client_protocol.connected, True)
         self.assertEqual(fake_smsc._client_protocol.is_bound(), False)
-        pdu = yield fake_smsc.bind()
-        self.assertEqual(pdu['header']['command_id'], 'bind_transceiver')
-        # The PDU hasn't reached the EMSE yet, so we wait for the first
-        # enquire_link PDU to know when we're bound.
-        yield fake_smsc.await_pdu()
+        yield fake_smsc.bind()
         self.assertEqual(fake_smsc._client_protocol.is_bound(), True)
 
     @inlineCallbacks
@@ -103,7 +99,7 @@ class TestFakeSMSC(VumiTestCase):
         """
         A FakeSMSC can reply to a specific bind PDU.
         """
-        fake_smsc = FakeSMSC(auto_bind=False)
+        fake_smsc = FakeSMSC()
         self.assertEqual(fake_smsc._client_protocol, None)
         yield self.connect_transport(fake_smsc)
         yield fake_smsc.await_connected()
@@ -111,23 +107,5 @@ class TestFakeSMSC(VumiTestCase):
         self.assertEqual(fake_smsc._client_protocol.is_bound(), False)
         bind_pdu = yield fake_smsc.await_pdu()
         self.assertEqual(bind_pdu['header']['command_id'], 'bind_transceiver')
-        bind_pdu_again = yield fake_smsc.bind(bind_pdu)
-        self.assertEqual(bind_pdu, bind_pdu_again)
-        # The PDU hasn't reached the EMSE yet, so we wait for the first
-        # enquire_link PDU to know when we're bound.
-        yield fake_smsc.await_pdu()
+        yield fake_smsc.bind(bind_pdu)
         self.assertEqual(fake_smsc._client_protocol.is_bound(), True)
-
-    @inlineCallbacks
-    def test_connect_bind(self):
-        """
-        By default, a FakeSMSC will accept a connection and a bind request.
-        """
-        fake_smsc = FakeSMSC()
-        self.assertEqual(fake_smsc._client_protocol, None)
-        yield self.connect_transport(fake_smsc)
-        # The first PDU we receive will be an enquire_link.
-        pdu = yield fake_smsc.await_pdu()
-        self.assertEqual(fake_smsc._client_protocol.connected, True)
-        self.assertEqual(fake_smsc._client_protocol.is_bound(), True)
-        self.assertEqual(pdu['header']['command_id'], 'enquire_link')

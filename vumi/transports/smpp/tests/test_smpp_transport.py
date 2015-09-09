@@ -14,13 +14,39 @@ from vumi.transports.smpp.smpp_transport import (
     SmppTransceiverTransport,
     SmppTransceiverTransportWithOldConfig,
     SmppTransmitterTransport, SmppReceiverTransport,
-    message_key, remote_message_key, SmppService,
-    multipart_info_key)
+    message_key, remote_message_key, multipart_info_key)
 from vumi.transports.smpp.pdu_utils import (
     pdu_ok, short_message, command_id, seq_no, pdu_tlv, unpacked_pdu_opts)
 from vumi.transports.smpp.processors import SubmitShortMessageProcessor
-from vumi.transports.smpp.tests.helpers import DummyService, SMPPHelper
+from vumi.transports.smpp.tests.fake_smsc import FakeSMSC
 from vumi.transports.tests.helpers import TransportHelper
+
+
+class TestSmppTransportConfig(VumiTestCase):
+    def test_host_port_fallback(self):
+        """
+        Old-style 'host' and 'port' fields are still supported in configs.
+        """
+
+        def parse_config(extra_config):
+            config = {
+                'transport_name': 'name',
+                'system_id': 'foo',
+                'password': 'bar',
+            }
+            config.update(extra_config)
+            return SmppTransceiverTransport.CONFIG_CLASS(config, static=True)
+
+        # If we don't provide an endpoint config, we get an error.
+        self.assertRaises(ConfigError, parse_config, {})
+
+        # If we do provide an endpoint config, we get an endpoint.
+        cfg = {'twisted_endpoint': 'tcp:host=example.com:port=1337'}
+        self.assertNotEqual(parse_config(cfg).twisted_endpoint.connect, None)
+
+        # If we provide host and port configs, we get an endpoint.
+        cfg = {'host': 'example.com', 'port': 1337}
+        self.assertNotEqual(parse_config(cfg).twisted_endpoint.connect, None)
 
 
 class SmppTransportTestCase(VumiTestCase):
@@ -31,15 +57,12 @@ class SmppTransportTestCase(VumiTestCase):
     transport_class = None
 
     def setUp(self):
-
         self.clock = Clock()
-        self.patch(self.transport_class, 'service_class', DummyService)
-        self.patch(self.transport_class, 'clock', self.clock)
-
+        self.fake_smsc = FakeSMSC()
         self.tx_helper = self.add_helper(TransportHelper(self.transport_class))
         self.default_config = {
             'transport_name': self.tx_helper.transport_name,
-            'twisted_endpoint': 'tcp:host=127.0.0.1:port=0',
+            'twisted_endpoint': self.fake_smsc.endpoint,
             'delivery_report_processor': 'vumi.transports.smpp.processors.'
                                          'DeliveryReportProcessor',
             'deliver_short_message_processor': (
@@ -54,21 +77,24 @@ class SmppTransportTestCase(VumiTestCase):
             }
         }
 
-    def _get_transport(self, config):
+    def _get_transport_config(self, config):
         """
         This is overridden in a subclass.
         """
         cfg = self.default_config.copy()
         cfg.update(config)
-        return self.tx_helper.get_transport(cfg)
+        return cfg
 
     @inlineCallbacks
-    def get_smpp_helper(self, config={}, bind=True):
-        transport = yield self._get_transport(config)
-        smpp_helper = SMPPHelper(transport)
+    def get_transport(self, config={}, bind=True):
+        cfg = self._get_transport_config(config)
+        transport = yield self.tx_helper.get_transport(cfg, start=False)
+        transport.clock = self.clock
+        yield transport.startWorker()
+        self.clock.advance(0)
         if bind:
-            yield smpp_helper.bind()
-        returnValue(smpp_helper)
+            yield self.fake_smsc.bind()
+        returnValue(transport)
 
 
 class SmppTransceiverTransportTestCase(SmppTransportTestCase):
@@ -77,50 +103,19 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_setup_transport(self):
-        smpp_helper = yield self.get_smpp_helper()
-        protocol = yield smpp_helper.transport.service.get_protocol()
-        self.assertTrue(protocol.is_bound())
-
-    @inlineCallbacks
-    def test_smpp_service(self):
-        """
-        Testing the real service because these tests use the
-        fake DummyService implementation
-        """
-        smpp_helper = yield self.get_smpp_helper()
-
-        service = SmppService(None, None)
-        self.assertEqual(service._protocol, None)
-        self.assertEqual(service.is_bound(), False)
-
-        d = service.get_protocol()
-        self.assertEqual(len(service.wait_on_protocol_deferreds), 1)
-        service.clientConnected(smpp_helper.protocol)
-        received_protocol = yield d
-        self.assertEqual(received_protocol, smpp_helper.protocol)
-        self.assertEqual(len(service.wait_on_protocol_deferreds), 0)
-        self.assertEqual(service.is_bound(), True)
-
-        # Replace protocol.is_bound() to test that service.is_bound() uses it.
-        received_protocol.is_bound = lambda: False
-        self.assertEqual(service.is_bound(), False)
-
-    @inlineCallbacks
-    def test_setup_transport_host_port_fallback(self):
-        self.default_config.pop('twisted_endpoint')
-        smpp_helper = yield self.get_smpp_helper({
-            'host': '127.0.0.1',
-            'port': 0,
-        })
-        self.assertTrue(smpp_helper.protocol.is_bound())
+        transport = yield self.get_transport(bind=False)
+        protocol = yield transport.service.get_protocol()
+        self.assertEqual(protocol.is_bound(), False)
+        yield self.fake_smsc.bind()
+        self.assertEqual(protocol.is_bound(), True)
 
     @inlineCallbacks
     def test_mo_sms(self):
-        smpp_helper = yield self.get_smpp_helper()
-        smpp_helper.send_mo(
+        yield self.get_transport()
+        self.fake_smsc.send_mo(
             sequence_number=1, short_message='foo', source_addr='123',
             destination_addr='456')
-        [deliver_sm_resp] = yield smpp_helper.wait_for_pdus(1)
+        deliver_sm_resp = yield self.fake_smsc.await_pdu()
         self.assertTrue(pdu_ok(deliver_sm_resp))
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assertEqual(msg['content'], 'foo')
@@ -130,27 +125,27 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_mo_sms_empty_sms_allowed(self):
-        smpp_helper = yield self.get_smpp_helper({
+        yield self.get_transport({
             'deliver_short_message_processor_config': {
                 'allow_empty_messages': True,
             }
         })
-        smpp_helper.send_mo(
+        self.fake_smsc.send_mo(
             sequence_number=1, short_message='', source_addr='123',
             destination_addr='456')
-        [deliver_sm_resp] = yield smpp_helper.wait_for_pdus(1)
+        deliver_sm_resp = yield self.fake_smsc.await_pdu()
         self.assertTrue(pdu_ok(deliver_sm_resp))
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assertEqual(msg['content'], '')
 
     @inlineCallbacks
     def test_mo_sms_empty_sms_disallowed(self):
-        smpp_helper = yield self.get_smpp_helper()
+        yield self.get_transport()
         with LogCatcher(message=r"^(Not all parts|WARNING)") as lc:
-            smpp_helper.send_mo(
+            self.fake_smsc.send_mo(
                 sequence_number=1, short_message='', source_addr='123',
                 destination_addr='456')
-            [deliver_sm_resp] = yield smpp_helper.wait_for_pdus(1)
+            deliver_sm_resp = yield self.fake_smsc.await_pdu()
 
         self.assertFalse(pdu_ok(deliver_sm_resp))
 
@@ -172,14 +167,13 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         We always treat a message with the optional PDU params set as a
         delivery report.
         """
-        smpp_helper = yield self.get_smpp_helper()
-        transport = smpp_helper.transport
+        transport = yield self.get_transport()
         yield transport.message_stash.set_remote_message_id('bar', 'foo')
 
         pdu = DeliverSM(sequence_number=1, esm_class=4)
         pdu.add_optional_parameter('receipted_message_id', 'foo')
         pdu.add_optional_parameter('message_state', 2)
-        yield smpp_helper.handle_pdu(pdu)
+        yield self.fake_smsc.handle_pdu(pdu)
 
         [event] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(event['event_type'], 'delivery_report')
@@ -192,14 +186,13 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         We always treat a message with the optional PDU params set as a
         delivery report, even if ``esm_class`` is not set.
         """
-        smpp_helper = yield self.get_smpp_helper()
-        transport = smpp_helper.transport
+        transport = yield self.get_transport()
         yield transport.message_stash.set_remote_message_id('bar', 'foo')
 
         pdu = DeliverSM(sequence_number=1)
         pdu.add_optional_parameter('receipted_message_id', 'foo')
         pdu.add_optional_parameter('message_state', 2)
-        yield smpp_helper.handle_pdu(pdu)
+        yield self.fake_smsc.handle_pdu(pdu)
 
         [event] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(event['event_type'], 'delivery_report')
@@ -212,11 +205,10 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         We treat a content-based DR as a normal message if the ``esm_class``
         flags are not set.
         """
-        smpp_helper = yield self.get_smpp_helper()
-        transport = smpp_helper.transport
+        transport = yield self.get_transport()
         yield transport.message_stash.set_remote_message_id('bar', 'foo')
 
-        smpp_helper.send_mo(
+        self.fake_smsc.send_mo(
             sequence_number=1, short_message=self.DR_TEMPLATE % ('foo',),
             source_addr='123', destination_addr='456')
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
@@ -234,11 +226,10 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         If ``esm_class`` and content are both set appropriately, we process the
         DR.
         """
-        smpp_helper = yield self.get_smpp_helper()
-        transport = smpp_helper.transport
+        transport = yield self.get_transport()
         yield transport.message_stash.set_remote_message_id('bar', 'foo')
 
-        smpp_helper.send_mo(
+        self.fake_smsc.send_mo(
             sequence_number=1, short_message=self.DR_TEMPLATE % ('foo',),
             source_addr='123', destination_addr='456', esm_class=4)
 
@@ -253,14 +244,13 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         If the delivery report has a shorter status field, the default regex
         still matches.
         """
-        smpp_helper = yield self.get_smpp_helper()
-        transport = smpp_helper.transport
+        transport = yield self.get_transport()
         yield transport.message_stash.set_remote_message_id('bar', 'foo')
 
         short_message = (
             "id:foo sub:... dlvrd:... submit date:200101010030"
             " done date:200101020030 stat:FAILED err:042 text:Meep")
-        smpp_helper.send_mo(
+        self.fake_smsc.send_mo(
             sequence_number=1, short_message=short_message,
             source_addr='123', destination_addr='456', esm_class=4)
 
@@ -275,11 +265,10 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         If ``esm_class`` and content are both set appropriately, we process the
         DR even if the minimal subset of the content regex matches.
         """
-        smpp_helper = yield self.get_smpp_helper()
-        transport = smpp_helper.transport
+        transport = yield self.get_transport()
         yield transport.message_stash.set_remote_message_id('bar', 'foo')
 
-        smpp_helper.send_mo(
+        self.fake_smsc.send_mo(
             sequence_number=1, source_addr='123', destination_addr='456',
             short_message=self.DR_MINIMAL_TEMPLATE % ('foo',), esm_class=4)
 
@@ -294,14 +283,13 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         If ``esm_class`` and content are both set appropriately, we process the
         DR even if some content fields contain null values.
         """
-        smpp_helper = yield self.get_smpp_helper()
-        transport = smpp_helper.transport
+        transport = yield self.get_transport()
         yield transport.message_stash.set_remote_message_id('bar', 'foo')
 
         content = (
             "id:%s sub:null dlvrd:null submit date:200101010030"
             " done date:200101020030 stat:DELIVRD err:null text:Meep")
-        smpp_helper.send_mo(
+        self.fake_smsc.send_mo(
             sequence_number=1, short_message=content % ("foo",),
             source_addr='123', destination_addr='456', esm_class=4)
 
@@ -316,16 +304,15 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         If ``esm_class`` indicates a DR but the regex fails to match, we log a
         warning and do nothing.
         """
-        smpp_helper = yield self.get_smpp_helper()
-        transport = smpp_helper.transport
+        transport = yield self.get_transport()
         yield transport.message_stash.set_remote_message_id('bar', 'foo')
 
         lc = LogCatcher(message="esm_class 4 indicates")
         with lc:
-            smpp_helper.send_mo(
+            self.fake_smsc.send_mo(
                 sequence_number=1, source_addr='123', destination_addr='456',
                 short_message="foo", esm_class=4)
-            yield smpp_helper.wait_for_pdus(1)
+            yield self.fake_smsc.await_pdu()
 
         # check that failure to process delivery report was logged
         [warning] = lc.logs
@@ -345,16 +332,15 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         If ``esm_class`` indicates a DR but the content is empty, we log a
         warning and do nothing.
         """
-        smpp_helper = yield self.get_smpp_helper()
-        transport = smpp_helper.transport
+        transport = yield self.get_transport()
         yield transport.message_stash.set_remote_message_id('bar', 'foo')
 
         lc = LogCatcher(message="esm_class 4 indicates")
         with lc:
-            smpp_helper.send_mo(
+            self.fake_smsc.send_mo(
                 sequence_number=1, source_addr='123', destination_addr='456',
                 short_message=None, esm_class=4)
-            yield smpp_helper.wait_for_pdus(1)
+            yield self.fake_smsc.await_pdu()
 
         # check that failure to process delivery report was logged
         [warning] = lc.logs
@@ -374,15 +360,14 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         If ``esm_class`` checking is disabled and the content is set
         appropriately, we process the DR.
         """
-        smpp_helper = yield self.get_smpp_helper(config={
+        transport = yield self.get_transport({
             "delivery_report_processor_config": {
                 "delivery_report_use_esm_class": False,
             }
         })
-        transport = smpp_helper.transport
         yield transport.message_stash.set_remote_message_id('bar', 'foo')
 
-        smpp_helper.send_mo(
+        self.fake_smsc.send_mo(
             sequence_number=1, short_message=self.DR_TEMPLATE % ('foo',),
             source_addr='123', destination_addr='456', esm_class=0)
 
@@ -398,15 +383,14 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         appropriately, we process the DR even if the minimal subset of the
         content regex matches.
         """
-        smpp_helper = yield self.get_smpp_helper(config={
+        transport = yield self.get_transport({
             "delivery_report_processor_config": {
                 "delivery_report_use_esm_class": False,
             }
         })
-        transport = smpp_helper.transport
         yield transport.message_stash.set_remote_message_id('bar', 'foo')
 
-        smpp_helper.send_mo(
+        self.fake_smsc.send_mo(
             sequence_number=1, source_addr='123', destination_addr='456',
             short_message=self.DR_MINIMAL_TEMPLATE % ('foo',), esm_class=0)
 
@@ -422,18 +406,17 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         appropriately, we process the DR even if some content fields contain
         null values.
         """
-        smpp_helper = yield self.get_smpp_helper(config={
+        transport = yield self.get_transport({
             "delivery_report_processor_config": {
                 "delivery_report_use_esm_class": False,
             }
         })
-        transport = smpp_helper.transport
         yield transport.message_stash.set_remote_message_id('bar', 'foo')
 
         content = (
             "id:%s sub:null dlvrd:null submit date:200101010030"
             " done date:200101020030 stat:DELIVRD err:null text:Meep")
-        smpp_helper.send_mo(
+        self.fake_smsc.send_mo(
             sequence_number=1, short_message=content % ("foo",),
             source_addr='123', destination_addr='456', esm_class=0)
 
@@ -444,24 +427,24 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_mo_sms_unicode(self):
-        smpp_helper = yield self.get_smpp_helper()
-        smpp_helper.send_mo(sequence_number=1, short_message='Zo\xc3\xab',
-                            data_coding=0)
-        [deliver_sm_resp] = yield smpp_helper.wait_for_pdus(1)
+        yield self.get_transport()
+        self.fake_smsc.send_mo(
+            sequence_number=1, short_message='Zo\xc3\xab', data_coding=0)
+        deliver_sm_resp = yield self.fake_smsc.await_pdu()
         self.assertTrue(pdu_ok(deliver_sm_resp))
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assertEqual(msg['content'], u'Zoë')
 
     @inlineCallbacks
     def test_mo_sms_multipart_long(self):
-        smpp_helper = yield self.get_smpp_helper()
+        yield self.get_transport()
         content = '1' * 255
 
         pdu = DeliverSM(sequence_number=1)
         pdu.add_optional_parameter('message_payload', content.encode('hex'))
-        smpp_helper.send_pdu(pdu)
+        self.fake_smsc.send_pdu(pdu)
 
-        [deliver_sm_resp] = yield smpp_helper.wait_for_pdus(1)
+        deliver_sm_resp = yield self.fake_smsc.await_pdu()
         self.assertEqual(1, seq_no(deliver_sm_resp))
         self.assertTrue(pdu_ok(deliver_sm_resp))
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
@@ -469,17 +452,17 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_mo_sms_multipart_udh(self):
-        smpp_helper = yield self.get_smpp_helper()
+        yield self.get_transport()
         deliver_sm_resps = []
-        smpp_helper.send_mo(sequence_number=1,
-                            short_message="\x05\x00\x03\xff\x03\x01back")
-        deliver_sm_resps.append((yield smpp_helper.wait_for_pdus(1))[0])
-        smpp_helper.send_mo(sequence_number=2,
-                            short_message="\x05\x00\x03\xff\x03\x02 at")
-        deliver_sm_resps.append((yield smpp_helper.wait_for_pdus(1))[0])
-        smpp_helper.send_mo(sequence_number=3,
-                            short_message="\x05\x00\x03\xff\x03\x03 you")
-        deliver_sm_resps.append((yield smpp_helper.wait_for_pdus(1))[0])
+        self.fake_smsc.send_mo(
+            sequence_number=1, short_message="\x05\x00\x03\xff\x03\x01back")
+        deliver_sm_resps.append((yield self.fake_smsc.await_pdu()))
+        self.fake_smsc.send_mo(
+            sequence_number=2, short_message="\x05\x00\x03\xff\x03\x02 at")
+        deliver_sm_resps.append((yield self.fake_smsc.await_pdu()))
+        self.fake_smsc.send_mo(
+            sequence_number=3, short_message="\x05\x00\x03\xff\x03\x03 you")
+        deliver_sm_resps.append((yield self.fake_smsc.await_pdu()))
         self.assertEqual([1, 2, 3], map(seq_no, deliver_sm_resps))
         self.assertTrue(all(map(pdu_ok, deliver_sm_resps)))
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
@@ -487,19 +470,19 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_mo_sms_multipart_udh_out_of_order(self):
-        smpp_helper = yield self.get_smpp_helper()
+        yield self.get_transport()
         deliver_sm_resps = []
-        smpp_helper.send_mo(sequence_number=1,
-                            short_message="\x05\x00\x03\xff\x03\x01back")
-        deliver_sm_resps.append((yield smpp_helper.wait_for_pdus(1))[0])
+        self.fake_smsc.send_mo(
+            sequence_number=1, short_message="\x05\x00\x03\xff\x03\x01back")
+        deliver_sm_resps.append((yield self.fake_smsc.await_pdu()))
 
-        smpp_helper.send_mo(sequence_number=3,
-                            short_message="\x05\x00\x03\xff\x03\x03 you")
-        deliver_sm_resps.append((yield smpp_helper.wait_for_pdus(1))[0])
+        self.fake_smsc.send_mo(
+            sequence_number=3, short_message="\x05\x00\x03\xff\x03\x03 you")
+        deliver_sm_resps.append((yield self.fake_smsc.await_pdu()))
 
-        smpp_helper.send_mo(sequence_number=2,
-                            short_message="\x05\x00\x03\xff\x03\x02 at")
-        deliver_sm_resps.append((yield smpp_helper.wait_for_pdus(1))[0])
+        self.fake_smsc.send_mo(
+            sequence_number=2, short_message="\x05\x00\x03\xff\x03\x02 at")
+        deliver_sm_resps.append((yield self.fake_smsc.await_pdu()))
 
         self.assertEqual([1, 3, 2], map(seq_no, deliver_sm_resps))
         self.assertTrue(all(map(pdu_ok, deliver_sm_resps)))
@@ -508,7 +491,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_mo_sms_multipart_sar(self):
-        smpp_helper = yield self.get_smpp_helper()
+        yield self.get_transport()
         deliver_sm_resps = []
 
         pdu1 = DeliverSM(sequence_number=1, short_message='back')
@@ -516,24 +499,24 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         pdu1.add_optional_parameter('sar_total_segments', 3)
         pdu1.add_optional_parameter('sar_segment_seqnum', 1)
 
-        smpp_helper.send_pdu(pdu1)
-        deliver_sm_resps.append((yield smpp_helper.wait_for_pdus(1))[0])
+        self.fake_smsc.send_pdu(pdu1)
+        deliver_sm_resps.append((yield self.fake_smsc.await_pdu()))
 
         pdu2 = DeliverSM(sequence_number=2, short_message=' at')
         pdu2.add_optional_parameter('sar_msg_ref_num', 1)
         pdu2.add_optional_parameter('sar_total_segments', 3)
         pdu2.add_optional_parameter('sar_segment_seqnum', 2)
 
-        smpp_helper.send_pdu(pdu2)
-        deliver_sm_resps.append((yield smpp_helper.wait_for_pdus(1))[0])
+        self.fake_smsc.send_pdu(pdu2)
+        deliver_sm_resps.append((yield self.fake_smsc.await_pdu()))
 
         pdu3 = DeliverSM(sequence_number=3, short_message=' you')
         pdu3.add_optional_parameter('sar_msg_ref_num', 1)
         pdu3.add_optional_parameter('sar_total_segments', 3)
         pdu3.add_optional_parameter('sar_segment_seqnum', 3)
 
-        smpp_helper.send_pdu(pdu3)
-        deliver_sm_resps.append((yield smpp_helper.wait_for_pdus(1))[0])
+        self.fake_smsc.send_pdu(pdu3)
+        deliver_sm_resps.append((yield self.fake_smsc.await_pdu()))
 
         self.assertEqual([1, 2, 3], map(seq_no, deliver_sm_resps))
         self.assertTrue(all(map(pdu_ok, deliver_sm_resps)))
@@ -542,7 +525,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_mo_bad_encoding(self):
-        smpp_helper = yield self.get_smpp_helper()
+        yield self.get_transport()
 
         bad_pdu = DeliverSM(555,
                             short_message="SMS from server containing \xa7",
@@ -556,8 +539,8 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
                              source_addr="2772000000",
                              data_coding=1)
 
-        yield smpp_helper.handle_pdu(bad_pdu)
-        yield smpp_helper.handle_pdu(good_pdu)
+        yield self.fake_smsc.handle_pdu(bad_pdu)
+        yield self.fake_smsc.handle_pdu(good_pdu)
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
 
         self.assertEqual(msg['message_type'], 'user_message')
@@ -576,11 +559,11 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_mo_sms_failed_remote_id_lookup(self):
-        smpp_helper = yield self.get_smpp_helper()
+        yield self.get_transport()
 
         lc = LogCatcher(message="Failed to retrieve message id")
         with lc:
-            yield smpp_helper.handle_pdu(
+            yield self.fake_smsc.handle_pdu(
                 DeliverSM(sequence_number=1, esm_class=4,
                           short_message=self.DR_TEMPLATE % ('foo',)))
 
@@ -593,16 +576,16 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_mt_sms(self):
-        smpp_helper = yield self.get_smpp_helper()
+        yield self.get_transport()
         msg = self.tx_helper.make_outbound('hello world')
         yield self.tx_helper.dispatch_outbound(msg)
-        [pdu] = yield smpp_helper.wait_for_pdus(1)
+        pdu = yield self.fake_smsc.await_pdu()
         self.assertEqual(command_id(pdu), 'submit_sm')
         self.assertEqual(short_message(pdu), 'hello world')
 
     @inlineCallbacks
     def test_mt_sms_bad_to_addr(self):
-        yield self.get_smpp_helper()
+        yield self.get_transport()
         msg = yield self.tx_helper.make_dispatch_outbound(
             'hello world', to_addr=u'+\u2000')
         [event] = self.tx_helper.get_dispatched_events()
@@ -612,7 +595,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_mt_sms_bad_from_addr(self):
-        yield self.get_smpp_helper()
+        yield self.get_transport()
         msg = yield self.tx_helper.make_dispatch_outbound(
             'hello world', from_addr=u'+\u2000')
         [event] = self.tx_helper.get_dispatched_events()
@@ -622,13 +605,13 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_mt_sms_submit_sm_encoding(self):
-        smpp_helper = yield self.get_smpp_helper(config={
+        yield self.get_transport({
             'submit_short_message_processor_config': {
                 'submit_sm_encoding': 'latin1',
             }
         })
         yield self.tx_helper.make_dispatch_outbound(u'Zoë destroyer of Ascii!')
-        [submit_sm_pdu] = yield smpp_helper.wait_for_pdus(1)
+        submit_sm_pdu = yield self.fake_smsc.await_pdu()
         self.assertEqual(
             short_message(submit_sm_pdu),
             u'Zoë destroyer of Ascii!'.encode('latin-1'))
@@ -638,32 +621,32 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         """
         We can successfully send a message with null content.
         """
-        smpp_helper = yield self.get_smpp_helper()
+        yield self.get_transport()
         msg = self.tx_helper.make_outbound(None)
         yield self.tx_helper.dispatch_outbound(msg)
-        [pdu] = yield smpp_helper.wait_for_pdus(1)
+        pdu = yield self.fake_smsc.await_pdu()
         self.assertEqual(command_id(pdu), 'submit_sm')
         self.assertEqual(short_message(pdu), None)
 
     @inlineCallbacks
     def test_submit_sm_data_coding(self):
-        smpp_helper = yield self.get_smpp_helper(config={
+        yield self.get_transport({
             'submit_short_message_processor_config': {
                 'submit_sm_data_coding': 8
             }
         })
         yield self.tx_helper.make_dispatch_outbound("hello world")
-        [submit_sm_pdu] = yield smpp_helper.wait_for_pdus(1)
+        submit_sm_pdu = yield self.fake_smsc.await_pdu()
         params = submit_sm_pdu['body']['mandatory_parameters']
         self.assertEqual(params['data_coding'], 8)
 
     @inlineCallbacks
     def test_mt_sms_ack(self):
-        smpp_helper = yield self.get_smpp_helper()
+        yield self.get_transport()
         msg = self.tx_helper.make_outbound('hello world')
         yield self.tx_helper.dispatch_outbound(msg)
-        [submit_sm_pdu] = yield smpp_helper.wait_for_pdus(1)
-        smpp_helper.send_pdu(
+        submit_sm_pdu = yield self.fake_smsc.await_pdu()
+        self.fake_smsc.send_pdu(
             SubmitSMResp(sequence_number=seq_no(submit_sm_pdu),
                          message_id='foo'))
         [event] = yield self.tx_helper.wait_for_dispatched_events(1)
@@ -673,21 +656,19 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_mt_sms_disabled_ack(self):
-        smpp_helper = yield self.get_smpp_helper({
-            'disable_ack': True,
-        })
+        yield self.get_transport({'disable_ack': True})
         msg = self.tx_helper.make_outbound('hello world')
         yield self.tx_helper.dispatch_outbound(msg)
-        [submit_sm_pdu] = yield smpp_helper.wait_for_pdus(1)
-        smpp_helper.send_pdu(
+        submit_sm_pdu = yield self.fake_smsc.await_pdu()
+        self.fake_smsc.send_pdu(
             SubmitSMResp(sequence_number=seq_no(submit_sm_pdu),
                          message_id='foo'))
         # NOTE: We can't test for the absence of an event in isolation but we
         #       can test that for the presence of a second event only.
         fail_msg = self.tx_helper.make_outbound('hello fail')
         yield self.tx_helper.dispatch_outbound(fail_msg)
-        [submit_sm_fail_pdu] = yield smpp_helper.wait_for_pdus(1)
-        smpp_helper.send_pdu(
+        submit_sm_fail_pdu = yield self.fake_smsc.await_pdu()
+        self.fake_smsc.send_pdu(
             SubmitSMResp(sequence_number=seq_no(submit_sm_fail_pdu),
                          message_id='foo', command_status='ESME_RINVDSTADR'))
         [fail] = yield self.tx_helper.wait_for_dispatched_events(1)
@@ -695,11 +676,11 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_mt_sms_nack(self):
-        smpp_helper = yield self.get_smpp_helper()
+        yield self.get_transport()
         msg = self.tx_helper.make_outbound('hello world')
         yield self.tx_helper.dispatch_outbound(msg)
-        [submit_sm_pdu] = yield smpp_helper.wait_for_pdus(1)
-        smpp_helper.send_pdu(
+        submit_sm_pdu = yield self.fake_smsc.await_pdu()
+        self.fake_smsc.send_pdu(
             SubmitSMResp(sequence_number=seq_no(submit_sm_pdu),
                          message_id='foo', command_status='ESME_RINVDSTADR'))
         [event] = yield self.tx_helper.wait_for_dispatched_events(1)
@@ -709,15 +690,15 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_mt_sms_failure(self):
-        smpp_helper = yield self.get_smpp_helper()
+        yield self.get_transport()
         message = yield self.tx_helper.make_dispatch_outbound(
             "message", message_id='446')
-        [submit_sm] = yield smpp_helper.wait_for_pdus(1)
+        submit_sm = yield self.fake_smsc.await_pdu()
         response = SubmitSMResp(seq_no(submit_sm), "3rd_party_id_3",
                                 command_status="ESME_RSUBMITFAIL")
         # A failure PDU might not have a body.
         response.obj.pop('body')
-        smpp_helper.send_pdu(response)
+        self.fake_smsc.send_pdu(response)
 
         # There should be a nack
         [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
@@ -729,12 +710,12 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
     @inlineCallbacks
     def test_mt_sms_failure_with_no_reason(self):
 
-        smpp_helper = yield self.get_smpp_helper()
+        yield self.get_transport()
         message = yield self.tx_helper.make_dispatch_outbound(
             "message", message_id='446')
-        [submit_sm] = yield smpp_helper.wait_for_pdus(1)
+        submit_sm = yield self.fake_smsc.await_pdu()
 
-        yield smpp_helper.handle_pdu(
+        yield self.fake_smsc.handle_pdu(
             SubmitSMResp(sequence_number=seq_no(submit_sm),
                          message_id='foo',
                          command_status=None))
@@ -749,15 +730,15 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_mt_sms_seq_num_lookup_failure(self):
-        smpp_helper = yield self.get_smpp_helper()
+        transport = yield self.get_transport()
 
         lc = LogCatcher(message="Failed to retrieve message id")
         with lc:
-            yield smpp_helper.handle_pdu(
+            yield self.fake_smsc.handle_pdu(
                 SubmitSMResp(sequence_number=0xbad, message_id='bad'))
 
         # Make sure we didn't store 'None' in redis.
-        message_stash = smpp_helper.transport.message_stash
+        message_stash = transport.message_stash
         message_id = yield message_stash.get_internal_message_id('bad')
         self.assertEqual(message_id, None)
 
@@ -770,14 +751,14 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_mt_sms_throttled(self):
-        smpp_helper = yield self.get_smpp_helper()
-        transport_config = smpp_helper.transport.get_static_config()
+        transport = yield self.get_transport()
+        transport_config = transport.get_static_config()
         msg = self.tx_helper.make_outbound('hello world')
 
         yield self.tx_helper.dispatch_outbound(msg)
-        [submit_sm_pdu] = yield smpp_helper.wait_for_pdus(1)
+        submit_sm_pdu = yield self.fake_smsc.await_pdu()
         with LogCatcher(message="Throttling outbound messages.") as lc:
-            yield smpp_helper.handle_pdu(
+            yield self.fake_smsc.handle_pdu(
                 SubmitSMResp(sequence_number=seq_no(submit_sm_pdu),
                              message_id='foo',
                              command_status='ESME_RTHROTTLED'))
@@ -786,8 +767,8 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
         self.clock.advance(transport_config.throttle_delay)
 
-        [submit_sm_pdu_retry] = yield smpp_helper.wait_for_pdus(1)
-        yield smpp_helper.handle_pdu(
+        submit_sm_pdu_retry = yield self.fake_smsc.await_pdu()
+        yield self.fake_smsc.handle_pdu(
             SubmitSMResp(sequence_number=seq_no(submit_sm_pdu_retry),
                          message_id='bar',
                          command_status='ESME_ROK'))
@@ -808,41 +789,41 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_mt_sms_throttle_while_throttled(self):
-        smpp_helper = yield self.get_smpp_helper()
-        transport_config = smpp_helper.transport.get_static_config()
+        transport = yield self.get_transport()
+        transport_config = transport.get_static_config()
         msg1 = self.tx_helper.make_outbound('hello world 1')
         msg2 = self.tx_helper.make_outbound('hello world 2')
 
         yield self.tx_helper.dispatch_outbound(msg1)
         yield self.tx_helper.dispatch_outbound(msg2)
-        [ssm_pdu1, ssm_pdu2] = yield smpp_helper.wait_for_pdus(2)
-        yield smpp_helper.handle_pdu(
+        [ssm_pdu1, ssm_pdu2] = yield self.fake_smsc.await_pdus(2)
+        yield self.fake_smsc.handle_pdu(
             SubmitSMResp(sequence_number=seq_no(ssm_pdu1),
                          message_id='foo1', command_status='ESME_RTHROTTLED'))
-        yield smpp_helper.handle_pdu(
+        yield self.fake_smsc.handle_pdu(
             SubmitSMResp(sequence_number=seq_no(ssm_pdu2),
                          message_id='foo2', command_status='ESME_RTHROTTLED'))
 
         # Advance clock, still throttled.
         self.clock.advance(transport_config.throttle_delay)
-        [ssm_pdu1_retry1] = yield smpp_helper.wait_for_pdus(1)
-        yield smpp_helper.handle_pdu(
+        ssm_pdu1_retry1 = yield self.fake_smsc.await_pdu()
+        yield self.fake_smsc.handle_pdu(
             SubmitSMResp(sequence_number=seq_no(ssm_pdu1_retry1),
                          message_id='bar1',
                          command_status='ESME_RTHROTTLED'))
 
         # Advance clock, message no longer throttled.
         self.clock.advance(transport_config.throttle_delay)
-        [ssm_pdu2_retry1] = yield smpp_helper.wait_for_pdus(1)
-        yield smpp_helper.handle_pdu(
+        ssm_pdu2_retry1 = yield self.fake_smsc.await_pdu()
+        yield self.fake_smsc.handle_pdu(
             SubmitSMResp(sequence_number=seq_no(ssm_pdu2_retry1),
                          message_id='bar2',
                          command_status='ESME_ROK'))
 
         # Prod clock, message no longer throttled.
         self.clock.advance(0)
-        [ssm_pdu1_retry2] = yield smpp_helper.wait_for_pdus(1)
-        yield smpp_helper.handle_pdu(
+        ssm_pdu1_retry2 = yield self.fake_smsc.await_pdu()
+        yield self.fake_smsc.handle_pdu(
             SubmitSMResp(sequence_number=seq_no(ssm_pdu1_retry2),
                          message_id='baz1',
                          command_status='ESME_ROK'))
@@ -864,31 +845,32 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         If we reconnect while throttled, we don't try to unthrottle before the
         connection is in a suitable state.
         """
-        smpp_helper = yield self.get_smpp_helper()
-        transport_config = smpp_helper.transport.get_static_config()
+        transport = yield self.get_transport(bind=False)
+        yield self.fake_smsc.bind()
+        transport_config = transport.get_static_config()
         msg = self.tx_helper.make_outbound('hello world')
         yield self.tx_helper.dispatch_outbound(msg)
-        [ssm_pdu] = yield smpp_helper.wait_for_pdus(1)
-        yield smpp_helper.handle_pdu(
+        ssm_pdu = yield self.fake_smsc.await_pdu()
+        yield self.fake_smsc.handle_pdu(
             SubmitSMResp(sequence_number=seq_no(ssm_pdu),
                          message_id='foo1',
                          command_status='ESME_RTHROTTLED'))
 
         # Drop SMPP connection and check throttling.
+        yield self.fake_smsc.disconnect()
         with LogCatcher(message="Can't check throttling while unbound") as lc:
-            smpp_helper.disconnect()
             self.clock.advance(transport_config.throttle_delay)
         [logmsg] = lc.logs
         self.assertEqual(
             logmsg["message"][0],
             "Can't check throttling while unbound, trying later.")
 
-        # Reconnect (but don't bind) and check throttling.
+        # Fast-forward to reconnect (but don't bind) and check throttling.
+        self.clock.advance(transport.service.delay)
+        bind_pdu = yield self.fake_smsc.await_pdu()
+        self.assertTrue(
+            bind_pdu["header"]["command_id"].startswith("bind_"))
         with LogCatcher(message="Can't check throttling while unbound") as lc:
-            smpp_helper.connect()
-            [bind_pdu] = yield smpp_helper.wait_for_pdus(1)
-            self.assertTrue(
-                bind_pdu["header"]["command_id"].startswith("bind_"))
             self.clock.advance(transport_config.throttle_delay)
         [logmsg] = lc.logs
         self.assertEqual(
@@ -896,16 +878,16 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
             "Can't check throttling while unbound, trying later.")
 
         # Bind and check throttling.
+        yield self.fake_smsc.bind(bind_pdu)
         with LogCatcher(message="Can't check throttling while unbound") as lc:
-            yield smpp_helper.bind(bind_pdu)
             self.clock.advance(transport_config.throttle_delay)
+        self.assertEqual(lc.logs, [])
 
-        [ssm_pdu_retry] = yield smpp_helper.wait_for_pdus(1)
-        yield smpp_helper.handle_pdu(
+        ssm_pdu_retry = yield self.fake_smsc.await_pdu()
+        yield self.fake_smsc.handle_pdu(
             SubmitSMResp(sequence_number=seq_no(ssm_pdu_retry),
                          message_id='foo',
                          command_status='ESME_ROK'))
-        self.assertEqual(lc.logs, [])
         self.assertEqual(short_message(ssm_pdu), 'hello world')
         self.assertEqual(short_message(ssm_pdu_retry), 'hello world')
         [event] = yield self.tx_helper.wait_for_dispatched_events(1)
@@ -914,10 +896,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_mt_sms_tps_limits(self):
-        smpp_helper = yield self.get_smpp_helper(config={
-            'mt_tps': 2,
-        })
-        transport = smpp_helper.transport
+        transport = yield self.get_transport({'mt_tps': 2})
 
         with LogCatcher(message="Throttling outbound messages.") as lc:
             yield self.tx_helper.make_dispatch_outbound('hello world 1')
@@ -927,7 +906,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.assertEqual(logmsg['logLevel'], logging.INFO)
 
         self.assertTrue(transport.throttled)
-        [submit_sm_pdu1, submit_sm_pdu2] = yield smpp_helper.wait_for_pdus(2)
+        [submit_sm_pdu1, submit_sm_pdu2] = yield self.fake_smsc.await_pdus(2)
         self.assertEqual(short_message(submit_sm_pdu1), 'hello world 1')
         self.assertEqual(short_message(submit_sm_pdu2), 'hello world 2')
         self.assertNoResult(msg3_d)
@@ -939,7 +918,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
         self.assertFalse(transport.throttled)
         yield msg3_d
-        [submit_sm_pdu3] = yield smpp_helper.wait_for_pdus(1)
+        submit_sm_pdu3 = yield self.fake_smsc.await_pdu()
         self.assertEqual(short_message(submit_sm_pdu3), 'hello world 3')
 
     @inlineCallbacks
@@ -948,9 +927,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         If we reconnect while throttled due to the tps limit, we don't try to
         unthrottle before the connection is in a suitable state.
         """
-        smpp_helper = yield self.get_smpp_helper(config={
-            'mt_tps': 2,
-        })
+        transport = yield self.get_transport({'mt_tps': 2})
 
         with LogCatcher(message="Throttling outbound messages.") as lc:
             yield self.tx_helper.make_dispatch_outbound('hello world 1')
@@ -959,59 +936,59 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         [logmsg] = lc.logs
         self.assertEqual(logmsg['logLevel'], logging.INFO)
 
-        self.assertTrue(smpp_helper.transport.throttled)
-        [submit_sm_pdu1, submit_sm_pdu2] = yield smpp_helper.wait_for_pdus(2)
+        self.assertTrue(transport.throttled)
+        [submit_sm_pdu1, submit_sm_pdu2] = yield self.fake_smsc.await_pdus(2)
         self.assertEqual(short_message(submit_sm_pdu1), 'hello world 1')
         self.assertEqual(short_message(submit_sm_pdu2), 'hello world 2')
         self.assertNoResult(msg3_d)
 
         # Drop SMPP connection and check throttling.
+        yield self.fake_smsc.disconnect()
         with LogCatcher(message="Can't stop throttling while unbound") as lc:
-            smpp_helper.disconnect()
             self.clock.advance(1)
         [logmsg] = lc.logs
         self.assertEqual(logmsg['logLevel'], logging.INFO)
-        self.assertTrue(smpp_helper.transport.throttled)
+        self.assertTrue(transport.throttled)
 
-        # Reconnect (but don't bind) and check throttling.
+        # Fast-forward to reconnect (but don't bind) and check throttling.
+        self.clock.advance(transport.service.delay)
+        bind_pdu = yield self.fake_smsc.await_pdu()
+        self.assertTrue(
+            bind_pdu["header"]["command_id"].startswith("bind_"))
         with LogCatcher(message="Can't stop throttling while unbound") as lc:
-            smpp_helper.connect()
-            [bind_pdu] = yield smpp_helper.wait_for_pdus(1)
-            self.assertTrue(
-                bind_pdu["header"]["command_id"].startswith("bind_"))
             self.clock.advance(1)
         [logmsg] = lc.logs
         self.assertEqual(logmsg['logLevel'], logging.INFO)
-        self.assertTrue(smpp_helper.transport.throttled)
+        self.assertTrue(transport.throttled)
 
         # Bind and check throttling.
+        yield self.fake_smsc.bind(bind_pdu)
         with LogCatcher(message="No longer throttling outbound") as lc:
-            yield smpp_helper.bind(bind_pdu)
             self.clock.advance(1)
         [logmsg] = lc.logs
         self.assertEqual(logmsg['logLevel'], logging.INFO)
 
-        self.assertFalse(smpp_helper.transport.throttled)
-        [submit_sm_pdu2] = yield smpp_helper.wait_for_pdus(1)
+        self.assertFalse(transport.throttled)
+        submit_sm_pdu2 = yield self.fake_smsc.await_pdu()
         self.assertEqual(short_message(submit_sm_pdu2), 'hello world 3')
 
     @inlineCallbacks
     def test_mt_sms_queue_full(self):
-        smpp_helper = yield self.get_smpp_helper()
-        transport_config = smpp_helper.transport.get_static_config()
+        transport = yield self.get_transport()
+        transport_config = transport.get_static_config()
         msg = self.tx_helper.make_outbound('hello world')
 
         yield self.tx_helper.dispatch_outbound(msg)
-        [submit_sm_pdu] = yield smpp_helper.wait_for_pdus(1)
-        yield smpp_helper.handle_pdu(
+        submit_sm_pdu = yield self.fake_smsc.await_pdu()
+        yield self.fake_smsc.handle_pdu(
             SubmitSMResp(sequence_number=seq_no(submit_sm_pdu),
                          message_id='foo',
                          command_status='ESME_RMSGQFUL'))
 
         self.clock.advance(transport_config.throttle_delay)
 
-        [submit_sm_pdu_retry] = yield smpp_helper.wait_for_pdus(1)
-        yield smpp_helper.handle_pdu(
+        submit_sm_pdu_retry = yield self.fake_smsc.await_pdu()
+        yield self.fake_smsc.handle_pdu(
             SubmitSMResp(sequence_number=seq_no(submit_sm_pdu_retry),
                          message_id='bar',
                          command_status='ESME_ROK'))
@@ -1025,16 +1002,16 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_mt_sms_unicode(self):
-        smpp_helper = yield self.get_smpp_helper()
+        yield self.get_transport()
         msg = self.tx_helper.make_outbound(u'Zoë')
         yield self.tx_helper.dispatch_outbound(msg)
-        [pdu] = yield smpp_helper.wait_for_pdus(1)
+        pdu = yield self.fake_smsc.await_pdu()
         self.assertEqual(command_id(pdu), 'submit_sm')
         self.assertEqual(short_message(pdu), 'Zo\xc3\xab')
 
     @inlineCallbacks
     def test_mt_sms_multipart_long(self):
-        smpp_helper = yield self.get_smpp_helper(config={
+        yield self.get_transport({
             'submit_short_message_processor_config': {
                 'send_long_messages': True,
             }
@@ -1044,7 +1021,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         content = '1' * 255
         msg = self.tx_helper.make_outbound(content)
         yield self.tx_helper.dispatch_outbound(msg)
-        [submit_sm] = yield smpp_helper.wait_for_pdus(1)
+        submit_sm = yield self.fake_smsc.await_pdu()
         self.assertEqual(pdu_tlv(submit_sm, 'message_payload').decode('hex'),
                          content)
 
@@ -1054,7 +1031,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         Sufficiently long messages are split into multiple PDUs with a UDH at
         the front of each.
         """
-        smpp_helper = yield self.get_smpp_helper(config={
+        transport = yield self.get_transport({
             'submit_short_message_processor_config': {
                 'send_multipart_udh': True,
             }
@@ -1062,7 +1039,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         content = '1' * 161
         msg = self.tx_helper.make_outbound(content)
         yield self.tx_helper.dispatch_outbound(msg)
-        [submit_sm1, submit_sm2] = yield smpp_helper.wait_for_pdus(2)
+        [submit_sm1, submit_sm2] = yield self.fake_smsc.await_pdus(2)
 
         self.assertEqual(
             submit_sm1["body"]["mandatory_parameters"]["esm_class"], 0x40)
@@ -1084,7 +1061,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
         # Our multipart_info Redis hash should contain the number of parts and
         # have an appropriate TTL.
-        mstash = smpp_helper.transport.message_stash
+        mstash = transport.message_stash
         multipart_info = yield mstash.get_multipart_info(msg['message_id'])
         self.assertEqual(multipart_info, {"parts": "2"})
         mpi_ttl = yield mstash.redis.ttl(multipart_info_key(msg['message_id']))
@@ -1098,7 +1075,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         """
         Messages that fit in a single part should not have a UDH.
         """
-        smpp_helper = yield self.get_smpp_helper(config={
+        yield self.get_transport({
             'submit_short_message_processor_config': {
                 'send_multipart_udh': True,
             }
@@ -1106,7 +1083,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         content = "1" * 158
         msg = self.tx_helper.make_outbound(content)
         yield self.tx_helper.dispatch_outbound(msg)
-        [submit_sm] = yield smpp_helper.wait_for_pdus(1)
+        submit_sm = yield self.fake_smsc.await_pdu()
 
         self.assertEqual(
             submit_sm["body"]["mandatory_parameters"]["esm_class"], 0)
@@ -1114,7 +1091,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_mt_sms_multipart_sar(self):
-        smpp_helper = yield self.get_smpp_helper(config={
+        yield self.get_transport({
             'submit_short_message_processor_config': {
                 'send_multipart_sar': True,
             }
@@ -1122,7 +1099,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         content = '1' * 161
         msg = self.tx_helper.make_outbound(content)
         yield self.tx_helper.dispatch_outbound(msg)
-        [submit_sm1, submit_sm2] = yield smpp_helper.wait_for_pdus(2)
+        [submit_sm1, submit_sm2] = yield self.fake_smsc.await_pdus(2)
 
         ref_num = pdu_tlv(submit_sm1, 'sar_msg_ref_num')
         self.assertEqual(pdu_tlv(submit_sm1, 'sar_total_segments'), 2)
@@ -1137,7 +1114,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         """
         Messages that fit in a single part should not have SAR params set.
         """
-        smpp_helper = yield self.get_smpp_helper(config={
+        yield self.get_transport({
             'submit_short_message_processor_config': {
                 'send_multipart_sar': True,
             }
@@ -1145,7 +1122,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         content = '1' * 158
         msg = self.tx_helper.make_outbound(content)
         yield self.tx_helper.dispatch_outbound(msg)
-        [submit_sm] = yield smpp_helper.wait_for_pdus(1)
+        submit_sm = yield self.fake_smsc.await_pdu()
 
         self.assertEqual(unpacked_pdu_opts(submit_sm), {})
         self.assertEqual(short_message(submit_sm), "1" * 158)
@@ -1156,7 +1133,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         When all PDUs of a multipart message have been successfully
         acknowledged, we clean up the relevant transient state and send an ack.
         """
-        smpp_helper = yield self.get_smpp_helper(config={
+        transport = yield self.get_transport({
             'submit_short_message_processor_config': {
                 'send_multipart_udh': True,
             }
@@ -1164,11 +1141,11 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         content = '1' * 161
         msg = self.tx_helper.make_outbound(content)
         yield self.tx_helper.dispatch_outbound(msg)
-        [submit_sm1, submit_sm2] = yield smpp_helper.wait_for_pdus(2)
+        [submit_sm1, submit_sm2] = yield self.fake_smsc.await_pdus(2)
 
         # Our multipart_info Redis hash should contain the number of parts and
         # have an appropriate TTL.
-        mstash = smpp_helper.transport.message_stash
+        mstash = transport.message_stash
         multipart_info = yield mstash.get_multipart_info(msg['message_id'])
         self.assertEqual(multipart_info, {"parts": "2"})
         mpi_ttl = yield mstash.redis.ttl(multipart_info_key(msg['message_id']))
@@ -1179,9 +1156,9 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
         # We get one response per PDU, so we only send the ack after receiving
         # both responses.
-        smpp_helper.send_pdu(
+        self.fake_smsc.send_pdu(
             SubmitSMResp(sequence_number=seq_no(submit_sm1), message_id='foo'))
-        smpp_helper.send_pdu(
+        self.fake_smsc.send_pdu(
             SubmitSMResp(sequence_number=seq_no(submit_sm2), message_id='bar'))
         [event] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(event['event_type'], 'ack')
@@ -1190,7 +1167,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
         # After all parts are acknowledged, our multipart_info hash should have
         # the details of the responses and a much shorter TTL.
-        mstash = smpp_helper.transport.message_stash
+        mstash = transport.message_stash
         multipart_info = yield mstash.get_multipart_info(msg['message_id'])
         self.assertEqual(multipart_info, {
             "parts": "2",
@@ -1211,7 +1188,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         least one of them failed, we clean up the relevant transient state and
         send a nack.
         """
-        smpp_helper = yield self.get_smpp_helper(config={
+        transport = yield self.get_transport({
             'submit_short_message_processor_config': {
                 'send_multipart_udh': True,
             }
@@ -1219,11 +1196,11 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         content = '1' * 161
         msg = self.tx_helper.make_outbound(content)
         yield self.tx_helper.dispatch_outbound(msg)
-        [submit_sm1, submit_sm2] = yield smpp_helper.wait_for_pdus(2)
+        [submit_sm1, submit_sm2] = yield self.fake_smsc.await_pdus(2)
 
         # Our multipart_info Redis hash should contain the number of parts and
         # have an appropriate TTL.
-        mstash = smpp_helper.transport.message_stash
+        mstash = transport.message_stash
         multipart_info = yield mstash.get_multipart_info(msg['message_id'])
         self.assertEqual(multipart_info, {"parts": "2"})
         mpi_ttl = yield mstash.redis.ttl(multipart_info_key(msg['message_id']))
@@ -1234,10 +1211,10 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
         # We get one response per PDU, so we only send the nack after receiving
         # both responses.
-        smpp_helper.send_pdu(
+        self.fake_smsc.send_pdu(
             SubmitSMResp(sequence_number=seq_no(submit_sm1),
                          message_id='foo', command_status='ESME_RSUBMITFAIL'))
-        smpp_helper.send_pdu(
+        self.fake_smsc.send_pdu(
             SubmitSMResp(sequence_number=seq_no(submit_sm2), message_id='bar'))
         [event] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(event['event_type'], 'nack')
@@ -1245,7 +1222,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
         # After all parts are acknowledged, our multipart_info hash should have
         # the details of the responses and a much shorter TTL.
-        mstash = smpp_helper.transport.message_stash
+        mstash = transport.message_stash
         multipart_info = yield mstash.get_multipart_info(msg['message_id'])
         self.assertEqual(multipart_info, {
             "parts": "2",
@@ -1262,7 +1239,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_mt_sms_multipart_fail_second_part(self):
-        smpp_helper = yield self.get_smpp_helper(config={
+        yield self.get_transport({
             'submit_short_message_processor_config': {
                 'send_multipart_udh': True,
             }
@@ -1270,10 +1247,10 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         content = '1' * 161
         msg = self.tx_helper.make_outbound(content)
         yield self.tx_helper.dispatch_outbound(msg)
-        [submit_sm1, submit_sm2] = yield smpp_helper.wait_for_pdus(2)
-        smpp_helper.send_pdu(
+        [submit_sm1, submit_sm2] = yield self.fake_smsc.await_pdus(2)
+        self.fake_smsc.send_pdu(
             SubmitSMResp(sequence_number=seq_no(submit_sm1), message_id='foo'))
-        smpp_helper.send_pdu(
+        self.fake_smsc.send_pdu(
             SubmitSMResp(sequence_number=seq_no(submit_sm2),
                          message_id='bar', command_status='ESME_RSUBMITFAIL'))
         [event] = yield self.tx_helper.wait_for_dispatched_events(1)
@@ -1282,7 +1259,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_mt_sms_multipart_fail_no_remote_id(self):
-        smpp_helper = yield self.get_smpp_helper(config={
+        yield self.get_transport({
             'submit_short_message_processor_config': {
                 'send_multipart_udh': True,
             }
@@ -1290,11 +1267,11 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         content = '1' * 161
         msg = self.tx_helper.make_outbound(content)
         yield self.tx_helper.dispatch_outbound(msg)
-        [submit_sm1, submit_sm2] = yield smpp_helper.wait_for_pdus(2)
-        smpp_helper.send_pdu(
+        [submit_sm1, submit_sm2] = yield self.fake_smsc.await_pdus(2)
+        self.fake_smsc.send_pdu(
             SubmitSMResp(sequence_number=seq_no(submit_sm1),
                          message_id='', command_status='ESME_RINVDSTADR'))
-        smpp_helper.send_pdu(
+        self.fake_smsc.send_pdu(
             SubmitSMResp(sequence_number=seq_no(submit_sm2),
                          message_id='', command_status='ESME_RINVDSTADR'))
         [event] = yield self.tx_helper.wait_for_dispatched_events(1)
@@ -1303,8 +1280,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_message_persistence(self):
-        smpp_helper = yield self.get_smpp_helper()
-        transport = smpp_helper.transport
+        transport = yield self.get_transport()
         message_stash = transport.message_stash
         config = transport.get_static_config()
 
@@ -1324,31 +1300,28 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_message_clearing(self):
-        smpp_helper = yield self.get_smpp_helper()
-        transport = smpp_helper.transport
+        transport = yield self.get_transport()
         message_stash = transport.message_stash
         msg = self.tx_helper.make_outbound('hello world')
         yield message_stash.set_sequence_number_message_id(
             3, msg['message_id'])
         yield message_stash.cache_message(msg)
-        yield smpp_helper.handle_pdu(SubmitSMResp(sequence_number=3,
-                                                  message_id='foo',
-                                                  command_status='ESME_ROK'))
+        yield self.fake_smsc.handle_pdu(SubmitSMResp(
+            sequence_number=3, message_id='foo', command_status='ESME_ROK'))
         self.assertEqual(
             None,
             (yield message_stash.get_cached_message(msg['message_id'])))
 
     @inlineCallbacks
     def test_link_remote_message_id(self):
-        smpp_helper = yield self.get_smpp_helper()
-        transport = smpp_helper.transport
+        transport = yield self.get_transport()
         config = transport.get_static_config()
 
         msg = self.tx_helper.make_outbound('hello world')
         yield self.tx_helper.dispatch_outbound(msg)
 
-        [pdu] = yield smpp_helper.wait_for_pdus(1)
-        yield smpp_helper.handle_pdu(
+        pdu = yield self.fake_smsc.await_pdu()
+        yield self.fake_smsc.handle_pdu(
             SubmitSMResp(sequence_number=seq_no(pdu),
                          message_id='foo',
                          command_status='ESME_ROK'))
@@ -1361,18 +1334,18 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_out_of_order_responses(self):
-        smpp_helper = yield self.get_smpp_helper()
+        yield self.get_transport()
         yield self.tx_helper.make_dispatch_outbound("msg 1", message_id='444')
-        [submit_sm1] = yield smpp_helper.wait_for_pdus(1)
+        submit_sm1 = yield self.fake_smsc.await_pdu()
         response1 = SubmitSMResp(seq_no(submit_sm1), "3rd_party_id_1")
 
         yield self.tx_helper.make_dispatch_outbound("msg 2", message_id='445')
-        [submit_sm2] = yield smpp_helper.wait_for_pdus(1)
+        submit_sm2 = yield self.fake_smsc.await_pdu()
         response2 = SubmitSMResp(seq_no(submit_sm2), "3rd_party_id_2")
 
         # respond out of order - just to keep things interesting
-        yield smpp_helper.handle_pdu(response2)
-        yield smpp_helper.handle_pdu(response1)
+        yield self.fake_smsc.handle_pdu(response2)
+        yield self.fake_smsc.handle_pdu(response1)
 
         [ack1, ack2] = yield self.tx_helper.wait_for_dispatched_events(2)
         self.assertEqual(ack1['user_message_id'], '445')
@@ -1384,9 +1357,9 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
     def test_delivery_report_for_unknown_message(self):
         dr = self.DR_TEMPLATE % ('foo',)
         deliver = DeliverSM(1, short_message=dr, esm_class=4)
-        smpp_helper = yield self.get_smpp_helper()
+        yield self.get_transport()
         with LogCatcher(message="Failed to retrieve message id") as lc:
-            yield smpp_helper.handle_pdu(deliver)
+            yield self.fake_smsc.handle_pdu(deliver)
             [warning] = lc.logs
             self.assertEqual(warning['message'],
                              ("Failed to retrieve message id for delivery "
@@ -1395,34 +1368,34 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_reconnect(self):
-        smpp_helper = yield self.get_smpp_helper(bind=False)
-        transport = smpp_helper.transport
+        transport = yield self.get_transport(bind=False)
         connector = transport.connectors[transport.transport_name]
         # Unbound and disconnected.
         self.assertEqual(connector._consumers['outbound'].paused, True)
         # Connect and bind.
-        yield smpp_helper.bind()
+        yield self.fake_smsc.bind()
         self.assertEqual(connector._consumers['outbound'].paused, False)
         # Disconnect.
-        smpp_helper.disconnect()
+        yield self.fake_smsc.disconnect()
         self.assertEqual(connector._consumers['outbound'].paused, True)
-        # Connect, but don't bind.
-        smpp_helper.connect()
+        # Wait for reconnect, but don't bind.
+        self.clock.advance(transport.service.delay)
+        yield self.fake_smsc.await_connected()
         self.assertEqual(connector._consumers['outbound'].paused, True)
         # Bind.
-        yield smpp_helper.bind()
+        yield self.fake_smsc.bind()
         self.assertEqual(connector._consumers['outbound'].paused, False)
 
     @inlineCallbacks
     def test_bind_params(self):
-        smpp_helper = yield self.get_smpp_helper(bind=False, config={
+        yield self.get_transport({
             'system_id': 'myusername',
             'password': 'mypasswd',
             'system_type': 'SMPP',
             'interface_version': '33',
             'address_range': '*12345',
-        })
-        bind_pdu = yield smpp_helper.bind()
+        }, bind=False)
+        bind_pdu = yield self.fake_smsc.await_pdu()
         # This test runs for multiple bind types, so we only assert on the
         # common prefix of the command.
         self.assertEqual(bind_pdu['header']['command_id'][:5], 'bind_')
@@ -1438,16 +1411,16 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_bind_params_long_password(self):
-        smpp_helper = yield self.get_smpp_helper(bind=False, config={
-            'system_id': 'myusername',
-            'password': 'mypass789',
-            'system_type': 'SMPP',
-            'interface_version': '33',
-            'address_range': '*12345',
-        })
         lc = LogCatcher(message="Password longer than 8 characters,")
         with lc:
-            bind_pdu = yield smpp_helper.bind()
+            yield self.get_transport({
+                'system_id': 'myusername',
+                'password': 'mypass789',
+                'system_type': 'SMPP',
+                'interface_version': '33',
+                'address_range': '*12345',
+            }, bind=False)
+            bind_pdu = yield self.fake_smsc.await_pdu()
         # This test runs for multiple bind types, so we only assert on the
         # common prefix of the command.
         self.assertEqual(bind_pdu['header']['command_id'][:5], 'bind_')
@@ -1468,8 +1441,8 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_default_bind_params(self):
-        smpp_helper = yield self.get_smpp_helper(bind=False, config={})
-        bind_pdu = yield smpp_helper.bind()
+        yield self.get_transport(bind=False)
+        bind_pdu = yield self.fake_smsc.await_pdu()
         # This test runs for multiple bind types, so we only assert on the
         # common prefix of the command.
         self.assertEqual(bind_pdu['header']['command_id'][:5], 'bind_')
@@ -1485,7 +1458,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_startup_with_backlog(self):
-        smpp_helper = yield self.get_smpp_helper(bind=False)
+        yield self.get_transport(bind=False)
 
         # Disconnected.
         for i in range(2):
@@ -1493,8 +1466,8 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
             yield self.tx_helper.dispatch_outbound(msg)
 
         # Connect and bind.
-        yield smpp_helper.bind()
-        [submit_sm1, submit_sm2] = yield smpp_helper.wait_for_pdus(2)
+        yield self.fake_smsc.bind()
+        [submit_sm1, submit_sm2] = yield self.fake_smsc.await_pdus(2)
         self.assertEqual(short_message(submit_sm1), 'hello world 0')
         self.assertEqual(short_message(submit_sm2), 'hello world 1')
 
@@ -1513,15 +1486,12 @@ class SmppTransceiverTransportWithOldConfigTestCase(
     transport_class = SmppTransceiverTransportWithOldConfig
 
     def setUp(self):
-
         self.clock = Clock()
-        self.patch(self.transport_class, 'service_class', DummyService)
-        self.patch(self.transport_class, 'clock', self.clock)
-
+        self.fake_smsc = FakeSMSC()
         self.tx_helper = self.add_helper(TransportHelper(self.transport_class))
         self.default_config = {
             'transport_name': self.tx_helper.transport_name,
-            'twisted_endpoint': 'tcp:host=127.0.0.1:port=0',
+            'twisted_endpoint': self.fake_smsc.endpoint,
             'system_id': 'foo',
             'password': 'bar',
             'data_coding_overrides': {
@@ -1529,7 +1499,7 @@ class SmppTransceiverTransportWithOldConfigTestCase(
             }
         }
 
-    def _get_transport(self, config):
+    def _get_transport_config(self, config):
         """
         The test cases assume the new config, this flattens the
         config key word arguments value to match an old config
@@ -1551,7 +1521,7 @@ class SmppTransceiverTransportWithOldConfigTestCase(
 
         # Update with all remaining (non-processor) config values
         cfg.update(config)
-        return self.tx_helper.get_transport(cfg)
+        return cfg
 
 
 class TataUssdSmppTransportTestCase(SmppTransportTestCase):
@@ -1560,12 +1530,12 @@ class TataUssdSmppTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_submit_and_deliver_ussd_continue(self):
-        smpp_helper = yield self.get_smpp_helper()
+        yield self.get_transport()
 
         yield self.tx_helper.make_dispatch_outbound(
             "hello world", transport_type="ussd")
 
-        [submit_sm_pdu] = yield smpp_helper.wait_for_pdus(1)
+        submit_sm_pdu = yield self.fake_smsc.await_pdu()
         self.assertEqual(command_id(submit_sm_pdu), 'submit_sm')
         self.assertEqual(pdu_tlv(submit_sm_pdu, 'ussd_service_op'), '02')
         self.assertEqual(pdu_tlv(submit_sm_pdu, 'its_session_info'), '0000')
@@ -1575,7 +1545,7 @@ class TataUssdSmppTransportTestCase(SmppTransportTestCase):
         pdu.add_optional_parameter('ussd_service_op', '02')
         pdu.add_optional_parameter('its_session_info', '0000')
 
-        yield smpp_helper.handle_pdu(pdu)
+        yield self.fake_smsc.handle_pdu(pdu)
 
         [mess] = yield self.tx_helper.wait_for_dispatched_inbound(1)
 
@@ -1586,13 +1556,13 @@ class TataUssdSmppTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_submit_and_deliver_ussd_close(self):
-        smpp_helper = yield self.get_smpp_helper()
+        yield self.get_transport()
 
         yield self.tx_helper.make_dispatch_outbound(
             "hello world", transport_type="ussd",
             session_event=TransportUserMessage.SESSION_CLOSE)
 
-        [submit_sm_pdu] = yield smpp_helper.wait_for_pdus(1)
+        submit_sm_pdu = yield self.fake_smsc.await_pdu()
         self.assertEqual(command_id(submit_sm_pdu), 'submit_sm')
         self.assertEqual(pdu_tlv(submit_sm_pdu, 'ussd_service_op'), '02')
         self.assertEqual(pdu_tlv(submit_sm_pdu, 'its_session_info'), '0001')
@@ -1602,7 +1572,7 @@ class TataUssdSmppTransportTestCase(SmppTransportTestCase):
         pdu.add_optional_parameter('ussd_service_op', '02')
         pdu.add_optional_parameter('its_session_info', '0001')
 
-        yield smpp_helper.handle_pdu(pdu)
+        yield self.fake_smsc.handle_pdu(pdu)
 
         [mess] = yield self.tx_helper.wait_for_dispatched_inbound(1)
 
