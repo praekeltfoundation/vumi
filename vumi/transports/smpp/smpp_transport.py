@@ -17,13 +17,11 @@ from vumi.transports.smpp.config import SmppTransportConfig
 from vumi.transports.smpp.deprecated.transport import (
     SmppTransportConfig as OldSmppTransportConfig)
 from vumi.transports.smpp.deprecated.utils import convert_to_new_config
-from vumi.transports.smpp.protocol import EsmeTransceiverFactory
+from vumi.transports.smpp.protocol import EsmeProtocolFactory
 from vumi.transports.smpp.sequence import RedisSequence
 from vumi.transports.failures import FailureMessage
 
 from vumi.persist.txredis_manager import TxRedisManager
-
-from smpp.pdu_builder import BindTransceiver, BindReceiver, BindTransmitter
 
 from vumi import log
 
@@ -42,77 +40,6 @@ def message_key(message_id):
 
 def remote_message_key(message_id):
     return 'remote_message:%s' % (message_id,)
-
-
-class SmppTransceiverProtocol(EsmeTransceiverFactory.protocol):
-    bind_pdu = BindTransceiver
-
-    def connectionMade(self):
-        EsmeTransceiverFactory.protocol.connectionMade(self)
-        config = self.vumi_transport.get_static_config()
-        password = config.password
-        # Overly long passwords should be truncated.
-        if len(password) > 8:
-            password = password[:8]
-            log.warning("Password longer than 8 characters, truncating.")
-        self.bind(
-            system_id=config.system_id,
-            password=password,
-            system_type=config.system_type,
-            interface_version=config.interface_version,
-            address_range=config.address_range)
-
-    def connectionLost(self, reason):
-        d = maybeDeferred(self.vumi_transport.pause_connectors)
-        d.addCallback(
-            lambda _: EsmeTransceiverFactory.protocol.connectionLost(
-                self, reason))
-        return d
-
-    def on_smpp_bind(self, sequence_number):
-        d = maybeDeferred(EsmeTransceiverFactory.protocol.on_smpp_bind,
-                          self, sequence_number)
-        d.addCallback(lambda _: self.vumi_transport.unpause_connectors())
-        return d
-
-    def on_submit_sm_resp(self, sequence_number, smpp_message_id,
-                          command_status):
-        cb = {
-            'ESME_ROK': self.vumi_transport.handle_submit_sm_success,
-            'ESME_RTHROTTLED': self.vumi_transport.handle_submit_sm_throttled,
-            'ESME_RMSGQFUL': self.vumi_transport.handle_submit_sm_throttled,
-        }.get(command_status, self.vumi_transport.handle_submit_sm_failure)
-        message_stash = self.vumi_transport.message_stash
-        d = message_stash.get_sequence_number_message_id(sequence_number)
-        d.addCallback(
-            message_stash.set_remote_message_id, smpp_message_id)
-        d.addCallback(
-            self._handle_submit_sm_resp_callback, smpp_message_id,
-            command_status, cb)
-        return d
-
-    def _handle_submit_sm_resp_callback(self, message_id, smpp_message_id,
-                                        command_status, cb):
-        if message_id is None:
-            # We have no message_id, so log a warning instead of calling the
-            # callback.
-            log.warning("Failed to retrieve message id for deliver_sm_resp."
-                        " ack/nack from %s discarded."
-                        % self.vumi_transport.transport_name)
-        else:
-            return cb(message_id, smpp_message_id, command_status)
-
-
-class SmppReceiverProtocol(SmppTransceiverProtocol):
-    bind_pdu = BindReceiver
-
-
-class SmppTransmitterProtocol(SmppTransceiverProtocol):
-    bind_pdu = BindTransmitter
-
-
-class SmppTransceiverClientFactory(EsmeTransceiverFactory):
-    protocol = SmppTransceiverProtocol
 
 
 class SmppService(ReconnectingClientService):
@@ -306,7 +233,8 @@ class SmppTransceiverTransport(Transport):
 
     CONFIG_CLASS = SmppTransportConfig
 
-    factory_class = SmppTransceiverClientFactory
+    bind_type = 'TRX'
+    factory_class = EsmeProtocolFactory
     service_class = SmppService
     sequence_class = RedisSequence
     clock = reactor
@@ -335,7 +263,7 @@ class SmppTransceiverTransport(Transport):
         self.throttled = None
         self._throttled_message_ids = []
         self._unthrottle_delayedCall = None
-        self.factory = self.factory_class(self)
+        self.factory = self.factory_class(self, self.bind_type)
 
         self.service = self.start_service(self.factory)
 
@@ -611,20 +539,12 @@ class SmppTransceiverTransport(Transport):
         returnValue(dr)
 
 
-class SmppReceiverClientFactory(EsmeTransceiverFactory):
-    protocol = SmppReceiverProtocol
-
-
 class SmppReceiverTransport(SmppTransceiverTransport):
-    factory_class = SmppReceiverClientFactory
-
-
-class SmppTransmitterClientFactory(EsmeTransceiverFactory):
-    protocol = SmppTransmitterProtocol
+    bind_type = 'RX'
 
 
 class SmppTransmitterTransport(SmppTransceiverTransport):
-    factory_class = SmppTransmitterClientFactory
+    bind_type = 'TX'
 
 
 class SmppTransceiverTransportWithOldConfig(SmppTransceiverTransport):
