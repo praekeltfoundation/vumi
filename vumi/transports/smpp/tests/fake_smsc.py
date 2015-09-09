@@ -1,7 +1,9 @@
+from twisted.internet import reactor
 from twisted.internet.defer import (
     Deferred, succeed, DeferredQueue, gatherResults)
 from twisted.internet.interfaces import IStreamClientEndpoint
 from twisted.internet.protocol import Protocol
+from twisted.internet.task import deferLater
 from twisted.protocols.loopback import loopbackAsync
 from zope.interface import implementer
 
@@ -28,7 +30,8 @@ class FakeSMSC(object):
 
     def await_connecting(self):
         """
-        Wait for a client to start connecting.
+        Wait for a client to start connecting, and then return the client
+        protocol.
 
         This is useful if auto-accept is disabled, otherwise use
         :meth:`await_connected` instead.
@@ -55,11 +58,23 @@ class FakeSMSC(object):
         """
         return self._bound_d
 
+    def send_bytes(self, bytes):
+        """
+        Put some bytes on the wire.
+
+        This also waits zero seconds to allow the bytes to be delivered.
+        """
+        self.protocol.transport.write(bytes)
+        return deferLater(reactor, 0, lambda: None)
+
     def send_pdu(self, pdu):
         """
         Send a PDU to the connected ESME.
+
+        This also waits zero seconds to allow the PDU to be delivered.
         """
         self.protocol.send_pdu(pdu)
+        return deferLater(reactor, 0, lambda: None)
 
     def handle_pdu(self, pdu):
         """
@@ -117,17 +132,26 @@ class FakeSMSC(object):
         """
         Disconnect.
         """
-        finished_d = self._finished_d
         self.protocol.transport.loseConnection()
-        return finished_d
+        return self.await_disconnect()
+
+    def await_disconnect(self):
+        """
+        Wait for the client to disconnect.
+        """
+        return self._finished_d
+
+    def wait(self, seconds):
+        return deferLater(reactor, 0, lambda: None)
 
     # Internal stuff.
 
     def _reset_connection_ds(self):
+        # self._finished_d is special, because we need that after the
+        # connection gets closed.
         self._listen_d = Deferred()
         self._accept_d = Deferred()
         self._connected_d = Deferred()
-        self._finished_d = Deferred()
         self._bound_d = Deferred()
         self._client_protocol = None
         self.protocol = None
@@ -136,7 +160,7 @@ class FakeSMSC(object):
         assert self.protocol is None
         self._client_protocol = client_protocol
         self.protocol = FakeSMSCProtocol(self)
-        self._listen_d.callback(None)
+        self._listen_d.callback(client_protocol)
         if self.auto_accept:
             self.accept_connection()
         return self._accept_d
@@ -156,6 +180,7 @@ class FakeSMSC(object):
             self.send_pdu(UnbindResp(seq_no(pdu)))
 
     def set_finished(self, finished_d):
+        self._finished_d = Deferred()
         finished_d.addCallback(self._finished_d.callback)
 
     def _given_or_next_pdu(self, pdu):
@@ -183,7 +208,7 @@ class FakeSMSC(object):
 
     def _enquire_link_resp(self, enquire_link_pdu):
         self.assert_command_id(enquire_link_pdu, 'enquire_link')
-        self.send_pdu(EnquireLinkResp(seq_no(enquire_link_pdu)))
+        return self.send_pdu(EnquireLinkResp(seq_no(enquire_link_pdu)))
 
 
 @implementer(IStreamClientEndpoint)
