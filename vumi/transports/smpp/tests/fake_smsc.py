@@ -48,13 +48,13 @@ class FakeSMSC(object):
         """
         Accept a pending connection.
 
-        This is only useful is auto-accept is disabled.
+        This is only useful if auto-accept is disabled.
         """
         self._accept_d.callback(self.protocol)
 
     def await_bound(self):
         """
-        Wait for a client to connect ant bind.
+        Wait for a client to connect and bind.
         """
         return self._bound_d
 
