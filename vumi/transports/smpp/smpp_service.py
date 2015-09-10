@@ -18,7 +18,7 @@ def proxy_protocol(func):
 
 class SmppService(ReconnectingClientService):
 
-    sequence_class = RedisSequence
+    throttle_statuses = ('ESME_RTHROTTLED', 'ESME_RMSGQFUL')
 
     def __init__(self, endpoint, bind_type, transport):
         self.transport = transport
@@ -26,7 +26,7 @@ class SmppService(ReconnectingClientService):
         self.message_stash = self.transport.message_stash
         self.deliver_sm_processor = self.transport.deliver_sm_processor
         self.dr_processor = self.transport.dr_processor
-        self.sequence_generator = self.sequence_class(transport.redis)
+        self.sequence_generator = RedisSequence(transport.redis)
 
         self.wait_on_protocol_deferreds = []
         factory = EsmeProtocolFactory(self, bind_type)
@@ -73,12 +73,16 @@ class SmppService(ReconnectingClientService):
     def on_connection_lost(self):
         return self.transport.pause_connectors()
 
-    def get_submit_sm_callback(self, pdu_status):
-        return {
-            'ESME_ROK': self.transport.handle_submit_sm_success,
-            'ESME_RTHROTTLED': self.transport.handle_submit_sm_throttled,
-            'ESME_RMSGQFUL': self.transport.handle_submit_sm_throttled,
-        }.get(pdu_status, self.transport.handle_submit_sm_failure)
+    def handle_submit_sm_resp(self, message_id, smpp_message_id, pdu_status):
+        if pdu_status in self.throttle_statuses:
+            return self.handle_submit_sm_throttled(message_id)
+        func = self.transport.handle_submit_sm_failure
+        if pdu_status == 'ESME_ROK':
+            func = self.transport.handle_submit_sm_success
+        return func(message_id, smpp_message_id, pdu_status)
+
+    def handle_submit_sm_throttled(self, message_id):
+        return self.transport.handle_submit_sm_throttled(message_id)
 
     @proxy_protocol
     def submit_sm(self, protocol, *args, **kw):

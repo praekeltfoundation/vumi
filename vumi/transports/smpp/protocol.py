@@ -319,18 +319,17 @@ class EsmeProtocol(Protocol):
             the ``submit_sm`` command was successful or not. Refer to the
             SMPP specification for full list of options.
         """
-        cb = self.service.get_submit_sm_callback(command_status)
         message_stash = self.service.message_stash
         d = message_stash.get_sequence_number_message_id(sequence_number)
         d.addCallback(
             message_stash.set_remote_message_id, smpp_message_id)
         d.addCallback(
             self._handle_submit_sm_resp_callback, smpp_message_id,
-            command_status, cb)
+            command_status)
         return d
 
     def _handle_submit_sm_resp_callback(self, message_id, smpp_message_id,
-                                        command_status, cb):
+                                        command_status):
         if message_id is None:
             # We have no message_id, so log a warning instead of calling the
             # callback.
@@ -338,7 +337,8 @@ class EsmeProtocol(Protocol):
                         " ack/nack from %s discarded."
                         % self.service.transport_name)
         else:
-            return cb(message_id, smpp_message_id, command_status)
+            return self.service.handle_submit_sm_resp(
+                message_id, smpp_message_id, command_status)
 
     @inlineCallbacks
     def handle_deliver_sm(self, pdu):

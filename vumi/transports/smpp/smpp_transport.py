@@ -15,7 +15,6 @@ from vumi.transports.smpp.config import SmppTransportConfig
 from vumi.transports.smpp.deprecated.transport import (
     SmppTransportConfig as OldSmppTransportConfig)
 from vumi.transports.smpp.deprecated.utils import convert_to_new_config
-from vumi.transports.smpp.sequence import RedisSequence
 from vumi.transports.smpp.smpp_service import SmppService
 from vumi.transports.failures import FailureMessage
 
@@ -198,7 +197,6 @@ class SmppTransceiverTransport(Transport):
     CONFIG_CLASS = SmppTransportConfig
 
     bind_type = 'TRX'
-    sequence_class = RedisSequence
     clock = reactor
     start_message_consumer = False
 
@@ -220,7 +218,6 @@ class SmppTransceiverTransport(Transport):
         self.submit_sm_processor = config.submit_short_message_processor(
             self, config.submit_short_message_processor_config)
         self.disable_ack = config.disable_ack
-        self.sequence_generator = self.sequence_class(self.redis)
         self.message_stash = SmppMessageDataStash(self.redis, config)
         self.throttled = None
         self._throttled_message_ids = []
@@ -365,8 +362,7 @@ class SmppTransceiverTransport(Transport):
             self.check_stop_throttling(0)
 
     @inlineCallbacks
-    def handle_submit_sm_throttled(self, message_id, smpp_message_id,
-                                   command_status):
+    def handle_submit_sm_throttled(self, message_id):
         yield self.start_throttling()
         config = self.get_static_config()
         self._append_throttle_retry(message_id)
