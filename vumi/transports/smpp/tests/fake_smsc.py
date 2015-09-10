@@ -1,4 +1,5 @@
-from twisted.internet import reactor
+# -*- test-case-name: vumi.transports.smpp.tests.test_fake_smsc -*-
+
 from twisted.internet.defer import (
     Deferred, succeed, DeferredQueue, gatherResults)
 from twisted.internet.interfaces import IStreamClientEndpoint
@@ -12,6 +13,16 @@ from smpp.pdu_builder import (
     BindTransceiverResp, BindTransmitterResp, BindReceiverResp,
     EnquireLinkResp, UnbindResp, DeliverSM)
 from vumi.transports.smpp.pdu_utils import seq_no, chop_pdu_stream, command_id
+
+
+def wait0(r=None):
+    """
+    Wait zero seconds to give the reactor a chance to work.
+
+    Returns its (optional) argument, so it's useful as a callback.
+    """
+    from twisted.internet import reactor
+    return deferLater(reactor, 0, lambda: r)
 
 
 class FakeSMSC(object):
@@ -50,13 +61,9 @@ class FakeSMSC(object):
 
         This is only useful if auto-accept is disabled.
         """
+        assert self._accept_d is not None, "No pending connection."
         self._accept_d.callback(self.protocol)
-
-    def await_bound(self):
-        """
-        Wait for a client to connect and bind.
-        """
-        return self._bound_d
+        return self.await_connected()
 
     def send_bytes(self, bytes):
         """
@@ -65,7 +72,7 @@ class FakeSMSC(object):
         This also waits zero seconds to allow the bytes to be delivered.
         """
         self.protocol.transport.write(bytes)
-        return deferLater(reactor, 0, lambda: None)
+        return wait0()
 
     def send_pdu(self, pdu):
         """
@@ -74,7 +81,7 @@ class FakeSMSC(object):
         This also waits zero seconds to allow the PDU to be delivered.
         """
         self.protocol.send_pdu(pdu)
-        return deferLater(reactor, 0, lambda: None)
+        return wait0()
 
     def handle_pdu(self, pdu):
         """
@@ -141,25 +148,23 @@ class FakeSMSC(object):
         """
         return self._finished_d
 
-    def wait(self, seconds):
-        return deferLater(reactor, 0, lambda: None)
-
     # Internal stuff.
 
     def _reset_connection_ds(self):
         # self._finished_d is special, because we need that after the
         # connection gets closed.
         self._listen_d = Deferred()
-        self._accept_d = Deferred()
+        self._accept_d = None
         self._connected_d = Deferred()
         self._bound_d = Deferred()
         self._client_protocol = None
         self.protocol = None
 
     def handle_connection(self, client_protocol):
-        assert self.protocol is None
+        assert self.protocol is None, "Already connected."
         self._client_protocol = client_protocol
         self.protocol = FakeSMSCProtocol(self)
+        self._accept_d = Deferred()
         self._listen_d.callback(client_protocol)
         if self.auto_accept:
             self.accept_connection()
