@@ -1,4 +1,5 @@
 from twisted.internet.defer import Deferred, inlineCallbacks
+from twisted.internet.error import ConnectionRefusedError
 from twisted.internet.protocol import Protocol, ClientFactory
 from twisted.internet.task import Clock, deferLater
 
@@ -127,12 +128,67 @@ class TestFakeSMSC(VumiTestCase):
         self.assertEqual(client.connected, True)
         self.assertEqual(self.successResultOf(connect_d), client)
 
-    def test_accept_connection_no_connection(self):
+    def test_accept_connection_no_pending(self):
         """
         There must be a pending connection to accept.
         """
         fake_smsc = FakeSMSC(auto_accept=False)
         self.assertRaises(Exception, fake_smsc.accept_connection)
+
+    def test_reject_connection(self):
+        """
+        With auto-accept disabled, a connection may be rejected.
+        """
+        fake_smsc = FakeSMSC(auto_accept=False)
+        await_connecting_d = fake_smsc.await_connecting()
+        await_connected_d = fake_smsc.await_connected()
+        self.assertNoResult(await_connecting_d)
+        self.assertNoResult(await_connected_d)
+
+        connect_d = self.connect(fake_smsc)
+        # The client connection is pending.
+        self.successResultOf(await_connecting_d)
+        self.assertNoResult(await_connected_d)
+        self.assertNoResult(connect_d)
+        client = self.client_factory.proto
+        self.assertEqual(client.connected, False)
+
+        fake_smsc.reject_connection()
+        # The client is not connected.
+        self.assertFailure(connect_d, ConnectionRefusedError)
+        self.assertFailure(await_connected_d, ConnectionRefusedError)
+        self.assertEqual(client.connected, False)
+
+    def test_reject_connection_no_pending(self):
+        """
+        There must be a pending connection to reject.
+        """
+        fake_smsc = FakeSMSC(auto_accept=False)
+        self.assertRaises(Exception, fake_smsc.reject_connection)
+
+    def test_has_pending_connection(self):
+        """
+        FakeSMSC knows if there's a pending connection.
+        """
+        fake_smsc = FakeSMSC(auto_accept=False)
+        self.assertEqual(fake_smsc.has_pending_connection(), False)
+
+        # Pending connection we reject.
+        connect_d = self.connect(fake_smsc)
+        await_connected_d = fake_smsc.await_connected()
+        self.assertEqual(fake_smsc.has_pending_connection(), True)
+        fake_smsc.reject_connection()
+        self.assertEqual(fake_smsc.has_pending_connection(), False)
+        self.assertFailure(connect_d)
+        self.assertFailure(await_connected_d)
+
+        # Pending connection we accept.
+        self.connect(fake_smsc)
+        await_connected_d = fake_smsc.await_connected()
+        self.assertEqual(fake_smsc.has_pending_connection(), True)
+        fake_smsc.accept_connection()
+        self.assertEqual(fake_smsc.has_pending_connection(), False)
+        self.successResultOf(await_connected_d)
 
     @inlineCallbacks
     def test_send_bytes(self):

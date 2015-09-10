@@ -2,6 +2,7 @@
 
 from twisted.internet.defer import (
     Deferred, succeed, DeferredQueue, gatherResults)
+from twisted.internet.error import ConnectionRefusedError
 from twisted.internet.interfaces import IStreamClientEndpoint
 from twisted.internet.protocol import Protocol
 from twisted.internet.task import deferLater
@@ -61,9 +62,27 @@ class FakeSMSC(object):
 
         This is only useful if auto-accept is disabled.
         """
-        assert self._accept_d is not None, "No pending connection."
+        assert self.has_pending_connection(), "No pending connection."
         self._accept_d.callback(self.protocol)
         return self.await_connected()
+
+    def reject_connection(self):
+        """
+        Reject a pending connection.
+
+        This is only useful if auto-accept is disabled.
+        """
+        assert self.has_pending_connection(), "No pending connection."
+        err = ConnectionRefusedError()
+        self._accept_d.errback(err)
+        self._connected_d.errback(err)
+        self._reset_connection_ds()
+
+    def has_pending_connection(self):
+        """
+        Returns `True` if there is a pending connection, `False` otherwise.
+        """
+        return self._accept_d is not None and not self._accept_d.called
 
     def send_bytes(self, bytes):
         """
@@ -264,13 +283,6 @@ class FakeSMSCProtocol(Protocol):
 
         data, self._buf = pdu_found
         return data
-
-    def process_pdus(self):
-        pdu_found = chop_pdu_stream(self._buf)
-        while pdu_found is not None:
-            pdu_data, self._buf = pdu_found
-            self.pdu_received(unpack_pdu(pdu_data))
-            pdu_found = chop_pdu_stream(self._buf)
 
     def pdu_received(self, pdu):
         self.fake_smsc.pdu_received(pdu)
