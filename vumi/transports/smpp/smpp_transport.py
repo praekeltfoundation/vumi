@@ -15,7 +15,6 @@ from vumi.transports.smpp.config import SmppTransportConfig
 from vumi.transports.smpp.deprecated.transport import (
     SmppTransportConfig as OldSmppTransportConfig)
 from vumi.transports.smpp.deprecated.utils import convert_to_new_config
-from vumi.transports.smpp.protocol import EsmeProtocolFactory
 from vumi.transports.smpp.sequence import RedisSequence
 from vumi.transports.smpp.smpp_service import SmppService
 from vumi.transports.failures import FailureMessage
@@ -199,7 +198,6 @@ class SmppTransceiverTransport(Transport):
     CONFIG_CLASS = SmppTransportConfig
 
     bind_type = 'TRX'
-    factory_class = EsmeProtocolFactory
     sequence_class = RedisSequence
     clock = reactor
     start_message_consumer = False
@@ -227,9 +225,7 @@ class SmppTransceiverTransport(Transport):
         self.throttled = None
         self._throttled_message_ids = []
         self._unthrottle_delayedCall = None
-        self.factory = self.factory_class(self, self.bind_type)
-
-        self.service = self.start_service(self.factory)
+        self.service = self.start_service()
 
         self.tps_counter = 0
         self.tps_limit = config.mt_tps
@@ -240,7 +236,7 @@ class SmppTransceiverTransport(Transport):
         else:
             self.mt_tps_lc = None
 
-    def start_service(self, factory):
+    def start_service(self):
         config = self.get_static_config()
         service = SmppService(config.twisted_endpoint, self.bind_type, self)
         service.clock = self.clock
@@ -299,7 +295,6 @@ class SmppTransceiverTransport(Transport):
     def handle_outbound_message(self, message):
         if self.bind_requires_throttling():
             yield self.check_mt_throttling()
-        protocol = yield self.service.get_protocol()
         if not self._check_address_valid(message, 'to_addr'):
             yield self._reject_for_invalid_address(message, 'to_addr')
             return
@@ -308,7 +303,7 @@ class SmppTransceiverTransport(Transport):
             return
         yield self.message_stash.cache_message(message)
         yield self.submit_sm_processor.handle_outbound_message(
-            message, protocol)
+            message, self.service)
 
     @inlineCallbacks
     def process_submit_sm_event(self, message_id, event_type, remote_id,

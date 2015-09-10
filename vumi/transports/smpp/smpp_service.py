@@ -1,8 +1,19 @@
+from functools import wraps
+
 from twisted.internet.defer import Deferred, succeed
 
 from vumi.reconnecting_client import ReconnectingClientService
 from vumi.transports.smpp.protocol import EsmeProtocol, EsmeProtocolFactory
 from vumi.transports.smpp.sequence import RedisSequence
+
+
+def proxy_protocol(func):
+    @wraps(func)
+    def wrapper(self, *args, **kw):
+        d = self.get_protocol()
+        d.addCallback(lambda p: func(self, p, *args, **kw))
+        return d
+    return wrapper
 
 
 class SmppService(ReconnectingClientService):
@@ -68,3 +79,31 @@ class SmppService(ReconnectingClientService):
             'ESME_RTHROTTLED': self.transport.handle_submit_sm_throttled,
             'ESME_RMSGQFUL': self.transport.handle_submit_sm_throttled,
         }.get(pdu_status, self.transport.handle_submit_sm_failure)
+
+    @proxy_protocol
+    def submit_sm(self, protocol, *args, **kw):
+        """
+        See :meth:`EsmeProtocol.submit_sm`.
+        """
+        return protocol.submit_sm(*args, **kw)
+
+    @proxy_protocol
+    def submit_sm_long(self, protocol, *args, **kw):
+        """
+        See :meth:`EsmeProtocol.submit_sm_long`.
+        """
+        return protocol.submit_sm_long(*args, **kw)
+
+    @proxy_protocol
+    def submit_csm_sar(self, protocol, *args, **kw):
+        """
+        See :meth:`EsmeProtocol.submit_csm_sar`.
+        """
+        return protocol.submit_csm_sar(*args, **kw)
+
+    @proxy_protocol
+    def submit_csm_udh(self, protocol, *args, **kw):
+        """
+        See :meth:`EsmeProtocol.submit_csm_udh`.
+        """
+        return protocol.submit_csm_udh(*args, **kw)

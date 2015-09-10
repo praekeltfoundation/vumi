@@ -134,7 +134,7 @@ class SubmitShortMessageProcessor(default.SubmitShortMessageProcessor):
             self.redis, max_session_length=self.config.max_session_length)
 
     @inlineCallbacks
-    def handle_outbound_message(self, message, protocol):
+    def handle_outbound_message(self, message, service):
         to_addr = message['to_addr']
         from_addr = message['from_addr']
         text = message['content']
@@ -173,7 +173,7 @@ class SubmitShortMessageProcessor(default.SubmitShortMessageProcessor):
                     vumi_session_identifier)
 
         if self.config.send_long_messages:
-            resp = yield protocol.submit_sm_long(
+            resp = yield service.submit_sm_long(
                 vumi_message_id,
                 to_addr.encode('ascii'),
                 long_message=text.encode(self.config.submit_sm_encoding),
@@ -183,7 +183,7 @@ class SubmitShortMessageProcessor(default.SubmitShortMessageProcessor):
             )
 
         elif self.config.send_multipart_sar:
-            resp = yield protocol.submit_csm_sar(
+            resp = yield service.submit_csm_sar(
                 vumi_message_id,
                 to_addr.encode('ascii'),
                 short_message=text.encode(self.config.submit_sm_encoding),
@@ -193,7 +193,7 @@ class SubmitShortMessageProcessor(default.SubmitShortMessageProcessor):
             )
 
         elif self.config.send_multipart_udh:
-            resp = yield protocol.submit_csm_udh(
+            resp = yield service.submit_csm_udh(
                 vumi_message_id,
                 to_addr.encode('ascii'),
                 short_message=text.encode(self.config.submit_sm_encoding),
@@ -202,7 +202,7 @@ class SubmitShortMessageProcessor(default.SubmitShortMessageProcessor):
                 optional_parameters=optional_parameters,
             )
         else:
-            resp = yield protocol.submit_sm(
+            resp = yield service.submit_sm(
                 vumi_message_id,
                 to_addr.encode('ascii'),
                 short_message=text.encode(self.config.submit_sm_encoding),

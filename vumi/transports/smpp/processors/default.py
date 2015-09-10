@@ -475,7 +475,7 @@ class SubmitShortMessageProcessor(object):
         self.transport = transport
         self.config = self.CONFIG_CLASS(config, static=True)
 
-    def handle_outbound_message(self, message, protocol):
+    def handle_outbound_message(self, message, service):
         to_addr = message['to_addr']
         from_addr = message['from_addr']
         text = message['content']
@@ -501,7 +501,7 @@ class SubmitShortMessageProcessor(object):
             })
 
         if self.config.send_long_messages:
-            return protocol.submit_sm_long(
+            return service.submit_sm_long(
                 vumi_message_id,
                 to_addr.encode('ascii'),
                 long_message=text.encode(self.config.submit_sm_encoding),
@@ -511,7 +511,7 @@ class SubmitShortMessageProcessor(object):
             )
 
         elif self.config.send_multipart_sar:
-            return protocol.submit_csm_sar(
+            return service.submit_csm_sar(
                 vumi_message_id,
                 to_addr.encode('ascii'),
                 short_message=text.encode(self.config.submit_sm_encoding),
@@ -521,7 +521,7 @@ class SubmitShortMessageProcessor(object):
             )
 
         elif self.config.send_multipart_udh:
-            return protocol.submit_csm_udh(
+            return service.submit_csm_udh(
                 vumi_message_id,
                 to_addr.encode('ascii'),
                 short_message=text.encode(self.config.submit_sm_encoding),
@@ -530,7 +530,7 @@ class SubmitShortMessageProcessor(object):
                 optional_parameters=optional_parameters,
             )
 
-        return protocol.submit_sm(
+        return service.submit_sm(
             vumi_message_id,
             to_addr.encode('ascii'),
             short_message=text.encode(self.config.submit_sm_encoding),
