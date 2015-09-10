@@ -156,8 +156,8 @@ class TestFakeSMSC(VumiTestCase):
 
         fake_smsc.reject_connection()
         # The client is not connected.
-        self.assertFailure(connect_d, ConnectionRefusedError)
-        self.assertFailure(await_connected_d, ConnectionRefusedError)
+        self.failureResultOf(connect_d, ConnectionRefusedError)
+        self.failureResultOf(await_connected_d, ConnectionRefusedError)
         self.assertEqual(client.connected, False)
 
     def test_reject_connection_no_pending(self):
@@ -180,8 +180,8 @@ class TestFakeSMSC(VumiTestCase):
         self.assertEqual(fake_smsc.has_pending_connection(), True)
         fake_smsc.reject_connection()
         self.assertEqual(fake_smsc.has_pending_connection(), False)
-        self.assertFailure(connect_d)
-        self.assertFailure(await_connected_d)
+        self.failureResultOf(connect_d)
+        self.failureResultOf(await_connected_d)
 
         # Pending connection we accept.
         self.connect(fake_smsc)
@@ -366,7 +366,7 @@ class TestFakeSMSC(VumiTestCase):
 
         bind_d = fake_smsc.bind()
         yield client.write(EnquireLink(0).get_bin())
-        self.assertFailure(bind_d, ValueError)
+        self.failureResultOf(bind_d, ValueError)
 
     @inlineCallbacks
     def test_respond_to_enquire_link(self):
@@ -412,7 +412,7 @@ class TestFakeSMSC(VumiTestCase):
 
         rtel_d = fake_smsc.respond_to_enquire_link()
         yield client.write(DeliverSM(0).get_bin())
-        self.assertFailure(rtel_d, ValueError)
+        self.failureResultOf(rtel_d, ValueError)
 
     @inlineCallbacks
     def test_await_pdu(self):
