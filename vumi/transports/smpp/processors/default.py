@@ -500,41 +500,37 @@ class SubmitShortMessageProcessor(object):
                     int(session_info, 16) + int(not continue_session))
             })
 
-        if self.config.send_long_messages:
-            return service.submit_sm_long(
-                vumi_message_id,
-                to_addr.encode('ascii'),
-                long_message=text.encode(self.config.submit_sm_encoding),
-                data_coding=self.config.submit_sm_data_coding,
-                source_addr=from_addr.encode('ascii'),
-                optional_parameters=optional_parameters,
-            )
-
-        elif self.config.send_multipart_sar:
-            return service.submit_csm_sar(
-                vumi_message_id,
-                to_addr.encode('ascii'),
-                short_message=text.encode(self.config.submit_sm_encoding),
-                data_coding=self.config.submit_sm_data_coding,
-                source_addr=from_addr.encode('ascii'),
-                optional_parameters=optional_parameters,
-            )
-
-        elif self.config.send_multipart_udh:
-            return service.submit_csm_udh(
-                vumi_message_id,
-                to_addr.encode('ascii'),
-                short_message=text.encode(self.config.submit_sm_encoding),
-                data_coding=self.config.submit_sm_data_coding,
-                source_addr=from_addr.encode('ascii'),
-                optional_parameters=optional_parameters,
-            )
-
-        return service.submit_sm(
+        return self.send_short_message(
+            service,
             vumi_message_id,
             to_addr.encode('ascii'),
-            short_message=text.encode(self.config.submit_sm_encoding),
+            text.encode(self.config.submit_sm_encoding),
             data_coding=self.config.submit_sm_data_coding,
             source_addr=from_addr.encode('ascii'),
-            optional_parameters=optional_parameters,
-        )
+            optional_parameters=optional_parameters)
+
+    def send_short_message(self, service, vumi_message_id, destination_addr,
+                           content, data_coding=0, source_addr='',
+                           optional_parameters=None):
+        """
+        Call the appropriate `submit_*` method depending on config.
+        """
+        kwargs = dict(
+            vumi_message_id=vumi_message_id,
+            destination_addr=destination_addr,
+            short_message=content,
+            data_coding=data_coding,
+            source_addr=source_addr,
+            optional_parameters=optional_parameters)
+
+        if self.config.send_long_messages:
+            kwargs['long_message'] = kwargs.pop('short_message')
+            return service.submit_sm_long(**kwargs)
+
+        elif self.config.send_multipart_sar:
+            return service.submit_csm_sar(**kwargs)
+
+        elif self.config.send_multipart_udh:
+            return service.submit_csm_udh(**kwargs)
+
+        return service.submit_sm(**kwargs)
