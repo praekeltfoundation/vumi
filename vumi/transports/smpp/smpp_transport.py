@@ -4,11 +4,9 @@ import warnings
 from uuid import uuid4
 
 from twisted.internet import reactor
-from twisted.internet.defer import (
-    inlineCallbacks, returnValue, Deferred, succeed)
+from twisted.internet.defer import inlineCallbacks, returnValue, succeed
 from twisted.internet.task import LoopingCall
 
-from vumi.reconnecting_client import ReconnectingClientService
 from vumi.transports.base import Transport
 
 from vumi.message import TransportUserMessage
@@ -19,6 +17,7 @@ from vumi.transports.smpp.deprecated.transport import (
 from vumi.transports.smpp.deprecated.utils import convert_to_new_config
 from vumi.transports.smpp.protocol import EsmeProtocolFactory
 from vumi.transports.smpp.sequence import RedisSequence
+from vumi.transports.smpp.smpp_service import SmppService
 from vumi.transports.failures import FailureMessage
 
 from vumi.persist.txredis_manager import TxRedisManager
@@ -40,40 +39,6 @@ def message_key(message_id):
 
 def remote_message_key(message_id):
     return 'remote_message:%s' % (message_id,)
-
-
-class SmppService(ReconnectingClientService):
-
-    def __init__(self, endpoint, factory):
-        ReconnectingClientService.__init__(self, endpoint, factory)
-        self.wait_on_protocol_deferreds = []
-
-    def clientConnected(self, protocol):
-        ReconnectingClientService.clientConnected(self, protocol)
-        while self.wait_on_protocol_deferreds:
-            deferred = self.wait_on_protocol_deferreds.pop()
-            deferred.callback(protocol)
-
-    def get_protocol(self):
-        if self._protocol is not None:
-            return succeed(self._protocol)
-        else:
-            d = Deferred()
-            self.wait_on_protocol_deferreds.append(d)
-            return d
-
-    def is_bound(self):
-        if self._protocol is not None:
-            return self._protocol.is_bound()
-        return False
-
-    def stopService(self):
-        if self._protocol is not None:
-            d = self._protocol.disconnect()
-            d.addCallback(
-                lambda _: ReconnectingClientService.stopService(self))
-            return d
-        return ReconnectingClientService.stopService(self)
 
 
 class SmppMessageDataStash(object):
@@ -235,7 +200,6 @@ class SmppTransceiverTransport(Transport):
 
     bind_type = 'TRX'
     factory_class = EsmeProtocolFactory
-    service_class = SmppService
     sequence_class = RedisSequence
     clock = reactor
     start_message_consumer = False
@@ -278,7 +242,7 @@ class SmppTransceiverTransport(Transport):
 
     def start_service(self, factory):
         config = self.get_static_config()
-        service = self.service_class(config.twisted_endpoint, factory)
+        service = SmppService(config.twisted_endpoint, self.bind_type, self)
         service.clock = self.clock
         service.startService()
         return service

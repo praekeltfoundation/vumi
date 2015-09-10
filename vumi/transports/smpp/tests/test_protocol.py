@@ -16,7 +16,7 @@ from vumi.transports.smpp.sequence import RedisSequence
 from vumi.transports.smpp.tests.fake_smsc import FakeSMSC
 
 
-class DummySmppTransport(object):
+class DummySmppService(object):
     def __init__(self, clock, redis, config):
         self.clock = clock
         self.redis = redis
@@ -24,7 +24,7 @@ class DummySmppTransport(object):
         self._static_config = SmppTransceiverTransport.CONFIG_CLASS(
             self._config, static=True)
 
-        config = self.get_static_config()
+        config = self.get_config()
         self.dr_processor = config.delivery_report_processor(
             self, config.delivery_report_processor_config)
         self.deliver_sm_processor = config.deliver_short_message_processor(
@@ -39,10 +39,13 @@ class DummySmppTransport(object):
     def get_static_config(self):
         return self._static_config
 
-    def pause_connectors(self):
+    def get_config(self):
+        return self._static_config
+
+    def on_connection_lost(self):
         self.paused = True
 
-    def unpause_connectors(self):
+    def on_smpp_bind(self):
         self.paused = False
 
 
@@ -64,9 +67,9 @@ class TestEsmeProtocol(VumiTestCase):
             'smpp_bind_timeout': 30,
         }
         cfg.update(config)
-        dummy_transport = DummySmppTransport(self.clock, self.redis, cfg)
+        dummy_service = DummySmppService(self.clock, self.redis, cfg)
 
-        factory = EsmeProtocolFactory(dummy_transport, bind_type)
+        factory = EsmeProtocolFactory(dummy_service, bind_type)
         proto_d = self.fake_smsc.endpoint.connect(factory)
         if accept_connection:
             self.fake_smsc.accept_connection()
@@ -97,7 +100,7 @@ class TestEsmeProtocol(VumiTestCase):
             'smpp_last_sequence_number', seq_nr)
 
     def lookup_message_ids(self, protocol, seq_nums):
-        message_stash = protocol.vumi_transport.message_stash
+        message_stash = protocol.service.message_stash
         lookup_func = message_stash.get_sequence_number_message_id
         return gatherResults([lookup_func(seq_num) for seq_num in seq_nums])
 

@@ -2,7 +2,6 @@
 
 from functools import wraps
 
-from twisted.internet import reactor
 from twisted.internet.protocol import Protocol, ClientFactory
 from twisted.internet.task import LoopingCall
 from twisted.internet.defer import (
@@ -39,7 +38,6 @@ class EsmeProtocolError(Exception):
 
 class EsmeProtocol(Protocol):
 
-    clock = reactor
     noisy = True
     unbind_timeout = 2
 
@@ -59,24 +57,25 @@ class EsmeProtocol(Protocol):
         'TRX': BindTransceiver,
     }
 
-    def __init__(self, vumi_transport, bind_type):
+    def __init__(self, service, bind_type):
         """
         An SMPP 3.4 client suitable for use by a Vumi Transport.
 
-        :param SmppTransceiverProtocol vumi_transport:
-            The transport that is using this protocol to communicate
-            with an SMSC.
+        :param SmppService service:
+            The SMPP service that is using this protocol to communicate with an
+            SMSC.
         """
-        self.vumi_transport = vumi_transport
+        self.service = service
         self.bind_pdu = self._BIND_PDU[bind_type]
-        self.config = self.vumi_transport.get_static_config()
+        self.clock = service.clock
+        self.config = self.service.get_config()
 
         self.buffer = b''
         self.state = self.CLOSED_STATE
 
-        self.deliver_sm_processor = self.vumi_transport.deliver_sm_processor
-        self.dr_processor = self.vumi_transport.dr_processor
-        self.sequence_generator = self.vumi_transport.sequence_generator
+        self.deliver_sm_processor = self.service.deliver_sm_processor
+        self.dr_processor = self.service.dr_processor
+        self.sequence_generator = self.service.sequence_generator
         self.enquire_link_call = LoopingCall(self.enquire_link)
         self.drop_link_call = None
         self.idle_timeout = self.config.smpp_enquire_link_interval * 2
@@ -189,7 +188,7 @@ class EsmeProtocol(Protocol):
             self.drop_link_call.cancel()
         if self.disconnect_call is not None and self.disconnect_call.active():
             self.disconnect_call.cancel()
-        return self.vumi_transport.pause_connectors()
+        return self.service.on_connection_lost()
 
     def is_bound(self):
         """
@@ -294,7 +293,7 @@ class EsmeProtocol(Protocol):
             'than %s seconds' % (self.idle_timeout,))
         self.enquire_link_call.clock = self.clock
         self.enquire_link_call.start(self.config.smpp_enquire_link_interval)
-        return self.vumi_transport.unpause_connectors()
+        return self.service.on_smpp_bind()
 
     def handle_unbind(self, pdu):
         return self.send_pdu(UnbindResp(seq_no(pdu)))
@@ -320,12 +319,8 @@ class EsmeProtocol(Protocol):
             the ``submit_sm`` command was successful or not. Refer to the
             SMPP specification for full list of options.
         """
-        cb = {
-            'ESME_ROK': self.vumi_transport.handle_submit_sm_success,
-            'ESME_RTHROTTLED': self.vumi_transport.handle_submit_sm_throttled,
-            'ESME_RMSGQFUL': self.vumi_transport.handle_submit_sm_throttled,
-        }.get(command_status, self.vumi_transport.handle_submit_sm_failure)
-        message_stash = self.vumi_transport.message_stash
+        cb = self.service.get_submit_sm_callback(command_status)
+        message_stash = self.service.message_stash
         d = message_stash.get_sequence_number_message_id(sequence_number)
         d.addCallback(
             message_stash.set_remote_message_id, smpp_message_id)
@@ -341,7 +336,7 @@ class EsmeProtocol(Protocol):
             # callback.
             log.warning("Failed to retrieve message id for deliver_sm_resp."
                         " ack/nack from %s discarded."
-                        % self.vumi_transport.transport_name)
+                        % self.service.transport_name)
         else:
             return cb(message_id, smpp_message_id, command_status)
 
@@ -517,7 +512,7 @@ class EsmeProtocol(Protocol):
             for key, value in optional_parameters.items():
                 pdu.add_optional_parameter(key, value)
 
-        yield self.vumi_transport.message_stash.set_sequence_number_message_id(
+        yield self.service.message_stash.set_sequence_number_message_id(
             sequence_number, vumi_message_id)
         self.send_pdu(pdu)
         returnValue([sequence_number])
@@ -613,7 +608,7 @@ class EsmeProtocol(Protocol):
         optional_parameters = pdu_params.pop('optional_parameters', {}).copy()
         ref_num = yield self.sequence_generator.next()
         sequence_numbers = []
-        yield self.vumi_transport.message_stash.init_multipart_info(
+        yield self.service.message_stash.init_multipart_info(
             vumi_message_id, len(split_msg))
         for i, msg in enumerate(split_msg):
             pdu_params = pdu_params.copy()
@@ -660,7 +655,7 @@ class EsmeProtocol(Protocol):
 
         ref_num = yield self.sequence_generator.next()
         sequence_numbers = []
-        yield self.vumi_transport.message_stash.init_multipart_info(
+        yield self.service.message_stash.init_multipart_info(
             vumi_message_id, len(split_msg))
         for i, msg in enumerate(split_msg):
             # 0x40 is the UDHI flag indicating that this payload contains a
@@ -745,12 +740,11 @@ class EsmeProtocolFactory(ClientFactory):
 
     protocol = EsmeProtocol
 
-    def __init__(self, transport, bind_type):
-        self.transport = transport
+    def __init__(self, service, bind_type):
+        self.service = service
         self.bind_type = bind_type
 
     def buildProtocol(self, addr):
-        proto = self.protocol(self.transport, self.bind_type)
+        proto = self.protocol(self.service, self.bind_type)
         proto.factory = self
-        proto.clock = self.transport.clock
         return proto
