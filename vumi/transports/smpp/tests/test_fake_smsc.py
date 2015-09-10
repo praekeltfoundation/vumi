@@ -5,8 +5,9 @@ from twisted.internet.task import Clock, deferLater
 
 from smpp.pdu import unpack_pdu
 from smpp.pdu_builder import (
-    BindTransceiver, BindTransceiverResp, EnquireLink, EnquireLinkResp,
-    DeliverSM)
+    BindTransceiver, BindTransceiverResp, BindTransmitter, BindTransmitterResp,
+    BindReceiver, BindReceiverResp, EnquireLink, EnquireLinkResp, DeliverSM,
+    Unbind, UnbindResp)
 from vumi.tests.helpers import VumiTestCase
 from vumi.transports.smpp.tests.fake_smsc import FakeSMSC
 
@@ -277,6 +278,60 @@ class TestFakeSMSC(VumiTestCase):
         self.successResultOf(bind_d)
 
     @inlineCallbacks
+    def test_bind_mode_TRX(self):
+        """
+        FakeSMSC can accept tranceiver bind requests.
+        """
+        fake_smsc = FakeSMSC()
+        client = self.successResultOf(self.connect(fake_smsc))
+        self.assertEqual(client.received, b"")
+
+        bind_d = fake_smsc.bind()
+        yield client.write(BindTransceiver(0).get_bin())
+        yield client.write(EnquireLink(1).get_bin())
+        self.assertEqual(client.received, b"".join([
+            BindTransceiverResp(0).get_bin(),
+            EnquireLinkResp(1).get_bin()]))
+        yield wait0()
+        self.successResultOf(bind_d)
+
+    @inlineCallbacks
+    def test_bind_mode_TX(self):
+        """
+        FakeSMSC can accept transmitter bind requests.
+        """
+        fake_smsc = FakeSMSC()
+        client = self.successResultOf(self.connect(fake_smsc))
+        self.assertEqual(client.received, b"")
+
+        bind_d = fake_smsc.bind()
+        yield client.write(BindTransmitter(0).get_bin())
+        yield client.write(EnquireLink(1).get_bin())
+        self.assertEqual(client.received, b"".join([
+            BindTransmitterResp(0).get_bin(),
+            EnquireLinkResp(1).get_bin()]))
+        yield wait0()
+        self.successResultOf(bind_d)
+
+    @inlineCallbacks
+    def test_bind_mode_RX(self):
+        """
+        FakeSMSC can accept receiver bind requests.
+        """
+        fake_smsc = FakeSMSC()
+        client = self.successResultOf(self.connect(fake_smsc))
+        self.assertEqual(client.received, b"")
+
+        bind_d = fake_smsc.bind()
+        yield client.write(BindReceiver(0).get_bin())
+        yield client.write(EnquireLink(1).get_bin())
+        self.assertEqual(client.received, b"".join([
+            BindReceiverResp(0).get_bin(),
+            EnquireLinkResp(1).get_bin()]))
+        yield wait0()
+        self.successResultOf(bind_d)
+
+    @inlineCallbacks
     def test_bind_explicit(self):
         """
         FakeSMSC can bind using a PDU explicitly passed in.
@@ -300,6 +355,18 @@ class TestFakeSMSC(VumiTestCase):
         yield wait0()
         # Bind complete.
         self.successResultOf(bind_d)
+
+    @inlineCallbacks
+    def test_bind_wrong_pdu(self):
+        """
+        FakeSMSC will raise an exception if asked to bind with a non-bind PDU.
+        """
+        fake_smsc = FakeSMSC()
+        client = self.successResultOf(self.connect(fake_smsc))
+
+        bind_d = fake_smsc.bind()
+        yield client.write(EnquireLink(0).get_bin())
+        self.assertFailure(bind_d, ValueError)
 
     @inlineCallbacks
     def test_respond_to_enquire_link(self):
@@ -333,6 +400,19 @@ class TestFakeSMSC(VumiTestCase):
         # enquire_link response received.
         self.successResultOf(rtel_d)
         self.assertEqual(client.received, EnquireLinkResp(2).get_bin())
+
+    @inlineCallbacks
+    def test_respond_to_enquire_link_wrong_pdu(self):
+        """
+        FakeSMSC will raise an exception if asked to respond to an enquire_link
+        that isn't an enquire_link.
+        """
+        fake_smsc = FakeSMSC()
+        client = self.successResultOf(self.connect(fake_smsc))
+
+        rtel_d = fake_smsc.respond_to_enquire_link()
+        yield client.write(DeliverSM(0).get_bin())
+        self.assertFailure(rtel_d, ValueError)
 
     @inlineCallbacks
     def test_await_pdu(self):
@@ -409,6 +489,37 @@ class TestFakeSMSC(VumiTestCase):
             unpack_pdu(EnquireLink(2).get_bin())])
 
     @inlineCallbacks
+    def test_waiting_pdu_count(self):
+        """
+        FakeSMSC knows how many received PDUs are waiting.
+        """
+        fake_smsc = FakeSMSC()
+        client = self.successResultOf(self.connect(fake_smsc))
+
+        # Nothing received yet.
+        self.assertEqual(fake_smsc.waiting_pdu_count(), 0)
+
+        # Some PDUs received.
+        yield client.write(EnquireLink(1).get_bin())
+        self.assertEqual(fake_smsc.waiting_pdu_count(), 1)
+        yield client.write(EnquireLink(2).get_bin())
+        self.assertEqual(fake_smsc.waiting_pdu_count(), 2)
+
+        # Some PDUs returned.
+        self.successResultOf(fake_smsc.await_pdu())
+        self.assertEqual(fake_smsc.waiting_pdu_count(), 1)
+        self.successResultOf(fake_smsc.await_pdu())
+        self.assertEqual(fake_smsc.waiting_pdu_count(), 0)
+
+        # Wait for a PDU that arrives later.
+        pdu_d = fake_smsc.await_pdu()
+        self.assertNoResult(pdu_d)
+        self.assertEqual(fake_smsc.waiting_pdu_count(), 0)
+        yield client.write(EnquireLink(3).get_bin())
+        self.assertEqual(fake_smsc.waiting_pdu_count(), 0)
+        self.successResultOf(pdu_d)
+
+    @inlineCallbacks
     def test_send_mo(self):
         """
         FakeSMSC can send a DeliverSM PDU.
@@ -474,3 +585,18 @@ class TestFakeSMSC(VumiTestCase):
         yield wait0()
         # Disconnect completed.
         self.successResultOf(disconnect_d)
+
+    @inlineCallbacks
+    def test_auto_unbind(self):
+        """
+        FakeSMSC will automatically respond to an unbind request by default.
+        The unbind PDU remains in the queue.
+        """
+        fake_smsc = FakeSMSC()
+        client = self.successResultOf(self.connect(fake_smsc))
+        self.assertEqual(client.received, b"")
+        self.assertEqual(fake_smsc.waiting_pdu_count(), 0)
+
+        yield client.write(Unbind(7).get_bin())
+        self.assertEqual(client.received, UnbindResp(7).get_bin())
+        self.assertEqual(fake_smsc.waiting_pdu_count(), 1)

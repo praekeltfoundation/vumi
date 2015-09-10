@@ -29,6 +29,9 @@ def wait0(r=None):
 class FakeSMSC(object):
     """
     Fake SMSC for testing.
+
+    By default, it accepts incoming connections and automatically responds to
+    unbind commands. Only one client connection at a time is allowed.
     """
     def __init__(self, auto_accept=True, auto_unbind=True):
         self.auto_accept = auto_accept
@@ -135,15 +138,21 @@ class FakeSMSC(object):
 
     def await_pdu(self):
         """
-        Wait for the next PDU on the receive queue.
+        Wait for the next PDU from the receive queue.
         """
         return self.pdu_queue.get()
 
     def await_pdus(self, count):
         """
-        Wait for the next `count` PDUs on the receive queue.
+        Wait for the next `count` PDUs from the receive queue.
         """
         return gatherResults([self.pdu_queue.get() for _ in range(count)])
+
+    def waiting_pdu_count(self):
+        """
+        Returns the number of PDUs in the receive queue.
+        """
+        return len(self.pdu_queue.pending)
 
     def send_mo(self, sequence_number, short_message, data_coding=1, **kwargs):
         """
