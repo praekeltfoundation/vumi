@@ -73,12 +73,11 @@ class FakeSMSC(object):
         """
         Reject a pending connection.
 
-        This is only useful if auto-accept is disabled.
+        This is only useful if auto-accept is disabled. The deferred returned
+        by waiting for `await_connected()` for this connection will never fire.
         """
         assert self.has_pending_connection(), "No pending connection."
-        err = ConnectionRefusedError()
-        self._accept_d.errback(err)
-        self._connected_d.errback(err)
+        self._accept_d.errback(ConnectionRefusedError())
         self._reset_connection_ds()
 
     def has_pending_connection(self):
