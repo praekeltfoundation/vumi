@@ -1,18 +1,20 @@
 from functools import wraps
 
-from twisted.internet.defer import Deferred, succeed
+from twisted.internet.defer import succeed
 
 from vumi.reconnecting_client import ReconnectingClientService
-from vumi.transports.smpp.protocol import EsmeProtocol, EsmeProtocolFactory
+from vumi.transports.smpp.protocol import (
+    EsmeProtocol, EsmeProtocolFactory, EsmeProtocolError)
 from vumi.transports.smpp.sequence import RedisSequence
 
 
 def proxy_protocol(func):
     @wraps(func)
     def wrapper(self, *args, **kw):
-        d = self.get_protocol()
-        d.addCallback(lambda p: func(self, p, *args, **kw))
-        return d
+        protocol = self.get_protocol()
+        if protocol is None:
+            raise EsmeProtocolError('%s called while not connected.' % (func,))
+        return func(self, protocol, *args, **kw)
     return wrapper
 
 
@@ -28,23 +30,11 @@ class SmppService(ReconnectingClientService):
         self.dr_processor = self.transport.dr_processor
         self.sequence_generator = RedisSequence(transport.redis)
 
-        self.wait_on_protocol_deferreds = []
         factory = EsmeProtocolFactory(self, bind_type)
         ReconnectingClientService.__init__(self, endpoint, factory)
 
-    def clientConnected(self, protocol):
-        ReconnectingClientService.clientConnected(self, protocol)
-        while self.wait_on_protocol_deferreds:
-            deferred = self.wait_on_protocol_deferreds.pop()
-            deferred.callback(protocol)
-
     def get_protocol(self):
-        if self._protocol is not None:
-            return succeed(self._protocol)
-        else:
-            d = Deferred()
-            self.wait_on_protocol_deferreds.append(d)
-            return d
+        return self._protocol
 
     def get_bind_state(self):
         if self._protocol is None:
@@ -57,12 +47,11 @@ class SmppService(ReconnectingClientService):
         return False
 
     def stopService(self):
+        d = succeed(None)
         if self._protocol is not None:
-            d = self._protocol.disconnect()
-            d.addCallback(
-                lambda _: ReconnectingClientService.stopService(self))
-            return d
-        return ReconnectingClientService.stopService(self)
+            d.addCallback(lambda _: self._protocol.disconnect())
+        d.addCallback(lambda _: ReconnectingClientService.stopService(self))
+        return d
 
     def get_config(self):
         return self.transport.get_static_config()

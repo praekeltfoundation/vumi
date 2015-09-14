@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
-from twisted.internet.defer import inlineCallbacks, succeed
+from twisted.internet.defer import inlineCallbacks, succeed, gatherResults
 from twisted.internet.task import Clock
 
 from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 from vumi.transports.smpp.smpp_transport import (
     SmppTransceiverTransport, SmppMessageDataStash)
-from vumi.transports.smpp.protocol import EsmeProtocol
+from vumi.transports.smpp.protocol import EsmeProtocol, EsmeProtocolError
 from vumi.transports.smpp.smpp_service import SmppService
 from vumi.transports.smpp.pdu_utils import command_id
 from vumi.transports.smpp.sequence import RedisSequence
@@ -86,6 +86,13 @@ class TestSmppService(VumiTestCase):
             d.addCallback(lambda _: self.fake_smsc.accept_connection())
         return d.addCallback(lambda _: service)
 
+    def lookup_message_ids(self, service, seq_nums):
+        """
+        Find vumi message ids associated with SMPP sequence numbers.
+        """
+        lookup_func = service.message_stash.get_sequence_number_message_id
+        return gatherResults([lookup_func(seq_num) for seq_num in seq_nums])
+
     @inlineCallbacks
     def test_start_sequence(self):
         """
@@ -143,3 +150,41 @@ class TestSmppService(VumiTestCase):
         yield self.fake_smsc.accept_connection()
         self.assertEqual(service.running, True)
         self.assertNotEqual(service._protocol, None)
+
+    @inlineCallbacks
+    def test_submit_sm(self):
+        """
+        When bound, we can send a message.
+        """
+        service = yield self.get_service()
+        yield self.fake_smsc.bind()
+
+        seq_nums = yield service.submit_sm(
+            'abc123', 'dest_addr', short_message='foo')
+        submit_sm = yield self.fake_smsc.await_pdu()
+        self.assertEqual(command_id(submit_sm), 'submit_sm')
+        stored_ids = yield self.lookup_message_ids(service, seq_nums)
+        self.assertEqual(['abc123'], stored_ids)
+
+    @inlineCallbacks
+    def test_submit_sm_unbound(self):
+        """
+        When unbound, we can't send a message.
+        """
+        service = yield self.get_service()
+
+        self.assertRaises(
+            EsmeProtocolError,
+            service.submit_sm, 'abc123', 'dest_addr', short_message='foo')
+
+    @inlineCallbacks
+    def test_submit_sm_not_connected(self):
+        """
+        When not connected, we can't send a message.
+        """
+        service = yield self.get_service(start=False)
+        yield self.start_service(service, accept_connection=False)
+
+        self.assertRaises(
+            EsmeProtocolError,
+            service.submit_sm, 'abc123', 'dest_addr', short_message='foo')
