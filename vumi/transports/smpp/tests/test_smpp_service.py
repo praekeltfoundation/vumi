@@ -2,7 +2,8 @@
 from twisted.internet.defer import inlineCallbacks, succeed, gatherResults
 from twisted.internet.task import Clock
 
-from vumi.tests.helpers import VumiTestCase, PersistenceHelper
+from smpp.pdu_builder import Unbind
+from vumi.tests.helpers import VumiTestCase, PersistenceHelper, skiptest
 from vumi.transports.smpp.smpp_transport import (
     SmppTransceiverTransport, SmppMessageDataStash)
 from vumi.transports.smpp.protocol import EsmeProtocol, EsmeProtocolError
@@ -188,3 +189,18 @@ class TestSmppService(VumiTestCase):
         self.assertRaises(
             EsmeProtocolError,
             service.submit_sm, 'abc123', 'dest_addr', short_message='foo')
+
+    @skiptest("FIXME: We don't actually unbind and disconnect yet.")
+    @inlineCallbacks
+    def test_handle_unbind(self):
+        """
+        If the SMSC sends an unbind command, we respond and disconnect.
+        """
+        service = yield self.get_service()
+        yield self.fake_smsc.bind()
+
+        self.assertEqual(service.is_bound(), True)
+        self.fake_smsc.send_pdu(Unbind(7))
+        unbind_resp_pdu = yield self.fake_smsc.await_pdu()
+        self.assertEqual(command_id(unbind_resp_pdu), 'unbind_resp')
+        self.assertEqual(service.is_bound(), False)
