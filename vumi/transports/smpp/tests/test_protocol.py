@@ -1,74 +1,76 @@
 # -*- coding: utf-8 -*-
-from twisted.test import proto_helpers
-from twisted.internet.defer import (
-    inlineCallbacks, gatherResults, returnValue, succeed)
-from twisted.internet.error import ConnectionDone
+from twisted.internet.defer import inlineCallbacks, gatherResults, succeed
 from twisted.internet.task import Clock
 
-
+from smpp.pdu_builder import (
+    Unbind, UnbindResp, SubmitSMResp, DeliverSM, EnquireLink)
 from vumi.tests.helpers import VumiTestCase, PersistenceHelper
-from vumi.transports.smpp.smpp_transport import SmppTransceiverTransport
+from vumi.transports.smpp.smpp_transport import (
+    SmppTransceiverTransport, SmppMessageDataStash)
 from vumi.transports.smpp.protocol import (
     EsmeProtocol, EsmeProtocolFactory)
 from vumi.transports.smpp.pdu_utils import (
     seq_no, command_status, command_id, short_message)
 from vumi.transports.smpp.smpp_utils import unpacked_pdu_opts
 from vumi.transports.smpp.sequence import RedisSequence
-from vumi.transports.smpp.tests.helpers import bind_protocol, wait_for_pdus
-from vumi.transports.tests.helpers import TransportHelper
-
-from smpp.pdu import unpack_pdu
-from smpp.pdu_builder import (
-    Unbind, UnbindResp, SubmitSMResp, DeliverSM, EnquireLink, EnquireLinkResp)
+from vumi.transports.smpp.tests.fake_smsc import FakeSMSC
 
 
-def connect_transport(protocol):
-    transport = proto_helpers.StringTransport()
-    protocol.makeConnection(transport)
-    return transport
+class DummySmppTransport(object):
+    def __init__(self, clock, redis, config):
+        self.clock = clock
+        self.redis = redis
+        self._config = config
+        self._static_config = SmppTransceiverTransport.CONFIG_CLASS(
+            self._config, static=True)
 
+        config = self.get_static_config()
+        self.dr_processor = config.delivery_report_processor(
+            self, config.delivery_report_processor_config)
+        self.deliver_sm_processor = config.deliver_short_message_processor(
+            self, config.deliver_short_message_processor_config)
+        self.submit_sm_processor = config.submit_short_message_processor(
+            self, config.submit_short_message_processor_config)
+        self.sequence_generator = RedisSequence(self.redis)
+        self.message_stash = SmppMessageDataStash(self.redis, config)
 
-class ForwardableRedisSequence(RedisSequence):
+        self.paused = True
 
-    def advance(self, seq_nr):
-        d = self.redis.set('smpp_last_sequence_number', seq_nr)
-        d.addCallback(lambda _: seq_nr)
-        return d
+    def get_static_config(self):
+        return self._static_config
 
+    def pause_connectors(self):
+        self.paused = True
 
-class DummySmppTransport(SmppTransceiverTransport):
-
-    sequence_class = ForwardableRedisSequence
+    def unpause_connectors(self):
+        self.paused = False
 
 
 class TestEsmeProtocol(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self.tx_helper = self.add_helper(TransportHelper(DummySmppTransport))
+        self.clock = Clock()
         self.persistence_helper = self.add_helper(PersistenceHelper())
         self.redis = yield self.persistence_helper.get_redis_manager()
-        self.clock = Clock()
-        self.patch(EsmeProtocol, 'clock', self.clock)
+        self.fake_smsc = FakeSMSC(auto_accept=False)
 
-    @inlineCallbacks
-    def get_protocol(self, config={}, bind_type='TRX'):
-        default_config = {
+    def get_protocol(self, config={}, bind_type='TRX', accept_connection=True):
+        cfg = {
             'transport_name': 'sphex_transport',
             'twisted_endpoint': 'tcp:host=127.0.0.1:port=0',
             'system_id': 'system_id',
             'password': 'password',
             'smpp_bind_timeout': 30,
         }
+        cfg.update(config)
+        dummy_transport = DummySmppTransport(self.clock, self.redis, cfg)
 
-        default_config.update(config)
-
-        smpp_transport = yield self.tx_helper.get_transport(default_config)
-
-        factory = EsmeProtocolFactory(smpp_transport, bind_type)
-        proto = factory.buildProtocol(('127.0.0.1', 0))
-        self.add_cleanup(proto.connectionLost, reason=ConnectionDone)
-        returnValue(proto)
+        factory = EsmeProtocolFactory(dummy_transport, bind_type)
+        proto_d = self.fake_smsc.endpoint.connect(factory)
+        if accept_connection:
+            self.fake_smsc.accept_connection()
+        return proto_d
 
     def assertCommand(self, pdu, cmd_id, sequence_number=None,
                       status=None, params={}):
@@ -90,12 +92,9 @@ class TestEsmeProtocol(VumiTestCase):
 
             self.assertEqual(params, pdu_params)
 
-    @inlineCallbacks
-    def setup_bind(self, config={}, clear=True, bind_type='TRX'):
-        protocol = yield self.get_protocol(config, bind_type=bind_type)
-        transport = connect_transport(protocol)
-        yield bind_protocol(transport, protocol, clear=clear)
-        returnValue((transport, protocol))
+    def set_sequence_number(self, protocol, seq_nr):
+        return protocol.sequence_generator.redis.set(
+            'smpp_last_sequence_number', seq_nr)
 
     def lookup_message_ids(self, protocol, seq_nums):
         message_stash = protocol.vumi_transport.message_stash
@@ -104,11 +103,14 @@ class TestEsmeProtocol(VumiTestCase):
 
     @inlineCallbacks
     def test_on_connection_made(self):
-        protocol = yield self.get_protocol()
+        connect_d = self.get_protocol(accept_connection=False)
+        protocol = yield self.fake_smsc.await_connecting()
         self.assertEqual(protocol.state, EsmeProtocol.CLOSED_STATE)
-        transport = connect_transport(protocol)
+        self.fake_smsc.accept_connection()
+        protocol = yield connect_d  # Same protocol.
         self.assertEqual(protocol.state, EsmeProtocol.OPEN_STATE)
-        [bind_pdu] = yield wait_for_pdus(transport, 1)
+
+        bind_pdu = yield self.fake_smsc.await_pdu()
         self.assertCommand(
             bind_pdu,
             'bind_transceiver',
@@ -121,100 +123,97 @@ class TestEsmeProtocol(VumiTestCase):
     @inlineCallbacks
     def test_drop_link(self):
         protocol = yield self.get_protocol()
-        transport = connect_transport(protocol)
-        [bind_pdu] = yield wait_for_pdus(transport, 1)
+        bind_pdu = yield self.fake_smsc.await_pdu()
         self.assertCommand(bind_pdu, 'bind_transceiver')
         self.assertFalse(protocol.is_bound())
         self.assertEqual(protocol.state, EsmeProtocol.OPEN_STATE)
-        self.assertFalse(transport.disconnecting)
         self.clock.advance(protocol.config.smpp_bind_timeout + 1)
-        [unbind_pdu] = yield wait_for_pdus(transport, 1)
+        unbind_pdu = yield self.fake_smsc.await_pdu()
         self.assertCommand(unbind_pdu, 'unbind')
-        unbind_resp_pdu = UnbindResp(sequence_number=seq_no(unbind_pdu))
-        yield protocol.on_pdu(unpack_pdu(unbind_resp_pdu.get_bin()))
-        self.assertTrue(transport.disconnecting)
+        yield self.fake_smsc.send_pdu(UnbindResp(seq_no(unbind_pdu)))
+        yield self.fake_smsc.await_disconnect()
 
     @inlineCallbacks
     def test_on_smpp_bind(self):
         protocol = yield self.get_protocol()
-        transport = connect_transport(protocol)
-        yield bind_protocol(transport, protocol)
+        yield self.fake_smsc.bind()
         self.assertEqual(protocol.state, EsmeProtocol.BOUND_STATE_TRX)
         self.assertTrue(protocol.is_bound())
         self.assertTrue(protocol.enquire_link_call.running)
 
     @inlineCallbacks
     def test_handle_unbind(self):
-        transport, protocol = yield self.setup_bind()
-        protocol.dataReceived(Unbind(sequence_number=0).get_bin())
-        [pdu] = yield wait_for_pdus(transport, 1)
-        self.assertCommand(pdu, 'unbind_resp',
-                           sequence_number=0, status='ESME_ROK')
+        protocol = yield self.get_protocol()
+        yield self.fake_smsc.bind()
+        self.assertEqual(protocol.state, EsmeProtocol.BOUND_STATE_TRX)
+        self.fake_smsc.send_pdu(Unbind(0))
+        pdu = yield self.fake_smsc.await_pdu()
+        self.assertCommand(
+            pdu, 'unbind_resp', sequence_number=0, status='ESME_ROK')
+        # We don't change state here.
+        self.assertEqual(protocol.state, EsmeProtocol.BOUND_STATE_TRX)
 
     @inlineCallbacks
     def test_on_submit_sm_resp(self):
+        protocol = yield self.get_protocol()
+        yield self.fake_smsc.bind()
         calls = []
-        self.patch(EsmeProtocol, 'on_submit_sm_resp',
-                   lambda p, *a: calls.append(a))
-        transport, protocol = yield self.setup_bind()
-        pdu = SubmitSMResp(sequence_number=0, message_id='foo')
-        protocol.dataReceived(pdu.get_bin())
+        protocol.on_submit_sm_resp = lambda *a: calls.append(a)
+        yield self.fake_smsc.send_pdu(SubmitSMResp(0, message_id='foo'))
         self.assertEqual(calls, [(0, 'foo', 'ESME_ROK')])
 
     @inlineCallbacks
     def test_deliver_sm(self):
         calls = []
-        self.patch(EsmeProtocol, 'handle_deliver_sm',
-                   lambda p, pdu: succeed(calls.append(pdu)))
-        transport, protocol = yield self.setup_bind()
-        pdu = DeliverSM(
-            sequence_number=0, message_id='foo', short_message='bar')
-        protocol.dataReceived(pdu.get_bin())
+        protocol = yield self.get_protocol()
+        protocol.handle_deliver_sm = lambda pdu: succeed(calls.append(pdu))
+        yield self.fake_smsc.bind()
+        yield self.fake_smsc.send_pdu(
+            DeliverSM(0, message_id='foo', short_message='bar'))
         [deliver_sm] = calls
         self.assertCommand(deliver_sm, 'deliver_sm', sequence_number=0)
 
     @inlineCallbacks
     def test_deliver_sm_fail(self):
-        transport, protocol = yield self.setup_bind()
-        pdu = DeliverSM(
+        yield self.get_protocol()
+        yield self.fake_smsc.send_pdu(DeliverSM(
             sequence_number=0, message_id='foo', data_coding=4,
-            short_message='string with unknown data coding')
-        protocol.dataReceived(pdu.get_bin())
-        [deliver_sm_resp] = yield wait_for_pdus(transport, 1)
+            short_message='string with unknown data coding'))
+        deliver_sm_resp = yield self.fake_smsc.await_pdu()
         self.assertCommand(
             deliver_sm_resp, 'deliver_sm_resp', sequence_number=0,
             status='ESME_RDELIVERYFAILURE')
 
     @inlineCallbacks
     def test_deliver_sm_fail_with_custom_error(self):
-        transport, protocol = yield self.setup_bind(config={
+        yield self.get_protocol({
             "deliver_sm_decoding_error": "ESME_RSYSERR"
         })
-        pdu = DeliverSM(
+        yield self.fake_smsc.send_pdu(DeliverSM(
             sequence_number=0, message_id='foo', data_coding=4,
-            short_message='string with unknown data coding')
-        protocol.dataReceived(pdu.get_bin())
-        [deliver_sm_resp] = yield wait_for_pdus(transport, 1)
+            short_message='string with unknown data coding'))
+        deliver_sm_resp = yield self.fake_smsc.await_pdu()
         self.assertCommand(
             deliver_sm_resp, 'deliver_sm_resp', sequence_number=0,
             status='ESME_RSYSERR')
 
     @inlineCallbacks
     def test_on_enquire_link(self):
-        transport, protocol = yield self.setup_bind()
-        pdu = EnquireLink(sequence_number=0)
+        protocol = yield self.get_protocol()
+        yield self.fake_smsc.bind()
+        pdu = EnquireLink(0)
         protocol.dataReceived(pdu.get_bin())
-        [enquire_link_resp] = yield wait_for_pdus(transport, 1)
+        enquire_link_resp = yield self.fake_smsc.await_pdu()
         self.assertCommand(
             enquire_link_resp, 'enquire_link_resp', sequence_number=0,
             status='ESME_ROK')
 
     @inlineCallbacks
     def test_on_enquire_link_resp(self):
+        protocol = yield self.get_protocol()
         calls = []
-        self.patch(EsmeProtocol, 'handle_enquire_link_resp',
-                   lambda p, pdu: calls.append(pdu))
-        transport, protocol = yield self.setup_bind()
+        protocol.handle_enquire_link_resp = calls.append
+        yield self.fake_smsc.bind()
         [pdu] = calls
         # bind_transceiver is sequence_number 1
         self.assertEqual(seq_no(pdu), 2)
@@ -222,37 +221,50 @@ class TestEsmeProtocol(VumiTestCase):
 
     @inlineCallbacks
     def test_enquire_link_no_response(self):
-        transport, protocol = yield self.setup_bind(clear=False)
-        protocol.clock.advance(protocol.idle_timeout)
-        [unbind_pdu] = yield wait_for_pdus(transport, 1)
+        self.fake_smsc.auto_unbind = False
+        protocol = yield self.get_protocol()
+        yield self.fake_smsc.bind()
+        self.assertEqual(self.fake_smsc.connected, True)
+        self.clock.advance(protocol.idle_timeout)
+        [enquire_link_pdu, unbind_pdu] = yield self.fake_smsc.await_pdus(2)
+        self.assertCommand(enquire_link_pdu, 'enquire_link')
         self.assertCommand(unbind_pdu, 'unbind')
+        self.assertEqual(self.fake_smsc.connected, True)
         self.clock.advance(protocol.unbind_timeout)
-        self.assertTrue(transport.disconnecting)
+        yield self.fake_smsc.await_disconnect()
 
     @inlineCallbacks
     def test_enquire_link_looping(self):
-        transport, protocol = yield self.setup_bind(clear=False)
-        enquire_link_resp = EnquireLinkResp(1)
+        self.fake_smsc.auto_unbind = False
+        protocol = yield self.get_protocol()
+        yield self.fake_smsc.bind()
+        self.assertEqual(self.fake_smsc.connected, True)
 
-        protocol.clock.advance(protocol.idle_timeout - 1)
-        protocol.dataReceived(enquire_link_resp.get_bin())
+        # Respond to a few enquire_link cycles.
+        for i in range(5):
+            self.clock.advance(protocol.idle_timeout - 1)
+            pdu = yield self.fake_smsc.await_pdu()
+            self.assertCommand(pdu, 'enquire_link')
+            yield self.fake_smsc.respond_to_enquire_link(pdu)
 
-        protocol.clock.advance(protocol.idle_timeout - 1)
-        self.assertFalse(transport.disconnecting)
-        protocol.clock.advance(1)
-
-        [unbind_pdu] = yield wait_for_pdus(transport, 1)
+        # Fail to respond, so we disconnect.
+        self.clock.advance(protocol.idle_timeout - 1)
+        pdu = yield self.fake_smsc.await_pdu()
+        self.assertCommand(pdu, 'enquire_link')
+        self.clock.advance(1)
+        unbind_pdu = yield self.fake_smsc.await_pdu()
         self.assertCommand(unbind_pdu, 'unbind')
-        unbind_resp_pdu = UnbindResp(sequence_number=seq_no(unbind_pdu))
-        yield protocol.on_pdu(unpack_pdu(unbind_resp_pdu.get_bin()))
-        self.assertTrue(transport.disconnecting)
+        yield self.fake_smsc.send_pdu(
+            UnbindResp(seq_no(unbind_pdu)))
+        yield self.fake_smsc.await_disconnect()
 
     @inlineCallbacks
     def test_submit_sm(self):
-        transport, protocol = yield self.setup_bind()
+        protocol = yield self.get_protocol()
+        yield self.fake_smsc.bind()
         seq_nums = yield protocol.submit_sm(
             'abc123', 'dest_addr', short_message='foo')
-        [submit_sm] = yield wait_for_pdus(transport, 1)
+        submit_sm = yield self.fake_smsc.await_pdu()
         self.assertCommand(submit_sm, 'submit_sm', params={
             'short_message': 'foo',
         })
@@ -261,7 +273,7 @@ class TestEsmeProtocol(VumiTestCase):
 
     @inlineCallbacks
     def test_submit_sm_configured_parameters(self):
-        transport, protocol = yield self.setup_bind({
+        protocol = yield self.get_protocol({
             'service_type': 'stype',
             'source_addr_ton': 2,
             'source_addr_npi': 2,
@@ -269,9 +281,10 @@ class TestEsmeProtocol(VumiTestCase):
             'dest_addr_npi': 2,
             'registered_delivery': 0,
         })
+        yield self.fake_smsc.bind()
         seq_nums = yield protocol.submit_sm(
             'abc123', 'dest_addr', short_message='foo')
-        [submit_sm] = yield wait_for_pdus(transport, 1)
+        submit_sm = yield self.fake_smsc.await_pdu()
         self.assertCommand(submit_sm, 'submit_sm', params={
             'short_message': 'foo',
             'service_type': 'stype',
@@ -286,11 +299,12 @@ class TestEsmeProtocol(VumiTestCase):
 
     @inlineCallbacks
     def test_submit_sm_long(self):
-        transport, protocol = yield self.setup_bind()
+        protocol = yield self.get_protocol()
+        yield self.fake_smsc.bind()
         long_message = 'This is a long message.' * 20
         seq_nums = yield protocol.submit_sm_long(
             'abc123', 'dest_addr', long_message)
-        [submit_sm] = yield wait_for_pdus(transport, 1)
+        submit_sm = yield self.fake_smsc.await_pdu()
         pdu_opts = unpacked_pdu_opts(submit_sm)
 
         self.assertEqual('submit_sm', submit_sm['header']['command_id'])
@@ -303,13 +317,12 @@ class TestEsmeProtocol(VumiTestCase):
 
     @inlineCallbacks
     def test_submit_sm_multipart_udh(self):
-        transport, protocol = yield self.setup_bind(config={
-            'send_multipart_udh': True,
-        })
+        protocol = yield self.get_protocol({'send_multipart_udh': True})
+        yield self.fake_smsc.bind()
         long_message = 'This is a long message.' * 20
         seq_numbers = yield protocol.submit_csm_udh(
             'abc123', 'dest_addr', short_message=long_message)
-        pdus = yield wait_for_pdus(transport, 4)
+        pdus = yield self.fake_smsc.await_pdus(4)
         self.assertEqual(len(seq_numbers), 4)
 
         msg_parts = []
@@ -340,17 +353,16 @@ class TestEsmeProtocol(VumiTestCase):
 
     @inlineCallbacks
     def test_udh_ref_num_limit(self):
-        transport, protocol = yield self.setup_bind(config={
-            'send_multipart_udh': True,
-        })
+        protocol = yield self.get_protocol({'send_multipart_udh': True})
+        yield self.fake_smsc.bind()
 
         # forward until we go past 0xFF
-        yield protocol.sequence_generator.advance(0xFF)
+        yield self.set_sequence_number(protocol, 0xFF)
 
         long_message = 'This is a long message.' * 20
         seq_numbers = yield protocol.submit_csm_udh(
             'abc123', 'dest_addr', short_message=long_message)
-        pdus = yield wait_for_pdus(transport, 4)
+        pdus = yield self.fake_smsc.await_pdus(4)
 
         self.assertEqual(len(seq_numbers), 4)
         self.assertTrue(all([sn > 0xFF for sn in seq_numbers]))
@@ -367,13 +379,12 @@ class TestEsmeProtocol(VumiTestCase):
 
     @inlineCallbacks
     def test_submit_sm_multipart_sar(self):
-        transport, protocol = yield self.setup_bind(config={
-            'send_multipart_sar': True,
-        })
+        protocol = yield self.get_protocol({'send_multipart_sar': True})
+        yield self.fake_smsc.bind()
         long_message = 'This is a long message.' * 20
         seq_nums = yield protocol.submit_csm_sar(
             'abc123', 'dest_addr', short_message=long_message)
-        pdus = yield wait_for_pdus(transport, 4)
+        pdus = yield self.fake_smsc.await_pdus(4)
         # seq no 1 == bind_transceiver, 2 == enquire_link, 3 == sar_msg_ref_num
         self.assertEqual([4, 5, 6, 7], seq_nums)
         msg_parts = []
@@ -398,17 +409,16 @@ class TestEsmeProtocol(VumiTestCase):
 
     @inlineCallbacks
     def test_sar_ref_num_limit(self):
-        transport, protocol = yield self.setup_bind(config={
-            'send_multipart_udh': True,
-        })
+        protocol = yield self.get_protocol({'send_multipart_udh': True})
+        yield self.fake_smsc.bind()
 
         # forward until we go past 0xFFFF
-        yield protocol.sequence_generator.advance(0xFFFF)
+        yield self.set_sequence_number(protocol, 0xFFFF)
 
         long_message = 'This is a long message.' * 20
         seq_numbers = yield protocol.submit_csm_udh(
             'abc123', 'dest_addr', short_message=long_message)
-        pdus = yield wait_for_pdus(transport, 4)
+        pdus = yield self.fake_smsc.await_pdus(4)
 
         self.assertEqual(len(seq_numbers), 4)
         self.assertTrue(all([sn > 0xFF for sn in seq_numbers]))
@@ -425,9 +435,10 @@ class TestEsmeProtocol(VumiTestCase):
 
     @inlineCallbacks
     def test_query_sm(self):
-        transport, protocol = yield self.setup_bind()
+        protocol = yield self.get_protocol()
+        yield self.fake_smsc.bind()
         yield protocol.query_sm('foo', source_addr='bar')
-        [query_sm] = yield wait_for_pdus(transport, 1)
+        query_sm = yield self.fake_smsc.await_pdu()
         self.assertCommand(query_sm, 'query_sm', params={
             'message_id': 'foo',
             'source_addr': 'bar',
@@ -435,41 +446,43 @@ class TestEsmeProtocol(VumiTestCase):
 
     @inlineCallbacks
     def test_unbind(self):
+        protocol = yield self.get_protocol()
         calls = []
-        self.patch(EsmeProtocol, 'handle_unbind_resp',
-                   lambda p, pdu: calls.append(pdu))
-        transport, protocol = yield self.setup_bind()
+        protocol.handle_unbind_resp = calls.append
+        yield self.fake_smsc.bind()
         yield protocol.unbind()
-        [unbind_pdu] = yield wait_for_pdus(transport, 1)
+        unbind_pdu = yield self.fake_smsc.await_pdu()
         protocol.dataReceived(UnbindResp(seq_no(unbind_pdu)).get_bin())
         [unbind_resp_pdu] = calls
         self.assertEqual(seq_no(unbind_resp_pdu), seq_no(unbind_pdu))
 
     @inlineCallbacks
     def test_bind_transmitter(self):
-        transport, protocol = yield self.setup_bind(bind_type='TX')
+        protocol = yield self.get_protocol(bind_type='TX')
+        yield self.fake_smsc.bind()
         self.assertTrue(protocol.is_bound())
         self.assertEqual(protocol.state, protocol.BOUND_STATE_TX)
 
     @inlineCallbacks
     def test_bind_receiver(self):
-        transport, protocol = yield self.setup_bind(bind_type='RX')
+        protocol = yield self.get_protocol(bind_type='RX')
+        yield self.fake_smsc.bind()
         self.assertTrue(protocol.is_bound())
         self.assertEqual(protocol.state, protocol.BOUND_STATE_RX)
 
     @inlineCallbacks
     def test_partial_pdu_data_received(self):
+        protocol = yield self.get_protocol()
         calls = []
-        self.patch(EsmeProtocol, 'handle_deliver_sm',
-                   lambda p, pdu: calls.append(pdu))
-        transport, protocol = yield self.setup_bind()
-        deliver_sm = DeliverSM(sequence_number=1, short_message='foo')
+        protocol.handle_deliver_sm = calls.append
+        yield self.fake_smsc.bind()
+        deliver_sm = DeliverSM(1, short_message='foo')
         pdu = deliver_sm.get_bin()
         half = len(pdu) / 2
         pdu_part1, pdu_part2 = pdu[:half], pdu[half:]
-        protocol.dataReceived(pdu_part1)
+        yield self.fake_smsc.send_bytes(pdu_part1)
         self.assertEqual([], calls)
-        protocol.dataReceived(pdu_part2)
+        yield self.fake_smsc.send_bytes(pdu_part2)
         [handled_pdu] = calls
         self.assertEqual(command_id(handled_pdu), 'deliver_sm')
         self.assertEqual(seq_no(handled_pdu), 1)
@@ -477,15 +490,14 @@ class TestEsmeProtocol(VumiTestCase):
 
     @inlineCallbacks
     def test_unsupported_command_id(self):
+        protocol = yield self.get_protocol()
         calls = []
-        self.patch(EsmeProtocol, 'on_unsupported_command_id',
-                   lambda p, pdu: calls.append(pdu))
+        protocol.on_unsupported_command_id = calls.append
         invalid_pdu = {
             'header': {
                 'command_id': 'foo',
             }
         }
-        transport, protocol = yield self.setup_bind()
         protocol.on_pdu(invalid_pdu)
         self.assertEqual(calls, [invalid_pdu])
 

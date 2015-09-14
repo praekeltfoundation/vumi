@@ -1,16 +1,17 @@
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.task import Clock
 
 from smpp.pdu_builder import DeliverSM
 
 from vumi.message import TransportUserMessage
 
+from vumi.tests.helpers import VumiTestCase
+from vumi.transports.tests.helpers import TransportHelper
 from vumi.transports.smpp.pdu_utils import (
     command_id, seq_no, pdu_tlv, short_message)
-from vumi.transports.smpp.tests.test_smpp_transport import (
-    SmppTransportTestCase)
-from vumi.transports.smpp.smpp_transport import (
-    SmppTransceiverTransport)
+from vumi.transports.smpp.smpp_transport import SmppTransceiverTransport
 from vumi.transports.smpp.processors.sixdee import make_vumi_session_identifier
+from vumi.transports.smpp.tests.fake_smsc import FakeSMSC
 
 
 class SessionInfo(object):
@@ -36,15 +37,18 @@ class SessionInfo(object):
         return "%04x" % self.session_id
 
 
-class SixDeeProcessorTestCase(SmppTransportTestCase):
+class SixDeeProcessorTestCase(VumiTestCase):
 
     transport_class = SmppTransceiverTransport
 
     def setUp(self):
-        super(SixDeeProcessorTestCase, self).setUp()
+        self.clock = Clock()
+        self.fake_smsc = FakeSMSC()
+        self.tx_helper = self.add_helper(
+            TransportHelper(SmppTransceiverTransport))
         self.default_config = {
             'transport_name': self.tx_helper.transport_name,
-            'twisted_endpoint': 'tcp:host=127.0.0.1:port=0',
+            'twisted_endpoint': self.fake_smsc.endpoint,
             'deliver_short_message_processor': (
                 'vumi.transports.smpp.processors.sixdee.'
                 'DeliverShortMessageProcessor'),
@@ -64,6 +68,17 @@ class SixDeeProcessorTestCase(SmppTransportTestCase):
                 'send_multipart_udh': True,
             }
         }
+
+    @inlineCallbacks
+    def get_transport(self, config={}, bind=True):
+        cfg = self.default_config.copy()
+        transport = yield self.tx_helper.get_transport(cfg, start=False)
+        transport.clock = self.clock
+        yield transport.startWorker()
+        self.clock.advance(0)
+        if bind:
+            yield self.fake_smsc.bind()
+        returnValue(transport)
 
     def assert_udh_parts(self, pdus, texts, encoding):
         pdu_header = lambda pdu: short_message(pdu)[:6]
@@ -85,9 +100,9 @@ class SixDeeProcessorTestCase(SmppTransportTestCase):
             "or in different situations. Cups have been used for thousands "
             "of years for the ...Reply 1 for more")
 
-        smpp_helper = yield self.get_smpp_helper()
+        yield self.get_transport()
         yield self.tx_helper.make_dispatch_outbound(message, to_addr='msisdn')
-        pdus = yield smpp_helper.wait_for_pdus(7)
+        pdus = yield self.fake_smsc.await_pdus(7)
         self.assert_udh_parts(pdus, [
             ("A cup is a small, open container used"
              " for carrying and drinking d"),
@@ -109,14 +124,14 @@ class SixDeeProcessorTestCase(SmppTransportTestCase):
     @inlineCallbacks
     def test_submit_and_deliver_ussd_new(self):
         session = SessionInfo()
-        smpp_helper = yield self.get_smpp_helper()
+        yield self.get_transport()
 
         # Server delivers a USSD message to the Client
         pdu = DeliverSM(1, short_message="*123#")
         pdu.add_optional_parameter('ussd_service_op', '01')
         pdu.add_optional_parameter('its_session_info', session.its_info)
 
-        yield smpp_helper.handle_pdu(pdu)
+        yield self.fake_smsc.handle_pdu(pdu)
 
         [mess] = yield self.tx_helper.wait_for_dispatched_inbound(1)
 
@@ -137,11 +152,11 @@ class SixDeeProcessorTestCase(SmppTransportTestCase):
     @inlineCallbacks
     def test_deliver_sm_op_codes_new(self):
         session = SessionInfo()
-        smpp_helper = yield self.get_smpp_helper()
+        yield self.get_transport()
         pdu = DeliverSM(1, short_message="*123#")
         pdu.add_optional_parameter('ussd_service_op', '01')
         pdu.add_optional_parameter('its_session_info', session.its_info)
-        yield smpp_helper.handle_pdu(pdu)
+        yield self.fake_smsc.handle_pdu(pdu)
         [start] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assertEqual(start['session_event'],
                          TransportUserMessage.SESSION_NEW)
@@ -149,8 +164,8 @@ class SixDeeProcessorTestCase(SmppTransportTestCase):
     @inlineCallbacks
     def test_deliver_sm_op_codes_resume(self):
         session = SessionInfo()
-        smpp_helper = yield self.get_smpp_helper()
-        deliver_sm_processor = smpp_helper.transport.deliver_sm_processor
+        transport = yield self.get_transport()
+        deliver_sm_processor = transport.deliver_sm_processor
         session_manager = deliver_sm_processor.session_manager
 
         yield session_manager.create_session(
@@ -159,7 +174,7 @@ class SixDeeProcessorTestCase(SmppTransportTestCase):
         pdu = DeliverSM(1, short_message="", source_addr=session.addr)
         pdu.add_optional_parameter('ussd_service_op', '12')
         pdu.add_optional_parameter('its_session_info', session.its_info)
-        yield smpp_helper.handle_pdu(pdu)
+        yield self.fake_smsc.handle_pdu(pdu)
         [resume] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assertEqual(resume['session_event'],
                          TransportUserMessage.SESSION_RESUME)
@@ -167,8 +182,8 @@ class SixDeeProcessorTestCase(SmppTransportTestCase):
     @inlineCallbacks
     def test_deliver_sm_op_codes_end(self):
         session = SessionInfo()
-        smpp_helper = yield self.get_smpp_helper()
-        deliver_sm_processor = smpp_helper.transport.deliver_sm_processor
+        transport = yield self.get_transport()
+        deliver_sm_processor = transport.deliver_sm_processor
         session_manager = deliver_sm_processor.session_manager
 
         yield session_manager.create_session(
@@ -177,7 +192,7 @@ class SixDeeProcessorTestCase(SmppTransportTestCase):
         pdu = DeliverSM(1, short_message="", source_addr=session.addr)
         pdu.add_optional_parameter('ussd_service_op', '81')
         pdu.add_optional_parameter('its_session_info', session.its_info)
-        yield smpp_helper.handle_pdu(pdu)
+        yield self.fake_smsc.handle_pdu(pdu)
         [end] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assertEqual(end['session_event'],
                          TransportUserMessage.SESSION_CLOSE)
@@ -185,19 +200,19 @@ class SixDeeProcessorTestCase(SmppTransportTestCase):
     @inlineCallbacks
     def test_deliver_sm_unknown_op_code(self):
         session = SessionInfo()
-        smpp_helper = yield self.get_smpp_helper()
+        yield self.get_transport()
 
         pdu = DeliverSM(1, short_message="*123#")
         pdu.add_optional_parameter('ussd_service_op', '01')
         pdu.add_optional_parameter('its_session_info', session.its_info)
 
-        yield smpp_helper.handle_pdu(pdu)
+        yield self.fake_smsc.handle_pdu(pdu)
 
         pdu = DeliverSM(1, short_message="*123#")
         pdu.add_optional_parameter('ussd_service_op', '99')
         pdu.add_optional_parameter('its_session_info', session.its_info)
 
-        yield smpp_helper.handle_pdu(pdu)
+        yield self.fake_smsc.handle_pdu(pdu)
         [start, unknown] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assertEqual(unknown['session_event'],
                          TransportUserMessage.SESSION_RESUME)
@@ -205,7 +220,7 @@ class SixDeeProcessorTestCase(SmppTransportTestCase):
     @inlineCallbacks
     def test_submit_sm_op_codes_resume(self):
         session = SessionInfo()
-        smpp_helper = yield self.get_smpp_helper()
+        yield self.get_transport()
 
         yield self.tx_helper.make_dispatch_outbound(
             "hello world",
@@ -216,14 +231,14 @@ class SixDeeProcessorTestCase(SmppTransportTestCase):
                     'session_identifier': session.sixdee_id,
                 }
             }, to_addr=session.addr)
-        [resume] = yield smpp_helper.wait_for_pdus(1)
+        resume = yield self.fake_smsc.await_pdu()
         self.assertEqual(pdu_tlv(resume, 'ussd_service_op'), '02')
         self.assertEqual(pdu_tlv(resume, 'its_session_info'), session.its_info)
 
     @inlineCallbacks
     def test_submit_sm_op_codes_close(self):
         session = SessionInfo(continue_session=False)
-        smpp_helper = yield self.get_smpp_helper()
+        yield self.get_transport()
 
         yield self.tx_helper.make_dispatch_outbound(
             "hello world",
@@ -235,16 +250,16 @@ class SixDeeProcessorTestCase(SmppTransportTestCase):
                 }
             }, to_addr=session.addr)
 
-        [close] = yield smpp_helper.wait_for_pdus(1)
+        close = yield self.fake_smsc.await_pdu()
         self.assertEqual(pdu_tlv(close, 'ussd_service_op'), '17')
         self.assertEqual(pdu_tlv(close, 'its_session_info'), session.its_info)
 
     @inlineCallbacks
     def test_submit_and_deliver_ussd_continue(self):
         session = SessionInfo()
-        smpp_helper = yield self.get_smpp_helper()
+        transport = yield self.get_transport()
 
-        deliver_sm_processor = smpp_helper.transport.deliver_sm_processor
+        deliver_sm_processor = transport.deliver_sm_processor
         session_manager = deliver_sm_processor.session_manager
         yield session_manager.create_session(
             session.vumi_id, ussd_code='*123#')
@@ -256,7 +271,7 @@ class SixDeeProcessorTestCase(SmppTransportTestCase):
                 }
             }, to_addr=session.addr)
 
-        [submit_sm_pdu] = yield smpp_helper.wait_for_pdus(1)
+        submit_sm_pdu = yield self.fake_smsc.await_pdu()
         self.assertEqual(command_id(submit_sm_pdu), 'submit_sm')
         self.assertEqual(pdu_tlv(submit_sm_pdu, 'ussd_service_op'), '02')
         self.assertEqual(pdu_tlv(submit_sm_pdu, 'its_session_info'),
@@ -269,7 +284,7 @@ class SixDeeProcessorTestCase(SmppTransportTestCase):
         pdu.add_optional_parameter('ussd_service_op', '12')
         pdu.add_optional_parameter('its_session_info', session.its_info)
 
-        yield smpp_helper.handle_pdu(pdu)
+        yield self.fake_smsc.handle_pdu(pdu)
 
         [mess] = yield self.tx_helper.wait_for_dispatched_inbound(1)
 
@@ -282,7 +297,7 @@ class SixDeeProcessorTestCase(SmppTransportTestCase):
     @inlineCallbacks
     def test_submit_and_deliver_ussd_close(self):
         session = SessionInfo(continue_session=False)
-        smpp_helper = yield self.get_smpp_helper()
+        yield self.get_transport()
 
         yield self.tx_helper.make_dispatch_outbound(
             "hello world", transport_type="ussd",
@@ -293,7 +308,7 @@ class SixDeeProcessorTestCase(SmppTransportTestCase):
                 }
             })
 
-        [submit_sm_pdu] = yield smpp_helper.wait_for_pdus(1)
+        submit_sm_pdu = yield self.fake_smsc.await_pdu()
         self.assertEqual(command_id(submit_sm_pdu), 'submit_sm')
         self.assertEqual(pdu_tlv(submit_sm_pdu, 'ussd_service_op'), '17')
         self.assertEqual(pdu_tlv(submit_sm_pdu, 'its_session_info'),
@@ -305,7 +320,7 @@ class SixDeeProcessorTestCase(SmppTransportTestCase):
         We can successfully send a message with null content.
         """
         session = SessionInfo()
-        smpp_helper = yield self.get_smpp_helper()
+        yield self.get_transport()
 
         yield self.tx_helper.make_dispatch_outbound(
             None,
@@ -316,6 +331,6 @@ class SixDeeProcessorTestCase(SmppTransportTestCase):
                     'session_identifier': session.sixdee_id,
                 }
             }, to_addr=session.addr)
-        [resume] = yield smpp_helper.wait_for_pdus(1)
+        resume = yield self.fake_smsc.await_pdu()
         self.assertEqual(pdu_tlv(resume, 'ussd_service_op'), '02')
         self.assertEqual(pdu_tlv(resume, 'its_session_info'), session.its_info)

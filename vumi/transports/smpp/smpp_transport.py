@@ -5,7 +5,7 @@ from uuid import uuid4
 
 from twisted.internet import reactor
 from twisted.internet.defer import (
-    inlineCallbacks, maybeDeferred, returnValue, Deferred, succeed)
+    inlineCallbacks, returnValue, Deferred, succeed)
 from twisted.internet.task import LoopingCall
 
 from vumi.reconnecting_client import ReconnectingClientService
@@ -279,6 +279,7 @@ class SmppTransceiverTransport(Transport):
     def start_service(self, factory):
         config = self.get_static_config()
         service = self.service_class(config.twisted_endpoint, factory)
+        service.clock = self.clock
         service.startService()
         return service
 
