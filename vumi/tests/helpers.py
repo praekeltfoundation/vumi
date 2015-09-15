@@ -1204,6 +1204,19 @@ def import_skip(exc, *expected):
     raise SkipTest("Failed to import '%s'." % (module,))
 
 
+def skiptest(reason):
+    """
+    Decorate a test that should be skipped with a reason.
+
+    NOTE: Don't import this as `skip`, because that will cause trial to skip
+          the entire module that imports it.
+    """
+    def skipdeco(func):
+        func.skip = reason
+        return func
+    return skipdeco
+
+
 def maybe_async(sync_attr):
     """
     Decorate a method that may be sync or async.

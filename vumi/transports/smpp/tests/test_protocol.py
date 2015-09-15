@@ -11,12 +11,11 @@ from vumi.transports.smpp.protocol import (
     EsmeProtocol, EsmeProtocolFactory)
 from vumi.transports.smpp.pdu_utils import (
     seq_no, command_status, command_id, short_message)
-from vumi.transports.smpp.smpp_utils import unpacked_pdu_opts
 from vumi.transports.smpp.sequence import RedisSequence
 from vumi.transports.smpp.tests.fake_smsc import FakeSMSC
 
 
-class DummySmppTransport(object):
+class DummySmppService(object):
     def __init__(self, clock, redis, config):
         self.clock = clock
         self.redis = redis
@@ -24,13 +23,11 @@ class DummySmppTransport(object):
         self._static_config = SmppTransceiverTransport.CONFIG_CLASS(
             self._config, static=True)
 
-        config = self.get_static_config()
+        config = self.get_config()
         self.dr_processor = config.delivery_report_processor(
             self, config.delivery_report_processor_config)
         self.deliver_sm_processor = config.deliver_short_message_processor(
             self, config.deliver_short_message_processor_config)
-        self.submit_sm_processor = config.submit_short_message_processor(
-            self, config.submit_short_message_processor_config)
         self.sequence_generator = RedisSequence(self.redis)
         self.message_stash = SmppMessageDataStash(self.redis, config)
 
@@ -39,10 +36,13 @@ class DummySmppTransport(object):
     def get_static_config(self):
         return self._static_config
 
-    def pause_connectors(self):
+    def get_config(self):
+        return self._static_config
+
+    def on_connection_lost(self):
         self.paused = True
 
-    def unpause_connectors(self):
+    def on_smpp_bind(self):
         self.paused = False
 
 
@@ -64,9 +64,9 @@ class TestEsmeProtocol(VumiTestCase):
             'smpp_bind_timeout': 30,
         }
         cfg.update(config)
-        dummy_transport = DummySmppTransport(self.clock, self.redis, cfg)
+        dummy_service = DummySmppService(self.clock, self.redis, cfg)
 
-        factory = EsmeProtocolFactory(dummy_transport, bind_type)
+        factory = EsmeProtocolFactory(dummy_service, bind_type)
         proto_d = self.fake_smsc.endpoint.connect(factory)
         if accept_connection:
             self.fake_smsc.accept_connection()
@@ -92,12 +92,8 @@ class TestEsmeProtocol(VumiTestCase):
 
             self.assertEqual(params, pdu_params)
 
-    def set_sequence_number(self, protocol, seq_nr):
-        return protocol.sequence_generator.redis.set(
-            'smpp_last_sequence_number', seq_nr)
-
     def lookup_message_ids(self, protocol, seq_nums):
-        message_stash = protocol.vumi_transport.message_stash
+        message_stash = protocol.service.message_stash
         lookup_func = message_stash.get_sequence_number_message_id
         return gatherResults([lookup_func(seq_num) for seq_num in seq_nums])
 
@@ -298,142 +294,6 @@ class TestEsmeProtocol(VumiTestCase):
         self.assertEqual(['abc123'], stored_ids)
 
     @inlineCallbacks
-    def test_submit_sm_long(self):
-        protocol = yield self.get_protocol()
-        yield self.fake_smsc.bind()
-        long_message = 'This is a long message.' * 20
-        seq_nums = yield protocol.submit_sm_long(
-            'abc123', 'dest_addr', long_message)
-        submit_sm = yield self.fake_smsc.await_pdu()
-        pdu_opts = unpacked_pdu_opts(submit_sm)
-
-        self.assertEqual('submit_sm', submit_sm['header']['command_id'])
-        self.assertEqual(
-            None, submit_sm['body']['mandatory_parameters']['short_message'])
-        self.assertEqual(''.join('%02x' % ord(c) for c in long_message),
-                         pdu_opts['message_payload'])
-        stored_ids = yield self.lookup_message_ids(protocol, seq_nums)
-        self.assertEqual(['abc123'], stored_ids)
-
-    @inlineCallbacks
-    def test_submit_sm_multipart_udh(self):
-        protocol = yield self.get_protocol({'send_multipart_udh': True})
-        yield self.fake_smsc.bind()
-        long_message = 'This is a long message.' * 20
-        seq_numbers = yield protocol.submit_csm_udh(
-            'abc123', 'dest_addr', short_message=long_message)
-        pdus = yield self.fake_smsc.await_pdus(4)
-        self.assertEqual(len(seq_numbers), 4)
-
-        msg_parts = []
-        msg_refs = []
-
-        for i, sm in enumerate(pdus):
-            mandatory_parameters = sm['body']['mandatory_parameters']
-            self.assertEqual('submit_sm', sm['header']['command_id'])
-            msg = mandatory_parameters['short_message']
-
-            udh_hlen, udh_tag, udh_len, udh_ref, udh_tot, udh_seq = [
-                ord(octet) for octet in msg[:6]]
-            self.assertEqual(5, udh_hlen)
-            self.assertEqual(0, udh_tag)
-            self.assertEqual(3, udh_len)
-            msg_refs.append(udh_ref)
-            self.assertEqual(4, udh_tot)
-            self.assertEqual(i + 1, udh_seq)
-            self.assertTrue(len(msg) <= 136)
-            msg_parts.append(msg[6:])
-            self.assertEqual(0x40, mandatory_parameters['esm_class'])
-
-        self.assertEqual(long_message, ''.join(msg_parts))
-        self.assertEqual(1, len(set(msg_refs)))
-
-        stored_ids = yield self.lookup_message_ids(protocol, seq_numbers)
-        self.assertEqual(['abc123'] * len(seq_numbers), stored_ids)
-
-    @inlineCallbacks
-    def test_udh_ref_num_limit(self):
-        protocol = yield self.get_protocol({'send_multipart_udh': True})
-        yield self.fake_smsc.bind()
-
-        # forward until we go past 0xFF
-        yield self.set_sequence_number(protocol, 0xFF)
-
-        long_message = 'This is a long message.' * 20
-        seq_numbers = yield protocol.submit_csm_udh(
-            'abc123', 'dest_addr', short_message=long_message)
-        pdus = yield self.fake_smsc.await_pdus(4)
-
-        self.assertEqual(len(seq_numbers), 4)
-        self.assertTrue(all([sn > 0xFF for sn in seq_numbers]))
-
-        msg_refs = []
-
-        for pdu in pdus:
-            msg = short_message(pdu)
-            _, _, _, udh_ref, _, _ = [ord(octet) for octet in msg[:6]]
-            msg_refs.append(udh_ref)
-
-        self.assertEqual(1, len(set(msg_refs)))
-        self.assertTrue(all([msg_ref < 0xFF for msg_ref in msg_refs]))
-
-    @inlineCallbacks
-    def test_submit_sm_multipart_sar(self):
-        protocol = yield self.get_protocol({'send_multipart_sar': True})
-        yield self.fake_smsc.bind()
-        long_message = 'This is a long message.' * 20
-        seq_nums = yield protocol.submit_csm_sar(
-            'abc123', 'dest_addr', short_message=long_message)
-        pdus = yield self.fake_smsc.await_pdus(4)
-        # seq no 1 == bind_transceiver, 2 == enquire_link, 3 == sar_msg_ref_num
-        self.assertEqual([4, 5, 6, 7], seq_nums)
-        msg_parts = []
-        msg_refs = []
-
-        for i, sm in enumerate(pdus):
-            pdu_opts = unpacked_pdu_opts(sm)
-            mandatory_parameters = sm['body']['mandatory_parameters']
-
-            self.assertEqual('submit_sm', sm['header']['command_id'])
-            msg_parts.append(mandatory_parameters['short_message'])
-            self.assertTrue(len(mandatory_parameters['short_message']) <= 130)
-            msg_refs.append(pdu_opts['sar_msg_ref_num'])
-            self.assertEqual(i + 1, pdu_opts['sar_segment_seqnum'])
-            self.assertEqual(4, pdu_opts['sar_total_segments'])
-
-        self.assertEqual(long_message, ''.join(msg_parts))
-        self.assertEqual([3, 3, 3, 3], msg_refs)
-
-        stored_ids = yield self.lookup_message_ids(protocol, seq_nums)
-        self.assertEqual(['abc123'] * len(seq_nums), stored_ids)
-
-    @inlineCallbacks
-    def test_sar_ref_num_limit(self):
-        protocol = yield self.get_protocol({'send_multipart_udh': True})
-        yield self.fake_smsc.bind()
-
-        # forward until we go past 0xFFFF
-        yield self.set_sequence_number(protocol, 0xFFFF)
-
-        long_message = 'This is a long message.' * 20
-        seq_numbers = yield protocol.submit_csm_udh(
-            'abc123', 'dest_addr', short_message=long_message)
-        pdus = yield self.fake_smsc.await_pdus(4)
-
-        self.assertEqual(len(seq_numbers), 4)
-        self.assertTrue(all([sn > 0xFF for sn in seq_numbers]))
-
-        msg_refs = []
-
-        for pdu in pdus:
-            msg = short_message(pdu)
-            _, _, _, udh_ref, _, _ = [ord(octet) for octet in msg[:6]]
-            msg_refs.append(udh_ref)
-
-        self.assertEqual(1, len(set(msg_refs)))
-        self.assertTrue(all([msg_ref < 0xFFFF for msg_ref in msg_refs]))
-
-    @inlineCallbacks
     def test_query_sm(self):
         protocol = yield self.get_protocol()
         yield self.fake_smsc.bind()
@@ -500,17 +360,3 @@ class TestEsmeProtocol(VumiTestCase):
         }
         protocol.on_pdu(invalid_pdu)
         self.assertEqual(calls, [invalid_pdu])
-
-    @inlineCallbacks
-    def test_csm_split_message(self):
-        protocol = yield self.get_protocol()
-
-        def split(msg):
-            return protocol.csm_split_message(msg.encode('utf-8'))
-
-        # these are fine because they're in the 7-bit character set
-        self.assertEqual(1, len(split(u'&' * 140)))
-        self.assertEqual(1, len(split(u'&' * 160)))
-        # ± is not in the 7-bit character set so it should utf-8 encode it
-        # which bumps it over the 140 bytes
-        self.assertEqual(2, len(split(u'±' + u'1' * 139)))

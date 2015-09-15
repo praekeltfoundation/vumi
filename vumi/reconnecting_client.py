@@ -130,6 +130,7 @@ class ReconnectingClientService(Service):
 
 
     def startService(self):
+        Service.startService(self)
         self.continueTrying = True
         self.retry(delay=0.0)
 
@@ -156,7 +157,8 @@ class ReconnectingClientService(Service):
             waitFor.append(self._protocolStoppingDeferred)
             self._protocol.transport.loseConnection()
 
-        return gatherResults(waitFor)
+        d = gatherResults(waitFor)
+        return d.addCallback(lambda _: Service.stopService(self))
 
 
     def clientConnected(self, protocol):

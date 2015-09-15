@@ -2,7 +2,6 @@
 
 from functools import wraps
 
-from twisted.internet import reactor
 from twisted.internet.protocol import Protocol, ClientFactory
 from twisted.internet.task import LoopingCall
 from twisted.internet.defer import (
@@ -20,9 +19,6 @@ from vumi import log
 from vumi.transports.smpp.pdu_utils import (
     pdu_ok, seq_no, command_status, command_id, message_id, chop_pdu_stream)
 
-GSM_MAX_SMS_BYTES = 140
-GSM_MAX_SMS_7BIT_CHARS = 160
-
 
 def require_bind(func):
     @wraps(func)
@@ -39,7 +35,6 @@ class EsmeProtocolError(Exception):
 
 class EsmeProtocol(Protocol):
 
-    clock = reactor
     noisy = True
     unbind_timeout = 2
 
@@ -59,24 +54,25 @@ class EsmeProtocol(Protocol):
         'TRX': BindTransceiver,
     }
 
-    def __init__(self, vumi_transport, bind_type):
+    def __init__(self, service, bind_type):
         """
         An SMPP 3.4 client suitable for use by a Vumi Transport.
 
-        :param SmppTransceiverProtocol vumi_transport:
-            The transport that is using this protocol to communicate
-            with an SMSC.
+        :param SmppService service:
+            The SMPP service that is using this protocol to communicate with an
+            SMSC.
         """
-        self.vumi_transport = vumi_transport
+        self.service = service
         self.bind_pdu = self._BIND_PDU[bind_type]
-        self.config = self.vumi_transport.get_static_config()
+        self.clock = service.clock
+        self.config = self.service.get_config()
 
         self.buffer = b''
         self.state = self.CLOSED_STATE
 
-        self.deliver_sm_processor = self.vumi_transport.deliver_sm_processor
-        self.dr_processor = self.vumi_transport.dr_processor
-        self.sequence_generator = self.vumi_transport.sequence_generator
+        self.deliver_sm_processor = self.service.deliver_sm_processor
+        self.dr_processor = self.service.dr_processor
+        self.sequence_generator = self.service.sequence_generator
         self.enquire_link_call = LoopingCall(self.enquire_link)
         self.drop_link_call = None
         self.idle_timeout = self.config.smpp_enquire_link_interval * 2
@@ -189,7 +185,7 @@ class EsmeProtocol(Protocol):
             self.drop_link_call.cancel()
         if self.disconnect_call is not None and self.disconnect_call.active():
             self.disconnect_call.cancel()
-        return self.vumi_transport.pause_connectors()
+        return self.service.on_connection_lost()
 
     def is_bound(self):
         """
@@ -294,7 +290,7 @@ class EsmeProtocol(Protocol):
             'than %s seconds' % (self.idle_timeout,))
         self.enquire_link_call.clock = self.clock
         self.enquire_link_call.start(self.config.smpp_enquire_link_interval)
-        return self.vumi_transport.unpause_connectors()
+        return self.service.on_smpp_bind()
 
     def handle_unbind(self, pdu):
         return self.send_pdu(UnbindResp(seq_no(pdu)))
@@ -320,33 +316,29 @@ class EsmeProtocol(Protocol):
             the ``submit_sm`` command was successful or not. Refer to the
             SMPP specification for full list of options.
         """
-        cb = {
-            'ESME_ROK': self.vumi_transport.handle_submit_sm_success,
-            'ESME_RTHROTTLED': self.vumi_transport.handle_submit_sm_throttled,
-            'ESME_RMSGQFUL': self.vumi_transport.handle_submit_sm_throttled,
-        }.get(command_status, self.vumi_transport.handle_submit_sm_failure)
-        message_stash = self.vumi_transport.message_stash
+        message_stash = self.service.message_stash
         d = message_stash.get_sequence_number_message_id(sequence_number)
         d.addCallback(
             message_stash.set_remote_message_id, smpp_message_id)
         d.addCallback(
             self._handle_submit_sm_resp_callback, smpp_message_id,
-            command_status, cb)
+            command_status)
         d.addCallback(
             lambda _: message_stash.delete_sequence_number_message_id(
                 sequence_number))
         return d
 
     def _handle_submit_sm_resp_callback(self, message_id, smpp_message_id,
-                                        command_status, cb):
+                                        command_status):
         if message_id is None:
             # We have no message_id, so log a warning instead of calling the
             # callback.
             log.warning("Failed to retrieve message id for deliver_sm_resp."
                         " ack/nack from %s discarded."
-                        % self.vumi_transport.transport_name)
+                        % self.service.transport_name)
         else:
-            return cb(message_id, smpp_message_id, command_status)
+            return self.service.handle_submit_sm_resp(
+                message_id, smpp_message_id, command_status)
 
     @inlineCallbacks
     def handle_deliver_sm(self, pdu):
@@ -520,179 +512,10 @@ class EsmeProtocol(Protocol):
             for key, value in optional_parameters.items():
                 pdu.add_optional_parameter(key, value)
 
-        yield self.vumi_transport.message_stash.set_sequence_number_message_id(
+        yield self.service.message_stash.set_sequence_number_message_id(
             sequence_number, vumi_message_id)
         self.send_pdu(pdu)
         returnValue([sequence_number])
-
-    def submit_sm_long(self, vumi_message_id, destination_addr, long_message,
-                       **pdu_params):
-        """
-        Send a `submit_sm` command with the message encoded in the
-        ``message_payload`` optional parameter.
-
-        Same parameters apply as for ``submit_sm`` with the exception
-        that the ``short_message`` keyword argument is disallowed
-        because it conflicts with the ``long_message`` field.
-
-        :returns: list of 1 sequence number, int.
-        :rtype: list
-
-        """
-        if 'short_message' in pdu_params:
-            raise EsmeProtocolError(
-                'short_message not allowed when sending a long message'
-                'in the message_payload')
-
-        optional_parameters = pdu_params.pop('optional_parameters', {}).copy()
-        optional_parameters.update({
-            'message_payload': (
-                ''.join('%02x' % ord(c) for c in long_message))
-        })
-        return self.submit_sm(
-            vumi_message_id, destination_addr, short_message='', sm_length=0,
-            optional_parameters=optional_parameters, **pdu_params)
-
-    def _fits_in_one_message(self, message):
-        if len(message) <= GSM_MAX_SMS_BYTES:
-            return True
-
-        # NOTE: We already have byte strings here, so we assume that printable
-        #       ASCII characters are all the same as single-width GSM 03.38
-        #       characters.
-        if len(message) <= GSM_MAX_SMS_7BIT_CHARS:
-            # TODO: We need better character handling and counting stuff.
-            return all(0x20 <= ord(ch) <= 0x7f for ch in message)
-
-        return False
-
-    def csm_split_message(self, message):
-        """
-        Chop the message into 130 byte chunks to leave 10 bytes for the
-        user data header the SMSC is presumably going to add for us. This is
-        a guess based mostly on optimism and the hope that we'll never have
-        to deal with this stuff in production.
-
-        NOTE: If we have utf-8 encoded data, we might break in the
-              middle of a multibyte character. This should be ok since
-              the message is only decoded after re-assembly of all
-              individual segments.
-
-        :param str message:
-            The message to split
-        :returns: list of strings
-        :rtype: list
-
-        """
-        if self._fits_in_one_message(message):
-            return [message]
-
-        payload_length = GSM_MAX_SMS_BYTES - 10
-        split_msg = []
-        while message:
-            split_msg.append(message[:payload_length])
-            message = message[payload_length:]
-        return split_msg
-
-    @inlineCallbacks
-    def submit_csm_sar(self, vumi_message_id, destination_addr, **pdu_params):
-        """
-        Submit a concatenated SMS to the SMSC using the optional
-        SAR parameter names in the various PDUS.
-
-        :returns: List of sequence numbers (int) for each of the segments.
-        :rtype: list
-        """
-
-        split_msg = self.csm_split_message(pdu_params.pop('short_message'))
-
-        if len(split_msg) == 1:
-            # There is only one part, so send it without SAR stuff.
-            sequence_numbers = yield self.submit_sm(
-                vumi_message_id, destination_addr, short_message=split_msg[0],
-                **pdu_params)
-            returnValue(sequence_numbers)
-
-        optional_parameters = pdu_params.pop('optional_parameters', {}).copy()
-        ref_num = yield self.sequence_generator.next()
-        sequence_numbers = []
-        yield self.vumi_transport.message_stash.init_multipart_info(
-            vumi_message_id, len(split_msg))
-        for i, msg in enumerate(split_msg):
-            pdu_params = pdu_params.copy()
-            optional_parameters.update({
-                # Reference number must be between 00 & FFFF
-                'sar_msg_ref_num': (ref_num % 0xFFFF),
-                'sar_total_segments': len(split_msg),
-                'sar_segment_seqnum': i + 1,
-            })
-            sequence_number = yield self.submit_sm(
-                vumi_message_id, destination_addr, short_message=msg,
-                optional_parameters=optional_parameters, **pdu_params)
-            sequence_numbers.extend(sequence_number)
-        returnValue(sequence_numbers)
-
-    @inlineCallbacks
-    def submit_csm_udh(self, vumi_message_id, destination_addr, **pdu_params):
-        """
-        Submit a concatenated SMS to the SMSC using user data headers (UDH)
-        in the message content.
-
-        Same parameters apply as for ``submit_sm`` with the exception
-        that the ``esm_class`` keyword argument is disallowed
-        because the SMPP spec mandates a value that is to be set for UDH.
-
-        :returns: List of sequence numbers (int) for each of the segments.
-        :rtype: list
-        """
-
-        if 'esm_class' in pdu_params:
-            raise EsmeProtocolError(
-                'Cannot specify esm_class, GSM spec sets this at 0x40 '
-                'for concatenated messages using UDH.')
-
-        pdu_params = pdu_params.copy()
-        split_msg = self.csm_split_message(pdu_params.pop('short_message'))
-
-        if len(split_msg) == 1:
-            # There is only one part, so send it without UDH stuff.
-            sequence_numbers = yield self.submit_sm(
-                vumi_message_id, destination_addr, short_message=split_msg[0],
-                **pdu_params)
-            returnValue(sequence_numbers)
-
-        ref_num = yield self.sequence_generator.next()
-        sequence_numbers = []
-        yield self.vumi_transport.message_stash.init_multipart_info(
-            vumi_message_id, len(split_msg))
-        for i, msg in enumerate(split_msg):
-            # 0x40 is the UDHI flag indicating that this payload contains a
-            # user data header.
-
-            # NOTE: Looking at the SMPP specs I can find no requirement
-            #       for this anywhere.
-            pdu_params['esm_class'] = 0x40
-
-            # See http://en.wikipedia.org/wiki/User_Data_Header and
-            # http://en.wikipedia.org/wiki/Concatenated_SMS for an
-            # explanation of the magic numbers below. We should probably
-            # abstract this out into a class that makes it less magic and
-            # opaque.
-            udh = ''.join([
-                '\05',  # Full UDH header length
-                '\00',  # Information Element Identifier for Concatenated SMS
-                '\03',  # header length
-                # Reference number must be between 00 & FF
-                chr(ref_num % 0xFF),
-                chr(len(split_msg)),
-                chr(i + 1),
-            ])
-            short_message = udh + msg
-            sequence_number = yield self.submit_sm(
-                vumi_message_id, destination_addr, short_message=short_message,
-                **pdu_params)
-            sequence_numbers.extend(sequence_number)
-        returnValue(sequence_numbers)
 
     @require_bind
     @inlineCallbacks
@@ -748,12 +571,11 @@ class EsmeProtocolFactory(ClientFactory):
 
     protocol = EsmeProtocol
 
-    def __init__(self, transport, bind_type):
-        self.transport = transport
+    def __init__(self, service, bind_type):
+        self.service = service
         self.bind_type = bind_type
 
     def buildProtocol(self, addr):
-        proto = self.protocol(self.transport, self.bind_type)
+        proto = self.protocol(self.service, self.bind_type)
         proto.factory = self
-        proto.clock = self.transport.clock
         return proto

@@ -76,10 +76,10 @@ class IDeliverShortMessageProcessor(Interface):
 
 class ISubmitShortMessageProcessor(Interface):
 
-    def handle_raw_outbound_message(vumi_message, esme_protocol):
+    def handle_raw_outbound_message(vumi_message, smpp_service):
         """
         Handle an outbound message from Vumi by calling the appropriate
-        methods on the protocol with the appropriate parameters.
+        methods on the service with the appropriate parameters.
 
         These parameters and values can differ per MNO.
 
