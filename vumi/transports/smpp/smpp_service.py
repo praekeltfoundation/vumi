@@ -90,7 +90,7 @@ class SmppService(ReconnectingClientService):
                 log.msg("Can't stop throttling while unbound, trying later.")
                 return
             self.reset_mt_throttle_counter()
-            self.stop_throttling(quiet=True)
+            self.stop_throttling()
 
     def reset_mt_throttle_counter(self):
         self.tps_counter = 0
@@ -189,13 +189,10 @@ class SmppService(ReconnectingClientService):
         self.throttled = True
         return self.transport.pause_connectors()
 
-    def stop_throttling(self, quiet=False):
+    def stop_throttling(self):
         if not self.throttled:
             return
-        # We used to use `quiet` to decide log level, but now we always use
-        # `log.msg`.
-        logger = log.msg
-        logger("No longer throttling outbound messages.")
+        log.msg("No longer throttling outbound messages.")
         self.throttled = False
         self.transport.unpause_connectors()
 
