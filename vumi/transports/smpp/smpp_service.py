@@ -1,7 +1,9 @@
 from functools import wraps
 
 from twisted.internet.defer import inlineCallbacks, returnValue, succeed
+from twisted.internet.task import LoopingCall
 
+from vumi import log
 from vumi.reconnecting_client import ReconnectingClientService
 from vumi.transports.smpp.protocol import (
     EsmeProtocol, EsmeProtocolFactory, EsmeProtocolError)
@@ -34,6 +36,19 @@ class SmppService(ReconnectingClientService):
         self.dr_processor = self.transport.dr_processor
         self.sequence_generator = RedisSequence(transport.redis)
 
+        # Throttling setup.
+        self.throttled = None
+        self._throttled_message_ids = []
+        self._unthrottle_delayedCall = None
+
+        self.tps_counter = 0
+        self.tps_limit = self.get_config().mt_tps
+        if self.tps_limit > 0:
+            self.mt_tps_lc = LoopingCall(self.reset_mt_tps)
+        else:
+            self.mt_tps_lc = None
+
+        # Connection setup.
         factory = EsmeProtocolFactory(self, bind_type)
         ReconnectingClientService.__init__(self, endpoint, factory)
 
@@ -50,7 +65,15 @@ class SmppService(ReconnectingClientService):
             return self._protocol.is_bound()
         return False
 
+    def startService(self):
+        if self.mt_tps_lc is not None:
+            self.mt_tps_lc.clock = self.clock
+            self.mt_tps_lc.start(1, now=True)
+        return ReconnectingClientService.startService(self)
+
     def stopService(self):
+        if self.mt_tps_lc and self.mt_tps_lc.running:
+            self.mt_tps_lc.stop()
         d = succeed(None)
         if self._protocol is not None:
             d.addCallback(lambda _: self._protocol.disconnect())
@@ -60,8 +83,124 @@ class SmppService(ReconnectingClientService):
     def get_config(self):
         return self.transport.get_static_config()
 
+    def reset_mt_tps(self):
+        if self.throttled and self.need_mt_throttling():
+            if not self.is_bound():
+                # We don't have a bound SMPP connection, so try again later.
+                log.msg("Can't stop throttling while unbound, trying later.")
+                return
+            self.reset_mt_throttle_counter()
+            self.stop_throttling(quiet=True)
+
+    def reset_mt_throttle_counter(self):
+        self.tps_counter = 0
+
+    def incr_mt_throttle_counter(self):
+        self.tps_counter += 1
+
+    def need_mt_throttling(self):
+        return self.tps_counter >= self.tps_limit
+
+    def bind_requires_throttling(self):
+        return self.get_config().mt_tps > 0
+
+    def check_mt_throttling(self):
+        self.incr_mt_throttle_counter()
+        if self.need_mt_throttling():
+            # We can't yield here, because we need this message to finish
+            # processing before it will return.
+            self.start_throttling(quiet=True)
+
+    def _append_throttle_retry(self, message_id):
+        if message_id not in self._throttled_message_ids:
+            self._throttled_message_ids.append(message_id)
+
+    def check_stop_throttling(self, delay=None):
+        if self._unthrottle_delayedCall is not None:
+            # We already have one of these scheduled.
+            return
+        if delay is None:
+            delay = self.get_config().throttle_delay
+        self._unthrottle_delayedCall = self.clock.callLater(
+            delay, self._check_stop_throttling)
+
+    def check_stop_throttling_cb(self, ignored_result, delay=None):
+        self.check_stop_throttling(delay)
+
+    def _check_stop_throttling(self):
+        """
+        Check if we should stop throttling, and stop throttling if we should.
+
+        At a high level, we try each throttled message in our list until all of
+        them have been accepted by the SMSC, at which point we stop throttling.
+
+        In more detail:
+
+        We recursively process our list of throttled message_ids until either
+        we have none left (at which point we stop throttling) or we find one we
+        can successfully look up in our cache.
+
+        When we find a message we can retry, we retry it and return. We remain
+        throttled until the SMSC responds. If we're still throttled, the
+        message_id gets appended to our list and another check is scheduled for
+        later. If we're no longer throttled, this method gets called again
+        immediately.
+
+        When there are no more throttled message_ids in our list, we stop
+        throttling.
+        """
+        self._unthrottle_delayedCall = None
+
+        if not self.is_bound():
+            # We don't have a bound SMPP connection, so try again later.
+            log.msg("Can't check throttling while unbound, trying later.")
+            self.check_stop_throttling()
+            return
+
+        if not self._throttled_message_ids:
+            # We have no throttled messages waiting, so stop throttling.
+            log.msg("No more throttled messages to retry.")
+            self.stop_throttling()
+            return
+
+        message_id = self._throttled_message_ids.pop(0)
+        message_d = self.message_stash.get_cached_message(message_id)
+        return message_d.addCallback(self.retry_throttled_message, message_id)
+
+    def retry_throttled_message(self, message, message_id):
+        if message is None:
+            # We can't find this message, so log it and start again.
+            log.warning(
+                "Could not retrieve throttled message: %s" % (message_id,))
+            self.check_stop_throttling(0)
+        else:
+            # Try handle this message again and leave the rest to our
+            # submit_sm_resp handlers.
+            log.msg("Retrying throttled message: %s" % (message_id,))
+            return self.transport.handle_outbound_message(message)
+
+    def start_throttling(self, quiet=False):
+        if self.throttled:
+            return succeed(None)
+        # We used to use `quiet` to decide log level, but now we always use
+        # `log.msg`.
+        logger = log.msg
+        logger("Throttling outbound messages.")
+        self.throttled = True
+        return self.transport.pause_connectors()
+
+    def stop_throttling(self, quiet=False):
+        if not self.throttled:
+            return
+        # We used to use `quiet` to decide log level, but now we always use
+        # `log.msg`.
+        logger = log.msg
+        logger("No longer throttling outbound messages.")
+        self.throttled = False
+        self.transport.unpause_connectors()
+
     def on_smpp_bind(self):
-        return self.transport.unpause_connectors()
+        self.transport.unpause_connectors()
 
     def on_connection_lost(self):
         return self.transport.pause_connectors()
@@ -72,17 +211,23 @@ class SmppService(ReconnectingClientService):
         func = self.transport.handle_submit_sm_failure
         if pdu_status == 'ESME_ROK':
             func = self.transport.handle_submit_sm_success
-        return func(message_id, smpp_message_id, pdu_status)
+        d = func(message_id, smpp_message_id, pdu_status)
+        return d.addCallback(self.check_stop_throttling_cb, 0)
 
     def handle_submit_sm_throttled(self, message_id):
-        return self.transport.handle_submit_sm_throttled(message_id)
+        self._append_throttle_retry(message_id)
+        d = self.start_throttling()
+        return d.addCallback(self.check_stop_throttling_cb)
+
+    def _submit_sm_if_able(self, func, *args, **kw):
+        return func(*args, **kw)
 
     @proxy_protocol
     def submit_sm(self, protocol, *args, **kw):
         """
         See :meth:`EsmeProtocol.submit_sm`.
         """
-        return protocol.submit_sm(*args, **kw)
+        return self._submit_sm_if_able(protocol.submit_sm, *args, **kw)
 
     def submit_sm_long(self, vumi_message_id, destination_addr, long_message,
                        **pdu_params):

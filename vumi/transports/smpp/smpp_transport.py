@@ -5,7 +5,6 @@ from uuid import uuid4
 
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, returnValue, succeed
-from twisted.internet.task import LoopingCall
 
 from vumi.transports.base import Transport
 
@@ -203,6 +202,10 @@ class SmppTransceiverTransport(Transport):
     clock = reactor
     start_message_consumer = False
 
+    @property
+    def throttled(self):
+        return self.service.throttled
+
     @inlineCallbacks
     def setup_transport(self):
         config = self.get_static_config()
@@ -222,19 +225,7 @@ class SmppTransceiverTransport(Transport):
             self, config.submit_short_message_processor_config)
         self.disable_ack = config.disable_ack
         self.message_stash = SmppMessageDataStash(self.redis, config)
-        self.throttled = None
-        self._throttled_message_ids = []
-        self._unthrottle_delayedCall = None
         self.service = self.start_service()
-
-        self.tps_counter = 0
-        self.tps_limit = config.mt_tps
-        if config.mt_tps > 0:
-            self.mt_tps_lc = LoopingCall(self.reset_mt_tps)
-            self.mt_tps_lc.clock = self.clock
-            self.mt_tps_lc.start(1, now=True)
-        else:
-            self.mt_tps_lc = None
 
     def start_service(self):
         config = self.get_static_config()
@@ -247,38 +238,7 @@ class SmppTransceiverTransport(Transport):
     def teardown_transport(self):
         if self.service:
             yield self.service.stopService()
-        if self.mt_tps_lc and self.mt_tps_lc.running:
-            self.mt_tps_lc.stop()
         yield self.redis._close()
-
-    def reset_mt_tps(self):
-        if self.throttled and self.need_mt_throttling():
-            if not self.service.is_bound():
-                # We don't have a bound SMPP connection, so try again later.
-                log.msg("Can't stop throttling while unbound, trying later.")
-                return
-            self.reset_mt_throttle_counter()
-            self.stop_throttling(quiet=True)
-
-    def reset_mt_throttle_counter(self):
-        self.tps_counter = 0
-
-    def incr_mt_throttle_counter(self):
-        self.tps_counter += 1
-
-    def need_mt_throttling(self):
-        return self.tps_counter >= self.tps_limit
-
-    def bind_requires_throttling(self):
-        config = self.get_static_config()
-        return config.mt_tps > 0
-
-    def check_mt_throttling(self):
-        self.incr_mt_throttle_counter()
-        if self.need_mt_throttling():
-            # We can't yield here, because we need this message to finish
-            # processing before it will return.
-            self.start_throttling(quiet=True)
 
     def _check_address_valid(self, message, field):
         try:
@@ -293,8 +253,8 @@ class SmppTransceiverTransport(Transport):
 
     @inlineCallbacks
     def handle_outbound_message(self, message):
-        if self.bind_requires_throttling():
-            yield self.check_mt_throttling()
+        if self.service.bind_requires_throttling():
+            yield self.service.check_mt_throttling()
         if not self._check_address_valid(message, 'to_addr'):
             yield self._reject_for_invalid_address(message, 'to_addr')
             return
@@ -345,9 +305,6 @@ class SmppTransceiverTransport(Transport):
             yield self.process_submit_sm_event(
                 message_id, event_type, remote_id, command_status)
 
-        if self.throttled:
-            yield self.check_stop_throttling(0)
-
     @inlineCallbacks
     def handle_submit_sm_failure(self, message_id, smpp_message_id,
                                  command_status):
@@ -360,97 +317,6 @@ class SmppTransceiverTransport(Transport):
         if event_required:
             yield self.process_submit_sm_event(
                 message_id, event_type, remote_id, command_status)
-
-        if self.throttled:
-            self.check_stop_throttling(0)
-
-    @inlineCallbacks
-    def handle_submit_sm_throttled(self, message_id):
-        yield self.start_throttling()
-        config = self.get_static_config()
-        self._append_throttle_retry(message_id)
-        self.check_stop_throttling(config.throttle_delay)
-
-    def _append_throttle_retry(self, message_id):
-        if message_id not in self._throttled_message_ids:
-            self._throttled_message_ids.append(message_id)
-
-    def check_stop_throttling(self, delay):
-        if self._unthrottle_delayedCall is not None:
-            # We already have one of these scheduled.
-            return
-        self._unthrottle_delayedCall = self.clock.callLater(
-            delay, self._check_stop_throttling)
-
-    @inlineCallbacks
-    def _check_stop_throttling(self):
-        """
-        Check if we should stop throttling, and stop throttling if we should.
-
-        At a high level, we try each throttled message in our list until all of
-        them have been accepted by the SMSC, at which point we stop throttling.
-
-        In more detail:
-
-        We recursively process our list of throttled message_ids until either
-        we have none left (at which point we stop throttling) or we find one we
-        can successfully look up in our cache.
-
-        When we find a message we can retry, we retry it and return. We remain
-        throttled until the SMSC responds. If we're still throttled, the
-        message_id gets appended to our list and another check is scheduled for
-        later. If we're no longer throttled, this method gets called again
-        immediately.
-
-        When there are no more throttled message_ids in our list, we stop
-        throttling.
-        """
-        self._unthrottle_delayedCall = None
-
-        if not self.service.is_bound():
-            # We don't have a bound SMPP connection, so try again later.
-            log.msg("Can't check throttling while unbound, trying later.")
-            self.check_stop_throttling(self.get_static_config().throttle_delay)
-            return
-
-        if not self._throttled_message_ids:
-            # We have no throttled messages waiting, so stop throttling.
-            log.msg("No more throttled messages to retry.")
-            self.stop_throttling()
-            return
-
-        message_id = self._throttled_message_ids.pop(0)
-        message = yield self.message_stash.get_cached_message(message_id)
-        if message is None:
-            # We can't find this message, so log it and start again.
-            log.warning(
-                "Could not retrieve throttled message: %s" % (message_id,))
-            self.check_stop_throttling(0)
-        else:
-            # Try handle this message again and leave the rest to our
-            # submit_sm_resp handlers.
-            log.msg("Retrying throttled message: %s" % (message_id,))
-            yield self.handle_outbound_message(message)
-
-    def start_throttling(self, quiet=False):
-        if self.throttled:
-            return
-        # We used to use `quiet` to decide log level, but now we always use
-        # `log.msg`.
-        logger = log.msg
-        logger("Throttling outbound messages.")
-        self.throttled = True
-        return self.pause_connectors()
-
-    def stop_throttling(self, quiet=False):
-        if not self.throttled:
-            return
-        # We used to use `quiet` to decide log level, but now we always use
-        # `log.msg`.
-        logger = log.msg
-        logger("No longer throttling outbound messages.")
-        self.throttled = False
-        self.unpause_connectors()
 
     def handle_raw_inbound_message(self, **kwargs):
         # TODO: drop the kwargs, list the allowed key word arguments
