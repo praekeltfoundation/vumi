@@ -29,8 +29,6 @@ class DummySmppService(object):
             self, config.delivery_report_processor_config)
         self.deliver_sm_processor = config.deliver_short_message_processor(
             self, config.deliver_short_message_processor_config)
-        self.submit_sm_processor = config.submit_short_message_processor(
-            self, config.submit_short_message_processor_config)
         self.sequence_generator = RedisSequence(self.redis)
         self.message_stash = SmppMessageDataStash(self.redis, config)
 
