@@ -12,7 +12,7 @@ from zope.interface import implementer
 from smpp.pdu import unpack_pdu
 from smpp.pdu_builder import (
     BindTransceiverResp, BindTransmitterResp, BindReceiverResp,
-    EnquireLinkResp, UnbindResp, DeliverSM)
+    EnquireLinkResp, UnbindResp, DeliverSM, SubmitSMResp)
 from vumi.transports.smpp.pdu_utils import seq_no, chop_pdu_stream, command_id
 
 
@@ -162,6 +162,23 @@ class FakeSMSC(object):
                 sequence_number, short_message=short_message,
                 data_coding=data_coding, **kwargs))
 
+    def submit_sm_resp(self, submit_sm_pdu=None, message_id=None, **kw):
+        """
+        Respond to a submit_sm command.
+
+        NOTE: This uses :meth:`handle_pdu` instead of :meth:`send_pdu` because
+              there's a lot of async stuff going on.
+
+        :param submit_sm_pdu:
+            The submit_sm PDU to respond to. If `None`, the next PDU on the
+            receive queue will be used.
+        :param message_id:
+            The message_id to put in the response. If `None`, one will be
+            generated from the sequence number.
+        """
+        submit_sm_d = self._given_or_next_pdu(submit_sm_pdu)
+        return submit_sm_d.addCallback(self._submit_sm_resp, message_id, **kw)
+
     def disconnect(self):
         """
         Disconnect.
@@ -241,6 +258,14 @@ class FakeSMSC(object):
     def _enquire_link_resp(self, enquire_link_pdu):
         self.assert_command_id(enquire_link_pdu, 'enquire_link')
         return self.send_pdu(EnquireLinkResp(seq_no(enquire_link_pdu)))
+
+    def _submit_sm_resp(self, submit_sm_pdu, message_id, **kw):
+        self.assert_command_id(submit_sm_pdu, 'submit_sm')
+        sequence_number = seq_no(submit_sm_pdu)
+        if message_id is None:
+            message_id = "id%s" % (sequence_number,)
+        # We use handle_pdu here to avoid complications with all the async.
+        return self.handle_pdu(SubmitSMResp(sequence_number, message_id, **kw))
 
 
 @implementer(IStreamClientEndpoint)

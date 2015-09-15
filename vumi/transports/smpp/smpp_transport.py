@@ -1,25 +1,24 @@
 # -*- test-case-name: vumi.transports.smpp.tests.test_smpp_transport -*-
 
+import json
 import warnings
 from uuid import uuid4
 
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, returnValue, succeed
 
-from vumi.transports.base import Transport
-
+from smpp.pdu import decode_pdu
+from smpp.pdu_builder import PDU
+from vumi import log
 from vumi.message import TransportUserMessage
-
+from vumi.persist.txredis_manager import TxRedisManager
+from vumi.transports.base import Transport
 from vumi.transports.smpp.config import SmppTransportConfig
 from vumi.transports.smpp.deprecated.transport import (
     SmppTransportConfig as OldSmppTransportConfig)
 from vumi.transports.smpp.deprecated.utils import convert_to_new_config
 from vumi.transports.smpp.smpp_service import SmppService
 from vumi.transports.failures import FailureMessage
-
-from vumi.persist.txredis_manager import TxRedisManager
-
-from vumi import log
 
 
 def sequence_number_key(seq_no):
@@ -34,8 +33,30 @@ def message_key(message_id):
     return 'message:%s' % (message_id,)
 
 
+def pdu_key(seq_no):
+    return 'pdu:%s' % (seq_no,)
+
+
 def remote_message_key(message_id):
     return 'remote_message:%s' % (message_id,)
+
+
+class CachedPDU(object):
+    """
+    A cached PDU with its associated vumi message_id.
+    """
+
+    def __init__(self, vumi_message_id, pdu_dict):
+        self.vumi_message_id = vumi_message_id
+        self.pdu = PDU(None, None, None)
+        self.pdu.obj = pdu_dict
+
+    @classmethod
+    def from_json(cls, pdu_json):
+        if pdu_json is None:
+            return None
+        pdu_data = json.loads(pdu_json)
+        return cls(pdu_data['vumi_message_id'], decode_pdu(pdu_data['pdu']))
 
 
 class SmppMessageDataStash(object):
@@ -164,8 +185,8 @@ class SmppMessageDataStash(object):
 
     def cache_message(self, message):
         key = message_key(message['message_id'])
-        expire = self.config.submit_sm_expiry
-        return self.redis.setex(key, expire, message.to_json())
+        expiry = self.config.submit_sm_expiry
+        return self.redis.setex(key, expiry, message.to_json())
 
     def get_cached_message(self, message_id):
         d = self.redis.get(message_key(message_id))
@@ -176,6 +197,20 @@ class SmppMessageDataStash(object):
 
     def delete_cached_message(self, message_id):
         return self.redis.delete(message_key(message_id))
+
+    def cache_pdu(self, vumi_message_id, seq_no, pdu):
+        # We the PDU in wire format to avoid json encoding troubles.
+        key = pdu_key(seq_no)
+        expiry = self.config.submit_sm_expiry
+        return self.redis.setex(key, expiry, json.dumps(
+            {'vumi_message_id': vumi_message_id, 'pdu': pdu.get_hex()}))
+
+    def get_cached_pdu(self, seq_no):
+        d = self.redis.get(pdu_key(seq_no))
+        return d.addCallback(CachedPDU.from_json)
+
+    def delete_cached_pdu(self, seq_no):
+        return self.redis.delete(pdu_key(seq_no))
 
     def set_remote_message_id(self, message_id, smpp_message_id):
         if message_id is None:

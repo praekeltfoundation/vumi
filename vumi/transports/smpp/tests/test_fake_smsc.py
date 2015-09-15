@@ -7,7 +7,7 @@ from smpp.pdu import unpack_pdu
 from smpp.pdu_builder import (
     BindTransceiver, BindTransceiverResp, BindTransmitter, BindTransmitterResp,
     BindReceiver, BindReceiverResp, EnquireLink, EnquireLinkResp, DeliverSM,
-    Unbind, UnbindResp)
+    Unbind, UnbindResp, SubmitSM, SubmitSMResp)
 from vumi.tests.helpers import VumiTestCase
 from vumi.transports.smpp.tests.fake_smsc import FakeSMSC
 
@@ -597,3 +597,110 @@ class TestFakeSMSC(VumiTestCase):
         yield client.write(Unbind(7).get_bin())
         self.assertEqual(client.received, UnbindResp(7).get_bin())
         self.assertEqual(fake_smsc.waiting_pdu_count(), 1)
+
+    @inlineCallbacks
+    def test_submit_sm_resp(self):
+        """
+        FakeSMSC can respond to a SubmitSM PDU and wait for it to finish being
+        processed.
+        """
+        fake_smsc = FakeSMSC()
+        client = self.successResultOf(self.connect(fake_smsc))
+        self.assertEqual(client.received, b"")
+
+        # No params.
+        submit_sm_resp_d = fake_smsc.submit_sm_resp()
+        yield client.write(SubmitSM(123).get_bin())
+        self.assertNoResult(submit_sm_resp_d)
+
+        client.handle_pdu_d.callback(None)
+        self.successResultOf(submit_sm_resp_d)
+        resp = SubmitSMResp(123, message_id="id123", command_status="ESME_ROK")
+        self.assertEqual(client.pdus_handled, [resp.obj])
+
+        client.pdus_handled[:] = []
+        # Explicit message_id.
+        submit_sm_resp_d = fake_smsc.submit_sm_resp(message_id="foo")
+        yield client.write(SubmitSM(124).get_bin())
+        self.assertNoResult(submit_sm_resp_d)
+
+        client.handle_pdu_d.callback(None)
+        self.successResultOf(submit_sm_resp_d)
+        resp = SubmitSMResp(124, message_id="foo", command_status="ESME_ROK")
+        self.assertEqual(client.pdus_handled, [resp.obj])
+
+    @inlineCallbacks
+    def test_submit_sm_resp_with_failure(self):
+        """
+        FakeSMSC can respond to a SubmitSM PDU with a failure.
+        """
+        fake_smsc = FakeSMSC()
+        client = self.successResultOf(self.connect(fake_smsc))
+        self.assertEqual(client.received, b"")
+
+        # No params.
+        submit_sm_resp_d = fake_smsc.submit_sm_resp(
+            command_status="ESME_RSUBMITFAIL")
+        yield client.write(SubmitSM(123).get_bin())
+        self.assertNoResult(submit_sm_resp_d)
+
+        client.handle_pdu_d.callback(None)
+        self.successResultOf(submit_sm_resp_d)
+        resp = SubmitSMResp(
+            123, message_id="id123", command_status="ESME_RSUBMITFAIL")
+        self.assertEqual(client.pdus_handled, [resp.obj])
+
+        client.pdus_handled[:] = []
+        # Explicit message_id.
+        submit_sm_resp_d = fake_smsc.submit_sm_resp(
+            command_status="ESME_RSUBMITFAIL", message_id="foo")
+        yield client.write(SubmitSM(124).get_bin())
+        self.assertNoResult(submit_sm_resp_d)
+
+        client.handle_pdu_d.callback(None)
+        self.successResultOf(submit_sm_resp_d)
+        resp = SubmitSMResp(
+            124, message_id="foo", command_status="ESME_RSUBMITFAIL")
+        self.assertEqual(client.pdus_handled, [resp.obj])
+
+    @inlineCallbacks
+    def test_submit_sm_resp_explicit(self):
+        """
+        FakeSMSC can respond to a SubmitSM PDU that is explicitly passed in.
+        """
+        fake_smsc = FakeSMSC()
+        client = self.successResultOf(self.connect(fake_smsc))
+        self.assertEqual(client.received, b"")
+
+        # No params.
+        submit_sm_resp_d = fake_smsc.submit_sm_resp(SubmitSM(123).obj)
+        self.assertNoResult(submit_sm_resp_d)
+
+        client.handle_pdu_d.callback(None)
+        self.successResultOf(submit_sm_resp_d)
+        resp = SubmitSMResp(123, message_id="id123", command_status="ESME_ROK")
+        self.assertEqual(client.pdus_handled, [resp.obj])
+
+        client.pdus_handled[:] = []
+        # Explicit message_id.
+        submit_sm_resp_d = fake_smsc.submit_sm_resp(
+            SubmitSM(124).obj, message_id="foo")
+        yield client.write(SubmitSM(124).get_bin())
+        self.assertNoResult(submit_sm_resp_d)
+
+        client.handle_pdu_d.callback(None)
+        self.successResultOf(submit_sm_resp_d)
+        resp = SubmitSMResp(124, message_id="foo", command_status="ESME_ROK")
+        self.assertEqual(client.pdus_handled, [resp.obj])
+
+    @inlineCallbacks
+    def test_test_submit_sm_resp_wrong_pdu(self):
+        """
+        FakeSMSC will raise an exception if asked to bind with a non-bind PDU.
+        """
+        fake_smsc = FakeSMSC()
+        client = self.successResultOf(self.connect(fake_smsc))
+
+        submit_sm_resp_d = fake_smsc.submit_sm_resp()
+        yield client.write(EnquireLink(0).get_bin())
+        self.failureResultOf(submit_sm_resp_d, ValueError)

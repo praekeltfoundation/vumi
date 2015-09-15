@@ -322,14 +322,11 @@ class EsmeProtocol(Protocol):
             message_stash.set_remote_message_id, smpp_message_id)
         d.addCallback(
             self._handle_submit_sm_resp_callback, smpp_message_id,
-            command_status)
-        d.addCallback(
-            lambda _: message_stash.delete_sequence_number_message_id(
-                sequence_number))
+            command_status, sequence_number)
         return d
 
     def _handle_submit_sm_resp_callback(self, message_id, smpp_message_id,
-                                        command_status):
+                                        command_status, sequence_number):
         if message_id is None:
             # We have no message_id, so log a warning instead of calling the
             # callback.
@@ -338,7 +335,7 @@ class EsmeProtocol(Protocol):
                         % self.service.transport_name)
         else:
             return self.service.handle_submit_sm_resp(
-                message_id, smpp_message_id, command_status)
+                message_id, smpp_message_id, command_status, sequence_number)
 
     @inlineCallbacks
     def handle_deliver_sm(self, pdu):
@@ -512,10 +509,16 @@ class EsmeProtocol(Protocol):
             for key, value in optional_parameters.items():
                 pdu.add_optional_parameter(key, value)
 
-        yield self.service.message_stash.set_sequence_number_message_id(
-            sequence_number, vumi_message_id)
-        self.send_pdu(pdu)
+        yield self.send_submit_sm(vumi_message_id, pdu)
         returnValue([sequence_number])
+
+    @inlineCallbacks
+    def send_submit_sm(self, vumi_message_id, pdu):
+        yield self.service.message_stash.cache_pdu(
+            vumi_message_id, seq_no(pdu.obj), pdu)
+        yield self.service.message_stash.set_sequence_number_message_id(
+            seq_no(pdu.obj), vumi_message_id)
+        self.send_pdu(pdu)
 
     @require_bind
     @inlineCallbacks

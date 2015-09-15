@@ -2,10 +2,10 @@
 from twisted.internet.defer import inlineCallbacks, succeed, gatherResults
 from twisted.internet.task import Clock
 
-from smpp.pdu_builder import Unbind
+from smpp.pdu_builder import Unbind, SubmitSM
 from vumi.tests.helpers import VumiTestCase, PersistenceHelper, skiptest
 from vumi.transports.smpp.smpp_transport import (
-    SmppTransceiverTransport, SmppMessageDataStash)
+    SmppTransceiverTransport, SmppMessageDataStash, pdu_key)
 from vumi.transports.smpp.protocol import EsmeProtocol, EsmeProtocolError
 from vumi.transports.smpp.smpp_service import SmppService
 from vumi.transports.smpp.pdu_utils import (
@@ -442,3 +442,27 @@ class TestSmppService(VumiTestCase):
         self.assertEqual(short_message(submit_sm_pdu), content)
         self.assertEqual(
             submit_sm_pdu['body']['mandatory_parameters']['esm_class'], 0)
+
+    @inlineCallbacks
+    def test_pdu_cache_persistence(self):
+        """
+        A cached PDU has an appropriate TTL and can be deleted.
+        """
+        service = yield self.get_service()
+
+        message_stash = service.message_stash
+        config = service.get_config()
+
+        pdu = SubmitSM(1337, short_message="foo")
+        yield message_stash.cache_pdu("vumi0", 1337, pdu)
+
+        ttl = yield message_stash.redis.ttl(pdu_key(1337))
+        self.assertTrue(0 < ttl <= config.submit_sm_expiry)
+
+        pdu_data = yield message_stash.get_cached_pdu(1337)
+        self.assertEqual(pdu_data.vumi_message_id, "vumi0")
+        self.assertEqual(pdu_data.pdu.get_hex(), pdu.get_hex())
+
+        yield message_stash.delete_cached_pdu(1337)
+        deleted_pdu_data = yield message_stash.get_cached_pdu(1337)
+        self.assertEqual(deleted_pdu_data, None)
