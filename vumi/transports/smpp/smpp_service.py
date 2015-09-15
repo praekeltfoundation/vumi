@@ -1,11 +1,15 @@
 from functools import wraps
 
-from twisted.internet.defer import succeed
+from twisted.internet.defer import inlineCallbacks, returnValue, succeed
 
 from vumi.reconnecting_client import ReconnectingClientService
 from vumi.transports.smpp.protocol import (
     EsmeProtocol, EsmeProtocolFactory, EsmeProtocolError)
 from vumi.transports.smpp.sequence import RedisSequence
+
+
+GSM_MAX_SMS_BYTES = 140
+GSM_MAX_SMS_7BIT_CHARS = 160
 
 
 def proxy_protocol(func):
@@ -80,23 +84,171 @@ class SmppService(ReconnectingClientService):
         """
         return protocol.submit_sm(*args, **kw)
 
-    @proxy_protocol
-    def submit_sm_long(self, protocol, *args, **kw):
+    def submit_sm_long(self, vumi_message_id, destination_addr, long_message,
+                       **pdu_params):
         """
-        See :meth:`EsmeProtocol.submit_sm_long`.
-        """
-        return protocol.submit_sm_long(*args, **kw)
+        Send a `submit_sm` command with the message encoded in the
+        ``message_payload`` optional parameter.
 
-    @proxy_protocol
-    def submit_csm_sar(self, protocol, *args, **kw):
-        """
-        See :meth:`EsmeProtocol.submit_csm_sar`.
-        """
-        return protocol.submit_csm_sar(*args, **kw)
+        Same parameters apply as for ``submit_sm`` with the exception
+        that the ``short_message`` keyword argument is disallowed
+        because it conflicts with the ``long_message`` field.
 
-    @proxy_protocol
-    def submit_csm_udh(self, protocol, *args, **kw):
+        :returns: list of 1 sequence number, int.
+        :rtype: list
+
         """
-        See :meth:`EsmeProtocol.submit_csm_udh`.
+        if 'short_message' in pdu_params:
+            raise EsmeProtocolError(
+                'short_message not allowed when sending a long message'
+                'in the message_payload')
+
+        optional_parameters = pdu_params.pop('optional_parameters', {}).copy()
+        optional_parameters.update({
+            'message_payload': (
+                ''.join('%02x' % ord(c) for c in long_message))
+        })
+        return self.submit_sm(
+            vumi_message_id, destination_addr, short_message='', sm_length=0,
+            optional_parameters=optional_parameters, **pdu_params)
+
+    def _fits_in_one_message(self, message):
+        if len(message) <= GSM_MAX_SMS_BYTES:
+            return True
+
+        # NOTE: We already have byte strings here, so we assume that printable
+        #       ASCII characters are all the same as single-width GSM 03.38
+        #       characters.
+        if len(message) <= GSM_MAX_SMS_7BIT_CHARS:
+            # TODO: We need better character handling and counting stuff.
+            return all(0x20 <= ord(ch) <= 0x7f for ch in message)
+
+        return False
+
+    def csm_split_message(self, message):
         """
-        return protocol.submit_csm_udh(*args, **kw)
+        Chop the message into 130 byte chunks to leave 10 bytes for the
+        user data header the SMSC is presumably going to add for us. This is
+        a guess based mostly on optimism and the hope that we'll never have
+        to deal with this stuff in production.
+
+        NOTE: If we have utf-8 encoded data, we might break in the
+              middle of a multibyte character. This should be ok since
+              the message is only decoded after re-assembly of all
+              individual segments.
+
+        :param str message:
+            The message to split
+        :returns: list of strings
+        :rtype: list
+
+        """
+        if self._fits_in_one_message(message):
+            return [message]
+
+        payload_length = GSM_MAX_SMS_BYTES - 10
+        split_msg = []
+        while message:
+            split_msg.append(message[:payload_length])
+            message = message[payload_length:]
+        return split_msg
+
+    @inlineCallbacks
+    def submit_csm_sar(self, vumi_message_id, destination_addr, **pdu_params):
+        """
+        Submit a concatenated SMS to the SMSC using the optional
+        SAR parameter names in the various PDUS.
+
+        :returns: List of sequence numbers (int) for each of the segments.
+        :rtype: list
+        """
+
+        split_msg = self.csm_split_message(pdu_params.pop('short_message'))
+
+        if len(split_msg) == 1:
+            # There is only one part, so send it without SAR stuff.
+            sequence_numbers = yield self.submit_sm(
+                vumi_message_id, destination_addr, short_message=split_msg[0],
+                **pdu_params)
+            returnValue(sequence_numbers)
+
+        optional_parameters = pdu_params.pop('optional_parameters', {}).copy()
+        ref_num = yield self.sequence_generator.next()
+        sequence_numbers = []
+        yield self.message_stash.init_multipart_info(
+            vumi_message_id, len(split_msg))
+        for i, msg in enumerate(split_msg):
+            pdu_params = pdu_params.copy()
+            optional_parameters.update({
+                # Reference number must be between 00 & FFFF
+                'sar_msg_ref_num': (ref_num % 0xFFFF),
+                'sar_total_segments': len(split_msg),
+                'sar_segment_seqnum': i + 1,
+            })
+            sequence_number = yield self.submit_sm(
+                vumi_message_id, destination_addr, short_message=msg,
+                optional_parameters=optional_parameters, **pdu_params)
+            sequence_numbers.extend(sequence_number)
+        returnValue(sequence_numbers)
+
+    @inlineCallbacks
+    def submit_csm_udh(self, vumi_message_id, destination_addr, **pdu_params):
+        """
+        Submit a concatenated SMS to the SMSC using user data headers (UDH)
+        in the message content.
+
+        Same parameters apply as for ``submit_sm`` with the exception
+        that the ``esm_class`` keyword argument is disallowed
+        because the SMPP spec mandates a value that is to be set for UDH.
+
+        :returns: List of sequence numbers (int) for each of the segments.
+        :rtype: list
+        """
+
+        if 'esm_class' in pdu_params:
+            raise EsmeProtocolError(
+                'Cannot specify esm_class, GSM spec sets this at 0x40 '
+                'for concatenated messages using UDH.')
+
+        pdu_params = pdu_params.copy()
+        split_msg = self.csm_split_message(pdu_params.pop('short_message'))
+
+        if len(split_msg) == 1:
+            # There is only one part, so send it without UDH stuff.
+            sequence_numbers = yield self.submit_sm(
+                vumi_message_id, destination_addr, short_message=split_msg[0],
+                **pdu_params)
+            returnValue(sequence_numbers)
+
+        ref_num = yield self.sequence_generator.next()
+        sequence_numbers = []
+        yield self.message_stash.init_multipart_info(
+            vumi_message_id, len(split_msg))
+        for i, msg in enumerate(split_msg):
+            # 0x40 is the UDHI flag indicating that this payload contains a
+            # user data header.
+
+            # NOTE: Looking at the SMPP specs I can find no requirement
+            #       for this anywhere.
+            pdu_params['esm_class'] = 0x40
+
+            # See http://en.wikipedia.org/wiki/User_Data_Header and
+            # http://en.wikipedia.org/wiki/Concatenated_SMS for an
+            # explanation of the magic numbers below. We should probably
+            # abstract this out into a class that makes it less magic and
+            # opaque.
+            udh = ''.join([
+                '\05',  # Full UDH header length
+                '\00',  # Information Element Identifier for Concatenated SMS
+                '\03',  # header length
+                # Reference number must be between 00 & FF
+                chr(ref_num % 0xFF),
+                chr(len(split_msg)),
+                chr(i + 1),
+            ])
+            short_message = udh + msg
+            sequence_number = yield self.submit_sm(
+                vumi_message_id, destination_addr, short_message=short_message,
+                **pdu_params)
+            sequence_numbers.extend(sequence_number)
+        returnValue(sequence_numbers)
