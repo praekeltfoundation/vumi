@@ -11,10 +11,9 @@ from vumi.message import TransportUserMessage
 from vumi.tests.helpers import VumiTestCase
 from vumi.tests.utils import LogCatcher
 from vumi.transports.smpp.smpp_transport import (
-    SmppTransceiverTransport,
-    SmppTransceiverTransportWithOldConfig,
-    SmppTransmitterTransport, SmppReceiverTransport,
-    message_key, remote_message_key, multipart_info_key)
+    message_key, remote_message_key, multipart_info_key, sequence_number_key,
+    SmppTransceiverTransport, SmppTransmitterTransport, SmppReceiverTransport,
+    SmppTransceiverTransportWithOldConfig)
 from vumi.transports.smpp.pdu_utils import (
     pdu_ok, short_message, command_id, seq_no, pdu_tlv, unpacked_pdu_opts)
 from vumi.transports.smpp.processors import SubmitShortMessageProcessor
@@ -1311,6 +1310,44 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.assertEqual(
             None,
             (yield message_stash.get_cached_message(msg['message_id'])))
+
+    @inlineCallbacks
+    def test_sequence_number_persistence(self):
+        """
+        We create sequence_number to message_id mappings with an appropriate
+        TTL and can delete them when we're done.
+        """
+        transport = yield self.get_transport()
+        message_stash = transport.message_stash
+        config = transport.get_static_config()
+
+        yield message_stash.set_sequence_number_message_id(12, "abc")
+        ttl = yield transport.redis.ttl(sequence_number_key(12))
+        self.assertTrue(0 < ttl <= config.submit_sm_expiry)
+
+        message_id = yield message_stash.get_sequence_number_message_id(12)
+        self.assertEqual(message_id, "abc")
+
+        yield message_stash.delete_sequence_number_message_id(12)
+        message_id = yield message_stash.get_sequence_number_message_id(12)
+        self.assertEqual(message_id, None)
+
+    @inlineCallbacks
+    def test_sequence_number_clearing(self):
+        """
+        When we finish processing a PDU response, the mapping gets deleted.
+        """
+        transport = yield self.get_transport()
+        message_stash = transport.message_stash
+
+        yield message_stash.set_sequence_number_message_id(37, "def")
+        message_id = yield message_stash.get_sequence_number_message_id(37)
+        self.assertEqual(message_id, "def")
+
+        yield self.fake_smsc.handle_pdu(SubmitSMResp(
+            sequence_number=37, message_id='foo', command_status='ESME_ROK'))
+        message_id = yield message_stash.get_sequence_number_message_id(37)
+        self.assertEqual(message_id, None)
 
     @inlineCallbacks
     def test_link_remote_message_id(self):
