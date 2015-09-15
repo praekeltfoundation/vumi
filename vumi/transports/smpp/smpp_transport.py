@@ -288,8 +288,6 @@ class SmppTransceiverTransport(Transport):
 
     @inlineCallbacks
     def handle_outbound_message(self, message):
-        if self.service.bind_requires_throttling():
-            yield self.service.check_mt_throttling()
         if not self._check_address_valid(message, 'to_addr'):
             yield self._reject_for_invalid_address(message, 'to_addr')
             return

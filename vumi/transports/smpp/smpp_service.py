@@ -89,15 +89,13 @@ class SmppService(ReconnectingClientService):
     def need_mt_throttling(self):
         return self.tps_counter >= self.tps_limit
 
-    def bind_requires_throttling(self):
-        return self.get_config().mt_tps > 0
-
     def check_mt_throttling(self):
-        self.incr_mt_throttle_counter()
-        if self.need_mt_throttling():
-            # We can't yield here, because we need this message to finish
-            # processing before it will return.
-            self.start_throttling(quiet=True)
+        if self.get_config().mt_tps > 0:
+            self.incr_mt_throttle_counter()
+            if self.need_mt_throttling():
+                # We can't yield here, because we need the current message to
+                # finish sending before it will return.
+                self.start_throttling()
 
     def _append_throttle_retry(self, seq_no):
         if seq_no not in self._throttled_pdus:
@@ -174,13 +172,10 @@ class SmppService(ReconnectingClientService):
                 pdu_data.vumi_message_id, pdu_data.pdu)
             yield self.message_stash.delete_cached_pdu(seq_no)
 
-    def start_throttling(self, quiet=False):
+    def start_throttling(self):
         if self.throttled:
             return succeed(None)
-        # We used to use `quiet` to decide log level, but now we always use
-        # `log.msg`.
-        logger = log.msg
-        logger("Throttling outbound messages.")
+        log.msg("Throttling outbound messages.")
         self.throttled = True
         return self.transport.pause_connectors()
 
@@ -221,6 +216,7 @@ class SmppService(ReconnectingClientService):
         protocol = self.get_protocol()
         if protocol is None:
             raise EsmeProtocolError('submit_sm called while not connected.')
+        self.check_mt_throttling()
         return protocol.submit_sm(*args, **kw)
 
     def submit_sm_long(self, vumi_message_id, destination_addr, long_message,

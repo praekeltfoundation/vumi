@@ -969,6 +969,45 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.assertEqual(short_message(submit_sm_pdu3), 'hello world 3')
 
     @inlineCallbacks
+    def test_mt_sms_tps_limits_multipart(self):
+        """
+        TPS throttling counts PDUs, but doesn't finishes sending the current
+        message.
+        """
+        transport = yield self.get_transport({
+            'mt_tps': 3,
+            'submit_short_message_processor_config': {
+                'send_multipart_udh': True,
+            },
+        })
+        self.assertEqual(transport.throttled, False)
+
+        with LogCatcher(message="Throttling outbound messages.") as lc:
+            yield self.tx_helper.make_dispatch_outbound('1' * 200 + 'a')
+            yield self.tx_helper.make_dispatch_outbound('2' * 200 + 'b')
+            msg3_d = self.tx_helper.make_dispatch_outbound('3' * 200 + 'c')
+        [logmsg] = lc.logs
+        self.assertEqual(logmsg['logLevel'], logging.INFO)
+        self.assertEqual(transport.throttled, True)
+        [pdu1_1, pdu1_2, pdu2_1, pdu2_2] = yield self.fake_smsc.await_pdus(4)
+        self.assertEqual(short_message(pdu1_1)[-5:], '11111')
+        self.assertEqual(short_message(pdu1_2)[-5:], '1111a')
+        self.assertEqual(short_message(pdu2_1)[-5:], '22222')
+        self.assertEqual(short_message(pdu2_2)[-5:], '2222b')
+        self.assertNoResult(msg3_d)
+
+        with LogCatcher(message="No longer throttling outbound") as lc:
+            self.clock.advance(1)
+        [logmsg] = lc.logs
+        self.assertEqual(logmsg['logLevel'], logging.INFO)
+        self.assertEqual(transport.throttled, False)
+
+        yield msg3_d
+        [pdu3_1, pdu3_2] = yield self.fake_smsc.await_pdus(2)
+        self.assertEqual(short_message(pdu3_1)[-5:], '33333')
+        self.assertEqual(short_message(pdu3_2)[-5:], '3333c')
+
+    @inlineCallbacks
     def test_mt_sms_reconnect_while_tps_throttled(self):
         """
         If we reconnect while throttled due to the tps limit, we don't try to
