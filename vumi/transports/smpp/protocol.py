@@ -332,6 +332,9 @@ class EsmeProtocol(Protocol):
         d.addCallback(
             self._handle_submit_sm_resp_callback, smpp_message_id,
             command_status, cb)
+        d.addCallback(
+            lambda _: message_stash.delete_sequence_number_message_id(
+                sequence_number))
         return d
 
     def _handle_submit_sm_resp_callback(self, message_id, smpp_message_id,

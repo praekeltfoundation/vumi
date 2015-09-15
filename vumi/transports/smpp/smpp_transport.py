@@ -191,11 +191,14 @@ class SmppMessageDataStash(object):
 
     def set_sequence_number_message_id(self, sequence_number, message_id):
         key = sequence_number_key(sequence_number)
-        expiry = self.config.third_party_id_expiry
+        expiry = self.config.submit_sm_expiry
         return self.redis.setex(key, expiry, message_id)
 
     def get_sequence_number_message_id(self, sequence_number):
         return self.redis.get(sequence_number_key(sequence_number))
+
+    def delete_sequence_number_message_id(self, sequence_number):
+        return self.redis.delete(sequence_number_key(sequence_number))
 
     def cache_message(self, message):
         key = message_key(message['message_id'])
