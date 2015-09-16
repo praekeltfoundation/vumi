@@ -971,8 +971,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
     @inlineCallbacks
     def test_mt_sms_tps_limits_multipart(self):
         """
-        TPS throttling counts PDUs, but doesn't finishes sending the current
-        message.
+        TPS throttling counts PDUs, but finishes sending the current message.
         """
         transport = yield self.get_transport({
             'mt_tps': 3,
