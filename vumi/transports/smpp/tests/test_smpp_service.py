@@ -454,7 +454,7 @@ class TestSmppService(VumiTestCase):
         config = service.get_config()
 
         pdu = SubmitSM(1337, short_message="foo")
-        yield message_stash.cache_pdu("vumi0", 1337, pdu)
+        yield message_stash.cache_pdu("vumi0", pdu)
 
         ttl = yield message_stash.redis.ttl(pdu_key(1337))
         self.assertTrue(0 < ttl <= config.submit_sm_expiry)

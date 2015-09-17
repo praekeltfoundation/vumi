@@ -46,17 +46,26 @@ class CachedPDU(object):
     A cached PDU with its associated vumi message_id.
     """
 
-    def __init__(self, vumi_message_id, pdu_dict):
+    def __init__(self, vumi_message_id, pdu):
         self.vumi_message_id = vumi_message_id
-        self.pdu = PDU(None, None, None)
-        self.pdu.obj = pdu_dict
+        self.pdu = pdu
+        self.seq_no = pdu.obj['header']['sequence_number']
 
     @classmethod
     def from_json(cls, pdu_json):
         if pdu_json is None:
             return None
         pdu_data = json.loads(pdu_json)
-        return cls(pdu_data['vumi_message_id'], decode_pdu(pdu_data['pdu']))
+        pdu = PDU(None, None, None)
+        pdu.obj = decode_pdu(pdu_data['pdu'])
+        return cls(pdu_data['vumi_message_id'], pdu)
+
+    def to_json(self):
+        return json.dumps({
+            'vumi_message_id': self.vumi_message_id,
+            # We store the PDU in wire format to avoid json encoding troubles.
+            'pdu': self.pdu.get_hex(),
+        })
 
 
 class SmppMessageDataStash(object):
@@ -198,12 +207,11 @@ class SmppMessageDataStash(object):
     def delete_cached_message(self, message_id):
         return self.redis.delete(message_key(message_id))
 
-    def cache_pdu(self, vumi_message_id, seq_no, pdu):
-        # We the PDU in wire format to avoid json encoding troubles.
-        key = pdu_key(seq_no)
+    def cache_pdu(self, vumi_message_id, pdu):
+        cached_pdu = CachedPDU(vumi_message_id, pdu)
+        key = pdu_key(cached_pdu.seq_no)
         expiry = self.config.submit_sm_expiry
-        return self.redis.setex(key, expiry, json.dumps(
-            {'vumi_message_id': vumi_message_id, 'pdu': pdu.get_hex()}))
+        return self.redis.setex(key, expiry, cached_pdu.to_json())
 
     def get_cached_pdu(self, seq_no):
         d = self.redis.get(pdu_key(seq_no))

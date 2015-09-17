@@ -514,8 +514,7 @@ class EsmeProtocol(Protocol):
 
     @inlineCallbacks
     def send_submit_sm(self, vumi_message_id, pdu):
-        yield self.service.message_stash.cache_pdu(
-            vumi_message_id, seq_no(pdu.obj), pdu)
+        yield self.service.message_stash.cache_pdu(vumi_message_id, pdu)
         yield self.service.message_stash.set_sequence_number_message_id(
             seq_no(pdu.obj), vumi_message_id)
         self.send_pdu(pdu)
