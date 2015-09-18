@@ -1,7 +1,7 @@
-from functools import wraps
-
 from twisted.internet.defer import inlineCallbacks, returnValue, succeed
+from twisted.internet.task import LoopingCall
 
+from vumi import log
 from vumi.reconnecting_client import ReconnectingClientService
 from vumi.transports.smpp.protocol import (
     EsmeProtocol, EsmeProtocolFactory, EsmeProtocolError)
@@ -10,16 +10,6 @@ from vumi.transports.smpp.sequence import RedisSequence
 
 GSM_MAX_SMS_BYTES = 140
 GSM_MAX_SMS_7BIT_CHARS = 160
-
-
-def proxy_protocol(func):
-    @wraps(func)
-    def wrapper(self, *args, **kw):
-        protocol = self.get_protocol()
-        if protocol is None:
-            raise EsmeProtocolError('%s called while not connected.' % (func,))
-        return func(self, protocol, *args, **kw)
-    return wrapper
 
 
 class SmppService(ReconnectingClientService):
@@ -34,6 +24,19 @@ class SmppService(ReconnectingClientService):
         self.dr_processor = self.transport.dr_processor
         self.sequence_generator = RedisSequence(transport.redis)
 
+        # Throttling setup.
+        self.throttled = False
+        self._throttled_pdus = []
+        self._unthrottle_delayedCall = None
+
+        self.tps_counter = 0
+        self.tps_limit = self.get_config().mt_tps
+        if self.tps_limit > 0:
+            self.mt_tps_lc = LoopingCall(self.reset_mt_tps)
+        else:
+            self.mt_tps_lc = None
+
+        # Connection setup.
         factory = EsmeProtocolFactory(self, bind_type)
         ReconnectingClientService.__init__(self, endpoint, factory)
 
@@ -50,7 +53,15 @@ class SmppService(ReconnectingClientService):
             return self._protocol.is_bound()
         return False
 
+    def startService(self):
+        if self.mt_tps_lc is not None:
+            self.mt_tps_lc.clock = self.clock
+            self.mt_tps_lc.start(1, now=True)
+        return ReconnectingClientService.startService(self)
+
     def stopService(self):
+        if self.mt_tps_lc and self.mt_tps_lc.running:
+            self.mt_tps_lc.stop()
         d = succeed(None)
         if self._protocol is not None:
             d.addCallback(lambda _: self._protocol.disconnect())
@@ -60,28 +71,152 @@ class SmppService(ReconnectingClientService):
     def get_config(self):
         return self.transport.get_static_config()
 
+    def reset_mt_tps(self):
+        if self.throttled and self.need_mt_throttling():
+            if not self.is_bound():
+                # We don't have a bound SMPP connection, so try again later.
+                log.msg("Can't stop throttling while unbound, trying later.")
+                return
+            self.reset_mt_throttle_counter()
+            self.stop_throttling()
+
+    def reset_mt_throttle_counter(self):
+        self.tps_counter = 0
+
+    def incr_mt_throttle_counter(self):
+        self.tps_counter += 1
+
+    def need_mt_throttling(self):
+        return self.tps_counter >= self.tps_limit
+
+    def check_mt_throttling(self):
+        if self.get_config().mt_tps > 0:
+            self.incr_mt_throttle_counter()
+            if self.need_mt_throttling():
+                # We can't yield here, because we need the current message to
+                # finish sending before it will return.
+                self.start_throttling()
+
+    def _append_throttle_retry(self, seq_no):
+        if seq_no not in self._throttled_pdus:
+            self._throttled_pdus.append(seq_no)
+
+    def check_stop_throttling(self, delay=None):
+        if self._unthrottle_delayedCall is not None:
+            # We already have one of these scheduled.
+            return
+        if delay is None:
+            delay = self.get_config().throttle_delay
+        self._unthrottle_delayedCall = self.clock.callLater(
+            delay, self._check_stop_throttling)
+
+    def check_stop_throttling_cb(self, ignored_result, delay=None):
+        self.check_stop_throttling(delay)
+
+    def _check_stop_throttling(self):
+        """
+        Check if we should stop throttling, and stop throttling if we should.
+
+        At a high level, we try each throttled message in our list until all of
+        them have been accepted by the SMSC, at which point we stop throttling.
+
+        In more detail:
+
+        We recursively process our list of throttled message_ids until either
+        we have none left (at which point we stop throttling) or we find one we
+        can successfully look up in our cache.
+
+        When we find a message we can retry, we retry it and return. We remain
+        throttled until the SMSC responds. If we're still throttled, the
+        message_id gets appended to our list and another check is scheduled for
+        later. If we're no longer throttled, this method gets called again
+        immediately.
+
+        When there are no more throttled message_ids in our list, we stop
+        throttling.
+        """
+        self._unthrottle_delayedCall = None
+
+        if not self.is_bound():
+            # We don't have a bound SMPP connection, so try again later.
+            log.msg("Can't check throttling while unbound, trying later.")
+            self.check_stop_throttling()
+            return
+
+        if not self._throttled_pdus:
+            # We have no throttled messages waiting, so stop throttling.
+            log.msg("No more throttled messages to retry.")
+            self.stop_throttling()
+            return
+
+        seq_no = self._throttled_pdus.pop(0)
+        pdu_data_d = self.message_stash.get_cached_pdu(seq_no)
+        return pdu_data_d.addCallback(self.retry_throttled_pdu, seq_no)
+
+    @inlineCallbacks
+    def retry_throttled_pdu(self, pdu_data, seq_no):
+        if pdu_data is None:
+            # We can't find this pdu, so log it and start again.
+            log.warning(
+                "Could not retrieve throttled pdu: %s" % (seq_no,))
+            self.check_stop_throttling(0)
+        else:
+            # Try handle this message again and leave the rest to our
+            # submit_sm_resp handlers.
+            log.msg("Retrying throttled pdu for message: %s" % (
+                pdu_data.vumi_message_id,))
+            # This is a new PDU, so it needs a new sequence number.
+            new_seq_no = yield self.sequence_generator.next()
+            pdu_data.pdu.obj['header']['sequence_number'] = new_seq_no
+            yield self._protocol.send_submit_sm(
+                pdu_data.vumi_message_id, pdu_data.pdu)
+            yield self.message_stash.delete_cached_pdu(seq_no)
+
+    def start_throttling(self):
+        if self.throttled:
+            return succeed(None)
+        log.msg("Throttling outbound messages.")
+        self.throttled = True
+        return self.transport.pause_connectors()
+
+    def stop_throttling(self):
+        if not self.throttled:
+            return
+        log.msg("No longer throttling outbound messages.")
+        self.throttled = False
+        self.transport.unpause_connectors()
+
     def on_smpp_bind(self):
-        return self.transport.unpause_connectors()
+        self.transport.unpause_connectors()
 
     def on_connection_lost(self):
         return self.transport.pause_connectors()
 
-    def handle_submit_sm_resp(self, message_id, smpp_message_id, pdu_status):
+    def handle_submit_sm_resp(self, message_id, smpp_id, pdu_status, seq_no):
         if pdu_status in self.throttle_statuses:
-            return self.handle_submit_sm_throttled(message_id)
+            return self.handle_submit_sm_throttled(seq_no)
         func = self.transport.handle_submit_sm_failure
         if pdu_status == 'ESME_ROK':
             func = self.transport.handle_submit_sm_success
-        return func(message_id, smpp_message_id, pdu_status)
+        ms = self.message_stash
+        d = func(message_id, smpp_id, pdu_status)
+        d.addCallback(lambda _: ms.delete_cached_pdu(seq_no))
+        d.addCallback(lambda _: ms.delete_sequence_number_message_id(seq_no))
+        return d.addCallback(self.check_stop_throttling_cb, 0)
 
     def handle_submit_sm_throttled(self, message_id):
-        return self.transport.handle_submit_sm_throttled(message_id)
+        self._append_throttle_retry(message_id)
+        d = self.start_throttling()
+        return d.addCallback(self.check_stop_throttling_cb)
 
-    @proxy_protocol
-    def submit_sm(self, protocol, *args, **kw):
+    def submit_sm(self, *args, **kw):
         """
         See :meth:`EsmeProtocol.submit_sm`.
         """
+        protocol = self.get_protocol()
+        if protocol is None:
+            raise EsmeProtocolError('submit_sm called while not connected.')
+        self.check_mt_throttling()
         return protocol.submit_sm(*args, **kw)
 
     def submit_sm_long(self, vumi_message_id, destination_addr, long_message,

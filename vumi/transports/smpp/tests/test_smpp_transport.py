@@ -780,11 +780,59 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.assertEqual(event['user_message_id'], msg['message_id'])
 
         # We're still throttled until our next attempt to unthrottle finds no
-        # messages to retry.
+        # messages to retry. After a non-throttle submit_sm_resp, that happens
+        # with no delay.
         with LogCatcher(message="No longer throttling outbound") as lc:
-            self.clock.advance(transport_config.throttle_delay)
+            self.clock.advance(0)
         [logmsg] = lc.logs
         self.assertEqual(logmsg['logLevel'], logging.INFO)
+
+    @inlineCallbacks
+    def test_mt_sms_multipart_throttled(self):
+        """
+        When parts of a multipart message are throttled, we retry only those
+        PDUs.
+        """
+        transport = yield self.get_transport({
+            'submit_short_message_processor_config': {
+                'send_multipart_udh': True,
+            }
+        })
+        transport_config = transport.get_static_config()
+        msg = self.tx_helper.make_outbound('a' * 350)  # Three parts.
+
+        yield self.tx_helper.dispatch_outbound(msg)
+        [pdu1, pdu2, pdu3] = yield self.fake_smsc.await_pdus(3)
+        self.assertEqual(short_message(pdu1)[4:6], "\x03\x01")
+        self.assertEqual(short_message(pdu2)[4:6], "\x03\x02")
+        self.assertEqual(short_message(pdu3)[4:6], "\x03\x03")
+        # Let two parts through.
+        yield self.fake_smsc.submit_sm_resp(pdu1)
+        yield self.fake_smsc.submit_sm_resp(pdu2)
+        self.assertEqual(transport.throttled, False)
+        # Throttle the third part.
+        yield self.fake_smsc.submit_sm_resp(
+            pdu3, command_status='ESME_RTHROTTLED')
+        self.assertEqual(transport.throttled, True)
+
+        self.clock.advance(transport_config.throttle_delay)
+        retry_pdu = yield self.fake_smsc.await_pdu()
+        # Assume nothing else is incrementing seuqnce numbers.
+        self.assertEqual(seq_no(retry_pdu), seq_no(pdu3) + 1)
+        # The retry should be identical to pdu3 except for the sequence number.
+        pdu3_retry = dict((k, v.copy()) for k, v in pdu3.iteritems())
+        pdu3_retry['header']['sequence_number'] = seq_no(retry_pdu)
+        self.assertEqual(retry_pdu, pdu3_retry)
+
+        # Let the retry through.
+        yield self.fake_smsc.submit_sm_resp(retry_pdu)
+        [event] = yield self.tx_helper.wait_for_dispatched_events(1)
+        self.assertEqual(event['event_type'], 'ack')
+        self.assertEqual(event['user_message_id'], msg['message_id'])
+        self.assertEqual(transport.throttled, True)
+        # Prod the clock to notice there are no more retries and unthrottle.
+        self.clock.advance(0)
+        self.assertEqual(transport.throttled, False)
 
     @inlineCallbacks
     def test_mt_sms_throttle_while_throttled(self):
@@ -919,6 +967,44 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         yield msg3_d
         submit_sm_pdu3 = yield self.fake_smsc.await_pdu()
         self.assertEqual(short_message(submit_sm_pdu3), 'hello world 3')
+
+    @inlineCallbacks
+    def test_mt_sms_tps_limits_multipart(self):
+        """
+        TPS throttling counts PDUs, but finishes sending the current message.
+        """
+        transport = yield self.get_transport({
+            'mt_tps': 3,
+            'submit_short_message_processor_config': {
+                'send_multipart_udh': True,
+            },
+        })
+        self.assertEqual(transport.throttled, False)
+
+        with LogCatcher(message="Throttling outbound messages.") as lc:
+            yield self.tx_helper.make_dispatch_outbound('1' * 200 + 'a')
+            yield self.tx_helper.make_dispatch_outbound('2' * 200 + 'b')
+            msg3_d = self.tx_helper.make_dispatch_outbound('3' * 200 + 'c')
+        [logmsg] = lc.logs
+        self.assertEqual(logmsg['logLevel'], logging.INFO)
+        self.assertEqual(transport.throttled, True)
+        [pdu1_1, pdu1_2, pdu2_1, pdu2_2] = yield self.fake_smsc.await_pdus(4)
+        self.assertEqual(short_message(pdu1_1)[-5:], '11111')
+        self.assertEqual(short_message(pdu1_2)[-5:], '1111a')
+        self.assertEqual(short_message(pdu2_1)[-5:], '22222')
+        self.assertEqual(short_message(pdu2_2)[-5:], '2222b')
+        self.assertNoResult(msg3_d)
+
+        with LogCatcher(message="No longer throttling outbound") as lc:
+            self.clock.advance(1)
+        [logmsg] = lc.logs
+        self.assertEqual(logmsg['logLevel'], logging.INFO)
+        self.assertEqual(transport.throttled, False)
+
+        yield msg3_d
+        [pdu3_1, pdu3_2] = yield self.fake_smsc.await_pdus(2)
+        self.assertEqual(short_message(pdu3_1)[-5:], '33333')
+        self.assertEqual(short_message(pdu3_2)[-5:], '3333c')
 
     @inlineCallbacks
     def test_mt_sms_reconnect_while_tps_throttled(self):
