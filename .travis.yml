@@ -20,8 +20,9 @@ matrix:
     - python: "2.7"
       env: TWISTED_VERSION="Twisted==13.1.0" RIAK_VERSION="2.1.1"
     # Test on pypy without coverage, because it's unnecessary and very slow.
+    # Also, we hit an obscure GC bug in pypy<=2.6.0 so we need at least 2.6.1.
     - python: "pypy"
-      env: TWISTED_VERSION="Twisted" RIAK_VERSION="1.4.12" NO_COVERAGE="1"
+      env: PYPY_VERSION="2.6.1" NO_COVERAGE=1 TWISTED_VERSION="Twisted" RIAK_VERSION="1.4.12"
 
 cache:
   directories:
@@ -31,6 +32,8 @@ services:
   - redis-server
 
 before_install:
+  # If necessary, set up an appropriate version of pypy.
+  - if [ ! -z "$PYPY_VERSION" ]; then source utils/setup-pypy-travis.sh; fi
   # Set up an appropriate version of Riak.
   - utils/setup_travis_riak.sh "${RIAK_VERSION}"
 install:
