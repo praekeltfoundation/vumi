@@ -4,8 +4,12 @@ from twisted.internet.error import (
     ConnectionAborted)
 from twisted.internet.protocol import Protocol, ClientFactory, ServerFactory
 from twisted.trial.unittest import TestCase
+from twisted.web.client import readBody
+from twisted.web.iweb import IAgent
+from twisted.web.server import NOT_DONE_YET
 
-from vumi.tests.fake_connection import FakeServer, wait0, ProtocolDouble
+from vumi.tests.fake_connection import (
+    FakeServer, wait0, ProtocolDouble, FakeHttpServer)
 
 
 class DummyServerProtocol(ProtocolDouble):
@@ -308,3 +312,95 @@ class TestFakeConnection(TestCase):
         yield fake_server.endpoint.connect(self.client_factory)
         conn = yield fake_server.await_connection()
         self.assertIsInstance(conn.server_protocol, MyProtocol)
+
+
+class TestFakeHttpServer(TestCase):
+    @inlineCallbacks
+    def assert_response(self, response, code, body):
+        self.assertEqual(response.code, code)
+        response_body = yield readBody(response)
+        self.assertEqual(response_body, body)
+
+    @inlineCallbacks
+    def test_simple_request(self):
+        """
+        FakeHttpServer can handle a simple HTTP request using the IAgent
+        provider it supplies.
+        """
+        requests = []
+        fake_http = FakeHttpServer(lambda req: requests.append(req) or "hi")
+        agent = fake_http.get_agent()
+        self.assertTrue(IAgent.providedBy(agent))
+        response = yield agent.request("GET", "http://example.com/hello")
+        # We got a valid request and returned a valid response.
+        [request] = requests
+        self.assertEqual(request.method, "GET")
+        self.assertEqual(request.path, "http://example.com/hello")
+        yield self.assert_response(response, 200, "hi")
+
+    @inlineCallbacks
+    def test_async_response(self):
+        """
+        FakeHttpServer supports asynchronous responses.
+        """
+        requests = []
+        fake_http = FakeHttpServer(
+            lambda req: requests.append(req) or NOT_DONE_YET)
+        response1_d = fake_http.get_agent().request(
+            "GET", "http://example.com/hello/1")
+        response2_d = fake_http.get_agent().request(
+            "HEAD", "http://example.com/hello/2")
+
+        # Wait for the requests to arrive.
+        yield wait0()
+        [request1, request2] = requests
+        self.assertNoResult(response1_d)
+        self.assertNoResult(response2_d)
+        self.assertEqual(request1.method, "GET")
+        self.assertEqual(request1.path, "http://example.com/hello/1")
+        self.assertEqual(request2.method, "HEAD")
+        self.assertEqual(request2.path, "http://example.com/hello/2")
+
+        # Send a response to the second request.
+        request2.finish()
+        response2 = yield response2_d
+        self.assertNoResult(response1_d)
+        yield self.assert_response(response2, 200, "")
+
+        # Send a response to the first request.
+        request1.write("Thank you for waiting.")
+        request1.finish()
+        response1 = yield response1_d
+        yield self.assert_response(response1, 200, "Thank you for waiting.")
+
+    @inlineCallbacks
+    def test_POST_request(self):
+        """
+        FakeHttpServer can handle a POST request.
+        """
+        requests = []
+        fake_http = FakeHttpServer(lambda req: requests.append(req) or "hi")
+        agent = fake_http.get_agent()
+        self.assertTrue(IAgent.providedBy(agent))
+        response = yield agent.request("POST", "http://example.com/hello")
+        # We got a valid request and returned a valid response.
+        [request] = requests
+        self.assertEqual(request.method, "POST")
+        self.assertEqual(request.path, "http://example.com/hello")
+        yield self.assert_response(response, 200, "hi")
+
+    @inlineCallbacks
+    def test_PUT_request(self):
+        """
+        FakeHttpServer can handle a PUT request.
+        """
+        requests = []
+        fake_http = FakeHttpServer(lambda req: requests.append(req) or "hi")
+        agent = fake_http.get_agent()
+        self.assertTrue(IAgent.providedBy(agent))
+        response = yield agent.request("PUT", "http://example.com/hello")
+        # We got a valid request and returned a valid response.
+        [request] = requests
+        self.assertEqual(request.method, "PUT")
+        self.assertEqual(request.path, "http://example.com/hello")
+        yield self.assert_response(response, 200, "hi")

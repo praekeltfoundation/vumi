@@ -6,6 +6,9 @@ from twisted.internet.protocol import Protocol, ServerFactory
 from twisted.internet.task import deferLater
 from twisted.protocols.loopback import loopbackAsync
 from twisted.python.failure import Failure
+from twisted.web.client import ProxyAgent
+from twisted.web.resource import Resource
+from twisted.web.server import Site
 from zope.interface import implementer
 
 
@@ -242,3 +245,47 @@ class FakeServerProtocolWrapper(Protocol):
 
     def finish_connecting(self, client, finished_d):
         self.connection._finish_connecting(client, finished_d)
+
+
+class FakeHttpServer(object):
+    """
+    HTTP server built on top of FakeServer.
+    """
+
+    def __init__(self, handler):
+        site_factory = Site(HandlerResource(handler))
+        self.fake_server = FakeServer(site_factory)
+
+    @property
+    def endpoint(self):
+        return self.fake_server.endpoint
+
+    def get_agent(self, reactor=None, contextFactory=None):
+        """
+        Returns an IAgent that makes requests to this fake server.
+        """
+        return ProxyAgentWithContext(
+            self.endpoint, reactor=reactor, contextFactory=contextFactory)
+
+
+class HandlerResource(Resource):
+    isLeaf = True
+
+    def __init__(self, handler):
+        Resource.__init__(self)
+        self.handler = handler
+
+    def render_GET(self, request):
+        return self.handler(request)
+
+    def render_POST(self, request):
+        return self.handler(request)
+
+    def render_PUT(self, request):
+        return self.handler(request)
+
+
+class ProxyAgentWithContext(ProxyAgent):
+    def __init__(self, endpoint, reactor=None, contextFactory=None):
+        self.contextFactory = contextFactory  # To assert on in tests.
+        super(ProxyAgentWithContext, self).__init__(endpoint, reactor=reactor)
