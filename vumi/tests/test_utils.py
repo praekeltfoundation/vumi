@@ -1,18 +1,22 @@
 import os.path
 
 from twisted.internet import reactor
-from twisted.internet.defer import Deferred, inlineCallbacks
+from twisted.internet.defer import Deferred, inlineCallbacks, returnValue
+from twisted.internet.error import ConnectionDone
+from twisted.internet.protocol import Protocol, Factory
+from twisted.internet.task import Clock
 from twisted.web.server import Site, NOT_DONE_YET
 from twisted.web.resource import Resource
 from twisted.web import http
-from twisted.web.client import WebClientContextFactory, Agent
-from twisted.internet.protocol import Protocol, Factory
+from twisted.web.client import WebClientContextFactory, ResponseFailed
 
-from vumi.utils import (normalize_msisdn, vumi_resource_path, cleanup_msisdn,
-                        get_operator_name, http_request, http_request_full,
-                        get_first_word, redis_from_config, build_web_site,
-                        LogFilterSite, PkgResources)
+from vumi.utils import (
+    normalize_msisdn, vumi_resource_path, cleanup_msisdn, get_operator_name,
+    http_request, http_request_full, get_first_word, redis_from_config,
+    build_web_site, LogFilterSite, PkgResources, HttpTimeoutError)
 from vumi.persist.fake_redis import FakeRedis
+from vumi.tests.fake_connection import (
+    FakeServer, FakeHttpServer, ProxyAgentWithContext, wait0)
 from vumi.tests.helpers import VumiTestCase, import_skip
 
 
@@ -135,43 +139,69 @@ class FakeHTTP10(Protocol):
 
 
 class TestHttpUtils(VumiTestCase):
-
-    class InterruptHttp(Exception):
-        """Indicates that test server should halt http reply"""
-        pass
-
-    @inlineCallbacks
     def setUp(self):
-        self.root = Resource()
-        self.root.isLeaf = True
-        site_factory = Site(self.root)
-        self.webserver = yield reactor.listenTCP(
-            0, site_factory, interface='127.0.0.1')
-        # This is a lambda because we replace self.webserver in a test.
-        self.add_cleanup(lambda: self.webserver.loseConnection())
-        addr = self.webserver.getHost()
-        self.url = "http://%s:%s/" % (addr.host, addr.port)
+        self.fake_http = FakeHttpServer(lambda r: self._render_request(r))
+        self.url = "http://example.com:9980/"
 
-    def set_render(self, f, d=None):
+    def set_render(self, f):
         def render(request):
             request.setHeader('Content-Type', 'text/plain')
             try:
                 data = f(request)
                 request.setResponseCode(http.OK)
-            except self.InterruptHttp:
-                reactor.callLater(0, d.callback, request)
-                return NOT_DONE_YET
             except Exception, err:
                 data = str(err)
                 request.setResponseCode(http.INTERNAL_SERVER_ERROR)
             return data
+        self._render_request = render
 
-        self.root.render = render
+    def set_async_render(self):
+        def render_interrupt(request):
+            reactor.callLater(0, d.callback, request)
+            return NOT_DONE_YET
+        d = Deferred()
+        self.set_render(render_interrupt)
+        return d
+
+    @inlineCallbacks
+    def make_real_webserver(self):
+        """
+        Construct a real webserver to test actual connectivity.
+        """
+        root = Resource()
+        root.isLeaf = True
+        root.render = lambda r: self._render_request(r)
+        site_factory = Site(root)
+        webserver = yield reactor.listenTCP(
+            0, site_factory, interface='127.0.0.1')
+        self.add_cleanup(webserver.loseConnection)
+        addr = webserver.getHost()
+        url = "http://%s:%s/" % (addr.host, addr.port)
+        returnValue(url)
+
+    def with_agent(self, f, *args, **kw):
+        """
+        Wrapper around http_request_full and friends that injects our fake
+        connection's agent.
+        """
+        kw.setdefault('agent_class', self.fake_http.get_agent)
+        return f(*args, **kw)
+
+    @inlineCallbacks
+    def test_http_request_to_localhost(self):
+        """
+        Make a request over the network (localhost) to check that we're getting
+        a real agent by default.
+        """
+        url = yield self.make_real_webserver()
+        self.set_render(lambda r: "Yay")
+        data = yield http_request(url, '')
+        self.assertEqual(data, "Yay")
 
     @inlineCallbacks
     def test_http_request_ok(self):
         self.set_render(lambda r: "Yay")
-        data = yield http_request(self.url, '')
+        data = yield self.with_agent(http_request, self.url, '')
         self.assertEqual(data, "Yay")
 
     @inlineCallbacks
@@ -179,54 +209,60 @@ class TestHttpUtils(VumiTestCase):
         def err(r):
             raise ValueError("Bad")
         self.set_render(err)
-        data = yield http_request(self.url, '')
+        data = yield self.with_agent(http_request, self.url, '')
         self.assertEqual(data, "Bad")
+
+    @inlineCallbacks
+    def test_http_request_full_to_localhost(self):
+        """
+        Make a request over the network (localhost) to check that we're getting
+        a real agent by default.
+        """
+        url = yield self.make_real_webserver()
+        self.set_render(lambda r: "Yay")
+        request = yield http_request_full(url, '')
+        self.assertEqual(request.delivered_body, "Yay")
+        self.assertEqual(request.code, http.OK)
+        self.set_render(lambda r: "Yay")
 
     @inlineCallbacks
     def test_http_request_with_custom_context_factory(self):
         self.set_render(lambda r: "Yay")
+        agents = []
 
         ctxt = WebClientContextFactory()
 
-        class FakeAgent(Agent):
-            def __init__(slf, reactor, contextFactory=None):
-                self.assertEqual(contextFactory, ctxt)
-                super(FakeAgent, slf).__init__(reactor, contextFactory)
+        def stashing_factory(reactor, contextFactory=None):
+            agent = self.fake_http.get_agent(
+                reactor, contextFactory=contextFactory)
+            agents.append(agent)
+            return agent
 
-        request = yield http_request_full(self.url, '',
-                                          context_factory=ctxt,
-                                          agent_class=FakeAgent)
+        request = yield http_request_full(
+            self.url, '', context_factory=ctxt, agent_class=stashing_factory)
         self.assertEqual(request.delivered_body, "Yay")
         self.assertEqual(request.code, http.OK)
+        [agent] = agents
+        self.assertEqual(agent.contextFactory, ctxt)
 
     @inlineCallbacks
     def test_http_request_full_drop(self):
-        def interrupt(r):
-            raise self.InterruptHttp()
-        got_request = Deferred()
-        self.set_render(interrupt, got_request)
-
-        got_data = http_request_full(self.url, '')
-
+        """
+        If a connection drops, we get an appropriate exception.
+        """
+        got_request = self.set_async_render()
+        got_data = self.with_agent(http_request_full, self.url, '')
         request = yield got_request
         request.setResponseCode(http.OK)
         request.write("Foo!")
         request.transport.loseConnection()
 
-        def callback(reason):
-            self.assertTrue(
-                reason.check("twisted.web._newclient.ResponseFailed"))
-            done.callback(None)
-        done = Deferred()
-
-        got_data.addBoth(callback)
-
-        yield done
+        yield self.assertFailure(got_data, ResponseFailed)
 
     @inlineCallbacks
     def test_http_request_full_ok(self):
         self.set_render(lambda r: "Yay")
-        request = yield http_request_full(self.url, '')
+        request = yield self.with_agent(http_request_full, self.url, '')
         self.assertEqual(request.delivered_body, "Yay")
         self.assertEqual(request.code, http.OK)
 
@@ -237,12 +273,13 @@ class TestHttpUtils(VumiTestCase):
             return "Yay"
         self.set_render(check_ua)
 
-        request = yield http_request_full(self.url, '',
-                                          {'User-Agent': ['blah']})
+        request = yield self.with_agent(
+            http_request_full, self.url, '', {'User-Agent': ['blah']})
         self.assertEqual(request.delivered_body, "Yay")
         self.assertEqual(request.code, http.OK)
 
-        request = yield http_request_full(self.url, '', {'User-Agent': 'blah'})
+        request = yield self.with_agent(
+            http_request_full, self.url, '', {'User-Agent': 'blah'})
         self.assertEqual(request.delivered_body, "Yay")
         self.assertEqual(request.code, http.OK)
 
@@ -251,13 +288,18 @@ class TestHttpUtils(VumiTestCase):
         def err(r):
             raise ValueError("Bad")
         self.set_render(err)
-        request = yield http_request_full(self.url, '')
+        request = yield self.with_agent(http_request_full, self.url, '')
         self.assertEqual(request.delivered_body, "Bad")
         self.assertEqual(request.code, http.INTERNAL_SERVER_ERROR)
 
     @inlineCallbacks
     def test_http_request_potential_data_loss(self):
-        self.webserver.loseConnection()
+        """
+        In the absence of a Content-Length header or chunked transfer encoding,
+        we need to swallow a PotentialDataLoss exception.
+        """
+        # We can't use Twisted's HTTP server, because that always does the
+        # sensible thing. We also pretend to be HTTP 1.0 for simplicity.
         factory = Factory()
         factory.protocol = FakeHTTP10
         factory.response_body = (
@@ -267,19 +309,18 @@ class TestHttpUtils(VumiTestCase):
             "Content-Type: text/html; charset=utf-8\r\n"
             "\r\n"
             "Yay")
-        self.webserver = yield reactor.listenTCP(
-            0, factory, interface='127.0.0.1')
-        addr = self.webserver.getHost()
-        self.url = "http://%s:%s/" % (addr.host, addr.port)
+        fake_server = FakeServer(factory)
+        agent_factory = lambda *a, **kw: ProxyAgentWithContext(
+            fake_server.endpoint, *a, **kw)
 
-        data = yield http_request(self.url, '')
+        data = yield http_request(self.url, '', agent_class=agent_factory)
         self.assertEqual(data, "Yay")
 
     @inlineCallbacks
     def test_http_request_full_data_limit(self):
         self.set_render(lambda r: "Four")
 
-        d = http_request_full(self.url, '', data_limit=3)
+        d = self.with_agent(http_request_full, self.url, '', data_limit=3)
 
         def check_response(reason):
             self.assertTrue(reason.check('vumi.utils.HttpDataLimitError'))
@@ -291,77 +332,99 @@ class TestHttpUtils(VumiTestCase):
 
     @inlineCallbacks
     def test_http_request_full_ok_with_timeout_set(self):
-        # If we don't cancel the pending timeout check this test will fail with
-        # a dirty reactor.
+        """
+        If a request completes within the timeout, everything is happy.
+        """
+        clock = Clock()
         self.set_render(lambda r: "Yay")
-        request = yield http_request_full(self.url, '', timeout=100)
-        self.assertEqual(request.delivered_body, "Yay")
-        self.assertEqual(request.code, http.OK)
+        response = yield self.with_agent(
+            http_request_full, self.url, '', timeout=30, reactor=clock)
+        self.assertEqual(response.delivered_body, "Yay")
+        self.assertEqual(response.code, http.OK)
+        # Advance the clock past the timeout limit.
+        clock.advance(30)
 
     @inlineCallbacks
+    def test_http_request_full_drop_with_timeout_set(self):
+        """
+        If a request fails within the timeout, everything is happy(ish).
+        """
+        clock = Clock()
+        d = self.set_async_render()
+        got_data = self.with_agent(
+            http_request_full, self.url, '', timeout=30, reactor=clock)
+        request = yield d
+        request.setResponseCode(http.OK)
+        request.write("Foo!")
+        request.transport.loseConnection()
+
+        yield self.assertFailure(got_data, ResponseFailed)
+        # Advance the clock past the timeout limit.
+        clock.advance(30)
+
     def test_http_request_full_timeout_before_connect(self):
-        # This tests the case where the client times out before
-        # successfully connecting to the server.
-
-        # don't need to call .set_render because the request
-        # will never make it to the server
-        d = http_request_full(self.url, '', timeout=0)
-
-        def check_response(reason):
-            self.assertTrue(reason.check('vumi.utils.HttpTimeoutError'))
-
-        d.addBoth(check_response)
-        yield d
+        """
+        A request can time out before a connection is made.
+        """
+        clock = Clock()
+        # Instead of setting a render function, we tell the server not to
+        # accept connections.
+        self.fake_http.fake_server.auto_accept = False
+        d = self.with_agent(
+            http_request_full, self.url, '', timeout=30, reactor=clock)
+        self.assertNoResult(d)
+        clock.advance(29)
+        self.assertNoResult(d)
+        clock.advance(1)
+        self.failureResultOf(d, HttpTimeoutError)
 
     @inlineCallbacks
     def test_http_request_full_timeout_after_connect(self):
-        # This tests the case where the client connects but then
-        # times out before the server sends any data.
+        """
+        The client disconnects after the timeout if no data has been received
+        from the server.
+        """
+        clock = Clock()
+        request_started = self.set_async_render()
+        client_done = self.with_agent(
+            http_request_full, self.url, '', timeout=30, reactor=clock)
+        yield request_started
 
-        def interrupt(r):
-            raise self.InterruptHttp
-        request_started = Deferred()
-        self.set_render(interrupt, request_started)
-
-        client_done = http_request_full(self.url, '', timeout=0.1)
-
-        def check_response(reason):
-            self.assertTrue(reason.check('vumi.utils.HttpTimeoutError'))
-
-        client_done.addBoth(check_response)
-        yield client_done
-
-        request = yield request_started
-        request.transport.loseConnection()
+        self.assertNoResult(client_done)
+        clock.advance(29)
+        self.assertNoResult(client_done)
+        clock.advance(1)
+        failure = self.failureResultOf(client_done, HttpTimeoutError)
+        self.assertEqual(
+            failure.getErrorMessage(), "Timeout while connecting")
 
     @inlineCallbacks
     def test_http_request_full_timeout_after_first_receive(self):
-        # This tests the case where the client connects, receives
-        # some data and creates its receiver but then times out
-        # because the server takes too long to finish sending the data.
-
-        def interrupt(r):
-            raise self.InterruptHttp
-        request_started = Deferred()
-        self.set_render(interrupt, request_started)
-
-        client_done = http_request_full(self.url, '', timeout=0.1)
-
+        """
+        The client disconnects after the timeout even if some data has already
+        been received.
+        """
+        clock = Clock()
+        request_started = self.set_async_render()
+        client_done = self.with_agent(
+            http_request_full, self.url, '', timeout=30, reactor=clock)
         request = yield request_started
-        request.write("some data")
-
-        def check_server_response(reason):
-            self.assertTrue(reason.check('twisted.internet.error'
-                                         '.ConnectionDone'))
-
         request_done = request.notifyFinish()
-        request_done.addBoth(check_server_response)
-        yield request_done
 
-        def check_client_response(reason):
-            self.assertTrue(reason.check('vumi.utils.HttpTimeoutError'))
-        client_done.addBoth(check_client_response)
-        yield client_done
+        request.write("some data")
+        clock.advance(1)
+        yield wait0()
+        self.assertNoResult(client_done)
+        self.assertNoResult(request_done)
+
+        clock.advance(28)
+        self.assertNoResult(client_done)
+        self.assertNoResult(request_done)
+        clock.advance(1)
+        failure = self.failureResultOf(client_done, HttpTimeoutError)
+        self.assertEqual(
+            failure.getErrorMessage(), "Timeout while receiving data")
+        yield self.assertFailure(request_done, ConnectionDone)
 
 
 class TestPkgResources(VumiTestCase):
