@@ -26,6 +26,7 @@ class MTechKenyaTransport(HttpRpcTransport):
     """
 
     transport_type = 'sms'
+    agent_factory = None  # For swapping out the Agent we use in tests.
 
     CONFIG_CLASS = MTechKenyaTransportConfig
 
@@ -41,7 +42,8 @@ class MTechKenyaTransport(HttpRpcTransport):
         config = self.get_static_config()
         url = '%s?%s' % (config.outbound_url, urlencode(params))
         log.msg("Making HTTP request: %s" % (url,))
-        return http_request_full(url, '', method='POST')
+        return http_request_full(
+            url, '', method='POST', agent_class=self.agent_factory)
 
     @inlineCallbacks
     def handle_outbound_message(self, message):
@@ -103,4 +105,4 @@ class MTechKenyaTransportV2(MTechKenyaTransport):
         config = self.get_static_config()
         return http_request_full(
             config.outbound_url, urlencode(params), method='POST',
-            headers=self.headers)
+            headers=self.headers, agent_class=self.agent_factory)
