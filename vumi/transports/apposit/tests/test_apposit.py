@@ -6,9 +6,9 @@ from urllib import urlencode
 from twisted.web import http
 from twisted.internet.defer import inlineCallbacks, DeferredQueue
 
-from vumi.tests.utils import MockHttpServer
 from vumi.utils import http_request_full
 from vumi.transports.apposit import AppositTransport
+from vumi.tests.fake_connection import FakeHttpServer
 from vumi.tests.helpers import VumiTestCase
 from vumi.transports.tests.helpers import TransportHelper
 
@@ -17,12 +17,11 @@ class TestAppositTransport(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self.mock_server = MockHttpServer(self.handle_inbound_request)
+        self.fake_http = FakeHttpServer(self.handle_inbound_request)
         self.outbound_requests = DeferredQueue()
-        self.mock_server_response = ''
-        self.mock_server_response_code = http.OK
-        yield self.mock_server.start()
-        self.add_cleanup(self.mock_server.stop)
+        self.fake_http_response = ''
+        self.fake_http_response_code = http.OK
+        self.base_url = "http://apposit.example.com/"
 
         config = {
             'web_path': 'api/v1/apposit/sms',
@@ -39,13 +38,14 @@ class TestAppositTransport(VumiTestCase):
                     'service_id': 'service-id-2',
                 }
             },
-            'outbound_url': self.mock_server.url,
+            'outbound_url': self.base_url,
         }
         self.tx_helper = self.add_helper(
             TransportHelper(
                 AppositTransport, transport_addr='8123',
                 mobile_addr='251911223344'))
         self.transport = yield self.tx_helper.get_transport(config)
+        self.transport.agent_factory = self.fake_http.get_agent
         self.transport_url = self.transport.get_transport_url()
         self.web_path = config['web_path']
 
@@ -69,12 +69,12 @@ class TestAppositTransport(VumiTestCase):
 
     def handle_inbound_request(self, request):
         self.outbound_requests.put(request)
-        request.setResponseCode(self.mock_server_response_code)
-        return self.mock_server_response
+        request.setResponseCode(self.fake_http_response_code)
+        return self.fake_http_response
 
-    def set_mock_server_response(self, code=http.OK, body=''):
-        self.mock_server_response_code = code
-        self.mock_server_response = body
+    def set_fake_http_response(self, code=http.OK, body=''):
+        self.fake_http_response_code = code
+        self.fake_http_response = body
 
     def assert_outbound_request(self, request, **kwargs):
         expected_args = {
@@ -88,7 +88,7 @@ class TestAppositTransport(VumiTestCase):
         }
         expected_args.update(kwargs)
 
-        self.assertEqual(request.path, '/')
+        self.assertEqual(request.path, self.base_url)
         self.assertEqual(request.method, 'POST')
         self.assertEqual(dict((k, [v]) for k, v in expected_args.iteritems()),
                          request.args)
@@ -131,7 +131,8 @@ class TestAppositTransport(VumiTestCase):
         })
 
         [msg] = self.tx_helper.get_dispatched_inbound()
-        self.assert_message_fields(msg,
+        self.assert_message_fields(
+            msg,
             transport_name=self.tx_helper.transport_name,
             transport_type='sms',
             from_addr='251911223344',
@@ -220,7 +221,8 @@ class TestAppositTransport(VumiTestCase):
         msg1 = yield self.tx_helper.make_dispatch_outbound(
             'so many dynamos', from_addr='8123')
         request1 = yield self.outbound_requests.get()
-        self.assert_outbound_request(request1,
+        self.assert_outbound_request(
+            request1,
             fromAddress='8123',
             username='root',
             password='toor',
@@ -229,7 +231,8 @@ class TestAppositTransport(VumiTestCase):
         msg2 = yield self.tx_helper.make_dispatch_outbound(
             'so many dynamos', from_addr='8124')
         request2 = yield self.outbound_requests.get()
-        self.assert_outbound_request(request2,
+        self.assert_outbound_request(
+            request2,
             fromAddress='8124',
             username='admin',
             password='nimda',
@@ -251,7 +254,7 @@ class TestAppositTransport(VumiTestCase):
     @inlineCallbacks
     def test_outbound_requests_for_known_error_responses(self):
         code = '102999'
-        self.set_mock_server_response(http.BAD_REQUEST, code)
+        self.set_fake_http_response(http.BAD_REQUEST, code)
 
         msg = yield self.tx_helper.make_dispatch_outbound('racecar')
 
@@ -262,7 +265,7 @@ class TestAppositTransport(VumiTestCase):
     @inlineCallbacks
     def test_outbound_requests_for_unknown_error_responses(self):
         code = '103000'
-        self.set_mock_server_response(http.BAD_REQUEST, code)
+        self.set_fake_http_response(http.BAD_REQUEST, code)
 
         msg = yield self.tx_helper.make_dispatch_outbound("so many dynamos")
 
@@ -277,5 +280,6 @@ class TestAppositTransport(VumiTestCase):
             "so many dynamos", transport_type=transport_type)
 
         [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
-        self.assert_nack(nack, msg,
+        self.assert_nack(
+            nack, msg,
             self.transport.UNSUPPORTED_TRANSPORT_TYPE_ERROR % transport_type)
