@@ -3,9 +3,40 @@ from twisted.internet.task import Clock
 from twisted.words.xish import domish
 
 from vumi.tests.helpers import VumiTestCase
-from vumi.transports.xmpp.xmpp import XMPPTransport
-from vumi.transports.xmpp.tests import test_xmpp_stubs
+from vumi.transports.xmpp.xmpp import (
+    XMPPTransport, XMPPClient, XMPPTransportProtocol)
 from vumi.transports.tests.helpers import TransportHelper
+
+
+class DummyXMLStream(object):
+
+    def __init__(self):
+        self.outbox = []
+
+    def send(self, message):
+        self.outbox.append(message)
+
+    def addObserver(self, event, observerfn, *args, **kwargs):
+        """Ignore."""
+
+
+class DummyXMPPClient(XMPPClient):
+    def __init__(self, *args, **kw):
+        XMPPClient.__init__(self, *args, **kw)
+        self._connection = None
+
+    def startService(self):
+        pass
+
+    def stopService(self):
+        pass
+
+
+class DummyXMPPTransportProtocol(XMPPTransportProtocol):
+
+    def __init__(self, *args, **kwargs):
+        XMPPTransportProtocol.__init__(self, *args, **kwargs)
+        self.xmlstream = DummyXMLStream()
 
 
 class TestXMPPTransport(VumiTestCase):
@@ -23,8 +54,8 @@ class TestXMPPTransport(VumiTestCase):
             'transport_type': 'xmpp',
         }, start=False)
 
-        transport._xmpp_protocol = test_xmpp_stubs.TestXMPPTransportProtocol
-        transport._xmpp_client = test_xmpp_stubs.TestXMPPClient
+        transport._xmpp_protocol = DummyXMPPTransportProtocol
+        transport._xmpp_client = DummyXMPPClient
         transport.ping_call.clock = Clock()
         transport.presence_call.clock = Clock()
         yield transport.startWorker()
@@ -104,7 +135,7 @@ class TestXMPPTransport(VumiTestCase):
         self.assertTrue(transport.ping_call.running)
 
         # Stub output stream
-        xmlstream = test_xmpp_stubs.TestXMLStream()
+        xmlstream = DummyXMLStream()
         transport.xmpp_client.xmlstream = xmlstream
         transport.pinger.xmlstream = xmlstream
 
@@ -131,7 +162,7 @@ class TestXMPPTransport(VumiTestCase):
         self.assertFalse(transport.presence_call.running)
 
         # Stub output stream
-        xmlstream = test_xmpp_stubs.TestXMLStream()
+        xmlstream = DummyXMLStream()
         transport.xmpp_client.xmlstream = xmlstream
         transport.xmpp_client._initialized = True
         transport.presence.xmlstream = xmlstream
@@ -148,7 +179,8 @@ class TestXMPPTransport(VumiTestCase):
         self.assertTrue(transport.presence_call.running)
 
         [presence] = xmlstream.outbox
-        self.assertEqual(presence.toXml(),
+        self.assertEqual(
+            presence.toXml(),
             u"<presence><status>chat</status></presence>")
 
     @inlineCallbacks

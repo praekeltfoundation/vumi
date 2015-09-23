@@ -5,7 +5,7 @@ from vumi import log
 from vumi.tests.helpers import VumiTestCase
 
 
-class TestException(Exception):
+class TracerException(Exception):
     pass
 
 
@@ -32,16 +32,16 @@ class TestVumiLog(VumiTestCase):
             ('ERROR', log.error),
             ('CRITICAL', log.critical),
         ]
-        self.add_cleanup(self.flushLoggedErrors, TestException)
+        self.add_cleanup(self.flushLoggedErrors, TracerException)
         for label, logger in levels:
             entry = 'foo %s' % (label,)
             lc = LogCatcher()
             with lc:
-                logger(TestException(entry))
+                logger(TracerException(entry))
             entry = lc.logs[0]
             self.assertTrue(entry['isError'])
             self.assertEqual(entry['logLevel'], getattr(logging, label))
             self.assertEqual(entry['message'], ())
             failure = entry['failure']
-            exception = failure.trap(TestException)
-            self.assertEqual(exception, TestException)
+            exception = failure.trap(TracerException)
+            self.assertEqual(exception, TracerException)

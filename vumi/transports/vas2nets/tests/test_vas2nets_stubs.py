@@ -29,7 +29,7 @@ def create_request(params={}, path='/', method='POST'):
     return request
 
 
-class TestResource(Resource):
+class DummyResource(Resource):
     isLeaf = True
 
     def inc_receipts(self):
@@ -50,10 +50,10 @@ class TestResource(Resource):
         return ''
 
 
-class TestWorker(Worker):
+class DummyWorker(Worker):
     @inlineCallbacks
     def startWorker(self):
-        self.test_resource = TestResource()
+        self.test_resource = DummyResource()
         self.test_resource.receipts = 0
         self.resource = yield self.start_web_resources(
             [
@@ -85,7 +85,7 @@ class TestFakeVas2NetsWorker(VumiTestCase):
         self.worker = yield self.worker_helper.get_worker(
             StubbedFakeVas2NetsWorker, self.config, start=False)
         self.test_worker = yield self.worker_helper.get_worker(
-            TestWorker, self.config, start=False)
+            DummyWorker, self.config, start=False)
         self.today = datetime.utcnow().date()
 
     def render_request(self, resource, request):
@@ -149,13 +149,11 @@ class TestFakeVas2NetsWorker(VumiTestCase):
         }
 
         agent = Agent(reactor)
-        response = yield agent.request('POST', self.config['url'],
-            Headers({
+        response = yield agent.request(
+            'POST', self.config['url'], Headers({
                 'User-Agent': ['Vumi Vas2Net Transport'],
                 'Content-Type': ['application/x-www-form-urlencoded'],
-            }),
-            StringProducer(urlencode(params))
-        )
+            }), StringProducer(urlencode(params)))
 
         log.msg('Headers', list(response.headers.getAllRawHeaders()))
         self.assertTrue(response.headers.hasHeader('X-Nth-Smsid'))
