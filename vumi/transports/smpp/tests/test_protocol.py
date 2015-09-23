@@ -172,6 +172,7 @@ class TestEsmeProtocol(VumiTestCase):
     @inlineCallbacks
     def test_deliver_sm_fail(self):
         yield self.get_protocol()
+        yield self.fake_smsc.bind()
         yield self.fake_smsc.send_pdu(DeliverSM(
             sequence_number=0, message_id='foo', data_coding=4,
             short_message='string with unknown data coding'))
@@ -185,6 +186,7 @@ class TestEsmeProtocol(VumiTestCase):
         yield self.get_protocol({
             "deliver_sm_decoding_error": "ESME_RSYSERR"
         })
+        yield self.fake_smsc.bind()
         yield self.fake_smsc.send_pdu(DeliverSM(
             sequence_number=0, message_id='foo', data_coding=4,
             short_message='string with unknown data coding'))
