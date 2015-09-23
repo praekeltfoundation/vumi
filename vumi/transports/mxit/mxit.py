@@ -61,6 +61,7 @@ class MxitTransport(HttpRpcTransport):
     transport_type = 'mxit'
     access_token_key = 'access_token'
     access_token_auto_decay = 0.95
+    agent_factory = None  # For swapping out the Agent we use in tests.
 
     @inlineCallbacks
     def setup_transport(self):
@@ -195,8 +196,9 @@ class MxitTransport(HttpRpcTransport):
             'grant_type': 'client_credentials',
             'scope': ' '.join(config.api_auth_scopes)
         })
-        response = yield http_request_full(url=url, method='POST',
-                                           headers=headers, data=data)
+        response = yield http_request_full(
+            url=url, method='POST', headers=headers, data=data,
+            agent_class=self.agent_factory)
         data = json.loads(response.delivered_body)
         if 'error' in data:
             raise MxitTransportException(
@@ -222,10 +224,10 @@ class MxitTransport(HttpRpcTransport):
             "Spool": "true",
         }
         context_factory = None
-        resp = yield http_request_full(
+        yield http_request_full(
             config.api_send_url, data=json.dumps(data), headers=headers,
             method="POST", timeout=config.timeout,
-            context_factory=context_factory)
+            context_factory=context_factory, agent_class=self.agent_factory)
 
     @inlineCallbacks
     def render_response(self, message):
