@@ -29,6 +29,7 @@ class CellulantSmsTransport(HttpRpcTransport):
     """
 
     transport_type = 'sms'
+    agent_factory = None  # For swapping out the Agent we use in tests.
 
     CONFIG_CLASS = CellulantSmsTransportConfig
 
@@ -64,7 +65,8 @@ class CellulantSmsTransport(HttpRpcTransport):
         log.msg("Sending outbound message: %s" % (message,))
         url = '%s?%s' % (self._outbound_url, urlencode(params))
         log.msg("Making HTTP request: %s" % (url,))
-        response = yield http_request_full(url, '', method='GET')
+        response = yield http_request_full(
+            url, '', method='GET', agent_class=self.agent_factory)
         log.msg("Response: (%s) %r" % (response.code, response.delivered_body))
         content = response.delivered_body.strip()
 
@@ -72,16 +74,16 @@ class CellulantSmsTransport(HttpRpcTransport):
         # return this on a valid ack
         if content == '1':
             yield self.publish_ack(user_message_id=message['message_id'],
-                                sent_message_id=message['message_id'])
+                                   sent_message_id=message['message_id'])
         else:
-            error = self.KNOWN_ERROR_RESPONSE_CODES.get(content,
-                'Unknown response code: %s' % (content,))
+            error = self.KNOWN_ERROR_RESPONSE_CODES.get(
+                content, 'Unknown response code: %s' % (content,))
             yield self.publish_nack(message['message_id'], error)
 
     @inlineCallbacks
     def handle_raw_inbound_message(self, message_id, request):
-        values, errors = self.get_field_values(request, self.EXPECTED_FIELDS,
-                                                self.IGNORED_FIELDS)
+        values, errors = self.get_field_values(
+            request, self.EXPECTED_FIELDS, self.IGNORED_FIELDS)
         if errors:
             log.msg('Unhappy incoming message: %s' % (errors,))
             yield self.finish_request(message_id, json.dumps(errors), code=400)
