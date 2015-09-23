@@ -1,15 +1,15 @@
 import base64
 import json
 
-from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.defer import inlineCallbacks, returnValue, DeferredQueue
 from twisted.internet.error import ConnectionLost
 from twisted.internet.task import Clock
 from twisted.web.server import NOT_DONE_YET
 from twisted.python.failure import Failure
 
 from vumi.message import TransportUserMessage
+from vumi.tests.fake_connection import FakeHttpServer
 from vumi.tests.helpers import VumiTestCase
-from vumi.tests.utils import MockHttpServer
 from vumi.transports.tests.helpers import TransportHelper
 from vumi.transports.vumi_bridge import (
     GoConversationClientTransport, GoConversationServerTransport)
@@ -21,28 +21,25 @@ class TestGoConversationTransportBase(VumiTestCase):
 
     transport_class = None
 
-    @inlineCallbacks
     def setUp(self):
         self.tx_helper = self.add_helper(TransportHelper(self.transport_class))
-        self.mock_server = MockHttpServer(self.handle_inbound_request)
-        self.add_cleanup(self.mock_server.stop)
+        self.fake_http = FakeHttpServer(self.handle_inbound_request)
         self.clock = Clock()
-
-        yield self.mock_server.start()
-
+        self._request_queue = DeferredQueue()
         self._pending_reqs = []
         self.add_cleanup(self.finish_requests)
 
     @inlineCallbacks
     def get_transport(self, **config):
         defaults = {
-            'base_url': self.mock_server.url,
             'account_key': 'account-key',
             'conversation_key': 'conversation-key',
             'access_token': 'access-token',
         }
         defaults.update(config)
-        transport = yield self.tx_helper.get_transport(defaults)
+        transport = yield self.tx_helper.get_transport(defaults, start=False)
+        transport.agent_factory = self.fake_http.get_agent
+        yield transport.startWorker()
         yield self.setup_transport(transport)
         returnValue(transport)
 
@@ -56,12 +53,12 @@ class TestGoConversationTransportBase(VumiTestCase):
                 yield req.finish()
 
     def handle_inbound_request(self, request):
-        self.mock_server.queue.put(request)
+        self._request_queue.put(request)
         return NOT_DONE_YET
 
     @inlineCallbacks
     def get_next_request(self):
-        req = yield self.mock_server.queue.get()
+        req = yield self._request_queue.get()
         self._pending_reqs.append(req)
         returnValue(req)
 
@@ -103,12 +100,13 @@ class TestGoConversationTransport(TestGoConversationTransportBase):
     @inlineCallbacks
     def test_req_path(self):
         yield self.get_transport()
+        base_url = "https://go.vumi.org/api/v1/go/http_api/"
         self.assertEqual(
             self.message_req.path,
-            '/conversation-key/messages.json')
+            base_url + 'conversation-key/messages.json')
         self.assertEqual(
             self.event_req.path,
-            '/conversation-key/events.json')
+            base_url + 'conversation-key/events.json')
 
     @inlineCallbacks
     def test_receiving_messages(self):
@@ -133,7 +131,7 @@ class TestGoConversationTransport(TestGoConversationTransportBase):
 
     @inlineCallbacks
     def test_sending_messages(self):
-        yield self.get_transport()
+        tx = yield self.get_transport()
         msg = self.tx_helper.make_outbound(
             "outbound", session_event=TransportUserMessage.SESSION_CLOSE)
         d = self.tx_helper.dispatch_outbound(msg)

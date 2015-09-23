@@ -79,6 +79,8 @@ class VumiBridgeServerTransportConfig(VumiBridgeClientTransportConfig):
 
 class GoConversationTransportBase(Transport):
 
+    agent_factory = None  # For swapping out the Agent we use in tests.
+
     def get_url(self, path):
         config = self.get_static_config()
         url = '/'.join([
@@ -126,7 +128,8 @@ class GoConversationTransportBase(Transport):
             self.get_url('messages.json'),
             data=json.dumps(params).encode('utf-8'),
             headers=headers,
-            method='PUT')
+            method='PUT',
+            agent_class=self.agent_factory)
 
         if resp.code != http.OK:
             log.warning('Unexpected status code: %s, body: %s' % (
@@ -177,7 +180,7 @@ class GoConversationClientTransport(GoConversationTransportBase):
         self.retries = 0
         self.delay = config.initial_delay
         self.reconnect_call = None
-        self.client = StreamingClient()
+        self.client = StreamingClient(self.agent_factory)
         self.connect_api_clients()
 
     def teardown_transport(self):
