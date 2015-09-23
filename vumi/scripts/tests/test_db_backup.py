@@ -9,18 +9,18 @@ from vumi.scripts.db_backup import ConfigHolder, Options, vumi_version
 from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 
 
-class TestConfigHolder(ConfigHolder):
+class ConfigHolderWrapper(ConfigHolder):
     def __init__(self, testcase, *args, **kwargs):
         self.testcase = testcase
         self.output = []
         self.utcnow = None
-        super(TestConfigHolder, self).__init__(*args, **kwargs)
+        super(ConfigHolderWrapper, self).__init__(*args, **kwargs)
 
     def emit(self, s):
         self.output.append(s)
 
     def get_utcnow(self):
-        self.utcnow = super(TestConfigHolder, self).get_utcnow()
+        self.utcnow = super(ConfigHolderWrapper, self).get_utcnow()
         return self.utcnow
 
     def get_redis(self, config):
@@ -38,7 +38,7 @@ class DbBackupBaseTestCase(VumiTestCase):
     def make_cfg(self, args):
         options = Options()
         options.parseOptions(args)
-        return TestConfigHolder(self, options)
+        return ConfigHolderWrapper(self, options)
 
     def mkfile(self, data):
         name = self.mktemp()
