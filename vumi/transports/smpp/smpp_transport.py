@@ -407,7 +407,10 @@ class SmppTransceiverTransport(Transport):
             user_message_id=message_id,
             delivery_status=delivery_status)
 
-        yield self.message_stash.delete_remote_message_id(receipted_message_id)
+        if delivery_status in ('delivered', 'failed'):
+            yield self.message_stash.delete_remote_message_id(
+                receipted_message_id)
+
         returnValue(dr)
 
 
