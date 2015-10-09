@@ -1062,7 +1062,6 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         transport = yield self.get_transport()
         transport_config = transport.get_static_config()
         msg = self.tx_helper.make_outbound('hello world')
-
         yield self.tx_helper.dispatch_outbound(msg)
         submit_sm_pdu = yield self.fake_smsc.await_pdu()
         yield self.fake_smsc.handle_pdu(
@@ -1084,6 +1083,30 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         [event] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(event['event_type'], 'ack')
         self.assertEqual(event['user_message_id'], msg['message_id'])
+
+    @inlineCallbacks
+    def test_mt_sms_remote_id_stored_only_on_rok(self):
+        transport = yield self.get_transport()
+
+        yield self.tx_helper.make_dispatch_outbound("msg1")
+        submit_sm1 = yield self.fake_smsc.await_pdu()
+        response = SubmitSMResp(
+            seq_no(submit_sm1), "remote_1", command_status="ESME_RSUBMITFAIL")
+        self.fake_smsc.send_pdu(response)
+
+        yield self.tx_helper.make_dispatch_outbound("msg2")
+        submit_sm2 = yield self.fake_smsc.await_pdu()
+        response = SubmitSMResp(
+            seq_no(submit_sm2), "remote_2", command_status="ESME_ROK")
+        self.fake_smsc.send_pdu(response)
+
+        yield self.tx_helper.wait_for_dispatched_events(2)
+
+        self.assertFalse(
+            (yield transport.redis.exists(remote_message_key('remote_1'))))
+
+        self.assertTrue(
+            (yield transport.redis.exists(remote_message_key('remote_2'))))
 
     @inlineCallbacks
     def test_mt_sms_unicode(self):

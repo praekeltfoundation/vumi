@@ -318,8 +318,14 @@ class EsmeProtocol(Protocol):
         """
         message_stash = self.service.message_stash
         d = message_stash.get_sequence_number_message_id(sequence_number)
-        d.addCallback(
-            message_stash.set_remote_message_id, smpp_message_id)
+
+        # only set the remote message id if the submission was successful, we
+        # use remote message ids for delivery reports, so we won't need remote
+        # message ids for failed submissions
+        if command_status == 'ESME_ROK':
+            d.addCallback(
+                message_stash.set_remote_message_id, smpp_message_id)
+
         d.addCallback(
             self._handle_submit_sm_resp_callback, smpp_message_id,
             command_status, sequence_number)
