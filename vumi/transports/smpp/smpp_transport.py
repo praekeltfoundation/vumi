@@ -236,6 +236,10 @@ class SmppMessageDataStash(object):
     def get_internal_message_id(self, smpp_message_id):
         return self.redis.get(remote_message_key(smpp_message_id))
 
+    def delete_remote_message_id(self, smpp_message_id):
+        key = remote_message_key(smpp_message_id)
+        return self.redis.delete(key)
+
 
 class SmppTransceiverTransport(Transport):
 
@@ -402,6 +406,8 @@ class SmppTransceiverTransport(Transport):
         dr = yield self.publish_delivery_report(
             user_message_id=message_id,
             delivery_status=delivery_status)
+
+        yield self.message_stash.delete_remote_message_id(receipted_message_id)
         returnValue(dr)
 
 

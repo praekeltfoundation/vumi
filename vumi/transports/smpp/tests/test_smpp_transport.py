@@ -1490,6 +1490,21 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
                               "discarded." % self.tx_helper.transport_name,))
 
     @inlineCallbacks
+    def test_delivery_report_delete_stored_remote_id(self):
+        transport = yield self.get_transport()
+        yield transport.message_stash.set_remote_message_id('bar', 'foo')
+
+        pdu = DeliverSM(sequence_number=1, esm_class=4)
+        pdu.add_optional_parameter('receipted_message_id', 'foo')
+        pdu.add_optional_parameter('message_state', 2)
+        yield self.fake_smsc.handle_pdu(pdu)
+
+        yield self.tx_helper.wait_for_dispatched_events(1)
+
+        self.assertFalse(
+            (yield transport.redis.exists(remote_message_key('foo'))))
+
+    @inlineCallbacks
     def test_reconnect(self):
         transport = yield self.get_transport(bind=False)
         connector = transport.connectors[transport.transport_name]
