@@ -113,3 +113,16 @@ class TestBaseTransport(VumiTestCase):
         msg = yield self.tx_helper.make_dispatch_outbound(
             "outbound", endpoint='foo')
         self.assertEqual(msgs, [msg])
+
+    @inlineCallbacks
+    def test_publish_status(self):
+        transport = yield self.tx_helper.get_transport({
+            'transport_name': 'foo'
+        })
+
+        msg = yield transport.publish_status('major', reasons=['many lemons'])
+        self.assertEqual(msg['status'], 'major')
+        self.assertEqual(msg['reasons'], ['many lemons'])
+
+        msgs = self.tx_helper.get_dispatched_statuses('foo.status')
+        self.assertEqual(msgs, [msg])
