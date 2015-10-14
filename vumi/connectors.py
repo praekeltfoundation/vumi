@@ -1,8 +1,9 @@
 from twisted.internet.defer import gatherResults, inlineCallbacks, returnValue
 
 from vumi import log
-from vumi.message import TransportMessage, TransportEvent, TransportUserMessage
 from vumi.middleware import MiddlewareStack
+from vumi.message import (
+    TransportMessage, TransportEvent, TransportUserMessage, TransportStatus)
 
 
 class IgnoreMessage(Exception):
@@ -162,3 +163,28 @@ class ReceiveOutboundConnector(BaseConnector):
         return self.publish_event(TransportEvent(
             user_message_id=msg['message_id'], nack_reason=str(failure.value),
             event_type='nack'))
+
+
+class PublishStatusConnector(BaseConnector):
+    @inlineCallbacks
+    def setup(self):
+        yield self._setup_publisher('status')
+
+    def publish_status(self, msg, endpoint_name=None):
+        return self._publish_message('status', msg, endpoint_name)
+
+
+class ReceiveStatusConnector(BaseConnector):
+    @inlineCallbacks
+    def setup(self):
+        yield self._setup_consumer(
+            'status', TransportStatus, self.default_status_handler)
+
+    def default_status_handler(self, msg):
+        log.warning("No status handler for %r: %r" % (self.name, msg))
+
+    def set_status_handler(self, handler, endpoint_name=None):
+        self._set_endpoint_handler('status', handler, endpoint_name)
+
+    def set_default_status_handler(self, handler):
+        self._set_default_endpoint_handler('status', handler)
