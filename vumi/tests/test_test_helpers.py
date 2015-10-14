@@ -5,7 +5,7 @@ from twisted.internet.defer import Deferred, succeed, inlineCallbacks
 from twisted.trial.unittest import SkipTest, TestCase, FailTest
 
 from vumi.blinkenlights.metrics import MetricMessage
-from vumi.message import TransportUserMessage, TransportEvent
+from vumi.message import TransportUserMessage, TransportEvent, TransportStatus
 from vumi.tests.fake_amqp import FakeAMQPBroker, FakeAMQClient
 from vumi.tests.helpers import (
     VumiTestCase, proxyable, generate_proxies, IHelper, import_skip,
@@ -587,6 +587,16 @@ class TestMessageHelper(TestCase):
             'in_reply_to': msg['message_id'],
         })
 
+    def test_make_status(self):
+        """
+        .make_status() should build a status message.
+        """
+        msg_helper = MessageHelper()
+        msg = msg_helper.make_status('major', reasons=['too many lemons'])
+        self.assertEqual(msg['status'], 'major')
+        self.assertEqual(msg['reasons'], ['too many lemons'])
+        self.assertIsInstance(msg, TransportStatus)
+
 
 class FakeWorker(object):
     def __init__(self, stop_d=succeed(None)):
@@ -925,6 +935,36 @@ class TestWorkerHelper(VumiTestCase):
         dispatched = worker_helper.get_dispatched_outbound()
         self.assertEqual(dispatched, [msg])
 
+    def test_get_dispatched_statuses(self):
+        """
+        WorkerHelper.get_dispatched_statuses() should get status
+        messages dispatched by the broker.
+        """
+        msg_helper = MessageHelper()
+        worker_helper = WorkerHelper()
+        dispatched = worker_helper.get_dispatched_statuses('fooconn')
+        self.assertEqual(dispatched, [])
+        msg = msg_helper.make_status('good')
+        self._add_to_dispatched(
+            worker_helper.broker, 'fooconn.status', msg)
+        dispatched = worker_helper.get_dispatched_statuses('fooconn')
+        self.assertEqual(dispatched, [msg])
+
+    def test_get_dispatched_statuses_no_connector(self):
+        """
+        WorkerHelper.get_dispatched_statuses() should use the default
+        connector if none is passed in.
+        """
+        msg_helper = MessageHelper()
+        worker_helper = WorkerHelper(connector_name='fooconn')
+        dispatched = worker_helper.get_dispatched_statuses()
+        self.assertEqual(dispatched, [])
+        msg = msg_helper.make_status('good')
+        self._add_to_dispatched(
+            worker_helper.broker, 'fooconn.status', msg)
+        dispatched = worker_helper.get_dispatched_statuses()
+        self.assertEqual(dispatched, [msg])
+
     @inlineCallbacks
     def test_wait_for_dispatched_events(self):
         """
@@ -1014,6 +1054,36 @@ class TestWorkerHelper(VumiTestCase):
         msg = msg_helper.make_outbound('message')
         yield self._add_to_dispatched(
             worker_helper.broker, 'fooconn.outbound', msg, kick=True)
+        dispatched = success_result_of(d)
+        self.assertEqual(dispatched, [msg])
+
+    @inlineCallbacks
+    def test_wait_for_dispatched_statuses(self):
+        """
+        WorkerHelper.wait_for_dispatched_statuses() should wait for
+        status messages dispatched by the broker.
+        """
+        msg_helper = MessageHelper()
+        worker_helper = WorkerHelper()
+        d = worker_helper.wait_for_dispatched_statuses(1, 'fooconn')
+        msg = msg_helper.make_status('good')
+        yield self._add_to_dispatched(
+            worker_helper.broker, 'fooconn.status', msg, kick=True)
+        dispatched = success_result_of(d)
+        self.assertEqual(dispatched, [msg])
+
+    @inlineCallbacks
+    def test_wait_for_dispatched_statuses_no_connector(self):
+        """
+        WorkerHelper.wait_for_dispatched_statuses() should use the default
+        connector if none is passed in.
+        """
+        msg_helper = MessageHelper()
+        worker_helper = WorkerHelper(connector_name='fooconn')
+        d = worker_helper.wait_for_dispatched_statuses(1)
+        msg = msg_helper.make_status('good')
+        yield self._add_to_dispatched(
+            worker_helper.broker, 'fooconn.status', msg, kick=True)
         dispatched = success_result_of(d)
         self.assertEqual(dispatched, [msg])
 
@@ -1112,6 +1182,38 @@ class TestWorkerHelper(VumiTestCase):
         worker_helper.clear_dispatched_outbound()
         self.assertEqual(
             worker_helper.broker.dispatched['vumi']['fooconn.outbound'], [])
+
+    def test_clear_dispatched_statuses(self):
+        """
+        WorkerHelper.clear_dispatched_statuses() should clear status messages
+        dispatched to a particular endpoint from the broker.
+        """
+        msg_helper = MessageHelper()
+        worker_helper = WorkerHelper()
+        msg = msg_helper.make_status('good')
+        self._add_to_dispatched(
+            worker_helper.broker, 'fooconn.status', msg)
+        self.assertNotEqual(
+            worker_helper.broker.dispatched['vumi']['fooconn.status'], [])
+        worker_helper.clear_dispatched_statuses('fooconn')
+        self.assertEqual(
+            worker_helper.broker.dispatched['vumi']['fooconn.status'], [])
+
+    def test_clear_dispatched_statuses_no_connector(self):
+        """
+        WorkerHelper.clear_dispatched_statuses() should use the default
+        connector if none is passed in.
+        """
+        msg_helper = MessageHelper()
+        worker_helper = WorkerHelper(connector_name='fooconn')
+        msg = msg_helper.make_status('good')
+        self._add_to_dispatched(
+            worker_helper.broker, 'fooconn.status', msg)
+        self.assertNotEqual(
+            worker_helper.broker.dispatched['vumi']['fooconn.status'], [])
+        worker_helper.clear_dispatched_statuses()
+        self.assertEqual(
+            worker_helper.broker.dispatched['vumi']['fooconn.status'], [])
 
     @inlineCallbacks
     def test_dispatch_raw(self):
@@ -1230,6 +1332,37 @@ class TestWorkerHelper(VumiTestCase):
         yield worker_helper.dispatch_outbound(msg)
         self.assertEqual(
             broker.get_messages('vumi', 'fooconn.outbound'), [msg])
+
+    @inlineCallbacks
+    def test_dispatch_status(self):
+        """
+        WorkerHelper.dispatch_status() should dispatch an status message.
+        """
+        msg_helper = MessageHelper()
+        worker_helper = WorkerHelper()
+        broker = worker_helper.broker
+        broker.exchange_declare('vumi', 'direct')
+        self.assertEqual(broker.get_messages('vumi', 'fooconn.status'), [])
+        msg = msg_helper.make_status('good')
+        yield worker_helper.dispatch_status(msg, 'fooconn')
+        self.assertEqual(
+            broker.get_messages('vumi', 'fooconn.status'), [msg])
+
+    @inlineCallbacks
+    def test_dispatch_status_no_connector(self):
+        """
+        WorkerHelper.dispatch_status() should use the default connector if
+        none is passed in.
+        """
+        msg_helper = MessageHelper()
+        worker_helper = WorkerHelper(connector_name='fooconn')
+        broker = worker_helper.broker
+        broker.exchange_declare('vumi', 'direct')
+        self.assertEqual(broker.get_messages('vumi', 'fooconn.status'), [])
+        msg = msg_helper.make_status('good')
+        yield worker_helper.dispatch_status(msg)
+        self.assertEqual(
+            broker.get_messages('vumi', 'fooconn.status'), [msg])
 
     def test_get_dispatched_metrics(self):
         """
@@ -1508,7 +1641,7 @@ class TestMessageDispatchHelper(VumiTestCase):
         })
 
     @inlineCallbacks
-    def test_make_reply(self):
+    def test_make_dispatch_reply(self):
         """
         .make_dispatch_reply() should build and dispatch a reply message.
         """
@@ -1528,6 +1661,25 @@ class TestMessageDispatchHelper(VumiTestCase):
             'in_reply_to': msg['message_id'],
         })
 
+    @inlineCallbacks
+    def test_make_dispatch_status(self):
+        """
+        .make_dispatch_status() should build and dispatch a status message.
+        """
+        md_helper = MessageDispatchHelper(
+            MessageHelper(), WorkerHelper('fooconn'))
+        broker = md_helper.worker_helper.broker
+        broker.exchange_declare('vumi', 'direct')
+        self.assertEqual(broker.get_messages('vumi', 'fooconn.outbound'), [])
+        msg = yield md_helper.make_dispatch_status(
+            'major', reasons=['too many lemons'])
+        self.assertEqual(
+            broker.get_messages('vumi', 'fooconn.status'), [msg])
+
+        self.assert_message_fields(msg, {
+            'status': 'major',
+            'reasons': ['too many lemons'],
+        })
 
 class FakeRiakManagerForCleanup(object):
     purged = False

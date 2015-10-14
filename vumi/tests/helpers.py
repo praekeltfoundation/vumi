@@ -14,7 +14,7 @@ from twisted.trial.unittest import TestCase, SkipTest, FailTest
 
 from zope.interface import Interface, implements
 
-from vumi.message import TransportUserMessage, TransportEvent
+from vumi.message import TransportUserMessage, TransportEvent, TransportStatus
 from vumi.service import get_spec
 from vumi.utils import vumi_resource_path, flatten_generator
 from vumi.tests.fake_amqp import FakeAMQPBroker, FakeAMQClient
@@ -634,6 +634,13 @@ class MessageHelper(object):
         """
         return msg.reply(content, **kw)
 
+    @proxyable
+    def make_status(self, status, **kw):
+        """
+        Construct a :class:`~vumi.message.TransportStatus`.
+        """
+        return TransportStatus(status=status, **kw)
+
 
 def _start_and_return_worker(worker):
     return worker.startWorker().addCallback(lambda r: worker)
@@ -825,6 +832,21 @@ class WorkerHelper(object):
             connector_name, 'outbound', TransportUserMessage)
 
     @proxyable
+    def get_dispatched_statuses(self, connector_name=None):
+        """
+        Get statuses dispatched to a connector.
+
+        :param str connector_name:
+            Connector name. If ``None``, the default connector name for the
+            helper instance will be used.
+
+        :returns:
+            A list of :class:`~vumi.message.TransportStatus` instances.
+        """
+        return self.get_dispatched(
+            connector_name, 'status', TransportStatus)
+
+    @proxyable
     def wait_for_dispatched_events(self, amount, connector_name=None):
         """
         Wait for events dispatched to a connector.
@@ -888,6 +910,27 @@ class WorkerHelper(object):
         return d
 
     @proxyable
+    def wait_for_dispatched_statuses(self, amount, connector_name=None):
+        """
+        Wait for statuses dispatched to a connector.
+
+        :param int amount:
+            Number of events to wait for.
+
+        :param str connector_name:
+            Connector name. If ``None``, the default connector name for the
+            helper instance will be used.
+
+        :returns:
+            A :class:`Deferred` that fires with a list of
+            :class:`~vumi.message.TransportEvent` instances.
+        """
+        d = self._wait_for_dispatched(connector_name, 'status', amount)
+        d.addCallback(lambda msgs: [
+            TransportStatus(**msg.payload) for msg in msgs])
+        return d
+
+    @proxyable
     def clear_dispatched_events(self, connector_name=None):
         """
         Clear dispatched events for a connector.
@@ -919,6 +962,17 @@ class WorkerHelper(object):
             helper instance will be used.
         """
         return self._clear_dispatched(connector_name, 'outbound')
+
+    @proxyable
+    def clear_dispatched_statuses(self, connector_name=None):
+        """
+        Clear dispatched statuses for a connector.
+
+        :param str connector_name:
+            Connector name. If ``None``, the default connector name for the
+            helper instance will be used.
+        """
+        return self._clear_dispatched(connector_name, 'status')
 
     @proxyable
     def dispatch_raw(self, routing_key, message, exchange='vumi'):
@@ -1004,6 +1058,26 @@ class WorkerHelper(object):
         """
         return self.dispatch_raw(
             self._rkey(connector_name, 'event'), message)
+
+    @proxyable
+    def dispatch_status(self, message, connector_name=None):
+        """
+        Dispatch a status.
+
+        :param message:
+            Message to dispatch. Should be a
+            :class:`~vumi.message.TransportStatus` instance.
+
+        :param str connector_name:
+            Connector name. If ``None``, the default connector name for the
+            helper instance will be used.
+
+        :returns:
+            A :class:`Deferred` that fires when all messages have been
+            delivered.
+        """
+        return self.dispatch_raw(
+            self._rkey(connector_name, 'status'), message)
 
     @proxyable
     def kick_delivery(self):
@@ -1159,6 +1233,23 @@ class MessageDispatchHelper(object):
         """
         msg = self.msg_helper.make_reply(*args, **kw)
         d = self.worker_helper.dispatch_outbound(msg)
+        return d.addCallback(lambda r: msg)
+
+    @proxyable
+    def make_dispatch_status(self, *args, **kw):
+        """
+        Construct and dispatch a status.
+
+        This is a wrapper around :meth:`MessageHelper.make_status` (to
+        which all parameters are passed) and
+        :meth:`WorkerHelper.dispatch_status`.
+
+        :returns:
+            A :class:`Deferred` that fires with the constructed message once it
+            has been dispatched.
+        """
+        msg = self.msg_helper.make_status(*args, **kw)
+        d = self.worker_helper.dispatch_status(msg)
         return d.addCallback(lambda r: msg)
 
 
