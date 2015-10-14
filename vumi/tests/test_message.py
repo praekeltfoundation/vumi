@@ -4,6 +4,7 @@ import json
 from vumi.tests.utils import RegexMatcher, UTCNearNow
 from vumi.message import (
     Message, TransportMessage, TransportEvent, TransportUserMessage,
+    TransportStatus, MissingMessageField, InvalidMessageField,
     format_vumi_date, parse_vumi_date, from_json, to_json)
 from vumi.tests.helpers import VumiTestCase
 
@@ -470,3 +471,21 @@ class TransportEventTest(TransportMessageTestMixin, VumiTestCase):
         # self.assertEqual('sphex', msg['transport_name'])
         self.assertEqual('delivered', msg['delivery_status'])
         self.assertEqual({}, msg['helper_metadata'])
+
+
+class TestTransportStatus(VumiTestCase):
+    def test_defaults(self):
+        msg = TransportStatus(status='good')
+        self.assertEqual(msg['reasons'], [])
+        self.assertEqual(msg['details'], {})
+
+    def test_validate_status_present(self):
+        self.assertRaises(MissingMessageField, TransportStatus)
+
+    def test_validate_status_field(self):
+        TransportStatus(status='good')
+        TransportStatus(status='minor')
+        TransportStatus(status='major')
+
+        self.assertRaises(
+            InvalidMessageField, TransportStatus, status='amazing')
