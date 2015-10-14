@@ -12,7 +12,9 @@ from twisted.python import log
 
 from vumi.service import Worker
 from vumi.middleware import setup_middlewares_from_config
-from vumi.connectors import ReceiveInboundConnector, ReceiveOutboundConnector
+from vumi.connectors import (
+    ReceiveInboundConnector, ReceiveOutboundConnector,
+    PublishStatusConnector, ReceiveStatusConnector)
 from vumi.config import Config, ConfigInt
 from vumi.errors import DuplicateConnectorError
 from vumi.utils import generate_worker_id
@@ -201,6 +203,14 @@ class BaseWorker(Worker):
 
     def setup_ro_connector(self, connector_name, middleware=True):
         return self.setup_connector(ReceiveOutboundConnector, connector_name,
+                                    middleware=middleware)
+
+    def setup_publish_status_connector(self, connector_name, middleware=True):
+        return self.setup_connector(PublishStatusConnector, connector_name,
+                                    middleware=middleware)
+
+    def setup_receive_status_connector(self, connector_name, middleware=True):
+        return self.setup_connector(ReceiveStatusConnector, connector_name,
                                     middleware=middleware)
 
     def pause_connectors(self):
