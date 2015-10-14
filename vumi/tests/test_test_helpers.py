@@ -956,7 +956,7 @@ class TestWorkerHelper(VumiTestCase):
         connector if none is passed in.
         """
         msg_helper = MessageHelper()
-        worker_helper = WorkerHelper(connector_name='fooconn')
+        worker_helper = WorkerHelper(status_connector_name='fooconn')
         dispatched = worker_helper.get_dispatched_statuses()
         self.assertEqual(dispatched, [])
         msg = msg_helper.make_status('good')
@@ -1079,7 +1079,7 @@ class TestWorkerHelper(VumiTestCase):
         connector if none is passed in.
         """
         msg_helper = MessageHelper()
-        worker_helper = WorkerHelper(connector_name='fooconn')
+        worker_helper = WorkerHelper(status_connector_name='fooconn')
         d = worker_helper.wait_for_dispatched_statuses(1)
         msg = msg_helper.make_status('good')
         yield self._add_to_dispatched(
@@ -1205,7 +1205,7 @@ class TestWorkerHelper(VumiTestCase):
         connector if none is passed in.
         """
         msg_helper = MessageHelper()
-        worker_helper = WorkerHelper(connector_name='fooconn')
+        worker_helper = WorkerHelper(status_connector_name='fooconn')
         msg = msg_helper.make_status('good')
         self._add_to_dispatched(
             worker_helper.broker, 'fooconn.status', msg)
@@ -1355,7 +1355,7 @@ class TestWorkerHelper(VumiTestCase):
         none is passed in.
         """
         msg_helper = MessageHelper()
-        worker_helper = WorkerHelper(connector_name='fooconn')
+        worker_helper = WorkerHelper(status_connector_name='fooconn')
         broker = worker_helper.broker
         broker.exchange_declare('vumi', 'direct')
         self.assertEqual(broker.get_messages('vumi', 'fooconn.status'), [])
