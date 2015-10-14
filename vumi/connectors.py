@@ -170,8 +170,8 @@ class PublishStatusConnector(BaseConnector):
     def setup(self):
         yield self._setup_publisher('status')
 
-    def publish_status(self, msg, endpoint_name=None):
-        return self._publish_message('status', msg, endpoint_name)
+    def publish_status(self, msg):
+        return self._publish_message('status', msg, endpoint_name=None)
 
 
 class ReceiveStatusConnector(BaseConnector):
@@ -183,8 +183,5 @@ class ReceiveStatusConnector(BaseConnector):
     def default_status_handler(self, msg):
         log.warning("No status handler for %r: %r" % (self.name, msg))
 
-    def set_status_handler(self, handler, endpoint_name=None):
-        self._set_endpoint_handler('status', handler, endpoint_name)
-
-    def set_default_status_handler(self, handler):
+    def set_status_handler(self, handler):
         self._set_default_endpoint_handler('status', handler)

@@ -424,13 +424,3 @@ class TestReceiveStatusConnector(BaseConnectorTestCase):
         msg = self.msg_helper.make_status('good')
         yield self.worker_helper.dispatch_status(msg, 'foo')
         self.assertEqual(msgs, [msg])
-
-    @inlineCallbacks
-    def test_set_default_status_handler(self):
-        msgs = []
-        conn = yield self.mk_connector(connector_name='foo', setup=True)
-        conn.unpause()
-        conn.set_default_status_handler(msgs.append)
-        msg = self.msg_helper.make_status('good')
-        yield self.worker_helper.dispatch_status(msg, 'foo')
-        self.assertEqual(msgs, [msg])
