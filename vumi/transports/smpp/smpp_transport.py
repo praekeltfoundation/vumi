@@ -299,9 +299,9 @@ class SmppTransceiverTransport(Transport):
             message['message_id'], u'Invalid %s: %s' % (field, message[field]))
 
     def on_connection(self):
-        return self.publish_unbound()
+        return self.publish_status_unbound()
 
-    def publish_unbound(self):
+    def publish_status_unbound(self):
         return self.publish_status('smpp', 'major', reasons=[{
             'type': 'unbound',
             'message': 'Connected but not bound',
