@@ -1336,7 +1336,7 @@ class TestWorkerHelper(VumiTestCase):
     @inlineCallbacks
     def test_dispatch_status(self):
         """
-        WorkerHelper.dispatch_status() should dispatch an status message.
+        WorkerHelper.dispatch_status() should dispatch a status message.
         """
         msg_helper = MessageHelper()
         worker_helper = WorkerHelper()
@@ -1670,7 +1670,7 @@ class TestMessageDispatchHelper(VumiTestCase):
             MessageHelper(), WorkerHelper('fooconn'))
         broker = md_helper.worker_helper.broker
         broker.exchange_declare('vumi', 'direct')
-        self.assertEqual(broker.get_messages('vumi', 'fooconn.outbound'), [])
+        self.assertEqual(broker.get_messages('vumi', 'fooconn.status'), [])
         msg = yield md_helper.make_dispatch_status(
             'major', reasons=['too many lemons'])
         self.assertEqual(
