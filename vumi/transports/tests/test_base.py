@@ -3,6 +3,7 @@ from twisted.internet.defer import inlineCallbacks
 from vumi.tests.helpers import VumiTestCase
 from vumi.transports.base import Transport
 from vumi.transports.tests.helpers import TransportHelper
+from vumi.tests.utils import LogCatcher
 
 
 class TestBaseTransport(VumiTestCase):
@@ -117,7 +118,8 @@ class TestBaseTransport(VumiTestCase):
     @inlineCallbacks
     def test_publish_status(self):
         transport = yield self.tx_helper.get_transport({
-            'transport_name': 'foo'
+            'transport_name': 'foo',
+            'publish_status': True
         })
 
         msg = yield transport.publish_status(
@@ -129,3 +131,25 @@ class TestBaseTransport(VumiTestCase):
 
         msgs = self.tx_helper.get_dispatched_statuses('foo.status')
         self.assertEqual(msgs, [msg])
+
+    @inlineCallbacks
+    def test_publish_status_disabled(self):
+        transport = yield self.tx_helper.get_transport({
+            'transport_name': 'foo',
+            'publish_status': False
+        })
+
+        with LogCatcher() as lc:
+            msg = yield transport.publish_status(
+                'a', 'major', reasons=['many lemons'])
+            logs = lc.messages()
+
+        self.assertEqual(msg['component'], 'a')
+        self.assertEqual(msg['status'], 'major')
+        self.assertEqual(msg['reasons'], ['many lemons'])
+
+        msgs = self.tx_helper.get_dispatched_statuses('foo.status')
+        self.assertEqual(msgs, [])
+        self.assertEqual(logs, [
+            "Status publishing disabled for transport 'foo', "
+            "ignoring status %r" % (msg,)])

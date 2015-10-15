@@ -6,10 +6,10 @@ Common infrastructure for transport workers.
 This is likely to get used heavily fast, so try get your changes in early.
 """
 
-from twisted.internet.defer import maybeDeferred, inlineCallbacks
+from twisted.internet.defer import maybeDeferred, inlineCallbacks, succeed
 
 from vumi import log
-from vumi.config import ConfigText
+from vumi.config import ConfigText, ConfigBool
 from vumi.message import TransportUserMessage, TransportEvent, TransportStatus
 from vumi.worker import BaseWorker, then_call
 from vumi.transports.failures import FailureMessage
@@ -24,6 +24,9 @@ class TransportConfig(BaseWorker.CONFIG_CLASS):
     transport_name = ConfigText(
         "The name this transport instance will use to create its queues.",
         required=True, static=True)
+    publish_status = ConfigBool(
+        "Whether status messages should be published by the transport",
+        default=False, static=True)
 
 
 class Transport(BaseWorker):
@@ -50,6 +53,7 @@ class Transport(BaseWorker):
     def _validate_config(self):
         config = self.get_static_config()
         self.transport_name = config.transport_name
+        self._should_publish_status = config.publish_status
         self.validate_config()
 
     @inlineCallbacks
@@ -173,7 +177,14 @@ class Transport(BaseWorker):
         Helper method for publishing a status message.
         """
         msg = TransportStatus(component=component, status=status, **kw)
-        return self.connectors[self.status_connector_name].publish_status(msg)
+
+        if self._should_publish_status:
+            conn = self.connectors[self.status_connector_name]
+            return conn.publish_status(msg)
+        else:
+            log.debug('Status publishing disabled for transport %r, ignoring '
+                      'status %r' % (self.transport_name, msg))
+            return succeed(msg)
 
     def _send_failure_eb(self, f, message):
         self.send_failure(message, f.value, f.getTraceback())
