@@ -298,8 +298,9 @@ class SmppTransceiverTransport(Transport):
         return self.publish_nack(
             message['message_id'], u'Invalid %s: %s' % (field, message[field]))
 
+    @inlineCallbacks
     def on_smpp_bind(self):
-        return self.publish_status_bound()
+        yield self.publish_status_bound()
 
     def publish_status_bound(self):
         return self.publish_status('smpp', 'good', reasons=[{

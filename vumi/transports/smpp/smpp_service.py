@@ -186,9 +186,10 @@ class SmppService(ReconnectingClientService):
         self.throttled = False
         self.transport.unpause_connectors()
 
+    @inlineCallbacks
     def on_smpp_bind(self):
         self.transport.unpause_connectors()
-        return self.transport.on_smpp_bind()
+        yield self.transport.on_smpp_bind()
 
     def on_connection_lost(self):
         return self.transport.pause_connectors()
