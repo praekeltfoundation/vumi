@@ -635,11 +635,11 @@ class MessageHelper(object):
         return msg.reply(content, **kw)
 
     @proxyable
-    def make_status(self, status, **kw):
+    def make_status(self, component, status, **kw):
         """
         Construct a :class:`~vumi.message.TransportStatus`.
         """
-        return TransportStatus(status=status, **kw)
+        return TransportStatus(component=component, status=status, **kw)
 
 
 def _start_and_return_worker(worker):
