@@ -45,6 +45,9 @@ class DummySmppTransport(object):
     def unpause_connectors(self):
         self.paused = False
 
+    def on_smpp_bind_timeout(self):
+        pass
+
 
 class TestSmppService(VumiTestCase):
 

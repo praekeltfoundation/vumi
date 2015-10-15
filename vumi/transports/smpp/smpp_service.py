@@ -189,6 +189,10 @@ class SmppService(ReconnectingClientService):
     def on_smpp_bind(self):
         self.transport.unpause_connectors()
 
+    @inlineCallbacks
+    def on_smpp_bind_timeout(self):
+        yield self.transport.on_smpp_bind_timeout()
+
     def on_connection_lost(self):
         return self.transport.pause_connectors()
 
