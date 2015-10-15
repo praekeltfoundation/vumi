@@ -35,7 +35,11 @@ class TransportHelper(object):
         self.persistence_helper = PersistenceHelper(use_riak=use_riak)
         self.msg_helper = MessageHelper(**msg_helper_args)
         self.transport_name = self.msg_helper.transport_name
-        self.worker_helper = WorkerHelper(self.transport_name)
+
+        self.worker_helper = WorkerHelper(
+            connector_name=self.transport_name,
+            status_connector_name="%s.status" % (self.transport_name,))
+
         self.dispatch_helper = MessageDispatchHelper(
             self.msg_helper, self.worker_helper)
 

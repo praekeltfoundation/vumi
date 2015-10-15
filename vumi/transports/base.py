@@ -6,11 +6,11 @@ Common infrastructure for transport workers.
 This is likely to get used heavily fast, so try get your changes in early.
 """
 
-from twisted.internet.defer import maybeDeferred
+from twisted.internet.defer import maybeDeferred, inlineCallbacks
 
 from vumi import log
 from vumi.config import ConfigText
-from vumi.message import TransportUserMessage, TransportEvent
+from vumi.message import TransportUserMessage, TransportEvent, TransportStatus
 from vumi.worker import BaseWorker, then_call
 from vumi.transports.failures import FailureMessage
 
@@ -43,20 +43,22 @@ class Transport(BaseWorker):
     transport_name = None
     start_message_consumer = True
 
+    @property
+    def status_connector_name(self):
+        return "%s.status" % (self.transport_name,)
+
     def _validate_config(self):
         config = self.get_static_config()
         self.transport_name = config.transport_name
         self.validate_config()
 
+    @inlineCallbacks
     def setup_connectors(self):
-        d = self.setup_ro_connector(self.transport_name)
+        yield self.setup_publish_status_connector(self.status_connector_name)
 
-        def cb(connector):
-            self.add_outbound_handler(
-                self.handle_outbound_message, connector=connector)
-            return connector
-
-        return d.addCallback(cb)
+        ro_connector = yield self.setup_ro_connector(self.transport_name)
+        self.add_outbound_handler(
+            self.handle_outbound_message, connector=ro_connector)
 
     def setup_worker(self):
         """
@@ -165,6 +167,13 @@ class Transport(BaseWorker):
         return self.publish_event(user_message_id=user_message_id,
                                   delivery_status=delivery_status,
                                   event_type='delivery_report', **kw)
+
+    def publish_status(self, status, **kw):
+        """
+        Helper method for publishing a status message.
+        """
+        msg = TransportStatus(status=status, **kw)
+        return self.connectors[self.status_connector_name].publish_status(msg)
 
     def _send_failure_eb(self, f, message):
         self.send_failure(message, f.value, f.getTraceback())

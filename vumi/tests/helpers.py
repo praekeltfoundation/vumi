@@ -667,8 +667,10 @@ class WorkerHelper(object):
 
     implements(IHelper)
 
-    def __init__(self, connector_name=None, broker=None):
+    def __init__(self, connector_name=None, broker=None,
+                 status_connector_name=None):
         self._connector_name = connector_name
+        self._status_connector_name = status_connector_name
         self.broker = broker if broker is not None else FakeAMQPBroker()
         self._workers = []
 
@@ -837,12 +839,15 @@ class WorkerHelper(object):
         Get statuses dispatched to a connector.
 
         :param str connector_name:
-            Connector name. If ``None``, the default connector name for the
-            helper instance will be used.
+            Connector name. If ``None``, the default status connector name for
+            the helper instance will be used.
 
         :returns:
             A list of :class:`~vumi.message.TransportStatus` instances.
         """
+        if connector_name is None:
+            connector_name = self._status_connector_name
+
         return self.get_dispatched(
             connector_name, 'status', TransportStatus)
 
@@ -918,13 +923,16 @@ class WorkerHelper(object):
             Number of events to wait for.
 
         :param str connector_name:
-            Connector name. If ``None``, the default connector name for the
-            helper instance will be used.
+            Connector name. If ``None``, the default status connector name for
+            the helper instance will be used.
 
         :returns:
             A :class:`Deferred` that fires with a list of
             :class:`~vumi.message.TransportEvent` instances.
         """
+        if connector_name is None:
+            connector_name = self._status_connector_name
+
         d = self._wait_for_dispatched(connector_name, 'status', amount)
         d.addCallback(lambda msgs: [
             TransportStatus(**msg.payload) for msg in msgs])
@@ -969,9 +977,12 @@ class WorkerHelper(object):
         Clear dispatched statuses for a connector.
 
         :param str connector_name:
-            Connector name. If ``None``, the default connector name for the
-            helper instance will be used.
+            Connector name. If ``None``, the default status connector name for
+            the helper instance will be used.
         """
+        if connector_name is None:
+            connector_name = self._status_connector_name
+
         return self._clear_dispatched(connector_name, 'status')
 
     @proxyable
@@ -1069,13 +1080,16 @@ class WorkerHelper(object):
             :class:`~vumi.message.TransportStatus` instance.
 
         :param str connector_name:
-            Connector name. If ``None``, the default connector name for the
-            helper instance will be used.
+            Connector name. If ``None``, the default status connector name for
+            the helper instance will be used.
 
         :returns:
             A :class:`Deferred` that fires when all messages have been
             delivered.
         """
+        if connector_name is None:
+            connector_name = self._status_connector_name
+
         return self.dispatch_raw(
             self._rkey(connector_name, 'status'), message)
 
