@@ -189,6 +189,9 @@ class SmppService(ReconnectingClientService):
     def on_smpp_bind(self):
         self.transport.unpause_connectors()
 
+    def on_connection(self):
+        return self.transport.on_connection()
+
     def on_connection_lost(self):
         return self.transport.pause_connectors()
 

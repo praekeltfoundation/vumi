@@ -298,6 +298,15 @@ class SmppTransceiverTransport(Transport):
         return self.publish_nack(
             message['message_id'], u'Invalid %s: %s' % (field, message[field]))
 
+    def on_connection(self):
+        return self.publish_unbound()
+
+    def publish_unbound(self):
+        return self.publish_status('smpp', 'major', reasons=[{
+            'type': 'unbound',
+            'message': 'Connected but not bound',
+        }])
+
     @inlineCallbacks
     def handle_outbound_message(self, message):
         if not self._check_address_valid(message, 'to_addr'):

@@ -92,6 +92,7 @@ class EsmeProtocol(Protocol):
             system_type=self.config.system_type,
             interface_version=self.config.interface_version,
             address_range=self.config.address_range)
+        return self.service.on_connection()
 
     @inlineCallbacks
     def bind(self,
