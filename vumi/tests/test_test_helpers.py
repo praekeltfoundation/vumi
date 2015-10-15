@@ -592,10 +592,16 @@ class TestMessageHelper(TestCase):
         .make_status() should build a status message.
         """
         msg_helper = MessageHelper()
-        msg = msg_helper.make_status('major', reasons=['too many lemons'])
-        self.assertEqual(msg['status'], 'major')
-        self.assertEqual(msg['reasons'], ['too many lemons'])
+        msg = msg_helper.make_status('a', 'major', reasons=['too many lemons'])
+
         self.assertIsInstance(msg, TransportStatus)
+
+        self.assert_message_fields(msg, {
+            'component': 'a',
+            'status': 'major',
+            'reasons': ['too many lemons'],
+        })
+
 
 
 class FakeWorker(object):
@@ -944,7 +950,7 @@ class TestWorkerHelper(VumiTestCase):
         worker_helper = WorkerHelper()
         dispatched = worker_helper.get_dispatched_statuses('fooconn')
         self.assertEqual(dispatched, [])
-        msg = msg_helper.make_status('good')
+        msg = msg_helper.make_status('a', 'good')
         self._add_to_dispatched(
             worker_helper.broker, 'fooconn.status', msg)
         dispatched = worker_helper.get_dispatched_statuses('fooconn')
@@ -959,7 +965,7 @@ class TestWorkerHelper(VumiTestCase):
         worker_helper = WorkerHelper(status_connector_name='fooconn')
         dispatched = worker_helper.get_dispatched_statuses()
         self.assertEqual(dispatched, [])
-        msg = msg_helper.make_status('good')
+        msg = msg_helper.make_status('a', 'good')
         self._add_to_dispatched(
             worker_helper.broker, 'fooconn.status', msg)
         dispatched = worker_helper.get_dispatched_statuses()
@@ -1066,7 +1072,7 @@ class TestWorkerHelper(VumiTestCase):
         msg_helper = MessageHelper()
         worker_helper = WorkerHelper()
         d = worker_helper.wait_for_dispatched_statuses(1, 'fooconn')
-        msg = msg_helper.make_status('good')
+        msg = msg_helper.make_status('a', 'good')
         yield self._add_to_dispatched(
             worker_helper.broker, 'fooconn.status', msg, kick=True)
         dispatched = success_result_of(d)
@@ -1081,7 +1087,7 @@ class TestWorkerHelper(VumiTestCase):
         msg_helper = MessageHelper()
         worker_helper = WorkerHelper(status_connector_name='fooconn')
         d = worker_helper.wait_for_dispatched_statuses(1)
-        msg = msg_helper.make_status('good')
+        msg = msg_helper.make_status('a', 'good')
         yield self._add_to_dispatched(
             worker_helper.broker, 'fooconn.status', msg, kick=True)
         dispatched = success_result_of(d)
@@ -1190,7 +1196,7 @@ class TestWorkerHelper(VumiTestCase):
         """
         msg_helper = MessageHelper()
         worker_helper = WorkerHelper()
-        msg = msg_helper.make_status('good')
+        msg = msg_helper.make_status('a', 'good')
         self._add_to_dispatched(
             worker_helper.broker, 'fooconn.status', msg)
         self.assertNotEqual(
@@ -1206,7 +1212,7 @@ class TestWorkerHelper(VumiTestCase):
         """
         msg_helper = MessageHelper()
         worker_helper = WorkerHelper(status_connector_name='fooconn')
-        msg = msg_helper.make_status('good')
+        msg = msg_helper.make_status('a', 'good')
         self._add_to_dispatched(
             worker_helper.broker, 'fooconn.status', msg)
         self.assertNotEqual(
@@ -1343,7 +1349,7 @@ class TestWorkerHelper(VumiTestCase):
         broker = worker_helper.broker
         broker.exchange_declare('vumi', 'direct')
         self.assertEqual(broker.get_messages('vumi', 'fooconn.status'), [])
-        msg = msg_helper.make_status('good')
+        msg = msg_helper.make_status('a', 'good')
         yield worker_helper.dispatch_status(msg, 'fooconn')
         self.assertEqual(
             broker.get_messages('vumi', 'fooconn.status'), [msg])
@@ -1359,7 +1365,7 @@ class TestWorkerHelper(VumiTestCase):
         broker = worker_helper.broker
         broker.exchange_declare('vumi', 'direct')
         self.assertEqual(broker.get_messages('vumi', 'fooconn.status'), [])
-        msg = msg_helper.make_status('good')
+        msg = msg_helper.make_status('a', 'good')
         yield worker_helper.dispatch_status(msg)
         self.assertEqual(
             broker.get_messages('vumi', 'fooconn.status'), [msg])
@@ -1672,11 +1678,12 @@ class TestMessageDispatchHelper(VumiTestCase):
         broker.exchange_declare('vumi', 'direct')
         self.assertEqual(broker.get_messages('vumi', 'fooconn.status'), [])
         msg = yield md_helper.make_dispatch_status(
-            'major', reasons=['too many lemons'])
+            'a', 'major', reasons=['too many lemons'])
         self.assertEqual(
             broker.get_messages('vumi', 'fooconn.status'), [msg])
 
         self.assert_message_fields(msg, {
+            'component': 'a',
             'status': 'major',
             'reasons': ['too many lemons'],
         })

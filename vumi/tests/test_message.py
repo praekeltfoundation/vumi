@@ -475,17 +475,24 @@ class TransportEventTest(TransportMessageTestMixin, VumiTestCase):
 
 class TestTransportStatus(VumiTestCase):
     def test_defaults(self):
-        msg = TransportStatus(status='good')
+        msg = TransportStatus(
+            component='foo',
+            status='good')
+
         self.assertEqual(msg['reasons'], [])
         self.assertEqual(msg['details'], {})
 
+    def test_validate_component_present(self):
+        self.assertRaises(MissingMessageField, TransportStatus, status='good')
+
     def test_validate_status_present(self):
-        self.assertRaises(MissingMessageField, TransportStatus)
+        self.assertRaises(MissingMessageField, TransportStatus, component='foo')
 
     def test_validate_status_field(self):
-        TransportStatus(status='good')
-        TransportStatus(status='minor')
-        TransportStatus(status='major')
+        TransportStatus(component='foo', status='good')
+        TransportStatus(component='foo', status='minor')
+        TransportStatus(component='foo', status='major')
 
         self.assertRaises(
-            InvalidMessageField, TransportStatus, status='amazing')
+            InvalidMessageField, TransportStatus,
+            component='foo', status='amazing')

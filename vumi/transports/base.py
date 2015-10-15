@@ -168,11 +168,11 @@ class Transport(BaseWorker):
                                   delivery_status=delivery_status,
                                   event_type='delivery_report', **kw)
 
-    def publish_status(self, status, **kw):
+    def publish_status(self, component, status, **kw):
         """
         Helper method for publishing a status message.
         """
-        msg = TransportStatus(status=status, **kw)
+        msg = TransportStatus(component=component, status=status, **kw)
         return self.connectors[self.status_connector_name].publish_status(msg)
 
     def _send_failure_eb(self, f, message):
