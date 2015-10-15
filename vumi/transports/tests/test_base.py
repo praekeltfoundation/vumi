@@ -120,7 +120,10 @@ class TestBaseTransport(VumiTestCase):
             'transport_name': 'foo'
         })
 
-        msg = yield transport.publish_status('major', reasons=['many lemons'])
+        msg = yield transport.publish_status(
+            'a', 'major', reasons=['many lemons'])
+
+        self.assertEqual(msg['component'], 'a')
         self.assertEqual(msg['status'], 'major')
         self.assertEqual(msg['reasons'], ['many lemons'])
 
