@@ -1662,6 +1662,22 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.assertEqual(short_message(submit_sm1), 'hello world 0')
         self.assertEqual(short_message(submit_sm2), 'hello world 1')
 
+    @inlineCallbacks
+    def test_bind_status(self):
+        transport = yield self.get_transport(
+            {'publish_status': True}, bind=False)
+
+        self.tx_helper.clear_dispatched_statuses()
+
+        yield self.fake_smsc.bind()
+
+        [msg] = self.tx_helper.get_dispatched_statuses()
+        self.assertEqual(msg['status'], 'good')
+        self.assertEqual(msg['reasons'], [{
+            'type': 'bound',
+            'message': 'Bound',
+        }])
+
 
 class SmppTransmitterTransportTestCase(SmppTransceiverTransportTestCase):
     transport_class = SmppTransmitterTransport
