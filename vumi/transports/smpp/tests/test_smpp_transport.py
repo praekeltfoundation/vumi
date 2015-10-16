@@ -1758,6 +1758,39 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.assertEqual(msg['message'], 'No longer throttled')
 
     @inlineCallbacks
+    def test_smsc_throttle_reconnect_status(self):
+        transport = yield self.get_transport({
+            'publish_status': True,
+        })
+
+        self.tx_helper.clear_dispatched_statuses()
+
+        msg = self.tx_helper.make_outbound("throttle me")
+        yield self.tx_helper.dispatch_outbound(msg)
+        submit_sm_pdu = yield self.fake_smsc.await_pdu()
+
+        yield self.fake_smsc.handle_pdu(
+            SubmitSMResp(sequence_number=seq_no(submit_sm_pdu),
+                         message_id='foo',
+                         command_status='ESME_RTHROTTLED'))
+
+        yield self.fake_smsc.disconnect()
+        self.tx_helper.clear_dispatched_statuses()
+        self.clock.advance(transport.service.delay)
+
+        yield self.fake_smsc.bind()
+
+        [msg1, msg2, msg3] = self.tx_helper.get_dispatched_statuses()
+
+        self.assertEqual(msg1['type'], 'unbound')
+        self.assertEqual(msg2['type'], 'bound')
+
+        self.assertEqual(msg3['status'], 'minor')
+        self.assertEqual(msg3['component'], 'smpp')
+        self.assertEqual(msg3['type'], 'throttled')
+        self.assertEqual(msg3['message'], 'Throttled')
+
+    @inlineCallbacks
     def test_tps_throttle_status(self):
         yield self.get_transport({
             'publish_status': True,
@@ -1786,6 +1819,36 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.assertEqual(msg['component'], 'smpp')
         self.assertEqual(msg['type'], 'throttled_end')
         self.assertEqual(msg['message'], 'No longer throttled')
+
+    @inlineCallbacks
+    def test_tps_throttle_reconnect_status(self):
+        transport = yield self.get_transport({
+            'publish_status': True,
+            'mt_tps': 2
+        })
+
+        self.tx_helper.clear_dispatched_statuses()
+
+        yield self.tx_helper.make_dispatch_outbound('hello world 1')
+        yield self.tx_helper.make_dispatch_outbound('hello world 2')
+        self.tx_helper.make_dispatch_outbound('hello world 3')
+        yield self.fake_smsc.await_pdus(2)
+
+        yield self.fake_smsc.disconnect()
+        self.tx_helper.clear_dispatched_statuses()
+        self.clock.advance(transport.service.delay)
+
+        yield self.fake_smsc.bind()
+
+        [msg1, msg2, msg3] = self.tx_helper.get_dispatched_statuses()
+
+        self.assertEqual(msg1['type'], 'unbound')
+        self.assertEqual(msg2['type'], 'bound')
+
+        self.assertEqual(msg3['status'], 'minor')
+        self.assertEqual(msg3['component'], 'smpp')
+        self.assertEqual(msg3['type'], 'throttled')
+        self.assertEqual(msg3['message'], 'Throttled')
 
 
 class SmppTransmitterTransportTestCase(SmppTransceiverTransportTestCase):

@@ -319,8 +319,15 @@ class SmppTransceiverTransport(Transport):
     def on_smpp_bind(self):
         yield self.publish_status_bound()
 
+        if self.throttled:
+            yield self.publish_throttled()
+
     @inlineCallbacks
     def on_throttled(self):
+        yield self.publish_throttled()
+
+    @inlineCallbacks
+    def on_throttled_resume(self):
         yield self.publish_throttled()
 
     @inlineCallbacks
