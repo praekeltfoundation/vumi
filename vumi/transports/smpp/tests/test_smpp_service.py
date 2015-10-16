@@ -36,6 +36,9 @@ class DummySmppTransport(object):
 
         self.paused = True
 
+    def on_connection(self):
+        pass
+
     def get_static_config(self):
         return self._static_config
 

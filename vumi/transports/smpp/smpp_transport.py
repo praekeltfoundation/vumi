@@ -298,9 +298,18 @@ class SmppTransceiverTransport(Transport):
         return self.publish_nack(
             message['message_id'], u'Invalid %s: %s' % (field, message[field]))
 
+    def on_connection(self):
+        return self.publish_status_unbound()
+
     @inlineCallbacks
     def on_smpp_bind(self):
         yield self.publish_status_bound()
+
+    def publish_status_unbound(self):
+        return self.publish_status('smpp', 'major', reasons=[{
+            'type': 'unbound',
+            'message': 'Connected but not bound',
+        }])
 
     def publish_status_bound(self):
         return self.publish_status('smpp', 'good', reasons=[{

@@ -1663,6 +1663,26 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.assertEqual(short_message(submit_sm2), 'hello world 1')
 
     @inlineCallbacks
+    def test_connect_status(self):
+        transport = yield self.get_transport(
+            {'publish_status': True}, bind=False)
+
+        # disconnect
+        yield self.fake_smsc.disconnect()
+        self.tx_helper.clear_dispatched_statuses()
+
+        # reconnect
+        self.clock.advance(transport.service.delay)
+        yield self.fake_smsc.await_connected()
+
+        [msg] = self.tx_helper.get_dispatched_statuses()
+        self.assertEqual(msg['status'], 'major')
+        self.assertEqual(msg['reasons'], [{
+            'type': 'unbound',
+            'message': 'Connected but not bound',
+        }])
+
+    @inlineCallbacks
     def test_bind_status(self):
         transport = yield self.get_transport(
             {'publish_status': True}, bind=False)
