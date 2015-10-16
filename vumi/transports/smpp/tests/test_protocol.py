@@ -48,6 +48,8 @@ class DummySmppService(object):
     def on_smpp_bind(self):
         self.paused = False
 
+    def on_smpp_bind_timeout(self):
+        pass
 
 class TestEsmeProtocol(VumiTestCase):
 

@@ -330,6 +330,16 @@ class SmppTransceiverTransport(Transport):
         }])
 
     @inlineCallbacks
+    def on_smpp_bind_timeout(self):
+        yield self.publish_status_bind_timeout()
+
+    def publish_status_bind_timeout(self):
+        return self.publish_status('smpp', 'major', reasons=[{
+            'type': 'bind_timeout',
+            'message': 'Timed out awaiting bind',
+        }])
+
+    @inlineCallbacks
     def handle_outbound_message(self, message):
         if not self._check_address_valid(message, 'to_addr'):
             yield self._reject_for_invalid_address(message, 'to_addr')

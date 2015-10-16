@@ -36,9 +36,6 @@ class DummySmppTransport(object):
 
         self.paused = True
 
-    def on_connection(self):
-        pass
-
     def get_static_config(self):
         return self._static_config
 
@@ -48,7 +45,13 @@ class DummySmppTransport(object):
     def unpause_connectors(self):
         self.paused = False
 
+    def on_connection(self):
+        pass
+
     def on_smpp_bind(self):
+        pass
+
+    def on_smpp_bind_timeout(self):
         pass
 
     def on_smsc_throttle_start(self):
