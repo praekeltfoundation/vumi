@@ -54,10 +54,10 @@ class DummySmppTransport(object):
     def on_smpp_bind_timeout(self):
         pass
 
-    def on_smsc_throttle_start(self):
+    def on_throttled(self):
         pass
 
-    def on_smsc_throttle_stop(self):
+    def on_throttled_end(self):
         pass
 
 
