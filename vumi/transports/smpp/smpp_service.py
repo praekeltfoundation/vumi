@@ -181,7 +181,7 @@ class SmppService(ReconnectingClientService):
         log.msg("Throttling outbound messages.")
         self.throttled = True
         yield self.transport.pause_connectors()
-        yield self.transport.on_throttle_start()
+        yield self.transport.on_throttled()
 
     @inlineCallbacks
     def stop_throttling(self):
@@ -190,7 +190,7 @@ class SmppService(ReconnectingClientService):
         log.msg("No longer throttling outbound messages.")
         self.throttled = False
         self.transport.unpause_connectors()
-        yield self.transport.on_throttle_stop()
+        yield self.transport.on_throttled_end()
 
     @inlineCallbacks
     def on_smpp_bind(self):

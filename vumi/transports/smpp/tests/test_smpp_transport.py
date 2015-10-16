@@ -1754,7 +1754,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         [msg] = self.tx_helper.get_dispatched_statuses()
         self.assertEqual(msg['status'], 'good')
         self.assertEqual(msg['component'], 'smpp')
-        self.assertEqual(msg['type'], 'throttled_stop')
+        self.assertEqual(msg['type'], 'throttled_end')
         self.assertEqual(msg['message'], 'No longer throttled')
 
     @inlineCallbacks
@@ -1784,7 +1784,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         [msg] = self.tx_helper.get_dispatched_statuses()
         self.assertEqual(msg['status'], 'good')
         self.assertEqual(msg['component'], 'smpp')
-        self.assertEqual(msg['type'], 'throttled_stop')
+        self.assertEqual(msg['type'], 'throttled_end')
         self.assertEqual(msg['message'], 'No longer throttled')
 
 

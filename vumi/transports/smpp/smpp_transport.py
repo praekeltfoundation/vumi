@@ -320,12 +320,12 @@ class SmppTransceiverTransport(Transport):
         yield self.publish_status_bound()
 
     @inlineCallbacks
-    def on_throttle_start(self):
+    def on_throttled(self):
         yield self.publish_throttled()
 
     @inlineCallbacks
-    def on_throttle_stop(self):
-        yield self.publish_throttled_stop()
+    def on_throttled_end(self):
+        yield self.publish_throttled_end()
 
     def publish_throttled(self):
         return self.publish_status(
@@ -334,11 +334,11 @@ class SmppTransceiverTransport(Transport):
             type='throttled',
             message='Throttled')
 
-    def publish_throttled_stop(self):
+    def publish_throttled_end(self):
         return self.publish_status(
             status='good',
             component='smpp',
-            type='throttled_stop',
+            type='throttled_end',
             message='No longer throttled')
 
     @inlineCallbacks
