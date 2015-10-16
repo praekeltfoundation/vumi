@@ -395,7 +395,13 @@ class TestPublishStatusConnector(BaseConnectorTestCase):
     @inlineCallbacks
     def test_publish_status(self):
         conn = yield self.mk_connector(connector_name='foo', setup=True)
-        msg = self.msg_helper.make_status('a', 'good')
+
+        msg = self.msg_helper.make_status(
+            status='major',
+            component='foo',
+            type='bar',
+            message='baz')
+
         yield conn.publish_status(msg)
         msgs = self.worker_helper.get_dispatched_statuses('foo')
         self.assertEqual(msgs, [msg])
@@ -408,9 +414,15 @@ class TestReceiveStatusConnector(BaseConnectorTestCase):
     @inlineCallbacks
     def test_default_status_handler(self):
         conn = yield self.mk_connector(connector_name='foo', setup=True)
+        msg = self.msg_helper.make_status(
+            status='major',
+            component='foo',
+            type='bar',
+            message='baz')
+
         with LogCatcher() as lc:
-            conn.default_status_handler(
-                self.msg_helper.make_status('a', 'good'))
+            conn.default_status_handler(msg)
+
             [log] = lc.messages()
             self.assertTrue(
                 log.startswith("No status handler for 'foo'"))
@@ -421,6 +433,12 @@ class TestReceiveStatusConnector(BaseConnectorTestCase):
         conn = yield self.mk_connector(connector_name='foo', setup=True)
         conn.unpause()
         conn.set_status_handler(msgs.append)
-        msg = self.msg_helper.make_status('a', 'good')
+
+        msg = self.msg_helper.make_status(
+            status='major',
+            component='foo',
+            type='bar',
+            message='baz')
+
         yield self.worker_helper.dispatch_status(msg, 'foo')
         self.assertEqual(msgs, [msg])
