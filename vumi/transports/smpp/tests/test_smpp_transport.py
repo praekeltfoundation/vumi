@@ -1734,8 +1734,6 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         }])
 
 
-
-
 class SmppTransmitterTransportTestCase(SmppTransceiverTransportTestCase):
     transport_class = SmppTransmitterTransport
 
