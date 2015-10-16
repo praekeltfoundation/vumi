@@ -190,7 +190,7 @@ class EsmeProtocol(Protocol):
             self.drop_link_call.cancel()
         if self.disconnect_call is not None and self.disconnect_call.active():
             self.disconnect_call.cancel()
-        return self.service.on_connection_lost()
+        return self.service.on_connection_lost(reason)
 
     def is_bound(self):
         """

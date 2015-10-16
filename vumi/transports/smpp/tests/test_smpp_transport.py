@@ -1717,6 +1717,23 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         yield self.fake_smsc.disconnect()
 
     @inlineCallbacks
+    def test_connection_lost_status(self):
+        yield self.get_transport({'publish_status': True})
+
+        self.tx_helper.clear_dispatched_statuses()
+        yield self.fake_smsc.disconnect()
+
+        [msg] = self.tx_helper.get_dispatched_statuses()
+        self.assertEqual(msg['status'], 'major')
+        self.assertEqual(msg['status'], 'major')
+        self.assertEqual(msg['component'], 'smpp')
+        self.assertEqual(msg['type'], 'connection_lost')
+
+        self.assertEqual(
+            msg['message'],
+            'Connection was closed cleanly: Connection done.')
+
+    @inlineCallbacks
     def test_smsc_throttle_status(self):
         yield self.get_transport({
             'publish_status': True,
