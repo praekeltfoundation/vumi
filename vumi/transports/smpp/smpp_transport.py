@@ -306,26 +306,29 @@ class SmppTransceiverTransport(Transport):
         yield self.publish_status_bound()
 
     def publish_status_unbound(self):
-        return self.publish_status('smpp', 'major', reasons=[{
-            'type': 'unbound',
-            'message': 'Connected but not bound',
-        }])
+        return self.publish_status(
+            status='major',
+            component='smpp',
+            type='unbound',
+            message='Connected but not bound')
 
     def publish_status_bound(self):
-        return self.publish_status('smpp', 'good', reasons=[{
-            'type': 'bound',
-            'message': 'Bound',
-        }])
+        return self.publish_status(
+            status='good',
+            component='smpp',
+            type='bound',
+            message='Bound')
 
     @inlineCallbacks
     def on_smpp_bind_timeout(self):
         yield self.publish_status_bind_timeout()
 
     def publish_status_bind_timeout(self):
-        return self.publish_status('smpp', 'major', reasons=[{
-            'type': 'bind_timeout',
-            'message': 'Timed out awaiting bind',
-        }])
+        return self.publish_status(
+            status='major',
+            component='smpp',
+            type='bind_timeout',
+            message='Timed out awaiting bind')
 
     @inlineCallbacks
     def handle_outbound_message(self, message):

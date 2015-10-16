@@ -123,11 +123,15 @@ class TestBaseTransport(VumiTestCase):
         })
 
         msg = yield transport.publish_status(
-            'a', 'major', reasons=['many lemons'])
+            status='major',
+            component='foo',
+            type='bar',
+            message='baz')
 
-        self.assertEqual(msg['component'], 'a')
         self.assertEqual(msg['status'], 'major')
-        self.assertEqual(msg['reasons'], ['many lemons'])
+        self.assertEqual(msg['component'], 'foo')
+        self.assertEqual(msg['type'], 'bar')
+        self.assertEqual(msg['message'], 'baz')
 
         msgs = self.tx_helper.get_dispatched_statuses('foo.status')
         self.assertEqual(msgs, [msg])
@@ -141,12 +145,17 @@ class TestBaseTransport(VumiTestCase):
 
         with LogCatcher() as lc:
             msg = yield transport.publish_status(
-                'a', 'major', reasons=['many lemons'])
+                status='major',
+                component='foo',
+                type='bar',
+                message='baz')
+
             logs = lc.messages()
 
-        self.assertEqual(msg['component'], 'a')
         self.assertEqual(msg['status'], 'major')
-        self.assertEqual(msg['reasons'], ['many lemons'])
+        self.assertEqual(msg['component'], 'foo')
+        self.assertEqual(msg['type'], 'bar')
+        self.assertEqual(msg['message'], 'baz')
 
         msgs = self.tx_helper.get_dispatched_statuses('foo.status')
         self.assertEqual(msgs, [])

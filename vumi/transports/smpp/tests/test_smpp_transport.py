@@ -1677,10 +1677,9 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
         [msg] = self.tx_helper.get_dispatched_statuses()
         self.assertEqual(msg['status'], 'major')
-        self.assertEqual(msg['reasons'], [{
-            'type': 'unbound',
-            'message': 'Connected but not bound',
-        }])
+        self.assertEqual(msg['component'], 'smpp')
+        self.assertEqual(msg['type'], 'unbound')
+        self.assertEqual(msg['message'], 'Connected but not bound')
 
     @inlineCallbacks
     def test_bind_status(self):
@@ -1692,10 +1691,9 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
         [msg] = self.tx_helper.get_dispatched_statuses()
         self.assertEqual(msg['status'], 'good')
-        self.assertEqual(msg['reasons'], [{
-            'type': 'bound',
-            'message': 'Bound',
-        }])
+        self.assertEqual(msg['component'], 'smpp')
+        self.assertEqual(msg['type'], 'bound')
+        self.assertEqual(msg['message'], 'Bound')
 
     @inlineCallbacks
     def test_bind_timeout_status(self):
@@ -1712,10 +1710,9 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
         [msg] = self.tx_helper.get_dispatched_statuses()
         self.assertEqual(msg['status'], 'major')
-        self.assertEqual(msg['reasons'], [{
-            'type': 'bind_timeout',
-            'message': 'Timed out awaiting bind',
-        }])
+        self.assertEqual(msg['component'], 'smpp')
+        self.assertEqual(msg['type'], 'bind_timeout')
+        self.assertEqual(msg['message'], 'Timed out awaiting bind')
 
         yield self.fake_smsc.disconnect()
 
