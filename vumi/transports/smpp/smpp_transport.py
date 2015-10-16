@@ -335,10 +335,11 @@ class SmppTransceiverTransport(Transport):
         yield self.publish_status_connection_lost(reason)
 
     def publish_status_connection_lost(self, reason):
-        return self.publish_status('smpp', 'major', reasons=[{
-            'type': 'connection_lost',
-            'message': str(reason.value),
-        }])
+        return self.publish_status(
+            status='major',
+            component='smpp',
+            type='connection_lost',
+            message=str(reason.value))
 
     @inlineCallbacks
     def handle_outbound_message(self, message):

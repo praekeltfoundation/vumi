@@ -1725,10 +1725,13 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
         [msg] = self.tx_helper.get_dispatched_statuses()
         self.assertEqual(msg['status'], 'major')
-        self.assertEqual(msg['reasons'], [{
-            'type': 'connection_lost',
-            'message': 'Connection was closed cleanly: Connection done.',
-        }])
+        self.assertEqual(msg['status'], 'major')
+        self.assertEqual(msg['component'], 'smpp')
+        self.assertEqual(msg['type'], 'connection_lost')
+
+        self.assertEqual(
+            msg['message'],
+            'Connection was closed cleanly: Connection done.')
 
 
 class SmppTransmitterTransportTestCase(SmppTransceiverTransportTestCase):
