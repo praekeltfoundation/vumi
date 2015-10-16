@@ -320,16 +320,18 @@ class SmppTransceiverTransport(Transport):
             message='Bound')
 
     def on_smsc_throttle_start(self):
-        return self.publish_status('smpp', 'minor', reasons=[{
-            'type': 'smsc_throttle',
-            'message': 'Throttled by SMSC',
-        }])
+        return self.publish_status(
+            status='minor',
+            component='smpp',
+            type='smsc_throttle',
+            message='Throttled by SMSC')
 
     def on_smsc_throttle_stop(self):
-        return self.publish_status('smpp', 'good', reasons=[{
-            'type': 'smsc_throttle_stop',
-            'message': 'No longer throttled by SMSC',
-        }])
+        return self.publish_status(
+            status='good',
+            component='smpp',
+            type='smsc_throttle_stop',
+            message='No longer throttled by SMSC')
 
     @inlineCallbacks
     def on_smpp_bind_timeout(self):

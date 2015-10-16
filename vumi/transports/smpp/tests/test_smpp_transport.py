@@ -1736,11 +1736,9 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
         [msg] = self.tx_helper.get_dispatched_statuses()
         self.assertEqual(msg['status'], 'minor')
-
-        self.assertEqual(msg['reasons'], [{
-            'type': 'smsc_throttle',
-            'message': 'Throttled by SMSC',
-        }])
+        self.assertEqual(msg['component'], 'smpp')
+        self.assertEqual(msg['type'], 'smsc_throttle')
+        self.assertEqual(msg['message'], 'Throttled by SMSC')
 
         self.tx_helper.clear_dispatched_statuses()
         self.clock.advance(3)
@@ -1754,12 +1752,11 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.clock.advance(0)
 
         [msg] = self.tx_helper.get_dispatched_statuses()
-        self.assertEqual(msg['status'], 'good')
 
-        self.assertEqual(msg['reasons'], [{
-            'type': 'smsc_throttle_stop',
-            'message': 'No longer throttled by SMSC',
-        }])
+        self.assertEqual(msg['status'], 'good')
+        self.assertEqual(msg['component'], 'smpp')
+        self.assertEqual(msg['type'], 'smsc_throttle_stop')
+        self.assertEqual(msg['message'], 'No longer throttled by SMSC')
 
 
 class SmppTransmitterTransportTestCase(SmppTransceiverTransportTestCase):
