@@ -79,8 +79,7 @@ class SmppService(ReconnectingClientService):
                 log.msg("Can't stop throttling while unbound, trying later.")
                 return
             self.reset_mt_throttle_counter()
-            yield self.transport.on_tps_throttle_stop()
-            self.stop_throttling()
+            yield self.stop_throttling()
 
     def reset_mt_throttle_counter(self):
         self.tps_counter = 0
@@ -91,7 +90,6 @@ class SmppService(ReconnectingClientService):
     def need_mt_throttling(self):
         return self.tps_counter >= self.tps_limit
 
-    @inlineCallbacks
     def check_mt_throttling(self):
         if self.get_config().mt_tps > 0:
             self.incr_mt_throttle_counter()
@@ -99,8 +97,6 @@ class SmppService(ReconnectingClientService):
                 # We can't yield here, because we need the current message to
                 # finish sending before it will return.
                 self.start_throttling()
-
-                yield self.transport.on_tps_throttle_start()
 
     def _append_throttle_retry(self, seq_no):
         if seq_no not in self._throttled_pdus:
@@ -152,8 +148,7 @@ class SmppService(ReconnectingClientService):
         if not self._throttled_pdus:
             # We have no throttled messages waiting, so stop throttling.
             log.msg("No more throttled messages to retry.")
-            self.stop_throttling()
-            yield self.transport.on_smsc_throttle_stop()
+            yield self.stop_throttling()
             return
 
         seq_no = self._throttled_pdus.pop(0)
@@ -179,19 +174,23 @@ class SmppService(ReconnectingClientService):
                 pdu_data.vumi_message_id, pdu_data.pdu)
             yield self.message_stash.delete_cached_pdu(seq_no)
 
+    @inlineCallbacks
     def start_throttling(self):
         if self.throttled:
-            return succeed(None)
+            return
         log.msg("Throttling outbound messages.")
         self.throttled = True
-        return self.transport.pause_connectors()
+        yield self.transport.pause_connectors()
+        yield self.transport.on_throttle_start()
 
+    @inlineCallbacks
     def stop_throttling(self):
         if not self.throttled:
             return
         log.msg("No longer throttling outbound messages.")
         self.throttled = False
         self.transport.unpause_connectors()
+        yield self.transport.on_throttle_stop()
 
     @inlineCallbacks
     def on_smpp_bind(self):
@@ -224,10 +223,8 @@ class SmppService(ReconnectingClientService):
     def handle_submit_sm_throttled(self, message_id):
         self._append_throttle_retry(message_id)
         d = self.start_throttling()
-        d.addCallback(lambda _: self.transport.on_smsc_throttle_start())
         return d.addCallback(self.check_stop_throttling_cb)
 
-    @inlineCallbacks
     def submit_sm(self, *args, **kw):
         """
         See :meth:`EsmeProtocol.submit_sm`.
@@ -235,9 +232,8 @@ class SmppService(ReconnectingClientService):
         protocol = self.get_protocol()
         if protocol is None:
             raise EsmeProtocolError('submit_sm called while not connected.')
-        yield self.check_mt_throttling()
-        result = yield protocol.submit_sm(*args, **kw)
-        returnValue(result)
+        self.check_mt_throttling()
+        return protocol.submit_sm(*args, **kw)
 
     def submit_sm_long(self, vumi_message_id, destination_addr, long_message,
                        **pdu_params):
