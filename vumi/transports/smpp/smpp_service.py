@@ -199,8 +199,10 @@ class SmppService(ReconnectingClientService):
     def on_smpp_bind_timeout(self):
         yield self.transport.on_smpp_bind_timeout()
 
-    def on_connection_lost(self):
-        return self.transport.pause_connectors()
+    @inlineCallbacks
+    def on_connection_lost(self, reason):
+        yield self.transport.pause_connectors()
+        yield self.transport.on_connection_lost(reason)
 
     def handle_submit_sm_resp(self, message_id, smpp_id, pdu_status, seq_no):
         if pdu_status in self.throttle_statuses:

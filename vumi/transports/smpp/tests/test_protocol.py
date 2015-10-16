@@ -42,7 +42,7 @@ class DummySmppService(object):
     def on_connection(self):
         pass
 
-    def on_connection_lost(self):
+    def on_connection_lost(self, reason):
         self.paused = True
 
     def on_smpp_bind(self):
@@ -50,6 +50,7 @@ class DummySmppService(object):
 
     def on_smpp_bind_timeout(self):
         pass
+
 
 class TestEsmeProtocol(VumiTestCase):
 
