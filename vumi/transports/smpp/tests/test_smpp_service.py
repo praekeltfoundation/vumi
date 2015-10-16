@@ -51,6 +51,12 @@ class DummySmppTransport(object):
     def on_smpp_bind(self):
         pass
 
+    def on_smsc_throttle_start(self):
+        pass
+
+    def on_smsc_throttle_stop(self):
+        pass
+
 
 class TestSmppService(VumiTestCase):
 

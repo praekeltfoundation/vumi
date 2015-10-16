@@ -113,6 +113,7 @@ class SmppService(ReconnectingClientService):
     def check_stop_throttling_cb(self, ignored_result, delay=None):
         self.check_stop_throttling(delay)
 
+    @inlineCallbacks
     def _check_stop_throttling(self):
         """
         Check if we should stop throttling, and stop throttling if we should.
@@ -147,11 +148,12 @@ class SmppService(ReconnectingClientService):
             # We have no throttled messages waiting, so stop throttling.
             log.msg("No more throttled messages to retry.")
             self.stop_throttling()
+            yield self.transport.on_smsc_throttle_stop()
             return
 
         seq_no = self._throttled_pdus.pop(0)
-        pdu_data_d = self.message_stash.get_cached_pdu(seq_no)
-        return pdu_data_d.addCallback(self.retry_throttled_pdu, seq_no)
+        pdu_data = yield self.message_stash.get_cached_pdu(seq_no)
+        yield self.retry_throttled_pdu(pdu_data, seq_no)
 
     @inlineCallbacks
     def retry_throttled_pdu(self, pdu_data, seq_no):
@@ -195,6 +197,10 @@ class SmppService(ReconnectingClientService):
     def on_connection(self):
         yield self.transport.on_connection()
 
+    @inlineCallbacks
+    def on_smpp_bind_timeout(self):
+        yield self.transport.on_smpp_bind_timeout()
+
     def on_connection_lost(self):
         return self.transport.pause_connectors()
 
@@ -213,6 +219,7 @@ class SmppService(ReconnectingClientService):
     def handle_submit_sm_throttled(self, message_id):
         self._append_throttle_retry(message_id)
         d = self.start_throttling()
+        d.addCallback(lambda _: self.transport.on_smsc_throttle_start())
         return d.addCallback(self.check_stop_throttling_cb)
 
     def submit_sm(self, *args, **kw):

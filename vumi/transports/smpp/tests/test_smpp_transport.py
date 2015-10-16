@@ -1684,7 +1684,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_bind_status(self):
-        transport = yield self.get_transport(
+        yield self.get_transport(
             {'publish_status': True}, bind=False)
 
         self.tx_helper.clear_dispatched_statuses()
@@ -1696,6 +1696,51 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.assertEqual(msg['reasons'], [{
             'type': 'bound',
             'message': 'Bound',
+        }])
+
+    @inlineCallbacks
+    def test_smsc_throttle_status(self):
+        yield self.get_transport({
+            'publish_status': True,
+            'throttle_delay': 3
+        })
+
+        self.tx_helper.clear_dispatched_statuses()
+
+        msg = self.tx_helper.make_outbound("throttle me")
+        yield self.tx_helper.dispatch_outbound(msg)
+        submit_sm_pdu = yield self.fake_smsc.await_pdu()
+
+        yield self.fake_smsc.handle_pdu(
+            SubmitSMResp(sequence_number=seq_no(submit_sm_pdu),
+                         message_id='foo',
+                         command_status='ESME_RTHROTTLED'))
+
+        [msg] = self.tx_helper.get_dispatched_statuses()
+        self.assertEqual(msg['status'], 'minor')
+
+        self.assertEqual(msg['reasons'], [{
+            'type': 'smsc_throttle',
+            'message': 'Throttled by SMSC',
+        }])
+
+        self.tx_helper.clear_dispatched_statuses()
+        self.clock.advance(3)
+
+        submit_sm_pdu_retry = yield self.fake_smsc.await_pdu()
+        yield self.fake_smsc.handle_pdu(
+            SubmitSMResp(sequence_number=seq_no(submit_sm_pdu_retry),
+                         message_id='bar',
+                         command_status='ESME_ROK'))
+
+        self.clock.advance(0)
+
+        [msg] = self.tx_helper.get_dispatched_statuses()
+        self.assertEqual(msg['status'], 'good')
+
+        self.assertEqual(msg['reasons'], [{
+            'type': 'smsc_throttle_stop',
+            'message': 'No longer throttled by SMSC',
         }])
 
 
