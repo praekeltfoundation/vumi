@@ -141,6 +141,7 @@ class EsmeProtocol(Protocol):
         self.drop_link_call = self.clock.callLater(
             self.config.smpp_bind_timeout, self.drop_link)
 
+    @inlineCallbacks
     def drop_link(self):
         """
         Called if the SMPP connection is not bound within
@@ -149,7 +150,9 @@ class EsmeProtocol(Protocol):
         if self.is_bound():
             return
 
-        return self.disconnect(
+        yield self.service.on_smpp_bind_timeout()
+
+        yield self.disconnect(
             'Dropping link due to binding delay. Current state: %s' % (
                 self.state))
 

@@ -1684,8 +1684,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_bind_status(self):
-        transport = yield self.get_transport(
-            {'publish_status': True}, bind=False)
+        yield self.get_transport({'publish_status': True}, bind=False)
 
         self.tx_helper.clear_dispatched_statuses()
 
@@ -1697,6 +1696,28 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
             'type': 'bound',
             'message': 'Bound',
         }])
+
+    @inlineCallbacks
+    def test_bind_timeout_status(self):
+        yield self.get_transport({
+            'publish_status': True,
+            'smpp_bind_timeout': 3,
+        }, bind=False)
+
+        # wait for bind pdu
+        yield self.fake_smsc.await_pdu()
+
+        self.tx_helper.clear_dispatched_statuses()
+        self.clock.advance(3)
+
+        [msg] = self.tx_helper.get_dispatched_statuses()
+        self.assertEqual(msg['status'], 'major')
+        self.assertEqual(msg['reasons'], [{
+            'type': 'bind_timeout',
+            'message': 'Timed out awaiting bind',
+        }])
+
+        yield self.fake_smsc.disconnect()
 
 
 class SmppTransmitterTransportTestCase(SmppTransceiverTransportTestCase):
