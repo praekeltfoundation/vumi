@@ -331,6 +331,16 @@ class SmppTransceiverTransport(Transport):
             message='Timed out awaiting bind')
 
     @inlineCallbacks
+    def on_connection_lost(self, reason):
+        yield self.publish_status_connection_lost(reason)
+
+    def publish_status_connection_lost(self, reason):
+        return self.publish_status('smpp', 'major', reasons=[{
+            'type': 'connection_lost',
+            'message': str(reason.value),
+        }])
+
+    @inlineCallbacks
     def handle_outbound_message(self, message):
         if not self._check_address_valid(message, 'to_addr'):
             yield self._reject_for_invalid_address(message, 'to_addr')
