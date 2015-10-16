@@ -71,6 +71,7 @@ class SmppService(ReconnectingClientService):
     def get_config(self):
         return self.transport.get_static_config()
 
+    @inlineCallbacks
     def reset_mt_tps(self):
         if self.throttled and self.need_mt_throttling():
             if not self.is_bound():
@@ -78,6 +79,7 @@ class SmppService(ReconnectingClientService):
                 log.msg("Can't stop throttling while unbound, trying later.")
                 return
             self.reset_mt_throttle_counter()
+            yield self.transport.on_tps_throttle_stop()
             self.stop_throttling()
 
     def reset_mt_throttle_counter(self):
@@ -89,6 +91,7 @@ class SmppService(ReconnectingClientService):
     def need_mt_throttling(self):
         return self.tps_counter >= self.tps_limit
 
+    @inlineCallbacks
     def check_mt_throttling(self):
         if self.get_config().mt_tps > 0:
             self.incr_mt_throttle_counter()
@@ -96,6 +99,8 @@ class SmppService(ReconnectingClientService):
                 # We can't yield here, because we need the current message to
                 # finish sending before it will return.
                 self.start_throttling()
+
+                yield self.transport.on_tps_throttle_start()
 
     def _append_throttle_retry(self, seq_no):
         if seq_no not in self._throttled_pdus:
@@ -222,6 +227,7 @@ class SmppService(ReconnectingClientService):
         d.addCallback(lambda _: self.transport.on_smsc_throttle_start())
         return d.addCallback(self.check_stop_throttling_cb)
 
+    @inlineCallbacks
     def submit_sm(self, *args, **kw):
         """
         See :meth:`EsmeProtocol.submit_sm`.
@@ -229,8 +235,9 @@ class SmppService(ReconnectingClientService):
         protocol = self.get_protocol()
         if protocol is None:
             raise EsmeProtocolError('submit_sm called while not connected.')
-        self.check_mt_throttling()
-        return protocol.submit_sm(*args, **kw)
+        yield self.check_mt_throttling()
+        result = yield protocol.submit_sm(*args, **kw)
+        returnValue(result)
 
     def submit_sm_long(self, vumi_message_id, destination_addr, long_message,
                        **pdu_params):

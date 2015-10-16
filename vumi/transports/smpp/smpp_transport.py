@@ -298,13 +298,6 @@ class SmppTransceiverTransport(Transport):
         return self.publish_nack(
             message['message_id'], u'Invalid %s: %s' % (field, message[field]))
 
-    def on_connection(self):
-        return self.publish_status_unbound()
-
-    @inlineCallbacks
-    def on_smpp_bind(self):
-        yield self.publish_status_bound()
-
     def publish_status_unbound(self):
         return self.publish_status(
             status='major',
@@ -319,6 +312,13 @@ class SmppTransceiverTransport(Transport):
             type='bound',
             message='Bound')
 
+    def on_connection(self):
+        return self.publish_status_unbound()
+
+    @inlineCallbacks
+    def on_smpp_bind(self):
+        yield self.publish_status_bound()
+
     def on_smsc_throttle_start(self):
         return self.publish_status(
             status='minor',
@@ -332,6 +332,22 @@ class SmppTransceiverTransport(Transport):
             component='smpp',
             type='smsc_throttle_stop',
             message='No longer throttled by SMSC')
+
+    def on_tps_throttle_start(self):
+        return self.publish_status(
+            status='minor',
+            component='smpp',
+            type='tps_throttle',
+            message='Maximum transmissions per second reached, throttled')
+
+    def on_tps_throttle_stop(self):
+        return self.publish_status(
+            status='good',
+            component='smpp',
+            type='tps_throttle_stop',
+            message=(
+                'No longer throttled due to maximum '
+                'transmissions per second'))
 
     @inlineCallbacks
     def on_smpp_bind_timeout(self):

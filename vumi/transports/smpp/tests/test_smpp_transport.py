@@ -1752,11 +1752,46 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.clock.advance(0)
 
         [msg] = self.tx_helper.get_dispatched_statuses()
-
         self.assertEqual(msg['status'], 'good')
         self.assertEqual(msg['component'], 'smpp')
         self.assertEqual(msg['type'], 'smsc_throttle_stop')
         self.assertEqual(msg['message'], 'No longer throttled by SMSC')
+
+    @inlineCallbacks
+    def test_tps_throttle_status(self):
+        yield self.get_transport({
+            'publish_status': True,
+            'mt_tps': 2
+        })
+
+        self.tx_helper.clear_dispatched_statuses()
+
+        yield self.tx_helper.make_dispatch_outbound('hello world 1')
+        yield self.tx_helper.make_dispatch_outbound('hello world 2')
+        self.tx_helper.make_dispatch_outbound('hello world 3')
+        yield self.fake_smsc.await_pdus(2)
+
+        [msg] = self.tx_helper.get_dispatched_statuses()
+        self.assertEqual(msg['status'], 'minor')
+        self.assertEqual(msg['component'], 'smpp')
+        self.assertEqual(msg['type'], 'tps_throttle')
+
+        self.assertEqual(
+            msg['message'],
+            'Maximum transmissions per second reached, throttled')
+
+        self.tx_helper.clear_dispatched_statuses()
+
+        self.clock.advance(1)
+
+        [msg] = self.tx_helper.get_dispatched_statuses()
+        self.assertEqual(msg['status'], 'good')
+        self.assertEqual(msg['component'], 'smpp')
+        self.assertEqual(msg['type'], 'tps_throttle_stop')
+
+        self.assertEqual(
+            msg['message'],
+            'No longer throttled due to maximum transmissions per second')
 
 
 class SmppTransmitterTransportTestCase(SmppTransceiverTransportTestCase):
