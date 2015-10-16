@@ -83,6 +83,7 @@ class EsmeProtocol(Protocol):
         if self.noisy:
             log.debug(msg)
 
+    @inlineCallbacks
     def connectionMade(self):
         self.state = self.OPEN_STATE
         log.msg('Connection made, current state: %s' % (self.state,))
@@ -92,6 +93,7 @@ class EsmeProtocol(Protocol):
             system_type=self.config.system_type,
             interface_version=self.config.interface_version,
             address_range=self.config.address_range)
+        yield self.service.on_connection()
 
     @inlineCallbacks
     def bind(self,

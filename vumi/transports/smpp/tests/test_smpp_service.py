@@ -45,6 +45,12 @@ class DummySmppTransport(object):
     def unpause_connectors(self):
         self.paused = False
 
+    def on_connection(self):
+        pass
+
+    def on_smpp_bind(self):
+        pass
+
     def on_smpp_bind_timeout(self):
         pass
 
