@@ -5,7 +5,7 @@ from vumi.connectors import (
     PublishStatusConnector, ReceiveStatusConnector, IgnoreMessage)
 from vumi.tests.utils import LogCatcher
 from vumi.worker import BaseWorker
-from vumi.message import TransportUserMessage
+from vumi.message import TransportUserMessage, TransportStatus
 from vumi.middleware.tests.utils import RecordingMiddleware
 from vumi.tests.helpers import VumiTestCase, MessageHelper, WorkerHelper
 
