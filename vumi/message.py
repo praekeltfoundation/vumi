@@ -435,7 +435,11 @@ class TransportStatus(TransportMessage):
     """Message about a status event emitted by a transport.
     """
     MESSAGE_TYPE = 'status_event'
-    STATUSES = frozenset(('ok', 'degraded', 'down'))
+
+    STATUS_OK = 'ok'
+    STATUS_DEGRADED = 'degraded'
+    STATUS_DOWN = 'down'
+    STATUSES = frozenset((STATUS_OK, STATUS_DEGRADED, STATUS_DOWN))
 
     def process_fields(self, fields):
         super(TransportStatus, self).process_fields(fields)
