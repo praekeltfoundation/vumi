@@ -1663,6 +1663,15 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.assertEqual(short_message(submit_sm2), 'hello world 1')
 
     @inlineCallbacks
+    def test_starting_status(self):
+        yield self.get_transport({'publish_status': True})
+        [msg] = self.tx_helper.get_dispatched_statuses()[:1]
+        self.assertEqual(msg['status'], 'major')
+        self.assertEqual(msg['component'], 'smpp')
+        self.assertEqual(msg['type'], 'starting')
+        self.assertEqual(msg['message'], 'Starting')
+
+    @inlineCallbacks
     def test_connect_status(self):
         transport = yield self.get_transport(
             {'publish_status': True}, bind=False)
