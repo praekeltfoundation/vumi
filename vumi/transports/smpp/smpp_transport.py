@@ -298,44 +298,78 @@ class SmppTransceiverTransport(Transport):
         return self.publish_nack(
             message['message_id'], u'Invalid %s: %s' % (field, message[field]))
 
+    @inlineCallbacks
     def on_connection(self):
-        return self.publish_status_unbound()
+        yield self.publish_status_unbound()
 
     @inlineCallbacks
     def on_smpp_bind(self):
         yield self.publish_status_bound()
 
-    def publish_status_unbound(self):
-        return self.publish_status('smpp', 'major', reasons=[{
-            'type': 'unbound',
-            'message': 'Connected but not bound',
-        }])
+        if self.throttled:
+            yield self.publish_throttled()
 
-    def publish_status_bound(self):
-        return self.publish_status('smpp', 'good', reasons=[{
-            'type': 'bound',
-            'message': 'Bound',
-        }])
+    @inlineCallbacks
+    def on_throttled(self):
+        yield self.publish_throttled()
+
+    @inlineCallbacks
+    def on_throttled_resume(self):
+        yield self.publish_throttled()
+
+    @inlineCallbacks
+    def on_throttled_end(self):
+        yield self.publish_throttled_end()
 
     @inlineCallbacks
     def on_smpp_bind_timeout(self):
         yield self.publish_status_bind_timeout()
 
-    def publish_status_bind_timeout(self):
-        return self.publish_status('smpp', 'major', reasons=[{
-            'type': 'bind_timeout',
-            'message': 'Timed out awaiting bind',
-        }])
-
     @inlineCallbacks
     def on_connection_lost(self, reason):
         yield self.publish_status_connection_lost(reason)
 
+    def publish_status_unbound(self):
+        return self.publish_status(
+            status='major',
+            component='smpp',
+            type='unbound',
+            message='Connected but not bound')
+
+    def publish_status_bound(self):
+        return self.publish_status(
+            status='good',
+            component='smpp',
+            type='bound',
+            message='Bound')
+
+    def publish_throttled(self):
+        return self.publish_status(
+            status='minor',
+            component='smpp',
+            type='throttled',
+            message='Throttled')
+
+    def publish_throttled_end(self):
+        return self.publish_status(
+            status='good',
+            component='smpp',
+            type='throttled_end',
+            message='No longer throttled')
+
+    def publish_status_bind_timeout(self):
+        return self.publish_status(
+            status='major',
+            component='smpp',
+            type='bind_timeout',
+            message='Timed out awaiting bind')
+
     def publish_status_connection_lost(self, reason):
-        return self.publish_status('smpp', 'major', reasons=[{
-            'type': 'connection_lost',
-            'message': str(reason.value),
-        }])
+        return self.publish_status(
+            status='major',
+            component='smpp',
+            type='connection_lost',
+            message=str(reason.value))
 
     @inlineCallbacks
     def handle_outbound_message(self, message):

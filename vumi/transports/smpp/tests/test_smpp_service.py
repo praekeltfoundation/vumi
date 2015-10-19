@@ -54,6 +54,12 @@ class DummySmppTransport(object):
     def on_smpp_bind_timeout(self):
         pass
 
+    def on_throttled(self):
+        pass
+
+    def on_throttled_end(self):
+        pass
+
 
 class TestSmppService(VumiTestCase):
 

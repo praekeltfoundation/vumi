@@ -172,11 +172,11 @@ class Transport(BaseWorker):
                                   delivery_status=delivery_status,
                                   event_type='delivery_report', **kw)
 
-    def publish_status(self, component, status, **kw):
+    def publish_status(self, **kw):
         """
         Helper method for publishing a status message.
         """
-        msg = TransportStatus(component=component, status=status, **kw)
+        msg = TransportStatus(**kw)
 
         if self._should_publish_status:
             conn = self.connectors[self.status_connector_name]
