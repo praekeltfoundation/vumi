@@ -1678,8 +1678,8 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         [msg] = self.tx_helper.get_dispatched_statuses()
         self.assertEqual(msg['status'], 'major')
         self.assertEqual(msg['component'], 'smpp')
-        self.assertEqual(msg['type'], 'unbound')
-        self.assertEqual(msg['message'], 'Connected but not bound')
+        self.assertEqual(msg['type'], 'binding')
+        self.assertEqual(msg['message'], 'Binding')
 
     @inlineCallbacks
     def test_bind_status(self):
@@ -1799,7 +1799,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
         [msg1, msg2, msg3] = self.tx_helper.get_dispatched_statuses()
 
-        self.assertEqual(msg1['type'], 'unbound')
+        self.assertEqual(msg1['type'], 'binding')
         self.assertEqual(msg2['type'], 'bound')
 
         self.assertEqual(msg3['status'], 'minor')
@@ -1859,7 +1859,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
         [msg1, msg2, msg3] = self.tx_helper.get_dispatched_statuses()
 
-        self.assertEqual(msg1['type'], 'unbound')
+        self.assertEqual(msg1['type'], 'binding')
         self.assertEqual(msg2['type'], 'bound')
 
         self.assertEqual(msg3['status'], 'minor')

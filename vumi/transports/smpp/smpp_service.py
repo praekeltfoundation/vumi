@@ -198,8 +198,8 @@ class SmppService(ReconnectingClientService):
         yield self.transport.on_smpp_bind()
 
     @inlineCallbacks
-    def on_connection(self):
-        yield self.transport.on_connection()
+    def on_smpp_binding(self):
+        yield self.transport.on_smpp_binding()
 
     @inlineCallbacks
     def on_smpp_bind_timeout(self):
