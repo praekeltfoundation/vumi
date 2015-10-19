@@ -240,6 +240,11 @@ class SmppMessageDataStash(object):
         key = remote_message_key(smpp_message_id)
         return self.redis.delete(key)
 
+    def expire_remote_message_id(self, smpp_message_id):
+        key = remote_message_key(smpp_message_id)
+        expire = self.config.final_dr_third_party_id_expiry
+        return self.redis.expire(key, expire)
+
 
 class SmppTransceiverTransport(Transport):
 
@@ -481,7 +486,7 @@ class SmppTransceiverTransport(Transport):
             delivery_status=delivery_status)
 
         if delivery_status in ('delivered', 'failed'):
-            yield self.message_stash.delete_remote_message_id(
+            yield self.message_stash.expire_remote_message_id(
                 receipted_message_id)
 
         returnValue(dr)

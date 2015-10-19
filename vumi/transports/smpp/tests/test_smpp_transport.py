@@ -1514,8 +1514,14 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_delivery_report_delivered_delete_stored_remote_id(self):
-        transport = yield self.get_transport()
+        transport = yield self.get_transport({
+            'final_dr_third_party_id_expiry': 23,
+        })
+
         yield transport.message_stash.set_remote_message_id('bar', 'foo')
+
+        self.assertNotEqual(
+            (yield transport.redis.ttl(remote_message_key('foo'))), 23)
 
         pdu = DeliverSM(sequence_number=1, esm_class=4)
         pdu.add_optional_parameter('receipted_message_id', 'foo')
@@ -1524,13 +1530,19 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
         yield self.tx_helper.wait_for_dispatched_events(1)
 
-        self.assertFalse(
-            (yield transport.redis.exists(remote_message_key('foo'))))
+        self.assertEqual(
+            (yield transport.redis.ttl(remote_message_key('foo'))), 23)
 
     @inlineCallbacks
     def test_delivery_report_failed_delete_stored_remote_id(self):
-        transport = yield self.get_transport()
+        transport = yield self.get_transport({
+            'final_dr_third_party_id_expiry': 23,
+        })
+
         yield transport.message_stash.set_remote_message_id('bar', 'foo')
+
+        self.assertNotEqual(
+            (yield transport.redis.ttl(remote_message_key('foo'))), 23)
 
         pdu = DeliverSM(sequence_number=1, esm_class=4)
         pdu.add_optional_parameter('receipted_message_id', 'foo')
@@ -1539,13 +1551,19 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
         yield self.tx_helper.wait_for_dispatched_events(1)
 
-        self.assertFalse(
-            (yield transport.redis.exists(remote_message_key('foo'))))
+        self.assertEqual(
+            (yield transport.redis.ttl(remote_message_key('foo'))), 23)
 
     @inlineCallbacks
     def test_delivery_report_pending_keep_stored_remote_id(self):
-        transport = yield self.get_transport()
+        transport = yield self.get_transport({
+            'final_dr_third_party_id_expiry': 23,
+        })
+
         yield transport.message_stash.set_remote_message_id('bar', 'foo')
+
+        self.assertNotEqual(
+            (yield transport.redis.ttl(remote_message_key('foo'))), 23)
 
         pdu = DeliverSM(sequence_number=1, esm_class=4)
         pdu.add_optional_parameter('receipted_message_id', 'foo')
@@ -1554,8 +1572,8 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
         yield self.tx_helper.wait_for_dispatched_events(1)
 
-        self.assertTrue(
-            (yield transport.redis.exists(remote_message_key('foo'))))
+        self.assertNotEqual(
+            (yield transport.redis.ttl(remote_message_key('foo'))), 23)
 
     @inlineCallbacks
     def test_reconnect(self):
