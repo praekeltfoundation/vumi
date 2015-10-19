@@ -39,11 +39,11 @@ class DummySmppService(object):
     def get_config(self):
         return self._static_config
 
-    def on_connection(self):
-        pass
-
     def on_connection_lost(self, reason):
         self.paused = True
+
+    def on_smpp_binding(self):
+        pass
 
     def on_smpp_bind(self):
         self.paused = False

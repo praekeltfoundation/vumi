@@ -93,7 +93,7 @@ class EsmeProtocol(Protocol):
             system_type=self.config.system_type,
             interface_version=self.config.interface_version,
             address_range=self.config.address_range)
-        yield self.service.on_connection()
+        yield self.service.on_smpp_binding()
 
     @inlineCallbacks
     def bind(self,

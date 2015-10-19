@@ -299,8 +299,8 @@ class SmppTransceiverTransport(Transport):
             message['message_id'], u'Invalid %s: %s' % (field, message[field]))
 
     @inlineCallbacks
-    def on_connection(self):
-        yield self.publish_status_unbound()
+    def on_smpp_binding(self):
+        yield self.publish_status_binding()
 
     @inlineCallbacks
     def on_smpp_bind(self):
@@ -329,12 +329,12 @@ class SmppTransceiverTransport(Transport):
     def on_connection_lost(self, reason):
         yield self.publish_status_connection_lost(reason)
 
-    def publish_status_unbound(self):
+    def publish_status_binding(self):
         return self.publish_status(
             status='major',
             component='smpp',
-            type='unbound',
-            message='Connected but not bound')
+            type='binding',
+            message='Binding')
 
     def publish_status_bound(self):
         return self.publish_status(
