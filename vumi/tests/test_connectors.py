@@ -5,7 +5,7 @@ from vumi.connectors import (
     PublishStatusConnector, ReceiveStatusConnector, IgnoreMessage)
 from vumi.tests.utils import LogCatcher
 from vumi.worker import BaseWorker
-from vumi.message import TransportUserMessage, TransportStatus
+from vumi.message import TransportUserMessage
 from vumi.middleware.tests.utils import RecordingMiddleware
 from vumi.tests.helpers import VumiTestCase, MessageHelper, WorkerHelper
 
@@ -397,7 +397,7 @@ class TestPublishStatusConnector(BaseConnectorTestCase):
         conn = yield self.mk_connector(connector_name='foo', setup=True)
 
         msg = self.msg_helper.make_status(
-            status=TransportStatus.STATUS_DOWN,
+            status='down',
             component='foo',
             type='bar',
             message='baz')
@@ -415,7 +415,7 @@ class TestReceiveStatusConnector(BaseConnectorTestCase):
     def test_default_status_handler(self):
         conn = yield self.mk_connector(connector_name='foo', setup=True)
         msg = self.msg_helper.make_status(
-            status=TransportStatus.STATUS_DOWN,
+            status='down',
             component='foo',
             type='bar',
             message='baz')
@@ -435,7 +435,7 @@ class TestReceiveStatusConnector(BaseConnectorTestCase):
         conn.set_status_handler(msgs.append)
 
         msg = self.msg_helper.make_status(
-            status=TransportStatus.STATUS_DOWN,
+            status='down',
             component='foo',
             type='bar',
             message='baz')

@@ -477,7 +477,7 @@ class TestTransportStatus(VumiTestCase):
     def test_defaults(self):
         msg = TransportStatus(
             component='foo',
-            status=TransportStatus.STATUS_OK,
+            status='ok',
             type='bar',
             message='baz')
 
@@ -486,7 +486,7 @@ class TestTransportStatus(VumiTestCase):
     def test_validate_component_present(self):
         self.assertRaises(
             MissingMessageField, TransportStatus,
-            status=TransportStatus.STATUS_OK, type='bar', message='baz')
+            status='ok', type='bar', message='baz')
 
     def test_validate_status_present(self):
         self.assertRaises(
@@ -495,19 +495,19 @@ class TestTransportStatus(VumiTestCase):
 
     def test_validate_status_field(self):
         TransportStatus(
-            status=TransportStatus.STATUS_OK,
+            status='ok',
             component='foo',
             type='bar',
             message='baz')
 
         TransportStatus(
-            status=TransportStatus.STATUS_DEGRADED,
+            status='degraded',
             component='foo',
             type='bar',
             message='baz')
 
         TransportStatus(
-            status=TransportStatus.STATUS_DOWN,
+            status='down',
             component='foo',
             type='bar',
             message='baz')
