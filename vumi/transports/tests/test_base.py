@@ -123,12 +123,12 @@ class TestBaseTransport(VumiTestCase):
         })
 
         msg = yield transport.publish_status(
-            status='major',
+            status='down',
             component='foo',
             type='bar',
             message='baz')
 
-        self.assertEqual(msg['status'], 'major')
+        self.assertEqual(msg['status'], 'down')
         self.assertEqual(msg['component'], 'foo')
         self.assertEqual(msg['type'], 'bar')
         self.assertEqual(msg['message'], 'baz')
@@ -145,14 +145,14 @@ class TestBaseTransport(VumiTestCase):
 
         with LogCatcher() as lc:
             msg = yield transport.publish_status(
-                status='major',
+                status='down',
                 component='foo',
                 type='bar',
                 message='baz')
 
             logs = lc.messages()
 
-        self.assertEqual(msg['status'], 'major')
+        self.assertEqual(msg['status'], 'down')
         self.assertEqual(msg['component'], 'foo')
         self.assertEqual(msg['type'], 'bar')
         self.assertEqual(msg['message'], 'baz')
