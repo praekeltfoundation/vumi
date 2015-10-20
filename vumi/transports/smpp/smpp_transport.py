@@ -260,6 +260,8 @@ class SmppTransceiverTransport(Transport):
 
     @inlineCallbacks
     def setup_transport(self):
+        yield self.publish_status_starting()
+
         config = self.get_static_config()
         log.msg('Starting SMPP Transport for: %s' % (config.twisted_endpoint,))
 
@@ -333,6 +335,13 @@ class SmppTransceiverTransport(Transport):
     @inlineCallbacks
     def on_connection_lost(self, reason):
         yield self.publish_status_connection_lost(reason)
+
+    def publish_status_starting(self):
+        return self.publish_status(
+            status='down',
+            component='smpp',
+            type='starting',
+            message='Starting')
 
     def publish_status_binding(self):
         return self.publish_status(
