@@ -1523,7 +1523,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
         self.assertTrue(
             remote_id_ttl > 23,
-            "remote_id_ttl (%s) > final_dr_third_party_id_expiry (23)"
+            "remote_id_ttl (%s) <= final_dr_third_party_id_expiry (23)"
             % (remote_id_ttl,))
 
         pdu = DeliverSM(sequence_number=1, esm_class=4)
@@ -1552,7 +1552,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
         self.assertTrue(
             remote_id_ttl > 23,
-            "remote_id_ttl (%s) > final_dr_third_party_id_expiry (23)"
+            "remote_id_ttl (%s) <= final_dr_third_party_id_expiry (23)"
             % (remote_id_ttl,))
 
         pdu = DeliverSM(sequence_number=1, esm_class=4)
@@ -1581,7 +1581,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
         self.assertTrue(
             remote_id_ttl > 23,
-            "remote_id_ttl (%s) > final_dr_third_party_id_expiry (23)"
+            "remote_id_ttl (%s) <= final_dr_third_party_id_expiry (23)"
             % (remote_id_ttl,))
 
         pdu = DeliverSM(sequence_number=1, esm_class=4)
