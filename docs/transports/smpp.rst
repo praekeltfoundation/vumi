@@ -191,7 +191,7 @@ Fields:
 Published when a transport loses its connection to the SMSC. This occurs in the
 following situations:
 
-  - after succesfully unbinding
+  - after successfully unbinding
   - if an unbind attempt times out
   - when the connection to the SMSC is lost unexpectedly
 
