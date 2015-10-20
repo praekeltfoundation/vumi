@@ -574,6 +574,7 @@ class EsmeProtocol(Protocol):
     def unbind(self):
         sequence_number = yield self.sequence_generator.next()
         self.send_pdu(Unbind(sequence_number))
+        yield self.service.on_smpp_unbinding()
         returnValue([sequence_number])
 
     def handle_unbind_resp(self, pdu):

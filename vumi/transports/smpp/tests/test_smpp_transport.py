@@ -1732,6 +1732,18 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.assertEqual(msg['message'], 'Binding')
 
     @inlineCallbacks
+    def test_unbinding_status(self):
+        transport = yield self.get_transport({'publish_status': True})
+        self.tx_helper.clear_dispatched_statuses()
+        yield transport.service.get_protocol().unbind()
+
+        [msg] = self.tx_helper.get_dispatched_statuses()
+        self.assertEqual(msg['status'], 'down')
+        self.assertEqual(msg['component'], 'smpp')
+        self.assertEqual(msg['type'], 'unbinding')
+        self.assertEqual(msg['message'], 'Unbinding')
+
+    @inlineCallbacks
     def test_bind_status(self):
         yield self.get_transport({'publish_status': True}, bind=False)
 

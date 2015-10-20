@@ -48,6 +48,9 @@ class DummySmppTransport(object):
     def on_smpp_binding(self):
         pass
 
+    def on_smpp_unbinding(self):
+        pass
+
     def on_smpp_bind(self):
         pass
 

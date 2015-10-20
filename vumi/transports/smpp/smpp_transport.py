@@ -310,6 +310,10 @@ class SmppTransceiverTransport(Transport):
         yield self.publish_status_binding()
 
     @inlineCallbacks
+    def on_smpp_unbinding(self):
+        yield self.publish_status_unbinding()
+
+    @inlineCallbacks
     def on_smpp_bind(self):
         yield self.publish_status_bound()
 
@@ -349,6 +353,13 @@ class SmppTransceiverTransport(Transport):
             component='smpp',
             type='binding',
             message='Binding')
+
+    def publish_status_unbinding(self):
+        return self.publish_status(
+            status='down',
+            component='smpp',
+            type='unbinding',
+            message='Unbinding')
 
     def publish_status_bound(self):
         return self.publish_status(
