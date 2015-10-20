@@ -39,11 +39,20 @@ class DummySmppService(object):
     def get_config(self):
         return self._static_config
 
-    def on_connection_lost(self):
+    def on_connection_lost(self, reason):
         self.paused = True
+
+    def on_smpp_binding(self):
+        pass
+
+    def on_smpp_unbinding(self):
+        pass
 
     def on_smpp_bind(self):
         self.paused = False
+
+    def on_smpp_bind_timeout(self):
+        pass
 
 
 class TestEsmeProtocol(VumiTestCase):

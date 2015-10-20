@@ -71,6 +71,7 @@ class SmppService(ReconnectingClientService):
     def get_config(self):
         return self.transport.get_static_config()
 
+    @inlineCallbacks
     def reset_mt_tps(self):
         if self.throttled and self.need_mt_throttling():
             if not self.is_bound():
@@ -78,7 +79,7 @@ class SmppService(ReconnectingClientService):
                 log.msg("Can't stop throttling while unbound, trying later.")
                 return
             self.reset_mt_throttle_counter()
-            self.stop_throttling()
+            yield self.stop_throttling()
 
     def reset_mt_throttle_counter(self):
         self.tps_counter = 0
@@ -113,6 +114,7 @@ class SmppService(ReconnectingClientService):
     def check_stop_throttling_cb(self, ignored_result, delay=None):
         self.check_stop_throttling(delay)
 
+    @inlineCallbacks
     def _check_stop_throttling(self):
         """
         Check if we should stop throttling, and stop throttling if we should.
@@ -146,12 +148,12 @@ class SmppService(ReconnectingClientService):
         if not self._throttled_pdus:
             # We have no throttled messages waiting, so stop throttling.
             log.msg("No more throttled messages to retry.")
-            self.stop_throttling()
+            yield self.stop_throttling()
             return
 
         seq_no = self._throttled_pdus.pop(0)
-        pdu_data_d = self.message_stash.get_cached_pdu(seq_no)
-        return pdu_data_d.addCallback(self.retry_throttled_pdu, seq_no)
+        pdu_data = yield self.message_stash.get_cached_pdu(seq_no)
+        yield self.retry_throttled_pdu(pdu_data, seq_no)
 
     @inlineCallbacks
     def retry_throttled_pdu(self, pdu_data, seq_no):
@@ -172,25 +174,45 @@ class SmppService(ReconnectingClientService):
                 pdu_data.vumi_message_id, pdu_data.pdu)
             yield self.message_stash.delete_cached_pdu(seq_no)
 
+    @inlineCallbacks
     def start_throttling(self):
         if self.throttled:
-            return succeed(None)
+            return
         log.msg("Throttling outbound messages.")
         self.throttled = True
-        return self.transport.pause_connectors()
+        yield self.transport.pause_connectors()
+        yield self.transport.on_throttled()
 
+    @inlineCallbacks
     def stop_throttling(self):
         if not self.throttled:
             return
         log.msg("No longer throttling outbound messages.")
         self.throttled = False
         self.transport.unpause_connectors()
+        yield self.transport.on_throttled_end()
 
+    @inlineCallbacks
     def on_smpp_bind(self):
         self.transport.unpause_connectors()
+        yield self.transport.on_smpp_bind()
 
-    def on_connection_lost(self):
-        return self.transport.pause_connectors()
+    @inlineCallbacks
+    def on_smpp_binding(self):
+        yield self.transport.on_smpp_binding()
+
+    @inlineCallbacks
+    def on_smpp_unbinding(self):
+        yield self.transport.on_smpp_unbinding()
+
+    @inlineCallbacks
+    def on_smpp_bind_timeout(self):
+        yield self.transport.on_smpp_bind_timeout()
+
+    @inlineCallbacks
+    def on_connection_lost(self, reason):
+        yield self.transport.pause_connectors()
+        yield self.transport.on_connection_lost(reason)
 
     def handle_submit_sm_resp(self, message_id, smpp_id, pdu_status, seq_no):
         if pdu_status in self.throttle_statuses:

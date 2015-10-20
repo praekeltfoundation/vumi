@@ -240,6 +240,11 @@ class SmppMessageDataStash(object):
         key = remote_message_key(smpp_message_id)
         return self.redis.delete(key)
 
+    def expire_remote_message_id(self, smpp_message_id):
+        key = remote_message_key(smpp_message_id)
+        expire = self.config.final_dr_third_party_id_expiry
+        return self.redis.expire(key, expire)
+
 
 class SmppTransceiverTransport(Transport):
 
@@ -255,6 +260,8 @@ class SmppTransceiverTransport(Transport):
 
     @inlineCallbacks
     def setup_transport(self):
+        yield self.publish_status_starting()
+
         config = self.get_static_config()
         log.msg('Starting SMPP Transport for: %s' % (config.twisted_endpoint,))
 
@@ -297,6 +304,97 @@ class SmppTransceiverTransport(Transport):
     def _reject_for_invalid_address(self, message, field):
         return self.publish_nack(
             message['message_id'], u'Invalid %s: %s' % (field, message[field]))
+
+    @inlineCallbacks
+    def on_smpp_binding(self):
+        yield self.publish_status_binding()
+
+    @inlineCallbacks
+    def on_smpp_unbinding(self):
+        yield self.publish_status_unbinding()
+
+    @inlineCallbacks
+    def on_smpp_bind(self):
+        yield self.publish_status_bound()
+
+        if self.throttled:
+            yield self.publish_throttled()
+
+    @inlineCallbacks
+    def on_throttled(self):
+        yield self.publish_throttled()
+
+    @inlineCallbacks
+    def on_throttled_resume(self):
+        yield self.publish_throttled()
+
+    @inlineCallbacks
+    def on_throttled_end(self):
+        yield self.publish_throttled_end()
+
+    @inlineCallbacks
+    def on_smpp_bind_timeout(self):
+        yield self.publish_status_bind_timeout()
+
+    @inlineCallbacks
+    def on_connection_lost(self, reason):
+        yield self.publish_status_connection_lost(reason)
+
+    def publish_status_starting(self):
+        return self.publish_status(
+            status='down',
+            component='smpp',
+            type='starting',
+            message='Starting')
+
+    def publish_status_binding(self):
+        return self.publish_status(
+            status='down',
+            component='smpp',
+            type='binding',
+            message='Binding')
+
+    def publish_status_unbinding(self):
+        return self.publish_status(
+            status='down',
+            component='smpp',
+            type='unbinding',
+            message='Unbinding')
+
+    def publish_status_bound(self):
+        return self.publish_status(
+            status='ok',
+            component='smpp',
+            type='bound',
+            message='Bound')
+
+    def publish_throttled(self):
+        return self.publish_status(
+            status='degraded',
+            component='smpp',
+            type='throttled',
+            message='Throttled')
+
+    def publish_throttled_end(self):
+        return self.publish_status(
+            status='ok',
+            component='smpp',
+            type='throttled_end',
+            message='No longer throttled')
+
+    def publish_status_bind_timeout(self):
+        return self.publish_status(
+            status='down',
+            component='smpp',
+            type='bind_timeout',
+            message='Timed out awaiting bind')
+
+    def publish_status_connection_lost(self, reason):
+        return self.publish_status(
+            status='down',
+            component='smpp',
+            type='connection_lost',
+            message=str(reason.value))
 
     @inlineCallbacks
     def handle_outbound_message(self, message):
@@ -408,7 +506,7 @@ class SmppTransceiverTransport(Transport):
             delivery_status=delivery_status)
 
         if delivery_status in ('delivered', 'failed'):
-            yield self.message_stash.delete_remote_message_id(
+            yield self.message_stash.expire_remote_message_id(
                 receipted_message_id)
 
         returnValue(dr)

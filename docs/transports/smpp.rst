@@ -112,3 +112,129 @@ message_id in the response.
 Followup pdu's from the SMSC (i.e. delivery reports) will reference
 the original message by the message_id held by the SMSC which was
 returned in the submit_sm_resp.
+
+.. _smpp-status-events:
+
+Status event catalogue
+^^^^^^^^^^^^^^^^^^^^^^
+
+The SMPP transport publishes the following status events when status event
+publishing is enabled.
+
+``starting``
+~~~~~~~~~~~~
+
+Published when the transport is busy starting.
+
+Fields:
+
+  * ``status``: ``down``
+  * ``type``: ``starting``
+  * ``component``: ``smpp``
+
+
+``binding``
+~~~~~~~~~~~
+
+Published when the transport has established a connection to the SMSC, has
+attempted to bind, and is waiting for the SMSC's response.
+
+Fields:
+
+  * ``status``: ``down``
+  * ``type``: ``binding``
+  * ``component``: ``smpp``
+
+
+``bound``
+~~~~~~~~~
+
+Published when the transport has received a bind response from the SMSC and is
+ready to send and receive messages.
+
+Fields:
+
+  - ``status``: ``ok``
+  - ``type``: ``bound``
+  - ``component``: ``smpp``
+
+
+``bind_timeout``
+~~~~~~~~~~~~~~~~
+
+Published when the transport has not bound within the interval given by the
+``smpp_bind_timeout`` config field.
+
+Fields:
+
+  - ``status``: ``down``
+  - ``type``: ``bind_timeout``
+  - ``component``: ``smpp``
+
+
+``unbinding``
+~~~~~~~~~~~~~
+
+Published when the transport has attempted to unbind, and is waiting for the
+SMSC's response.
+
+Fields:
+
+  - ``status``: ``down``
+  - ``type``: ``unbinding``
+  - ``component``: ``smpp``
+
+
+``connection_lost``
+~~~~~~~~~~~~~~~~~~
+
+Published when a transport loses its connection to the SMSC. This occurs in the
+following situations:
+
+  - after successfully unbinding
+  - if an unbind attempt times out
+  - when the connection to the SMSC is lost unexpectedly
+
+Fields:
+
+  - ``status``: ``down``
+  - ``type``: ``connection_lost``
+  - ``component``: ``smpp``
+
+
+``throttled``
+~~~~~~~~~~~~~
+
+Published when throttling starts for the transport and when throttling
+continues for a transport after rebinding. Throttling starts in two situations:
+
+  - the SMSC has replied to a message we attempted to send with an
+    ``ESME_RTHROTTLED`` response
+  - we have reached the maximum number of transmissions per second allowed by the
+    transport (set by the ``mt_tps`` config field), where a transmission is a
+    mobile-terminating message put onto the wire by the transport.
+
+Fields:
+
+  - ``status``: ``degraded``
+  - ``type``: ``throttled``
+  - ``component``: ``smpp``
+
+
+``throttled_end``
+~~~~~~~~~~~~~~~~~
+
+Published when the transport is no longer throttled. This happens in two
+situations:
+
+  - we have retried an earlier message we attempted to send that was given a
+    ``ESME_RTHROTTLED`` response, and the SMSC has responded to the retried
+    message with a ``ESME_ROK`` response (that is, the retry was successful)
+  - the transport is no longer at the maximum number of transmissions per
+    second
+
+Fields:
+
+  - ``status``: ``ok``
+  - ``type``: ``throttled_end``
+  - ``component``: ``smpp``
