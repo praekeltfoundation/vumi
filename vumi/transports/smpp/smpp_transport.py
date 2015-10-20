@@ -333,7 +333,7 @@ class SmppTransceiverTransport(Transport):
 
     def publish_status_starting(self):
         return self.publish_status(
-            status='major',
+            status='down',
             component='smpp',
             type='starting',
             message='Starting')
