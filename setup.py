@@ -12,7 +12,7 @@ if platform.python_implementation() == "PyPy":
 
 setup(
     name="vumi",
-    version="0.5.32a",
+    version="0.5.33a",
     url='http://github.com/praekelt/vumi',
     license='BSD',
     description="Super-scalable messaging engine for the delivery of SMS, "
