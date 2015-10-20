@@ -340,42 +340,42 @@ class SmppTransceiverTransport(Transport):
 
     def publish_status_binding(self):
         return self.publish_status(
-            status='major',
+            status='down',
             component='smpp',
             type='binding',
             message='Binding')
 
     def publish_status_bound(self):
         return self.publish_status(
-            status='good',
+            status='ok',
             component='smpp',
             type='bound',
             message='Bound')
 
     def publish_throttled(self):
         return self.publish_status(
-            status='minor',
+            status='degraded',
             component='smpp',
             type='throttled',
             message='Throttled')
 
     def publish_throttled_end(self):
         return self.publish_status(
-            status='good',
+            status='ok',
             component='smpp',
             type='throttled_end',
             message='No longer throttled')
 
     def publish_status_bind_timeout(self):
         return self.publish_status(
-            status='major',
+            status='down',
             component='smpp',
             type='bind_timeout',
             message='Timed out awaiting bind')
 
     def publish_status_connection_lost(self, reason):
         return self.publish_status(
-            status='major',
+            status='down',
             component='smpp',
             type='connection_lost',
             message=str(reason.value))

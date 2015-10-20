@@ -593,7 +593,7 @@ class TestMessageHelper(TestCase):
         """
         msg_helper = MessageHelper()
         msg = msg_helper.make_status(
-            status='major',
+            status='down',
             component='foo',
             type='bar',
             message='baz')
@@ -601,7 +601,7 @@ class TestMessageHelper(TestCase):
         self.assertIsInstance(msg, TransportStatus)
 
         self.assert_message_fields(msg, {
-            'status': 'major',
+            'status': 'down',
             'component': 'foo',
             'type': 'bar',
             'message': 'baz',
@@ -956,7 +956,7 @@ class TestWorkerHelper(VumiTestCase):
         self.assertEqual(dispatched, [])
 
         msg = msg_helper.make_status(
-            status='major',
+            status='down',
             component='foo',
             type='bar',
             message='baz')
@@ -977,7 +977,7 @@ class TestWorkerHelper(VumiTestCase):
         self.assertEqual(dispatched, [])
 
         msg = msg_helper.make_status(
-            status='major',
+            status='down',
             component='foo',
             type='bar',
             message='baz')
@@ -1090,7 +1090,7 @@ class TestWorkerHelper(VumiTestCase):
         d = worker_helper.wait_for_dispatched_statuses(1, 'fooconn')
 
         msg = msg_helper.make_status(
-            status='major',
+            status='down',
             component='foo',
             type='bar',
             message='baz')
@@ -1111,7 +1111,7 @@ class TestWorkerHelper(VumiTestCase):
         d = worker_helper.wait_for_dispatched_statuses(1)
 
         msg = msg_helper.make_status(
-            status='major',
+            status='down',
             component='foo',
             type='bar',
             message='baz')
@@ -1226,7 +1226,7 @@ class TestWorkerHelper(VumiTestCase):
         worker_helper = WorkerHelper()
 
         msg = msg_helper.make_status(
-            status='major',
+            status='down',
             component='foo',
             type='bar',
             message='baz')
@@ -1250,7 +1250,7 @@ class TestWorkerHelper(VumiTestCase):
         worker_helper = WorkerHelper(status_connector_name='fooconn')
 
         msg = msg_helper.make_status(
-            status='major',
+            status='down',
             component='foo',
             type='bar',
             message='baz')
@@ -1396,7 +1396,7 @@ class TestWorkerHelper(VumiTestCase):
         self.assertEqual(broker.get_messages('vumi', 'fooconn.status'), [])
 
         msg = msg_helper.make_status(
-            status='major',
+            status='down',
             component='foo',
             type='bar',
             message='baz')
@@ -1420,7 +1420,7 @@ class TestWorkerHelper(VumiTestCase):
         self.assertEqual(broker.get_messages('vumi', 'fooconn.status'), [])
 
         msg = msg_helper.make_status(
-            status='major',
+            status='down',
             component='foo',
             type='bar',
             message='baz')
@@ -1739,7 +1739,7 @@ class TestMessageDispatchHelper(VumiTestCase):
         self.assertEqual(broker.get_messages('vumi', 'fooconn.status'), [])
 
         msg = yield md_helper.make_dispatch_status(
-            status='major',
+            status='down',
             component='foo',
             type='bar',
             message='baz')
@@ -1748,7 +1748,7 @@ class TestMessageDispatchHelper(VumiTestCase):
             broker.get_messages('vumi', 'fooconn.status'), [msg])
 
         self.assert_message_fields(msg, {
-            'status': 'major',
+            'status': 'down',
             'component': 'foo',
             'type': 'bar',
             'message': 'baz',
