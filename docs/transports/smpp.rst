@@ -173,7 +173,7 @@ Fields:
 
 
 ``unbinding``
-~~~~~~~~~~~
+~~~~~~~~~~~~~
 
 Published when the transport has attempted to unbind, and is waiting for the
 SMSC's response.
