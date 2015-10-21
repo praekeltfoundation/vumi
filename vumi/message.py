@@ -447,6 +447,8 @@ class TransportStatus(TransportMessage):
         super(TransportStatus, self).validate_fields()
         self.assert_field_present('component')
         self.assert_field_present('status')
+        self.assert_field_present('type')
+        self.assert_field_present('message')
 
         if self.payload['status'] not in self.STATUSES:
             raise InvalidMessageField(
