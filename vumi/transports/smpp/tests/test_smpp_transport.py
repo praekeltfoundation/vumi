@@ -1062,7 +1062,6 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         transport = yield self.get_transport()
         transport_config = transport.get_static_config()
         msg = self.tx_helper.make_outbound('hello world')
-
         yield self.tx_helper.dispatch_outbound(msg)
         submit_sm_pdu = yield self.fake_smsc.await_pdu()
         yield self.fake_smsc.handle_pdu(
@@ -1084,6 +1083,30 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         [event] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(event['event_type'], 'ack')
         self.assertEqual(event['user_message_id'], msg['message_id'])
+
+    @inlineCallbacks
+    def test_mt_sms_remote_id_stored_only_on_rok(self):
+        transport = yield self.get_transport()
+
+        yield self.tx_helper.make_dispatch_outbound("msg1")
+        submit_sm1 = yield self.fake_smsc.await_pdu()
+        response = SubmitSMResp(
+            seq_no(submit_sm1), "remote_1", command_status="ESME_RSUBMITFAIL")
+        self.fake_smsc.send_pdu(response)
+
+        yield self.tx_helper.make_dispatch_outbound("msg2")
+        submit_sm2 = yield self.fake_smsc.await_pdu()
+        response = SubmitSMResp(
+            seq_no(submit_sm2), "remote_2", command_status="ESME_ROK")
+        self.fake_smsc.send_pdu(response)
+
+        yield self.tx_helper.wait_for_dispatched_events(2)
+
+        self.assertFalse(
+            (yield transport.redis.exists(remote_message_key('remote_1'))))
+
+        self.assertTrue(
+            (yield transport.redis.exists(remote_message_key('remote_2'))))
 
     @inlineCallbacks
     def test_mt_sms_unicode(self):
@@ -1490,6 +1513,92 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
                               "discarded." % self.tx_helper.transport_name,))
 
     @inlineCallbacks
+    def test_delivery_report_delivered_delete_stored_remote_id(self):
+        transport = yield self.get_transport({
+            'final_dr_third_party_id_expiry': 23,
+        })
+
+        yield transport.message_stash.set_remote_message_id('bar', 'foo')
+        remote_id_ttl = yield transport.redis.ttl(remote_message_key('foo'))
+
+        self.assertTrue(
+            remote_id_ttl > 23,
+            "remote_id_ttl (%s) <= final_dr_third_party_id_expiry (23)"
+            % (remote_id_ttl,))
+
+        pdu = DeliverSM(sequence_number=1, esm_class=4)
+        pdu.add_optional_parameter('receipted_message_id', 'foo')
+        pdu.add_optional_parameter('message_state', 2)
+        yield self.fake_smsc.handle_pdu(pdu)
+
+        yield self.tx_helper.wait_for_dispatched_events(1)
+
+        remote_id_ttl = yield transport.redis.ttl(remote_message_key('foo'))
+
+        self.assertTrue(
+            remote_id_ttl <= 23,
+            "remote_id_ttl (%s) > final_dr_third_party_id_expiry (23)"
+            % (remote_id_ttl,))
+
+    @inlineCallbacks
+    def test_delivery_report_failed_delete_stored_remote_id(self):
+        transport = yield self.get_transport({
+            'final_dr_third_party_id_expiry': 23,
+        })
+
+        yield transport.message_stash.set_remote_message_id('bar', 'foo')
+
+        remote_id_ttl = yield transport.redis.ttl(remote_message_key('foo'))
+
+        self.assertTrue(
+            remote_id_ttl > 23,
+            "remote_id_ttl (%s) <= final_dr_third_party_id_expiry (23)"
+            % (remote_id_ttl,))
+
+        pdu = DeliverSM(sequence_number=1, esm_class=4)
+        pdu.add_optional_parameter('receipted_message_id', 'foo')
+        pdu.add_optional_parameter('message_state', 8)
+        yield self.fake_smsc.handle_pdu(pdu)
+
+        yield self.tx_helper.wait_for_dispatched_events(1)
+
+        remote_id_ttl = yield transport.redis.ttl(remote_message_key('foo'))
+
+        self.assertTrue(
+            remote_id_ttl <= 23,
+            "remote_id_ttl (%s) > final_dr_third_party_id_expiry (23)"
+            % (remote_id_ttl,))
+
+    @inlineCallbacks
+    def test_delivery_report_pending_keep_stored_remote_id(self):
+        transport = yield self.get_transport({
+            'final_dr_third_party_id_expiry': 23,
+        })
+
+        yield transport.message_stash.set_remote_message_id('bar', 'foo')
+
+        remote_id_ttl = yield transport.redis.ttl(remote_message_key('foo'))
+
+        self.assertTrue(
+            remote_id_ttl > 23,
+            "remote_id_ttl (%s) <= final_dr_third_party_id_expiry (23)"
+            % (remote_id_ttl,))
+
+        pdu = DeliverSM(sequence_number=1, esm_class=4)
+        pdu.add_optional_parameter('receipted_message_id', 'foo')
+        pdu.add_optional_parameter('message_state', 1)
+        yield self.fake_smsc.handle_pdu(pdu)
+
+        yield self.tx_helper.wait_for_dispatched_events(1)
+
+        remote_id_ttl = yield transport.redis.ttl(remote_message_key('foo'))
+
+        self.assertTrue(
+            remote_id_ttl > 23,
+            "remote_id_ttl (%s) <= final_dr_third_party_id_expiry (23)"
+            % (remote_id_ttl,))
+
+    @inlineCallbacks
     def test_reconnect(self):
         transport = yield self.get_transport(bind=False)
         connector = transport.connectors[transport.transport_name]
@@ -1593,6 +1702,232 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         [submit_sm1, submit_sm2] = yield self.fake_smsc.await_pdus(2)
         self.assertEqual(short_message(submit_sm1), 'hello world 0')
         self.assertEqual(short_message(submit_sm2), 'hello world 1')
+
+    @inlineCallbacks
+    def test_starting_status(self):
+        yield self.get_transport({'publish_status': True})
+        [msg] = self.tx_helper.get_dispatched_statuses()[:1]
+        self.assertEqual(msg['status'], 'down')
+        self.assertEqual(msg['component'], 'smpp')
+        self.assertEqual(msg['type'], 'starting')
+        self.assertEqual(msg['message'], 'Starting')
+
+    @inlineCallbacks
+    def test_connect_status(self):
+        transport = yield self.get_transport(
+            {'publish_status': True}, bind=False)
+
+        # disconnect
+        yield self.fake_smsc.disconnect()
+        self.tx_helper.clear_dispatched_statuses()
+
+        # reconnect
+        self.clock.advance(transport.service.delay)
+        yield self.fake_smsc.await_connected()
+
+        [msg] = self.tx_helper.get_dispatched_statuses()
+        self.assertEqual(msg['status'], 'down')
+        self.assertEqual(msg['component'], 'smpp')
+        self.assertEqual(msg['type'], 'binding')
+        self.assertEqual(msg['message'], 'Binding')
+
+    @inlineCallbacks
+    def test_unbinding_status(self):
+        transport = yield self.get_transport({'publish_status': True})
+        self.tx_helper.clear_dispatched_statuses()
+        yield transport.service.get_protocol().unbind()
+
+        [msg] = self.tx_helper.get_dispatched_statuses()
+        self.assertEqual(msg['status'], 'down')
+        self.assertEqual(msg['component'], 'smpp')
+        self.assertEqual(msg['type'], 'unbinding')
+        self.assertEqual(msg['message'], 'Unbinding')
+
+    @inlineCallbacks
+    def test_bind_status(self):
+        yield self.get_transport({'publish_status': True}, bind=False)
+
+        self.tx_helper.clear_dispatched_statuses()
+
+        yield self.fake_smsc.bind()
+
+        [msg] = self.tx_helper.get_dispatched_statuses()
+        self.assertEqual(msg['status'], 'ok')
+        self.assertEqual(msg['component'], 'smpp')
+        self.assertEqual(msg['type'], 'bound')
+        self.assertEqual(msg['message'], 'Bound')
+
+    @inlineCallbacks
+    def test_bind_timeout_status(self):
+        yield self.get_transport({
+            'publish_status': True,
+            'smpp_bind_timeout': 3,
+        }, bind=False)
+
+        # wait for bind pdu
+        yield self.fake_smsc.await_pdu()
+
+        self.tx_helper.clear_dispatched_statuses()
+        self.clock.advance(3)
+
+        [msg] = self.tx_helper.get_dispatched_statuses()
+        self.assertEqual(msg['status'], 'down')
+        self.assertEqual(msg['component'], 'smpp')
+        self.assertEqual(msg['type'], 'bind_timeout')
+        self.assertEqual(msg['message'], 'Timed out awaiting bind')
+
+        yield self.fake_smsc.disconnect()
+
+    @inlineCallbacks
+    def test_connection_lost_status(self):
+        yield self.get_transport({'publish_status': True})
+
+        self.tx_helper.clear_dispatched_statuses()
+        yield self.fake_smsc.disconnect()
+
+        [msg] = self.tx_helper.get_dispatched_statuses()
+        self.assertEqual(msg['status'], 'down')
+        self.assertEqual(msg['status'], 'down')
+        self.assertEqual(msg['component'], 'smpp')
+        self.assertEqual(msg['type'], 'connection_lost')
+
+        self.assertEqual(
+            msg['message'],
+            'Connection was closed cleanly: Connection done.')
+
+    @inlineCallbacks
+    def test_smsc_throttle_status(self):
+        yield self.get_transport({
+            'publish_status': True,
+            'throttle_delay': 3
+        })
+
+        self.tx_helper.clear_dispatched_statuses()
+
+        msg = self.tx_helper.make_outbound("throttle me")
+        yield self.tx_helper.dispatch_outbound(msg)
+        submit_sm_pdu = yield self.fake_smsc.await_pdu()
+
+        yield self.fake_smsc.handle_pdu(
+            SubmitSMResp(sequence_number=seq_no(submit_sm_pdu),
+                         message_id='foo',
+                         command_status='ESME_RTHROTTLED'))
+
+        [msg] = self.tx_helper.get_dispatched_statuses()
+        self.assertEqual(msg['status'], 'degraded')
+        self.assertEqual(msg['component'], 'smpp')
+        self.assertEqual(msg['type'], 'throttled')
+        self.assertEqual(msg['message'], 'Throttled')
+
+        self.tx_helper.clear_dispatched_statuses()
+        self.clock.advance(3)
+
+        submit_sm_pdu_retry = yield self.fake_smsc.await_pdu()
+        yield self.fake_smsc.handle_pdu(
+            SubmitSMResp(sequence_number=seq_no(submit_sm_pdu_retry),
+                         message_id='bar',
+                         command_status='ESME_ROK'))
+
+        self.clock.advance(0)
+
+        [msg] = self.tx_helper.get_dispatched_statuses()
+        self.assertEqual(msg['status'], 'ok')
+        self.assertEqual(msg['component'], 'smpp')
+        self.assertEqual(msg['type'], 'throttled_end')
+        self.assertEqual(msg['message'], 'No longer throttled')
+
+    @inlineCallbacks
+    def test_smsc_throttle_reconnect_status(self):
+        transport = yield self.get_transport({
+            'publish_status': True,
+        })
+
+        self.tx_helper.clear_dispatched_statuses()
+
+        msg = self.tx_helper.make_outbound("throttle me")
+        yield self.tx_helper.dispatch_outbound(msg)
+        submit_sm_pdu = yield self.fake_smsc.await_pdu()
+
+        yield self.fake_smsc.handle_pdu(
+            SubmitSMResp(sequence_number=seq_no(submit_sm_pdu),
+                         message_id='foo',
+                         command_status='ESME_RTHROTTLED'))
+
+        yield self.fake_smsc.disconnect()
+        self.tx_helper.clear_dispatched_statuses()
+        self.clock.advance(transport.service.delay)
+
+        yield self.fake_smsc.bind()
+
+        [msg1, msg2, msg3] = self.tx_helper.get_dispatched_statuses()
+
+        self.assertEqual(msg1['type'], 'binding')
+        self.assertEqual(msg2['type'], 'bound')
+
+        self.assertEqual(msg3['status'], 'degraded')
+        self.assertEqual(msg3['component'], 'smpp')
+        self.assertEqual(msg3['type'], 'throttled')
+        self.assertEqual(msg3['message'], 'Throttled')
+
+    @inlineCallbacks
+    def test_tps_throttle_status(self):
+        yield self.get_transport({
+            'publish_status': True,
+            'mt_tps': 2
+        })
+
+        self.tx_helper.clear_dispatched_statuses()
+
+        yield self.tx_helper.make_dispatch_outbound('hello world 1')
+        yield self.tx_helper.make_dispatch_outbound('hello world 2')
+        self.tx_helper.make_dispatch_outbound('hello world 3')
+        yield self.fake_smsc.await_pdus(2)
+
+        [msg] = self.tx_helper.get_dispatched_statuses()
+        self.assertEqual(msg['status'], 'degraded')
+        self.assertEqual(msg['component'], 'smpp')
+        self.assertEqual(msg['type'], 'throttled')
+        self.assertEqual(msg['message'], 'Throttled')
+
+        self.tx_helper.clear_dispatched_statuses()
+
+        self.clock.advance(1)
+
+        [msg] = self.tx_helper.get_dispatched_statuses()
+        self.assertEqual(msg['status'], 'ok')
+        self.assertEqual(msg['component'], 'smpp')
+        self.assertEqual(msg['type'], 'throttled_end')
+        self.assertEqual(msg['message'], 'No longer throttled')
+
+    @inlineCallbacks
+    def test_tps_throttle_reconnect_status(self):
+        transport = yield self.get_transport({
+            'publish_status': True,
+            'mt_tps': 2
+        })
+
+        self.tx_helper.clear_dispatched_statuses()
+
+        yield self.tx_helper.make_dispatch_outbound('hello world 1')
+        yield self.tx_helper.make_dispatch_outbound('hello world 2')
+        self.tx_helper.make_dispatch_outbound('hello world 3')
+        yield self.fake_smsc.await_pdus(2)
+
+        yield self.fake_smsc.disconnect()
+        self.tx_helper.clear_dispatched_statuses()
+        self.clock.advance(transport.service.delay)
+
+        yield self.fake_smsc.bind()
+
+        [msg1, msg2, msg3] = self.tx_helper.get_dispatched_statuses()
+
+        self.assertEqual(msg1['type'], 'binding')
+        self.assertEqual(msg2['type'], 'bound')
+
+        self.assertEqual(msg3['status'], 'degraded')
+        self.assertEqual(msg3['component'], 'smpp')
+        self.assertEqual(msg3['type'], 'throttled')
+        self.assertEqual(msg3['message'], 'Throttled')
 
 
 class SmppTransmitterTransportTestCase(SmppTransceiverTransportTestCase):

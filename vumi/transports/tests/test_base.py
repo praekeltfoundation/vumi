@@ -3,6 +3,7 @@ from twisted.internet.defer import inlineCallbacks
 from vumi.tests.helpers import VumiTestCase
 from vumi.transports.base import Transport
 from vumi.transports.tests.helpers import TransportHelper
+from vumi.tests.utils import LogCatcher
 
 
 class TestBaseTransport(VumiTestCase):
@@ -113,3 +114,51 @@ class TestBaseTransport(VumiTestCase):
         msg = yield self.tx_helper.make_dispatch_outbound(
             "outbound", endpoint='foo')
         self.assertEqual(msgs, [msg])
+
+    @inlineCallbacks
+    def test_publish_status(self):
+        transport = yield self.tx_helper.get_transport({
+            'transport_name': 'foo',
+            'publish_status': True
+        })
+
+        msg = yield transport.publish_status(
+            status='down',
+            component='foo',
+            type='bar',
+            message='baz')
+
+        self.assertEqual(msg['status'], 'down')
+        self.assertEqual(msg['component'], 'foo')
+        self.assertEqual(msg['type'], 'bar')
+        self.assertEqual(msg['message'], 'baz')
+
+        msgs = self.tx_helper.get_dispatched_statuses('foo.status')
+        self.assertEqual(msgs, [msg])
+
+    @inlineCallbacks
+    def test_publish_status_disabled(self):
+        transport = yield self.tx_helper.get_transport({
+            'transport_name': 'foo',
+            'publish_status': False
+        })
+
+        with LogCatcher() as lc:
+            msg = yield transport.publish_status(
+                status='down',
+                component='foo',
+                type='bar',
+                message='baz')
+
+            logs = lc.messages()
+
+        self.assertEqual(msg['status'], 'down')
+        self.assertEqual(msg['component'], 'foo')
+        self.assertEqual(msg['type'], 'bar')
+        self.assertEqual(msg['message'], 'baz')
+
+        msgs = self.tx_helper.get_dispatched_statuses('foo.status')
+        self.assertEqual(msgs, [])
+        self.assertEqual(logs, [
+            "Status publishing disabled for transport 'foo', "
+            "ignoring status %r" % (msg,)])

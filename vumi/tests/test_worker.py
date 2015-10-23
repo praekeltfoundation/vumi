@@ -1,7 +1,9 @@
 from twisted.internet.defer import inlineCallbacks, succeed, Deferred
 
 from vumi.worker import BaseConfig, BaseWorker
-from vumi.connectors import ReceiveInboundConnector, ReceiveOutboundConnector
+from vumi.connectors import (
+    ReceiveInboundConnector, ReceiveOutboundConnector,
+    PublishStatusConnector, ReceiveStatusConnector)
 from vumi.tests.utils import LogCatcher
 from vumi.middleware.base import BaseMiddleware
 from vumi.tests.helpers import VumiTestCase, MessageHelper, WorkerHelper
@@ -192,6 +194,18 @@ class TestBaseWorker(VumiTestCase):
     def test_setup_ro_connector(self):
         connector = yield self.worker.setup_ro_connector('foo')
         self.assertTrue(isinstance(connector, ReceiveOutboundConnector))
+        self.assertEqual(connector.name, 'foo')
+
+    @inlineCallbacks
+    def test_setup_publish_status_connector(self):
+        connector = yield self.worker.setup_publish_status_connector('foo')
+        self.assertTrue(isinstance(connector, PublishStatusConnector))
+        self.assertEqual(connector.name, 'foo')
+
+    @inlineCallbacks
+    def test_setup_receive_status_connector(self):
+        connector = yield self.worker.setup_receive_status_connector('foo')
+        self.assertTrue(isinstance(connector, ReceiveStatusConnector))
         self.assertEqual(connector.name, 'foo')
 
     @inlineCallbacks

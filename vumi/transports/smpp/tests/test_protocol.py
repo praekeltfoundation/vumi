@@ -39,11 +39,20 @@ class DummySmppService(object):
     def get_config(self):
         return self._static_config
 
-    def on_connection_lost(self):
+    def on_connection_lost(self, reason):
         self.paused = True
+
+    def on_smpp_binding(self):
+        pass
+
+    def on_smpp_unbinding(self):
+        pass
 
     def on_smpp_bind(self):
         self.paused = False
+
+    def on_smpp_bind_timeout(self):
+        pass
 
 
 class TestEsmeProtocol(VumiTestCase):
@@ -172,6 +181,7 @@ class TestEsmeProtocol(VumiTestCase):
     @inlineCallbacks
     def test_deliver_sm_fail(self):
         yield self.get_protocol()
+        yield self.fake_smsc.bind()
         yield self.fake_smsc.send_pdu(DeliverSM(
             sequence_number=0, message_id='foo', data_coding=4,
             short_message='string with unknown data coding'))
@@ -185,6 +195,7 @@ class TestEsmeProtocol(VumiTestCase):
         yield self.get_protocol({
             "deliver_sm_decoding_error": "ESME_RSYSERR"
         })
+        yield self.fake_smsc.bind()
         yield self.fake_smsc.send_pdu(DeliverSM(
             sequence_number=0, message_id='foo', data_coding=4,
             short_message='string with unknown data coding'))

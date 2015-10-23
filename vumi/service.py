@@ -1,12 +1,14 @@
 # -*- test-case-name: vumi.tests.test_service -*-
 
 import json
+import warnings
 from copy import deepcopy
 
 from twisted.python import log
 from twisted.application.service import MultiService
 from twisted.application.internet import TCPClient
-from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
+from twisted.internet.defer import (
+    inlineCallbacks, returnValue, Deferred, succeed)
 from twisted.internet import protocol, reactor
 import txamqp
 from txamqp.client import TwistedDelegate
@@ -221,19 +223,13 @@ class Worker(MultiService, object):
     def start_consumer(self, consumer_class, *args, **kw):
         return self._amqp_client.start_consumer(consumer_class, *args, **kw)
 
-    def publish_to(self, routing_key,
-                   exchange_name='vumi', exchange_type='direct', durable=True,
-                   delivery_mode=2):
-        class_name = self.routing_key_to_class_name(routing_key)
-        publisher_class = type(
-            "%sDynamicPublisher" % class_name, (Publisher,), {
-                "routing_key": routing_key,
-                "exchange_name": exchange_name,
-                "exchange_type": exchange_type,
-                "durable": durable,
-                "delivery_mode": delivery_mode,
-            })
-        return self.start_publisher(publisher_class)
+    @inlineCallbacks
+    def publish_to(self, routing_key):
+        channel = yield self._amqp_client.get_channel()
+        publisher = DynamicPublisher(channel, routing_key)
+        yield self._amqp_client._declare_exchange(publisher, channel)
+        # return the publisher
+        returnValue(publisher)
 
     def start_publisher(self, publisher_class, *args, **kw):
         return self._amqp_client.start_publisher(publisher_class, *args, **kw)
@@ -387,51 +383,87 @@ class RoutingKeyError(Exception):
         return repr(self.value)
 
 
-class Publisher(object):
+class _Publisher(object):
     exchange_name = "vumi"
     exchange_type = "direct"
-    routing_key = "routing_key"
     durable = False
     auto_delete = False
     delivery_mode = 2  # save to disk
 
+    def check_routing_key(self, routing_key):
+        if routing_key != routing_key.lower():
+            raise RoutingKeyError(
+                "The routing_key: %s is not all lower case!" % (routing_key,))
+
+
+class Publisher(_Publisher):
+    """
+    An old-style publisher to subclass for special-purpose publishers.
+    This is deprecated in favour of using :meth:`Worker.publish_to`, although
+    it will stay around for a while.
+    """
+
+    routing_key = "routing_key"
+
     def start(self, channel):
+        warnings.warn(
+            "Subclassing the Publisher class is deprecated. Please use"
+            " Worker.publish_to() instead.", category=DeprecationWarning)
         log.msg("Started the publisher")
         self.channel = channel
         self.bound_routing_keys = {}
 
-        # There's probably a better way to do this.
-        if not hasattr(self, 'vumi_options'):
-            self.vumi_options = {}
-
-    def check_routing_key(self, routing_key):
-        if(routing_key != routing_key.lower()):
-            raise RoutingKeyError("The routing_key: %s is not all lower case!"
-                                  % (routing_key))
-
     @inlineCallbacks
-    def publish(self, message, **kwargs):
-        exchange_name = kwargs.get('exchange_name') or self.exchange_name
-        routing_key = kwargs.get('routing_key') or self.routing_key
-        self.check_routing_key(routing_key)
-        yield self.channel.basic_publish(exchange=exchange_name,
-                                         content=message,
-                                         routing_key=routing_key)
+    def _publish(self, message, routing_key=None):
+        if routing_key is None:
+            routing_key = self.routing_key
+            self.check_routing_key(routing_key)
+        yield self.channel.basic_publish(
+            exchange=self.exchange_name, content=message,
+            routing_key=routing_key)
 
-    def publish_message(self, message, **kwargs):
-        d = self.publish_raw(message.to_json(), **kwargs)
+    def publish_message(self, message, routing_key=None):
+        d = self.publish_raw(message.to_json(), routing_key=routing_key)
         d.addCallback(lambda r: message)
         return d
 
-    def publish_json(self, data, **kw):
+    def publish_json(self, data, routing_key=None):
         """helper method"""
-        return self.publish_raw(json.dumps(data, cls=json.JSONEncoder), **kw)
+        return self.publish_raw(json.dumps(data, cls=json.JSONEncoder),
+                                routing_key=routing_key)
 
-    def publish_raw(self, data, **kwargs):
+    def publish_raw(self, data, routing_key=None):
         amq_message = Content(data)
-        amq_message['delivery mode'] = kwargs.pop(
-            'delivery_mode', self.delivery_mode)
-        return self.publish(amq_message, **kwargs)
+        amq_message['delivery mode'] = self.delivery_mode
+        return self._publish(amq_message, routing_key=routing_key)
+
+
+class DynamicPublisher(_Publisher):
+    """
+    A single-routing-key publisher.
+    """
+
+    def __init__(self, channel, routing_key):
+        self.channel = channel
+        self.check_routing_key(routing_key)
+        self.routing_key = routing_key
+
+    def publish_message(self, message):
+        self.publish_raw(message.to_json())
+        return succeed(message)
+
+    def publish_json(self, data):
+        self.publish_raw(json.dumps(data, cls=json.JSONEncoder))
+
+    def publish_raw(self, data):
+        amq_message = Content(data)
+        amq_message['delivery mode'] = self.delivery_mode
+        self._publish(amq_message)
+
+    def _publish(self, message):
+        return self.channel.basic_publish(
+            exchange=self.exchange_name, content=message,
+            routing_key=self.routing_key)
 
 
 class WorkerCreator(object):

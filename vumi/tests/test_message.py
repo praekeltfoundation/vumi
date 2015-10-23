@@ -4,6 +4,7 @@ import json
 from vumi.tests.utils import RegexMatcher, UTCNearNow
 from vumi.message import (
     Message, TransportMessage, TransportEvent, TransportUserMessage,
+    TransportStatus, MissingMessageField, InvalidMessageField,
     format_vumi_date, parse_vumi_date, from_json, to_json)
 from vumi.tests.helpers import VumiTestCase
 
@@ -470,3 +471,57 @@ class TransportEventTest(TransportMessageTestMixin, VumiTestCase):
         # self.assertEqual('sphex', msg['transport_name'])
         self.assertEqual('delivered', msg['delivery_status'])
         self.assertEqual({}, msg['helper_metadata'])
+
+
+class TestTransportStatus(VumiTestCase):
+    def test_defaults(self):
+        msg = TransportStatus(
+            component='foo',
+            status='ok',
+            type='bar',
+            message='baz')
+
+        self.assertEqual(msg['details'], {})
+
+    def test_validate_component_present(self):
+        self.assertRaises(
+            MissingMessageField, TransportStatus,
+            status='ok', type='bar', message='baz')
+
+    def test_validate_status_present(self):
+        self.assertRaises(
+            MissingMessageField, TransportStatus,
+            component='foo', type='bar', message='baz')
+
+    def test_validate_type_present(self):
+        self.assertRaises(
+            MissingMessageField, TransportStatus,
+             status='ok', component='foo', message='baz')
+
+    def test_validate_message_present(self):
+        self.assertRaises(
+            MissingMessageField, TransportStatus,
+             status='ok', component='foo', type='bar')
+
+    def test_validate_status_field(self):
+        TransportStatus(
+            status='ok',
+            component='foo',
+            type='bar',
+            message='baz')
+
+        TransportStatus(
+            status='degraded',
+            component='foo',
+            type='bar',
+            message='baz')
+
+        TransportStatus(
+            status='down',
+            component='foo',
+            type='bar',
+            message='baz')
+
+        self.assertRaises(
+            InvalidMessageField, TransportStatus,
+            status='amazing', component='foo', type='bar', message='baz')

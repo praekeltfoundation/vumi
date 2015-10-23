@@ -2,7 +2,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.connectors import (
     BaseConnector, ReceiveInboundConnector, ReceiveOutboundConnector,
-    IgnoreMessage)
+    PublishStatusConnector, ReceiveStatusConnector, IgnoreMessage)
 from vumi.tests.utils import LogCatcher
 from vumi.worker import BaseWorker
 from vumi.message import TransportUserMessage
@@ -386,3 +386,59 @@ class TestReceiveOutboundConnector(BaseConnectorTestCase):
                 "Ignoring msg (with NACK) due to IgnoreMessage(): <Message"))
         [event] = self.worker_helper.get_dispatched_events('foo')
         self.assertEqual(event['event_type'], 'nack')
+
+
+class TestPublishStatusConnector(BaseConnectorTestCase):
+
+    connector_class = PublishStatusConnector
+
+    @inlineCallbacks
+    def test_publish_status(self):
+        conn = yield self.mk_connector(connector_name='foo', setup=True)
+
+        msg = self.msg_helper.make_status(
+            status='down',
+            component='foo',
+            type='bar',
+            message='baz')
+
+        yield conn.publish_status(msg)
+        msgs = self.worker_helper.get_dispatched_statuses('foo')
+        self.assertEqual(msgs, [msg])
+
+
+class TestReceiveStatusConnector(BaseConnectorTestCase):
+
+    connector_class = ReceiveStatusConnector
+
+    @inlineCallbacks
+    def test_default_status_handler(self):
+        conn = yield self.mk_connector(connector_name='foo', setup=True)
+        msg = self.msg_helper.make_status(
+            status='down',
+            component='foo',
+            type='bar',
+            message='baz')
+
+        with LogCatcher() as lc:
+            conn.default_status_handler(msg)
+
+            [log] = lc.messages()
+            self.assertTrue(
+                log.startswith("No status handler for 'foo'"))
+
+    @inlineCallbacks
+    def test_set_status_handler(self):
+        msgs = []
+        conn = yield self.mk_connector(connector_name='foo', setup=True)
+        conn.unpause()
+        conn.set_status_handler(msgs.append)
+
+        msg = self.msg_helper.make_status(
+            status='down',
+            component='foo',
+            type='bar',
+            message='baz')
+
+        yield self.worker_helper.dispatch_status(msg, 'foo')
+        self.assertEqual(msgs, [msg])

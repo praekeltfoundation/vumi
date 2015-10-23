@@ -429,3 +429,27 @@ class TransportEvent(TransportMessage):
             self.assert_field_present(extra_field)
             if not check(self[extra_field]):
                 raise InvalidMessageField(extra_field)
+
+
+class TransportStatus(TransportMessage):
+    """Message about a status event emitted by a transport.
+    """
+    MESSAGE_TYPE = 'status_event'
+    STATUSES = frozenset(('ok', 'degraded', 'down'))
+
+    def process_fields(self, fields):
+        super(TransportStatus, self).process_fields(fields)
+        fields.setdefault('reasons', [])
+        fields.setdefault('details', {})
+        return fields
+
+    def validate_fields(self):
+        super(TransportStatus, self).validate_fields()
+        self.assert_field_present('component')
+        self.assert_field_present('status')
+        self.assert_field_present('type')
+        self.assert_field_present('message')
+
+        if self.payload['status'] not in self.STATUSES:
+            raise InvalidMessageField(
+                "Unknown status %r" % (self.payload['status'],))

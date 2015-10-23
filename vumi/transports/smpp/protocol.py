@@ -83,6 +83,7 @@ class EsmeProtocol(Protocol):
         if self.noisy:
             log.debug(msg)
 
+    @inlineCallbacks
     def connectionMade(self):
         self.state = self.OPEN_STATE
         log.msg('Connection made, current state: %s' % (self.state,))
@@ -92,6 +93,7 @@ class EsmeProtocol(Protocol):
             system_type=self.config.system_type,
             interface_version=self.config.interface_version,
             address_range=self.config.address_range)
+        yield self.service.on_smpp_binding()
 
     @inlineCallbacks
     def bind(self,
@@ -139,6 +141,7 @@ class EsmeProtocol(Protocol):
         self.drop_link_call = self.clock.callLater(
             self.config.smpp_bind_timeout, self.drop_link)
 
+    @inlineCallbacks
     def drop_link(self):
         """
         Called if the SMPP connection is not bound within
@@ -147,7 +150,9 @@ class EsmeProtocol(Protocol):
         if self.is_bound():
             return
 
-        return self.disconnect(
+        yield self.service.on_smpp_bind_timeout()
+
+        yield self.disconnect(
             'Dropping link due to binding delay. Current state: %s' % (
                 self.state))
 
@@ -185,7 +190,7 @@ class EsmeProtocol(Protocol):
             self.drop_link_call.cancel()
         if self.disconnect_call is not None and self.disconnect_call.active():
             self.disconnect_call.cancel()
-        return self.service.on_connection_lost()
+        return self.service.on_connection_lost(reason)
 
     def is_bound(self):
         """
@@ -318,8 +323,14 @@ class EsmeProtocol(Protocol):
         """
         message_stash = self.service.message_stash
         d = message_stash.get_sequence_number_message_id(sequence_number)
-        d.addCallback(
-            message_stash.set_remote_message_id, smpp_message_id)
+
+        # only set the remote message id if the submission was successful, we
+        # use remote message ids for delivery reports, so we won't need remote
+        # message ids for failed submissions
+        if command_status == 'ESME_ROK':
+            d.addCallback(
+                message_stash.set_remote_message_id, smpp_message_id)
+
         d.addCallback(
             self._handle_submit_sm_resp_callback, smpp_message_id,
             command_status, sequence_number)
@@ -563,6 +574,7 @@ class EsmeProtocol(Protocol):
     def unbind(self):
         sequence_number = yield self.sequence_generator.next()
         self.send_pdu(Unbind(sequence_number))
+        yield self.service.on_smpp_unbinding()
         returnValue([sequence_number])
 
     def handle_unbind_resp(self, pdu):
