@@ -4,11 +4,11 @@ from datetime import datetime
 from twisted.web import http
 from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
 
-from vumi.tests.utils import MockHttpServer
 from vumi.transports.failures import (
     FailureMessage, FailureWorker, TemporaryFailure)
 from vumi.transports.vas2nets.vas2nets import (
     Vas2NetsTransport, Vas2NetsTransportError)
+from vumi.tests.fake_connection import FakeHttpServer
 from vumi.tests.helpers import (
     VumiTestCase, MessageHelper, WorkerHelper, PersistenceHelper)
 
@@ -37,7 +37,7 @@ class TestVas2NetsFailureWorker(VumiTestCase):
 
         self.worker = yield self.mk_transport_worker({
             'transport_name': self.msg_helper.transport_name,
-            'url': None,
+            'url': 'http://vas2nets.example.com/',
             'username': 'username',
             'password': 'password',
             'owner': 'owner',
@@ -67,8 +67,7 @@ class TestVas2NetsFailureWorker(VumiTestCase):
         self.redis = worker.redis
         returnValue(worker)
 
-    @inlineCallbacks
-    def mk_mock_server(self, body, headers=None, code=http.OK):
+    def mk_fake_http(self, body, headers=None, code=http.OK):
         if headers is None:
             headers = {'X-Nth-Smsid': 'message_id'}
 
@@ -78,10 +77,9 @@ class TestVas2NetsFailureWorker(VumiTestCase):
                 request.setHeader(k, v)
             return body
 
-        self.mock_server = MockHttpServer(handler)
-        self.add_cleanup(self.mock_server.stop)
-        yield self.mock_server.start()
-        self.worker.config['url'] = self.mock_server.url
+        fake_http = FakeHttpServer(handler)
+        self.worker.agent_factory = fake_http.get_agent
+        return fake_http
 
     def get_dispatched_failures(self):
         return self.worker_helper.get_dispatched(
@@ -102,7 +100,7 @@ class TestVas2NetsFailureWorker(VumiTestCase):
 
     @inlineCallbacks
     def test_send_sms_success(self):
-        yield self.mk_mock_server("Result_code: 00, Message OK")
+        self.mk_fake_http("Result_code: 00, Message OK")
         msg = self.make_outbound("outbound")
         yield self.worker_helper.dispatch_outbound(msg)
         self.assertEqual(1, len(self.worker_helper.get_dispatched_events()))
@@ -114,9 +112,9 @@ class TestVas2NetsFailureWorker(VumiTestCase):
         A 'No SmsId Header' error should not be retried.
         """
         self.worker.failure_published = FailureCounter(1)
-        yield self.mk_mock_server("Result_code: 04, Internal system error "
-                                      "occurred while processing message",
-                                      {})
+        self.mk_fake_http("Result_code: 04, Internal system error "
+                          "occurred while processing message",
+                          {})
         msg = self.make_outbound("outbound")
         yield self.worker_helper.dispatch_outbound(msg)
         yield self.worker.failure_published.deferred

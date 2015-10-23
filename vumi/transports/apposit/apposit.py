@@ -28,6 +28,7 @@ class AppositTransport(HttpRpcTransport):
     """
     HTTP transport for Apposit's interconnection services.
     """
+    agent_factory = None  # For swapping out the Agent we use in tests.
 
     ENCODING = 'utf-8'
     CONFIG_CLASS = AppositTransportConfig
@@ -140,7 +141,8 @@ class AppositTransport(HttpRpcTransport):
             self.outbound_url,
             data=urlencode(params),
             method='POST',
-            headers={'Content-Type': self.CONTENT_TYPE})
+            headers={'Content-Type': self.CONTENT_TYPE},
+            agent_class=self.agent_factory)
 
         self.emit("Response: (%s) %r" %
                   (response.code, response.delivered_body))

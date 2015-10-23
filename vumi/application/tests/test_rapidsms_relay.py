@@ -5,11 +5,12 @@ import json
 from twisted.internet.defer import inlineCallbacks
 from twisted.web import http
 
-from vumi.tests.utils import LogCatcher, MockHttpServer
+from vumi.tests.utils import LogCatcher
 from vumi.application.rapidsms_relay import RapidSMSRelay, BadRequestError
 from vumi.utils import http_request_full, basic_auth_string, to_kwargs
 from vumi.message import TransportUserMessage, from_json
 from vumi.application.tests.helpers import ApplicationHelper
+from vumi.tests.fake_connection import FakeHttpServer
 from vumi.tests.helpers import VumiTestCase
 
 
@@ -22,16 +23,14 @@ class TestRapidSMSRelay(VumiTestCase):
     def setup_resource(self, callback=None, auth=None, config=None):
         if callback is None:
             callback = lambda r: self.fail("No RapidSMS requests expected.")
-        self.mock_server = MockHttpServer(callback)
-        self.add_cleanup(self.mock_server.stop)
-        yield self.mock_server.start()
-        url = '%s%s' % (self.mock_server.url, '/test/resource/path')
-        self.app = yield self.setup_app(url, auth=auth, config=config)
+        self.fake_http = FakeHttpServer(callback)
+        self.app = yield self.setup_app(auth=auth, config=config)
+        self.app.agent_factory = self.fake_http.get_agent
 
-    def setup_app(self, url, auth=None, config=None):
+    def setup_app(self, auth=None, config=None):
         vumi_username, vumi_password = auth if auth else (None, None)
         app_config = {
-            'rapidsms_url': url,
+            'rapidsms_url': 'http://rapidsms.example.com/test/resource/path',
             'web_path': '/send/',
             'web_port': '0',
             'rapidsms_username': 'username',

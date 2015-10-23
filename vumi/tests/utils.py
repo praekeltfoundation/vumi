@@ -156,6 +156,10 @@ class MockResource(Resource):
 
 
 class MockHttpServer(object):
+    """
+    NOTE: This is deprecated.
+          Please use :class:`vumi.tests.http_helpers.MockHttpHelper` instead.
+    """
 
     def __init__(self, handler=None):
         self.queue = DeferredQueue()

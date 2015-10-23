@@ -6,7 +6,7 @@ from urllib import urlencode
 from twisted.internet.defer import inlineCallbacks, DeferredQueue
 
 from vumi.utils import http_request, http_request_full
-from vumi.tests.utils import MockHttpServer
+from vumi.tests.fake_connection import FakeHttpServer
 from vumi.tests.helpers import VumiTestCase
 from vumi.transports.mtech_kenya import (
     MTechKenyaTransport, MTechKenyaTransportV2)
@@ -20,9 +20,8 @@ class TestMTechKenyaTransport(VumiTestCase):
     @inlineCallbacks
     def setUp(self):
         self.cellulant_sms_calls = DeferredQueue()
-        self.mock_mtech_sms = MockHttpServer(self.handle_request)
-        yield self.mock_mtech_sms.start()
-        self.add_cleanup(self.mock_mtech_sms.stop)
+        self.fake_http = FakeHttpServer(self.handle_request)
+        self.base_url = "http://mtech-keyna.example.com/"
 
         self.valid_creds = {
             'mt_username': 'testuser',
@@ -31,12 +30,13 @@ class TestMTechKenyaTransport(VumiTestCase):
         self.config = {
             'web_path': "foo",
             'web_port': 0,
-            'outbound_url': self.mock_mtech_sms.url,
+            'outbound_url': self.base_url,
         }
         self.config.update(self.valid_creds)
         self.tx_helper = self.add_helper(
             TransportHelper(self.transport_class, mobile_addr='2371234567'))
         self.transport = yield self.tx_helper.get_transport(self.config)
+        self.transport.agent_factory = self.fake_http.get_agent
         self.transport_url = self.transport.get_transport_url()
 
     def handle_request(self, request):
@@ -106,7 +106,7 @@ class TestMTechKenyaTransport(VumiTestCase):
     def test_outbound(self):
         msg = yield self.tx_helper.make_dispatch_outbound("hi")
         req = yield self.cellulant_sms_calls.get()
-        self.assertEqual(req.path, '/')
+        self.assertEqual(req.path, self.base_url)
         self.assertEqual(req.method, 'POST')
         self.assertEqual({
             'user': ['testuser'],
@@ -124,7 +124,7 @@ class TestMTechKenyaTransport(VumiTestCase):
         self.valid_creds['mt_username'] = 'other_user'
         msg = yield self.tx_helper.make_dispatch_outbound("hi")
         req = yield self.cellulant_sms_calls.get()
-        self.assertEqual(req.path, '/')
+        self.assertEqual(req.path, self.base_url)
         self.assertEqual(req.method, 'POST')
         self.assertEqual({
             'user': ['testuser'],
@@ -143,7 +143,7 @@ class TestMTechKenyaTransport(VumiTestCase):
         msg = yield self.tx_helper.make_dispatch_outbound(
             "hi", to_addr="4471234567")
         req = yield self.cellulant_sms_calls.get()
-        self.assertEqual(req.path, '/')
+        self.assertEqual(req.path, self.base_url)
         self.assertEqual(req.method, 'POST')
         self.assertEqual({
             'user': ['testuser'],
@@ -178,7 +178,7 @@ class TestMTechKenyaTransport(VumiTestCase):
         msg = yield self.tx_helper.make_dispatch_outbound(
             "hi", transport_metadata={'linkID': 'link123'})
         req = yield self.cellulant_sms_calls.get()
-        self.assertEqual(req.path, '/')
+        self.assertEqual(req.path, self.base_url)
         self.assertEqual(req.method, 'POST')
         self.assertEqual({
             'user': ['testuser'],
