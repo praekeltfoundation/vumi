@@ -587,6 +587,9 @@ class FakeAMQClient(WorkerAMQClient):
             self.vumi_options = vumi_options
         self.broker = broker
 
+    def connected_callback(self, client):
+        pass
+
     def _patch_channel(self, channel):
         channel.message_processed = self.broker.message_processed
         return channel
