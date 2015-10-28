@@ -9,7 +9,7 @@ from pika.spec import (
 from twisted.internet import reactor
 from twisted.internet.defer import Deferred, succeed
 from twisted.protocols.loopback import loopbackAsync
-from twisted.internet.protocol import Protocol
+from twisted.internet.protocol import Protocol, ServerFactory
 
 from vumi.service import WorkerAMQClient
 from vumi.message import Message as VumiMessage
@@ -25,12 +25,14 @@ def gen_longlong():
 
 
 class FakeAMQPBroker(object):
-    def __init__(self):
+    def __init__(self, delay_server=False, noisy=False):
         self.queues = {}
         self.exchanges = {}
         self.server_protocols = []
         self.dispatched = {}
         self._content_pending = None
+        self.delay_server = delay_server
+        self.noisy = noisy
 
     def _get_queue(self, queue):
         assert queue in self.queues
@@ -494,7 +496,6 @@ class FakeAMQPServerProtocol(Protocol):
     """
     A very basic wrapper around pika's AMQP wire protocol implementation.
     """
-
     def __init__(self, broker):
         self._buffer = b""
         self.broker = broker
@@ -520,6 +521,8 @@ class FakeAMQPServerProtocol(Protocol):
         return data
 
     def _handle_frame(self, frame):
+        if self.broker.noisy:
+            print "C->S", frame
         if self.conn_state == "NEW":
             return self._handle_connection_header(frame)
         elif self.conn_state == "CONNECTING":
@@ -544,9 +547,17 @@ class FakeAMQPServerProtocol(Protocol):
         elif method.NAME == Connection.TuneOk.NAME:
             return
         elif method.NAME == Connection.Open.NAME:
-            self.conn_state = "CONNECTED"
-            return self.send_method(0, Connection.OpenOk())
+            return self.finish_connecting()
         assert False, "Unexpected method while connecting: %s" % method.NAME
+
+    def finish_connecting(self):
+        if self.broker.delay_server and self.conn_state == "CONNECTING":
+            self.conn_state = "CONNECTING_DELAYED"
+            return
+        assert self.conn_state in ("CONNECTING", "CONNECTING_DELAYED")
+        self.conn_state = "CONNECTED"
+        self.send_method(0, Connection.OpenOk())
+        return wait0()
 
     def _handle_method(self, channel_number, method):
         if channel_number == 0:
@@ -569,6 +580,8 @@ class FakeAMQPServerProtocol(Protocol):
         return self.send_frame(Method(channel, method))
 
     def send_frame(self, frame):
+        if self.broker.noisy:
+            print "S->C", frame
         return self.write(frame.marshal())
 
     def write(self, data):
@@ -579,7 +592,19 @@ class FakeAMQPServerProtocol(Protocol):
         return wait0()
 
 
+class FakeAMQPFactory(ServerFactory):
+    def __init__(self, broker=None):
+        if broker is None:
+            broker = FakeAMQPBroker()
+        self.broker = broker
+
+    def protocol(self):
+        return FakeAMQPServerProtocol(self.broker)
+
+
 class FakeAMQClient(WorkerAMQClient):
+    is_open = False
+
     def __init__(self, spec, vumi_options=None, broker=None):
         from txamqp.client import TwistedDelegate
         WorkerAMQClient.__init__(self, TwistedDelegate(), '', spec)
@@ -588,7 +613,7 @@ class FakeAMQClient(WorkerAMQClient):
         self.broker = broker
 
     def connected_callback(self, client):
-        pass
+        self.is_open = True
 
     def _patch_channel(self, channel):
         channel.message_processed = self.broker.message_processed

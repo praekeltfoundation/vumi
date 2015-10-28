@@ -25,12 +25,14 @@ class TestFakeAMQP(VumiTestCase):
         self.broker = new_fake_amqp.FakeAMQPBroker()
         self.add_cleanup(self.broker.wait_delivery)
 
-    def make_client(self):
+    def make_client(self, broker=None):
+        if broker is None:
+            broker = self.broker
         spec = get_spec(vumi_resource_path("amqp-spec-0-9-1.xml"))
         amq_client = new_fake_amqp.make_fake_client(spec, {
             "username": "guest",
             "password": "guest",
-        }, self.broker)
+        }, broker)
         return amq_client.started.wait().addCallback(lambda _: amq_client)
 
     @inlineCallbacks
@@ -397,3 +399,14 @@ class TestFakeAMQP(VumiTestCase):
         yield self.broker.wait_delivery()
         self.assertEqual(2, len(worker.msgs))
         yield worker.con.unpause()
+
+    @inlineCallbacks
+    def test_delayed_setup(self):
+        """
+        The server connection can be delayed to test client readiness handling.
+        """
+        broker = new_fake_amqp.FakeAMQPBroker(delay_server=True)
+        client = yield self.make_client(broker)
+        self.assertEqual(client.is_open, False)
+        yield client._server.finish_connecting()
+        self.assertEqual(client.is_open, True)

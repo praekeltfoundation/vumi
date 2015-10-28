@@ -1,5 +1,6 @@
 import pika
 from pika.adapters.twisted_connection import TwistedProtocolConnection
+from twisted.internet.defer import succeed
 from twisted.internet.protocol import ClientFactory
 
 from vumi.reconnecting_client import ReconnectingClientService
@@ -18,7 +19,13 @@ class AMQPClientService(ReconnectingClientService):
     def clientConnected(self, protocol):
         ReconnectingClientService.clientConnected(self, protocol)
         print "clientConnected!", protocol
-        protocol.ready.addCallback(self.ready_callback)
+        # `protocol.ready` is a Deferred that fires when the AMQP connection is
+        # open and is set to `None` after that. We need to handle both cases
+        # because the network might be faster than us.
+        d = protocol.ready
+        if d is None:
+            d = succeed(self)
+        return d.addCallback(self.ready_callback)
 
     def clientConnectionLost(self, reason):
         ReconnectingClientService.clientConnectionLost(self, reason)
