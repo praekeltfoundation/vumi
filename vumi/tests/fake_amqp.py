@@ -336,7 +336,14 @@ class FakeAMQPChannel(object):
         self._consumer_prefetch.pop(tag, None)
         return Message(mkMethod("cancel-ok", 31))
 
-    def basic_publish(self, exchange, routing_key, content):
+    def basic_publish(self, exchange, routing_key, content=None, body=None,
+                      properties=None):
+        # Hackety hack
+        if content is None:
+            assert None not in (body, properties)
+            content = Content(body)
+            content['delivery_mode'] = properties.delivery_mode
+        assert content is not None
         return self.broker.basic_publish(exchange, routing_key, content)
 
     def basic_ack(self, delivery_tag, multiple):

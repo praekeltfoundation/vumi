@@ -6,6 +6,9 @@ from vumi.tests import fake_amqp
 from vumi.tests.helpers import VumiTestCase
 
 
+skip = "TODO: Kill this."
+
+
 def mkmsg(body):
     return fake_amqp.Thing("Message", body=body)
 

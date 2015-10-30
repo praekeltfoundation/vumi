@@ -1,40 +1,34 @@
-from pika.spec import Connection
 from twisted.internet.defer import Deferred, inlineCallbacks, returnValue
 
 from vumi.amqp_service import AMQPClientService
-from vumi.tests.fake_connection import FakeServer, wait0
-from vumi.tests.new_fake_amqp import FakeAMQPFactory
+from vumi.tests.new_fake_amqp import make_fake_server
 from vumi.tests.helpers import VumiTestCase
 
 
 class TestAMQPService(VumiTestCase):
     def setUp(self):
-        self.fake_server = FakeServer(FakeAMQPFactory())
+        self.fake_server = make_fake_server()
         self.broker = self.fake_server.server_factory.broker
 
     @inlineCallbacks
     def get_server_protocol(self):
         """
-        Get a server protocol object which will assert that it has no pending
-        frames at cleanup.
+        Get a server protocol from our fake server.
         """
         conn = yield self.fake_server.await_connection()
         yield conn.await_connected()
         server = conn.server_protocol
         returnValue(server)
 
-    @inlineCallbacks
     def get_connected_service(self):
         """
-        Get a started service and the server protocol it's connected to.
+        Get a started service.
         """
+        d = Deferred()
         service = AMQPClientService(self.fake_server.endpoint)
+        service.connect_callbacks.append(d.callback)
         service.startService()
-        self.add_cleanup(service.stopService)
-        server = yield self.get_server_protocol()
-        header = yield server.frame_queue.get()
-        self.assertEqual(header.NAME, "ProtocolHeader")
-        returnValue((service, server))
+        return d.addCallback(lambda _: service)
 
     @inlineCallbacks
     def test_connect(self):
@@ -61,8 +55,8 @@ class TestAMQPService(VumiTestCase):
         self.assertNoResult(d)
         service.startService()
         yield self.get_server_protocol()
-        yield wait0()
-        self.successResultOf(d)
+        yield self.broker.wait0()
+        self.assertEqual(self.successResultOf(d), service)
 
     @inlineCallbacks
     def test_protocol_ready_slow(self):
@@ -78,7 +72,21 @@ class TestAMQPService(VumiTestCase):
         self.assertNoResult(d)
         service.startService()
         server = yield self.get_server_protocol()
-        yield wait0()
+        yield self.broker.wait0()
         self.assertNoResult(d)
         yield server.finish_connecting()
-        self.successResultOf(d)
+        self.assertEqual(self.successResultOf(d), service)
+
+    @inlineCallbacks
+    def test_new_channel(self):
+        """
+        Once we have a connected client, we can create channels.
+        """
+        service = yield self.get_connected_service()
+        server = yield self.get_server_protocol()
+        channel1 = yield service.get_channel()
+        self.assertEqual(channel1.channel_number, 1)
+        self.assertEqual(server.channels.keys(), [1])
+        channel2 = yield service.get_channel()
+        self.assertEqual(channel2.channel_number, 2)
+        self.assertEqual(set(server.channels.keys()), set([1, 2]))

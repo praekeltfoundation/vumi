@@ -39,6 +39,7 @@ class TestMessageInjector(VumiTestCase):
         worker = yield self.get_worker('inbound')
         data = self.make_data()
         worker.process_line(json.dumps(data))
+        yield self.worker_helper.broker.wait_delivery()
         [msg] = self.worker_helper.get_dispatched_inbound()
         self.check_msg(msg, data)
 
@@ -47,6 +48,7 @@ class TestMessageInjector(VumiTestCase):
         worker = yield self.get_worker('outbound')
         data = self.make_data()
         worker.process_line(json.dumps(data))
+        yield self.worker_helper.broker.wait_delivery()
         [msg] = self.worker_helper.get_dispatched_outbound()
         self.check_msg(msg, data)
 

@@ -1,8 +1,8 @@
-from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.defer import Deferred, inlineCallbacks, returnValue
 
-from vumi.service import get_spec, Worker
-from vumi.utils import vumi_resource_path
-from vumi.tests import new_fake_amqp
+from vumi.amqp_service import AMQPClientService
+from vumi.service import Worker
+from vumi.tests.new_fake_amqp import FakeAMQPBroker, make_fake_server
 from vumi.tests.helpers import VumiTestCase
 
 
@@ -22,30 +22,31 @@ class ToyWorker(Worker):
 
 class TestFakeAMQP(VumiTestCase):
     def setUp(self):
-        self.broker = new_fake_amqp.FakeAMQPBroker()
+        self.broker = FakeAMQPBroker()
         self.add_cleanup(self.broker.wait_delivery)
 
-    def make_client(self, broker=None):
+    def make_service(self, broker=None):
         if broker is None:
             broker = self.broker
-        spec = get_spec(vumi_resource_path("amqp-spec-0-9-1.xml"))
-        amq_client = new_fake_amqp.make_fake_client(spec, {
-            "username": "guest",
-            "password": "guest",
-        }, broker)
-        return amq_client.started.wait().addCallback(lambda _: amq_client)
+        fake_server = make_fake_server(broker)
+        service = AMQPClientService(fake_server.endpoint)
+        d = Deferred()
+        service.connect_callbacks.append(d.callback)
+        service.startService()
+        return d
 
     @inlineCallbacks
-    def make_channel(self, client=None):
-        if client is None:
-            client = yield self.make_client()
-        channel = yield client.get_channel()
-        returnValue((channel, client._server.channels[channel.id]))
+    def make_channel(self, service=None):
+        if service is None:
+            service = yield self.make_service()
+        channel = yield service.get_channel()
+        returnValue(
+            (channel, service._fake_server.channels[channel.channel_number]))
 
     @inlineCallbacks
     def get_worker(self, **config):
         worker = ToyWorker({}, config)
-        worker._amqp_client = yield self.make_client()
+        worker._amqp_client = yield self.make_service()
         yield worker.startWorker()
         returnValue(worker)
 
@@ -54,14 +55,29 @@ class TestFakeAMQP(VumiTestCase):
         """
         channel_open() creates a new channel.
         """
-        client = yield self.make_client()
-        self.assertEqual(client._server.channels, {})
-        channel = yield client.get_channel()
-        self.assertEqual(channel.id, 1)
-        self.assertEqual(set(client._server.channels.keys()), set([1]))
-        channel = yield client.get_channel()
-        self.assertEqual(channel.id, 2)
-        self.assertEqual(set(client._server.channels.keys()), set([1, 2]))
+        service = yield self.make_service()
+        self.assertEqual(service._fake_server.channels, {})
+        channel = yield service.get_channel()
+        self.assertEqual(channel.channel_number, 1)
+        self.assertEqual(service._fake_server.channels.keys(), [1])
+        channel = yield service.get_channel()
+        self.assertEqual(channel.channel_number, 2)
+        self.assertEqual(sorted(service._fake_server.channels.keys()), [1, 2])
+
+    @inlineCallbacks
+    def test_channel_close(self):
+        """
+        channel_close() closes a channel.
+        """
+        service = yield self.make_service()
+        self.assertEqual(service._fake_server.channels, {})
+        channel = yield service.get_channel()
+        self.assertEqual(channel.channel_number, 1)
+        self.assertEqual(service._fake_server.channels.keys(), [1])
+
+        yield channel.close()
+        yield self.broker.wait0()
+        self.assertEqual(service._fake_server.channels, {})
 
     @inlineCallbacks
     def test_exchange_declare(self):
@@ -215,9 +231,9 @@ class TestFakeAMQP(VumiTestCase):
         self.assertEqual(len(server_channel.unacked), 0)
 
         yield self.broker.basic_publish('e1', 'rkey', 'blah')
-        reply = yield channel.basic_get(queue='q1')
-        self.assertEqual(reply.method.name, 'get-ok')
-        self.assertEqual(reply.content.body, 'blah')
+        _, method, _, body = yield channel.basic_get(queue='q1')
+        self.assertEqual(method.NAME, 'Basic.GetOk')
+        self.assertEqual(body, 'blah')
         self.assertEqual(len(server_channel.unacked), 1)
 
     @inlineCallbacks
@@ -231,8 +247,10 @@ class TestFakeAMQP(VumiTestCase):
         yield channel.queue_bind(queue='q1', exchange='e1', routing_key='rkey')
         self.assertEqual(len(server_channel.unacked), 0)
 
-        reply = yield channel.basic_get(queue='q1')
-        self.assertEqual(reply.method.name, 'get-empty')
+        _, method, _, body = yield channel.basic_get(queue='q1')
+        self.assertEqual(method.NAME, 'Basic.GetEmpty')
+        self.assertEqual(body, None)
+        self.assertEqual(server_channel.unacked, [])
 
     @inlineCallbacks
     def test_consumer_wrangling(self):
@@ -247,12 +265,16 @@ class TestFakeAMQP(VumiTestCase):
         self.assertEqual(set(), q1.consumers)
 
         yield channel.basic_consume(queue='q1', consumer_tag='tag1')
+        yield self.broker.wait0()
         self.assertEqual(set(['tag1']), q1.consumers)
         yield channel.basic_consume(queue='q1', consumer_tag='tag2')
+        yield self.broker.wait0()
         self.assertEqual(set(['tag1', 'tag2']), q1.consumers)
-        yield channel.basic_cancel('tag2')
+        yield channel.basic_cancel(consumer_tag='tag2')
+        yield self.broker.wait0()
         self.assertEqual(set(['tag1']), q1.consumers)
-        yield channel.basic_cancel('tag2')
+        yield channel.basic_cancel(consumer_tag='tag2')
+        yield self.broker.wait0()
         self.assertEqual(set(['tag1']), q1.consumers)
 
     @inlineCallbacks
@@ -261,7 +283,8 @@ class TestFakeAMQP(VumiTestCase):
         basic_qos() is unsupported with global=True.
         """
         channel, server_channel = yield self.make_channel()
-        yield channel.basic_qos(0, 1, True)
+        yield channel.basic_qos(
+            prefetch_size=0, prefetch_count=1, all_channels=True)
         assert False
     test_basic_qos_global_unsupported.skip = "Implement channel exceptions."
 
@@ -276,10 +299,13 @@ class TestFakeAMQP(VumiTestCase):
         self.assertEqual(server_channel.qos_prefetch_count, 0)
 
         yield channel.basic_consume(queue='q1', consumer_tag='tag1')
+        yield self.broker.wait0()
         self.assertEqual(server_channel._get_consumer_prefetch('tag1'), 0)
 
-        yield channel.basic_qos(0, 1, False)
+        yield channel.basic_qos(
+            prefetch_size=0, prefetch_count=1, all_channels=False)
         yield channel.basic_consume(queue='q2', consumer_tag='tag2')
+        yield self.broker.wait0()
         self.assertEqual(server_channel._get_consumer_prefetch('tag1'), 0)
         self.assertEqual(server_channel._get_consumer_prefetch('tag2'), 1)
 
@@ -292,17 +318,17 @@ class TestFakeAMQP(VumiTestCase):
         yield channel.exchange_declare(exchange='e1', type='direct')
         yield channel.queue_declare(queue='q1')
         yield channel.queue_bind(queue='q1', exchange='e1', routing_key='rkey')
-        yield channel.basic_consume(queue='q1', consumer_tag='tag1')
+        consume_queue, ctag = yield channel.basic_consume(queue='q1')
 
         self.assertEqual(len(server_channel.unacked), 0)
         self.broker.basic_publish('e1', 'rkey', 'foo')
-        consume_queue = yield channel.client.queue('tag1')
-        msg = yield consume_queue.get()
+        _, props, _, body = yield consume_queue.get()
         channel.message_processed()
         self.assertEqual(len(server_channel.unacked), 1)
 
-        yield channel.basic_ack(delivery_tag=msg.delivery_tag, multiple=False)
-        yield new_fake_amqp.wait0()
+        yield channel.basic_ack(
+            delivery_tag=props.delivery_tag, multiple=False)
+        yield self.broker.wait0()
         self.assertEqual(len(server_channel.unacked), 0)
 
     @inlineCallbacks
@@ -318,11 +344,12 @@ class TestFakeAMQP(VumiTestCase):
         self.broker.basic_publish('e1', 'rkey', 'foo')
 
         yield self.broker.basic_publish('e1', 'rkey', 'blah')
-        msg = yield channel.basic_get(queue='q1')
+        _, props, _, body = yield channel.basic_get(queue='q1')
         self.assertEqual(len(server_channel.unacked), 1)
 
-        yield channel.basic_ack(delivery_tag=msg.delivery_tag, multiple=False)
-        yield new_fake_amqp.wait0()
+        yield channel.basic_ack(
+            delivery_tag=props.delivery_tag, multiple=False)
+        yield self.broker.wait0()
         self.assertEqual(len(server_channel.unacked), 0)
 
     @inlineCallbacks
@@ -334,25 +361,25 @@ class TestFakeAMQP(VumiTestCase):
         yield channel.exchange_declare(exchange='e1', type='direct')
         yield channel.queue_declare(queue='q1')
         yield channel.queue_bind(queue='q1', exchange='e1', routing_key='rkey')
-        yield channel.basic_consume(queue='q1', consumer_tag='tag1')
+        consume_queue, consumer_tag = yield channel.basic_consume(queue='q1')
 
         self.assertEqual(len(server_channel.unacked), 0)
         self.broker.basic_publish('e1', 'rkey', 'foo')
-        consume_queue = yield channel.client.queue('tag1')
-        msg = yield consume_queue.get()
+        _, props, _, body = yield consume_queue.get()
         channel.message_processed()
         self.assertEqual(len(server_channel.unacked), 1)
 
-        yield channel.basic_cancel('tag1')
-        yield channel.basic_ack(delivery_tag=msg.delivery_tag, multiple=False)
-        yield new_fake_amqp.wait0()
+        yield channel.basic_cancel(consumer_tag)
+        yield channel.basic_ack(
+            delivery_tag=props.delivery_tag, multiple=False)
+        yield self.broker.wait0()
         self.assertEqual(len(server_channel.unacked), 0)
 
         assert False
     test_basic_ack_consumer_canceled.skip = "Implement channel exceptions."
 
     @inlineCallbacks
-    def test_fake_amqclient(self):
+    def test_fake_amqservice(self):
         worker = yield self.get_worker()
         yield worker.pub.publish_json({'message': 'foo'})
         yield worker.conpub.publish_json({'message': 'bar'})
@@ -360,19 +387,20 @@ class TestFakeAMQP(VumiTestCase):
         self.assertEqual({'message': 'bar'}, worker.msgs[0].payload)
 
     @inlineCallbacks
-    def test_fake_amqclient_qos(self):
+    def test_fake_amqservice_qos(self):
         """
         Even if we set QOS, all messages should get delivered.
         """
         worker = yield self.get_worker()
-        yield worker.con.channel.basic_qos(0, 1, False)
+        yield worker.con.channel.basic_qos(
+            prefetch_size=0, prefetch_count=1, all_channels=False)
         yield worker.conpub.publish_json({'message': 'foo'})
         yield worker.conpub.publish_json({'message': 'bar'})
         yield self.broker.wait_delivery()
         self.assertEqual(2, len(worker.msgs))
 
     @inlineCallbacks
-    def test_fake_amqclient_pause(self):
+    def test_fake_amqservice_pause(self):
         """
         Pausing and unpausing channels should work as expected.
         """
@@ -405,8 +433,12 @@ class TestFakeAMQP(VumiTestCase):
         """
         The server connection can be delayed to test client readiness handling.
         """
-        broker = new_fake_amqp.FakeAMQPBroker(delay_server=True)
-        client = yield self.make_client(broker)
-        self.assertEqual(client.is_open, False)
-        yield client._server.finish_connecting()
-        self.assertEqual(client.is_open, True)
+        broker = FakeAMQPBroker(delay_server=True)
+        service_d = self.make_service(broker)
+        yield self.broker.wait0()
+        [server] = broker.server_protocols
+        self.assertEqual(server.conn_state, "CONNECTING_DELAYED")
+        self.assertNoResult(service_d)
+        yield server.finish_connecting()
+        self.assertEqual(server.conn_state, "CONNECTED")
+        self.successResultOf(service_d)

@@ -5,19 +5,18 @@ from inspect import CO_GENERATOR
 from itertools import dropwhile
 import traceback
 
-from twisted.internet.defer import succeed, inlineCallbacks, Deferred
+from twisted.internet.defer import inlineCallbacks, Deferred
 from twisted.internet.error import ConnectionRefusedError
 from twisted.internet.task import deferLater
 from twisted.python.failure import Failure
 from twisted.python.monkey import MonkeyPatcher
 from twisted.trial.unittest import TestCase, SkipTest, FailTest
-
 from zope.interface import Interface, implements
 
+from vumi.amqp_service import AMQPClientService
 from vumi.message import TransportUserMessage, TransportEvent, TransportStatus
-from vumi.service import get_spec
-from vumi.utils import vumi_resource_path, flatten_generator
-from vumi.tests.fake_amqp import FakeAMQPBroker, FakeAMQClient
+from vumi.tests.new_fake_amqp import FakeAMQPBroker, make_fake_server
+from vumi.utils import flatten_generator
 
 
 class _Default(object):
@@ -705,8 +704,9 @@ class WorkerHelper(object):
         happen. If ``None`` is passed in explicitly, a new broker object will
         be created.
         """
-        spec = get_spec(vumi_resource_path("amqp-spec-0-8.xml"))
-        return FakeAMQClient(spec, {}, broker)
+        fake_server = make_fake_server(broker)
+        service = AMQPClientService(fake_server.endpoint)
+        return service
 
     @classmethod
     def get_worker_raw(cls, worker_class, config, broker=None):
@@ -739,7 +739,10 @@ class WorkerHelper(object):
         worker = self.get_worker_raw(worker_class, config, self.broker)
 
         self._workers.append(worker)
-        d = succeed(worker)
+        d = Deferred()
+        worker._amqp_client.connect_callbacks.append(
+            lambda _: d.callback(worker))
+        worker._amqp_client.startService()
         if start:
             d.addCallback(_start_and_return_worker)
         return d
@@ -772,7 +775,7 @@ class WorkerHelper(object):
         """
         msgs = self.broker.get_dispatched(
             'vumi', self._rkey(connector_name, name))
-        return [message_class.from_json(msg.body) for msg in msgs]
+        return [message_class.from_json(msg) for msg in msgs]
 
     def _wait_for_dispatched(self, connector_name, name, amount):
         rkey = self._rkey(connector_name, name)
@@ -848,8 +851,7 @@ class WorkerHelper(object):
         if connector_name is None:
             connector_name = self._status_connector_name
 
-        return self.get_dispatched(
-            connector_name, 'status', TransportStatus)
+        return self.get_dispatched(connector_name, 'status', TransportStatus)
 
     @proxyable
     def wait_for_dispatched_events(self, amount, connector_name=None):
@@ -1008,7 +1010,7 @@ class WorkerHelper(object):
             delivered.
         """
         self.broker.publish_message(exchange, routing_key, message)
-        return self.kick_delivery()
+        return self.broker.wait_delivery()
 
     @proxyable
     def dispatch_inbound(self, message, connector_name=None):
@@ -1115,7 +1117,7 @@ class WorkerHelper(object):
         returned.
         """
         msgs = self.broker.get_dispatched('vumi.metrics', 'vumi.metrics')
-        return [json.loads(msg.body)['datapoints'] for msg in msgs]
+        return [json.loads(msg)['datapoints'] for msg in msgs]
 
     @proxyable
     def clear_dispatched_metrics(self):

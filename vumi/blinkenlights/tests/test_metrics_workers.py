@@ -1,8 +1,8 @@
-from twisted.internet.defer import inlineCallbacks, Deferred, DeferredQueue
+from twisted.internet.defer import (
+    inlineCallbacks, Deferred, DeferredQueue, returnValue)
 from twisted.internet.protocol import DatagramProtocol
 from twisted.internet import reactor
 
-from vumi.tests.utils import get_stubbed_channel
 from vumi.blinkenlights import metrics_workers
 from vumi.blinkenlights.message20110818 import MetricMessage
 from vumi.tests.helpers import VumiTestCase, WorkerHelper
@@ -20,13 +20,15 @@ class BrokerWrapper(object):
         """Publish datapoints to a broker."""
         msg = MetricMessage()
         msg.extend(datapoints)
-        self._broker.publish_message(exchange, queue, msg)
+        return self._broker.publish_message(exchange, queue, msg)
 
+    @inlineCallbacks
     def recv_datapoints(self, exchange, queue):
         """Retrieve datapoints from a broker."""
+        yield self._broker.wait_delivery()
         vumi_msgs = self._broker.get_messages(exchange, queue)
         msgs = [MetricMessage.from_dict(vm.payload) for vm in vumi_msgs]
-        return [msg.datapoints() for msg in msgs]
+        returnValue([msg.datapoints() for msg in msgs])
 
 
 class TestMetricTimeBucket(VumiTestCase):
@@ -47,8 +49,8 @@ class TestMetricTimeBucket(VumiTestCase):
         broker.send_datapoints("vumi.metrics", "vumi.metrics", datapoints)
         yield broker.kick_delivery()
 
-        buckets = [broker.recv_datapoints("vumi.metrics.buckets",
-                                          "bucket.%d" % i) for i in range(4)]
+        buckets = [(yield broker.recv_datapoints(
+            "vumi.metrics.buckets", "bucket.%d" % i)) for i in range(4)]
 
         expected_buckets = [
             [],
@@ -85,11 +87,11 @@ class TestMetricAggregator(VumiTestCase):
             ("vumi.test.foo", ("avg",), [(1235, 1.5), (1236, 2.0)]),
             ("vumi.test.foo", ("sum",), [(1240, 1.0)]),
             ]
-        self.broker.send_datapoints(
+        yield self.broker.send_datapoints(
             "vumi.metrics.buckets", "bucket.3", datapoints)
-        self.broker.send_datapoints(
+        yield self.broker.send_datapoints(
             "vumi.metrics.buckets", "bucket.3", datapoints)
-        self.broker.send_datapoints(
+        yield self.broker.send_datapoints(
             "vumi.metrics.buckets", "bucket.2", datapoints)
         yield self.broker.kick_delivery()
 
@@ -100,18 +102,18 @@ class TestMetricAggregator(VumiTestCase):
         expected = []
         self.now = 1241
         worker.check_buckets()
-        self.assertEqual(recv(), expected)
+        self.assertEqual((yield recv()), expected)
 
         expected.append([["vumi.test.foo.avg", [], [[1235, 1.75]]]])
         self.now = 1246
         worker.check_buckets()
-        self.assertEqual(recv(), expected)
+        self.assertEqual((yield recv()), expected)
 
         # skip a few checks
         expected.append([["vumi.test.foo.sum", [], [[1240, 2.0]]]])
         self.now = 1261
         worker.check_buckets()
-        self.assertEqual(recv(), expected)
+        self.assertEqual((yield recv()), expected)
 
     @inlineCallbacks
     def test_aggregating_last(self):
@@ -125,11 +127,11 @@ class TestMetricAggregator(VumiTestCase):
             ("vumi.test.foo", ("last",), [(1235, 1.5), (1236, 2.0)]),
             ("vumi.test.bar", ("last",), [(1241, 1.0), (1240, 2.0)]),
             ]
-        self.broker.send_datapoints(
+        yield self.broker.send_datapoints(
             "vumi.metrics.buckets", "bucket.3", datapoints)
-        self.broker.send_datapoints(
+        yield self.broker.send_datapoints(
             "vumi.metrics.buckets", "bucket.3", datapoints)
-        self.broker.send_datapoints(
+        yield self.broker.send_datapoints(
             "vumi.metrics.buckets", "bucket.2", datapoints)
         yield self.broker.kick_delivery()
 
@@ -140,18 +142,18 @@ class TestMetricAggregator(VumiTestCase):
         expected = []
         self.now = 1241
         worker.check_buckets()
-        self.assertEqual(recv(), expected)
+        self.assertEqual((yield recv()), expected)
 
         expected.append([["vumi.test.foo.last", [], [[1235, 2.0]]]])
         self.now = 1246
         worker.check_buckets()
-        self.assertEqual(recv(), expected)
+        self.assertEqual((yield recv()), expected)
 
         # skip a few checks
         expected.append([["vumi.test.bar.last", [], [[1240, 1.0]]]])
         self.now = 1261
         worker.check_buckets()
-        self.assertEqual(recv(), expected)
+        self.assertEqual((yield recv()), expected)
 
     @inlineCallbacks
     def test_aggregating_lag(self):
@@ -165,11 +167,11 @@ class TestMetricAggregator(VumiTestCase):
             ("vumi.test.foo", ("avg",), [(1235, 1.5), (1236, 2.0)]),
             ("vumi.test.foo", ("sum",), [(1240, 1.0)]),
             ]
-        self.broker.send_datapoints(
+        yield self.broker.send_datapoints(
             "vumi.metrics.buckets", "bucket.3", datapoints)
-        self.broker.send_datapoints(
+        yield self.broker.send_datapoints(
             "vumi.metrics.buckets", "bucket.3", datapoints)
-        self.broker.send_datapoints(
+        yield self.broker.send_datapoints(
             "vumi.metrics.buckets", "bucket.2", datapoints)
         yield self.broker.kick_delivery()
 
@@ -180,18 +182,18 @@ class TestMetricAggregator(VumiTestCase):
         expected = []
         self.now = 1237
         worker.check_buckets()
-        self.assertEqual(recv(), expected)
+        self.assertEqual((yield recv()), expected)
 
         expected.append([["vumi.test.foo.avg", [], [[1235, 1.75]]]])
         self.now = 1242
         worker.check_buckets()
-        self.assertEqual(recv(), expected)
+        self.assertEqual((yield recv()), expected)
 
         # skip a few checks
         expected.append([["vumi.test.foo.sum", [], [[1240, 2.0]]]])
         self.now = 1257
         worker.check_buckets()
-        self.assertEqual(recv(), expected)
+        self.assertEqual((yield recv()), expected)
 
 
 class TestAggregationSystem(VumiTestCase):
@@ -207,8 +209,8 @@ class TestAggregationSystem(VumiTestCase):
         return self.now
 
     def send(self, datapoints):
-        self.broker.send_datapoints("vumi.metrics",
-                                    "vumi.metrics", datapoints)
+        return self.broker.send_datapoints("vumi.metrics",
+                                           "vumi.metrics", datapoints)
 
     def recv(self):
         return self.broker.recv_datapoints("vumi.metrics.aggregates",
@@ -251,7 +253,7 @@ class TestAggregationSystem(VumiTestCase):
         for worker in self.aggregator_workers:
             worker.check_buckets()
 
-        datapoints, = self.recv()
+        [datapoints] = yield self.recv()
         self.assertEqual(datapoints, [
             ["vumi.test.foo.sum", [], [[12345, 6.0]]]
         ])
@@ -261,15 +263,24 @@ class TestGraphitePublisher(VumiTestCase):
     def setUp(self):
         self.worker_helper = self.add_helper(WorkerHelper())
 
+    def get_channel(self, broker=None):
+        client = self.worker_helper.get_fake_amqp_client(broker)
+        d = Deferred()
+        client.connect_callbacks.append(d.callback)
+        client.startService()
+        d.addCallback(lambda cl: cl.get_channel())
+        return d
+
+    @inlineCallbacks
     def _check_msg(self, channel, metric, value, timestamp):
+        yield self.worker_helper.broker.wait0()
         [msg] = self.worker_helper.broker.get_dispatched("graphite", metric)
-        self.assertEqual(msg.properties, {"delivery mode": 2})
-        self.assertEqual(msg.body, "%f %d" % (value, timestamp))
+        self.assertEqual(msg, "%f %d" % (value, timestamp))
 
     @inlineCallbacks
     def test_publish_metric(self):
         datapoint = ("vumi.test.v1", 1.0, 1234)
-        channel = yield get_stubbed_channel(self.worker_helper.broker)
+        channel = yield self.get_channel(self.worker_helper.broker)
         pub = metrics_workers.GraphitePublisher()
         pub.start(channel)
         pub.publish_metric(*datapoint)
@@ -287,12 +298,13 @@ class TestGraphiteMetricsCollector(VumiTestCase):
             metrics_workers.GraphiteMetricsCollector, {})
 
         datapoints = [("vumi.test.foo", "", [(1234, 1.5)])]
-        self.broker.send_datapoints("vumi.metrics.aggregates",
-                                    "vumi.metrics.aggregates", datapoints)
+        yield self.broker.send_datapoints(
+            "vumi.metrics.aggregates",
+            "vumi.metrics.aggregates", datapoints)
         yield self.broker.kick_delivery()
 
         content, = self.broker.get_dispatched("graphite", "vumi.test.foo")
-        parts = content.body.split()
+        parts = content.split()
         value, ts = float(parts[0]), int(parts[1])
         self.assertEqual(value, 1.5)
         self.assertEqual(ts, 1234)
@@ -369,7 +381,8 @@ class TestRandomMetricsGenerator(VumiTestCase):
         yield self.wake_after_run()
         yield self.wake_after_run()
 
-        datasets = self.broker.recv_datapoints('vumi.metrics', 'vumi.metrics')
+        datasets = yield self.broker.recv_datapoints(
+            'vumi.metrics', 'vumi.metrics')
         # there should be a least one but there may be more
         # than one if the tests are running slowly
         datapoints = datasets[0]

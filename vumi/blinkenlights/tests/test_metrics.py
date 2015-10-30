@@ -4,7 +4,6 @@ from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, Deferred
 
 from vumi.blinkenlights import metrics
-from vumi.tests.utils import get_stubbed_channel
 from vumi.message import Message
 from vumi.service import Worker
 from vumi.tests.helpers import VumiTestCase, WorkerHelper
@@ -15,9 +14,17 @@ class TestMetricPublisher(VumiTestCase):
     def setUp(self):
         self.worker_helper = self.add_helper(WorkerHelper())
 
+    def get_channel(self, broker=None):
+        client = self.worker_helper.get_fake_amqp_client(broker)
+        d = Deferred()
+        client.connect_callbacks.append(d.callback)
+        client.startService()
+        d.addCallback(lambda cl: cl.get_channel())
+        return d
+
     @inlineCallbacks
     def start_publisher(self, publisher):
-        channel = yield get_stubbed_channel(self.worker_helper.broker)
+        channel = yield self.get_channel(self.worker_helper.broker)
         publisher.start(channel)
 
     def _sleep(self, delay):
@@ -25,7 +32,9 @@ class TestMetricPublisher(VumiTestCase):
         reactor.callLater(delay, lambda: d.callback(None))
         return d
 
+    @inlineCallbacks
     def _check_msg(self, prefix, metric, values):
+        yield self.worker_helper.broker.wait0()
         msgs = self.worker_helper.get_dispatched_metrics()
         if values is None:
             self.assertEqual(msgs, [])
@@ -53,7 +62,7 @@ class TestMetricPublisher(VumiTestCase):
         msg.append(
             ("vumi.test.%s" % (cnt.name,), cnt.aggs, [(time.time(), 1)]))
         publisher.publish_message(msg)
-        self._check_msg("vumi.test.", cnt, [1])
+        yield self._check_msg("vumi.test.", cnt, [1])
 
     def test_publisher_provides_interface(self):
         publisher = metrics.MetricPublisher()
@@ -67,16 +76,24 @@ class TestMetricManager(VumiTestCase):
         self.add_cleanup(lambda: self._next_publish.callback(None))
         self.worker_helper = self.add_helper(WorkerHelper())
 
+    def get_channel(self, broker=None):
+        client = self.worker_helper.get_fake_amqp_client(broker)
+        d = Deferred()
+        client.connect_callbacks.append(d.callback)
+        client.startService()
+        d.addCallback(lambda cl: cl.get_channel())
+        return d
+
     def on_publish(self, mm):
         d, self._next_publish = self._next_publish, Deferred()
         d.callback(mm)
 
     def wait_publish(self):
-        return self._next_publish
+        return self._next_publish.addCallback(self.worker_helper.broker.wait0)
 
     @inlineCallbacks
     def start_manager_as_publisher(self, manager):
-        channel = yield get_stubbed_channel(self.worker_helper.broker)
+        channel = yield self.get_channel(self.worker_helper.broker)
         manager.start(channel)
         self.add_cleanup(manager.stop)
 
@@ -85,7 +102,9 @@ class TestMetricManager(VumiTestCase):
         reactor.callLater(delay, lambda: d.callback(None))
         return d
 
+    @inlineCallbacks
     def _check_msg(self, manager, metric, values):
+        yield self.worker_helper.broker.wait0()
         msgs = self.worker_helper.get_dispatched_metrics()
         if values is None:
             self.assertEqual(msgs, [])
@@ -108,7 +127,7 @@ class TestMetricManager(VumiTestCase):
         mm = metrics.MetricManager("vumi.test.")
         self.assertEqual(mm._publisher, None)
         self.assertEqual(mm._task, None)
-        channel = yield get_stubbed_channel(self.worker_helper.broker)
+        channel = yield self.get_channel(self.worker_helper.broker)
         mm.start(channel)
         self.add_cleanup(mm.stop)
         self.assertIsInstance(mm._publisher, metrics.MetricPublisher)
@@ -120,7 +139,7 @@ class TestMetricManager(VumiTestCase):
         mm = metrics.MetricManager("vumi.test.", publisher=publisher)
         self.assertEqual(mm._publisher, publisher)
         self.assertEqual(mm._task, None)
-        channel = yield get_stubbed_channel(self.worker_helper.broker)
+        channel = yield self.get_channel(self.worker_helper.broker)
         self.assertRaises(RuntimeError, mm.start, channel)
 
     def test_start_polling_no_publisher(self):
@@ -179,7 +198,7 @@ class TestMetricManager(VumiTestCase):
 
         cnt.inc()
         mm.publish_metrics()
-        self._check_msg(mm, cnt, [1])
+        yield self._check_msg(mm, cnt, [1])
 
     @inlineCallbacks
     def test_publish_metrics_oneshot(self):
@@ -189,7 +208,7 @@ class TestMetricManager(VumiTestCase):
 
         mm.oneshot(cnt, 1)
         mm.publish_metrics()
-        self._check_msg(mm, cnt, [1])
+        yield self._check_msg(mm, cnt, [1])
 
     @inlineCallbacks
     def test_start(self):
@@ -198,16 +217,16 @@ class TestMetricManager(VumiTestCase):
         yield self.start_manager_as_publisher(mm)
 
         self.assertTrue(mm._task is not None)
-        self._check_msg(mm, cnt, None)
+        yield self._check_msg(mm, cnt, None)
 
         cnt.inc()
         yield self.wait_publish()
-        self._check_msg(mm, cnt, [1])
+        yield self._check_msg(mm, cnt, [1])
 
         cnt.inc()
         cnt.inc()
         yield self.wait_publish()
-        self._check_msg(mm, cnt, [1, 1])
+        yield self._check_msg(mm, cnt, [1, 1])
 
     @inlineCallbacks
     def test_publish_metrics(self):
@@ -219,7 +238,7 @@ class TestMetricManager(VumiTestCase):
         self.assertEqual(len(mm._oneshot_msgs), 1)
         mm.publish_metrics()
         self.assertEqual(mm._oneshot_msgs, [])
-        self._check_msg(mm, cnt, [1])
+        yield self._check_msg(mm, cnt, [1])
 
     def test_publish_metrics_not_started_no_publisher(self):
         mm = metrics.MetricManager("vumi.test.")
@@ -240,18 +259,18 @@ class TestMetricManager(VumiTestCase):
         acc = mm.register(metrics.Metric("my.acc"))
         try:
             self.assertTrue(mm._task is not None)
-            self._check_msg(mm, acc, None)
+            yield self._check_msg(mm, acc, None)
 
             acc.set(1.5)
             acc.set(1.0)
             yield self.wait_publish()
-            self._check_msg(mm, acc, [1.5, 1.0])
+            yield self._check_msg(mm, acc, [1.5, 1.0])
         finally:
             mm.stop()
 
     @inlineCallbacks
     def test_task_failure(self):
-        channel = yield get_stubbed_channel()
+        channel = yield self.get_channel()
         mm = metrics.MetricManager("vumi.test.", 0.1)
         wait_error = Deferred()
 

@@ -95,6 +95,7 @@ class TestXMPPTransport(VumiTestCase):
         message.addElement((None, 'body'), content='hello world')
         protocol = transport.xmpp_protocol
         protocol.onMessage(message)
+        yield self.tx_helper.kick_delivery()
         [msg] = self.tx_helper.get_dispatched_inbound()
         self.assertEqual(msg['to_addr'], self.jid.userhost())
         self.assertEqual(msg['from_addr'], 'test@case.com')
@@ -115,6 +116,7 @@ class TestXMPPTransport(VumiTestCase):
 
         protocol = transport.xmpp_protocol
         protocol.onMessage(message)
+        yield self.tx_helper.kick_delivery()
 
         [msg] = self.tx_helper.get_dispatched_inbound()
         self.assertTrue(msg['message_id'])
@@ -194,6 +196,7 @@ class TestXMPPTransport(VumiTestCase):
         message.addElement((None, 'body'), content='hello world')
         protocol = transport.xmpp_protocol
         protocol.onMessage(message)
+        yield self.tx_helper.kick_delivery()
         [msg] = self.tx_helper.get_dispatched_inbound()
         self.assertEqual(msg['from_addr'], 'test@case.com')
         self.assertEqual(msg['transport_metadata']['xmpp_id'], message['id'])

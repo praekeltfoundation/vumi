@@ -8,12 +8,11 @@ from pika.spec import (
     Connection, Channel, Exchange, Queue, Basic, BasicProperties)
 from twisted.internet import reactor
 from twisted.internet.defer import Deferred, succeed
-from twisted.protocols.loopback import loopbackAsync
 from twisted.internet.protocol import Protocol, ServerFactory
 
-from vumi.service import WorkerAMQClient
+from vumi.amqp_service import AMQPClientService
 from vumi.message import Message as VumiMessage
-from vumi.tests.fake_connection import wait0
+from vumi.tests.fake_connection import FakeServer, wait0
 
 
 def gen_id(prefix=''):
@@ -76,13 +75,13 @@ class FakeAMQPBroker(object):
         if queue in self.queues:
             self.queues[queue].remove_consumer(tag)
 
-    def basic_publish(self, exchange, routing_key, content):
+    def basic_publish(self, exchange, routing_key, body):
         exc = self.dispatched.setdefault(exchange, {})
-        exc.setdefault(routing_key, []).append(content)
+        exc.setdefault(routing_key, []).append(body)
         if exchange not in self.exchanges:
             # This is to test, so we don't care about missing queues
             return None
-        self._get_exchange(exchange).basic_publish(routing_key, content)
+        self._get_exchange(exchange).basic_publish(routing_key, body)
         self.kick_delivery()
         return None
 
@@ -222,9 +221,23 @@ class FakeAMQPBroker(object):
         self.check_pending_content()
 
     def message_processed(self):
+        """
+        Track that a delivered message has been processed.
+
+        The wait0() allows the reactor to finish anything that was scheduled by
+        the message processor but hasn't actually run yet and ensures that
+        wait_delivery() is actually waiting for all delivered messages to be
+        processed.
+        """
+        return wait0().addCallback(self._message_processed_cb)
+
+    def _message_processed_cb(self, _r):
         assert self._content_pending is not None
         self._content_pending['delivering_count'] -= 1
         self.check_pending_content()
+
+    def wait0(self, r=None):
+        return wait0(r)
 
 
 class FakeAMQPChannel(object):
@@ -355,6 +368,8 @@ class FakeAMQPChannel(object):
         self._reset_publishing()
         if method.NAME == Channel.Open.NAME:
             return self.channel_open()
+        if method.NAME == Channel.Close.NAME:
+            return self.channel_close()
         elif method.NAME == Exchange.Declare.NAME:
             return self.exchange_declare(method.exchange, method.type)
         elif method.NAME == Queue.Declare.NAME:
@@ -602,33 +617,12 @@ class FakeAMQPFactory(ServerFactory):
         return FakeAMQPServerProtocol(self.broker)
 
 
-class FakeAMQClient(WorkerAMQClient):
-    is_open = False
-
-    def __init__(self, spec, vumi_options=None, broker=None):
-        from txamqp.client import TwistedDelegate
-        WorkerAMQClient.__init__(self, TwistedDelegate(), '', spec)
-        if vumi_options is not None:
-            self.vumi_options = vumi_options
-        self.broker = broker
-
-    def connected_callback(self, client):
-        self.is_open = True
-
-    def _patch_channel(self, channel):
-        channel.message_processed = self.broker.message_processed
-        return channel
-
-    def channel(self, id):
-        d = WorkerAMQClient.channel(self, id)
-        return d.addCallback(self._patch_channel)
+def make_fake_server(broker=None):
+    factory = FakeAMQPFactory(broker)
+    fake_server = FakeServer(factory, on_connect=_fake_server_connect_cb)
+    fake_server.broker = factory.broker
+    return fake_server
 
 
-def make_fake_client(spec, vumi_options=None, broker=None):
-    if broker is None:
-        broker = FakeAMQPBroker()
-    server = FakeAMQPServerProtocol(broker)
-    client = FakeAMQClient(spec, vumi_options, broker)
-    client._server = server
-    client._finished_d = loopbackAsync(server, client)
-    return client
+def _fake_server_connect_cb(conn):
+    conn.client_protocol._fake_server = conn.server_protocol

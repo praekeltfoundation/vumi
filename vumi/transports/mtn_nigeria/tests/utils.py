@@ -1,5 +1,5 @@
 from twisted.internet.defer import (
-    Deferred, inlineCallbacks, gatherResults, maybeDeferred)
+    Deferred, inlineCallbacks, gatherResults, maybeDeferred, DeferredQueue)
 from twisted.internet import reactor
 from twisted.internet.protocol import Protocol
 from twisted.internet.protocol import Factory, ClientCreator
@@ -9,22 +9,6 @@ from vumi.transports.mtn_nigeria.xml_over_tcp import XmlOverTcpClient
 
 def mk_packet(session_id, body):
     return XmlOverTcpClient.serialize_header(session_id, body) + body
-
-
-class WaitForDataMixin(object):
-    waiting_for_data = False
-    deferred_data = Deferred()
-
-    def wait_for_data(self):
-        d = Deferred()
-        self.deferred_data = d
-        self.waiting_for_data = True
-        return d
-
-    def callback_deferred_data(self, data):
-        if self.waiting_for_data and not self.deferred_data.called:
-            self.waiting_for_data = False
-            self.deferred_data.callback(data)
 
 
 class MockServerFactory(Factory):
@@ -63,9 +47,13 @@ class MockServerMixin(object):
         return self.server_port.getHost().port
 
 
-class MockXmlOverTcpServer(MockServer, WaitForDataMixin):
+class MockXmlOverTcpServer(MockServer):
     def __init__(self):
         self.responses = {}
+        self.received_queue = DeferredQueue()
+
+    def wait_for_data(self):
+        return self.received_queue.get()
 
     def send_data(self, data):
         self.transport.write(data)
@@ -74,7 +62,7 @@ class MockXmlOverTcpServer(MockServer, WaitForDataMixin):
         response = self.responses.get(data)
         if response is not None:
             self.transport.write(response)
-        self.callback_deferred_data(data)
+        self.received_queue.put(data)
 
 
 class MockXmlOverTcpServerMixin(MockServerMixin):
