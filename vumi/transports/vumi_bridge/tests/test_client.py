@@ -38,6 +38,7 @@ class TestStreamingClient(VumiTestCase):
         """
         self.assertNotIsInstance(self.client.agent, Agent)
         self.assertIsInstance(StreamingClient(None).agent, Agent)
+        self.assertIsInstance(StreamingClient().agent, Agent)
 
     @inlineCallbacks
     def test_callback_on_disconnect(self):

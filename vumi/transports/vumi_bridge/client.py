@@ -87,7 +87,7 @@ class VumiMessageReceiver(basic.LineReceiver):
 
 class StreamingClient(object):
 
-    def __init__(self, agent_factory):
+    def __init__(self, agent_factory=None):
         if agent_factory is None:
             agent_factory = Agent
         self.agent = agent_factory(reactor)
