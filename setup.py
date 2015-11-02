@@ -38,7 +38,6 @@ setup(
         'zope.interface',
         'Twisted>=13.2.0',
         'pika',
-        'txAMQP>=0.6.2',
         'PyYAML',
         'iso8601',
         'pyOpenSSL',

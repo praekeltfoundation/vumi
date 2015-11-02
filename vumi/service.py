@@ -10,150 +10,12 @@ from twisted.python import log
 from twisted.application.service import MultiService
 from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
 from twisted.internet.endpoints import clientFromString
-from twisted.internet import protocol, reactor
-import txamqp
-from txamqp.client import TwistedDelegate
-from txamqp.protocol import AMQClient
+from twisted.internet import reactor
 
 from vumi.amqp_service import AMQPClientService
 from vumi.errors import VumiError
 from vumi.message import Message
-from vumi.utils import load_class_by_string, vumi_resource_path, build_web_site
-
-
-SPECS = {}
-
-
-def get_spec(specfile):
-    """
-    Cache the generated part of txamqp, because generating it is expensive.
-
-    This is important for tests, which create lots of txamqp clients,
-    and therefore generate lots of specs. Just doing this results in a
-    decidedly happy test run time reduction.
-    """
-    if specfile not in SPECS:
-        SPECS[specfile] = txamqp.spec.load(specfile)
-    return SPECS[specfile]
-
-
-class AmqpFactory(protocol.ReconnectingClientFactory):
-
-    def __init__(self, worker):
-        self.options = worker.options
-        self.config = worker.config
-        self.spec = get_spec(vumi_resource_path(worker.options['specfile']))
-        self.delegate = TwistedDelegate()
-        self.worker = worker
-        self.amqp_client = None
-
-    def buildProtocol(self, addr):
-        self.amqp_client = WorkerAMQClient(
-            self.delegate, self.options['vhost'],
-            self.spec, self.options.get('heartbeat', 0))
-        self.amqp_client.factory = self
-        self.amqp_client.vumi_options = self.options
-        self.amqp_client.connected_callback = self.worker._amqp_connected
-        self.resetDelay()
-        return self.amqp_client
-
-    def clientConnectionFailed(self, connector, reason):
-        log.err("AmqpFactory connection failed (%s)" % (
-            reason.getErrorMessage(),))
-        self.worker._amqp_connection_failed()
-        self.amqp_client = None
-        protocol.ReconnectingClientFactory.clientConnectionFailed(
-            self, connector, reason)
-
-    def clientConnectionLost(self, connector, reason):
-        if not self.worker.running:
-            # We've specifically asked for this disconnect.
-            return
-        log.err("AmqpFactory client connection lost (%s)" % (
-            reason.getErrorMessage(),))
-        self.worker._amqp_connection_failed()
-        self.amqp_client = None
-        protocol.ReconnectingClientFactory.clientConnectionLost(
-            self, connector, reason)
-
-
-class WorkerAMQClient(AMQClient):
-    @inlineCallbacks
-    def connectionMade(self):
-        AMQClient.connectionMade(self)
-        yield self.authenticate(self.vumi_options['username'],
-                                self.vumi_options['password'])
-        # authentication was successful
-        log.msg("Got an authenticated connection")
-        yield self.connected_callback(self)
-
-    @inlineCallbacks
-    def get_channel(self, channel_id=None):
-        """If channel_id is None a new channel is created"""
-        if channel_id:
-            channel = self.channels[channel_id]
-        else:
-            channel_id = self.get_new_channel_id()
-            channel = yield self.channel(channel_id)
-            yield channel.channel_open()
-            self.channels[channel_id] = channel
-        returnValue(channel)
-
-    def get_new_channel_id(self):
-        """
-        AMQClient keeps track of channels in a dictionary. The
-        channel ids are the keys, get the highest number and up it
-        or just return zero for the first channel
-        """
-        return (max(self.channels) + 1) if self.channels else 0
-
-    def _declare_exchange(self, source, channel):
-        # get the details for AMQP
-        exchange_name = source.exchange_name
-        exchange_type = source.exchange_type
-        durable = source.durable
-        return channel.exchange_declare(exchange=exchange_name,
-                                        type=exchange_type, durable=durable)
-
-    @inlineCallbacks
-    def start_consumer(self, consumer_class, *args, **kwargs):
-        channel = yield self.get_channel()
-
-        consumer = consumer_class(channel, *args, **kwargs)
-        consumer.vumi_options = self.vumi_options
-
-        # get the details for AMQP
-        exchange_name = consumer.exchange_name
-        durable = consumer.durable
-        queue_name = consumer.queue_name
-        routing_key = consumer.routing_key
-
-        # declare the exchange, doesn't matter if it already exists
-        yield self._declare_exchange(consumer, channel)
-
-        # declare the queue
-        yield channel.queue_declare(queue=queue_name, durable=durable)
-        # bind it to the exchange with the routing key
-        yield channel.queue_bind(queue=queue_name, exchange=exchange_name,
-                                 routing_key=routing_key)
-        yield consumer.start()
-        # return the newly created & consuming consumer
-        returnValue(consumer)
-
-    @inlineCallbacks
-    def start_publisher(self, publisher_class, *args, **kwargs):
-        # much more braindead than start_consumer
-        # get a channel
-        channel = yield self.get_channel()
-        # start the publisher
-        publisher = publisher_class(*args, **kwargs)
-        publisher.vumi_options = self.vumi_options
-        # declare the exchange, doesn't matter if it already exists
-        yield self._declare_exchange(publisher, channel)
-        # start!
-        yield publisher.start(channel)
-        # return the publisher
-        returnValue(publisher)
+from vumi.utils import load_class_by_string, build_web_site
 
 
 class Worker(MultiService, object):
@@ -241,10 +103,6 @@ class Worker(MultiService, object):
         return reactor.listenTCP(port, site_factory)
 
 
-class QueueCloseMarker(object):
-    "This is a marker for closing consumer queues."
-
-
 class Consumer(object):
 
     exchange_name = "vumi"
@@ -285,8 +143,6 @@ class Consumer(object):
         try:
             while self.keep_consuming:
                 message = yield self.queue.get()
-                if isinstance(message, QueueCloseMarker):
-                    break
                 if self.paused:
                     yield self._unpause_d
                 delivery_tag = message[1].delivery_tag
