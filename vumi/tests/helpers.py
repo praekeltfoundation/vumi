@@ -15,7 +15,7 @@ from zope.interface import Interface, implements
 
 from vumi.amqp_service import AMQPClientService
 from vumi.message import TransportUserMessage, TransportEvent, TransportStatus
-from vumi.tests.new_fake_amqp import FakeAMQPBroker, make_fake_server
+from vumi.tests.fake_amqp import FakeAMQPBroker, make_fake_server
 from vumi.utils import flatten_generator
 
 

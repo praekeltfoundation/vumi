@@ -1,7 +1,7 @@
-from twisted.internet.defer import Deferred, inlineCallbacks, returnValue
+from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.amqp_service import AMQPClientService
-from vumi.tests.new_fake_amqp import make_fake_server
+from vumi.tests.fake_amqp import make_fake_server
 from vumi.tests.helpers import VumiTestCase
 
 

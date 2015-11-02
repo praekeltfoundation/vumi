@@ -7,7 +7,7 @@ from twisted.trial.unittest import SkipTest, TestCase, FailTest
 from vumi.amqp_service import AMQPClientService
 from vumi.blinkenlights.metrics import MetricMessage
 from vumi.message import TransportUserMessage, TransportEvent, TransportStatus
-from vumi.tests.new_fake_amqp import FakeAMQPBroker
+from vumi.tests.fake_amqp import FakeAMQPBroker
 from vumi.tests.helpers import (
     VumiTestCase, proxyable, generate_proxies, IHelper, import_skip,
     MessageHelper, WorkerHelper, MessageDispatchHelper, PersistenceHelper,

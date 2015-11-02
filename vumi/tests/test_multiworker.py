@@ -4,7 +4,7 @@ from twisted.internet.defer import (
 from vumi.service import Worker, WorkerCreator
 from vumi.message import TransportUserMessage
 from vumi.multiworker import MultiWorker
-from vumi.tests.new_fake_amqp import make_fake_server
+from vumi.tests.fake_amqp import make_fake_server
 from vumi.tests.helpers import VumiTestCase, MessageHelper, WorkerHelper
 
 
