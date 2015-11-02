@@ -265,11 +265,8 @@ class TestGraphitePublisher(VumiTestCase):
 
     def get_channel(self, broker=None):
         client = self.worker_helper.get_fake_amqp_client(broker)
-        d = Deferred()
-        client.connect_callbacks.append(d.callback)
         client.startService()
-        d.addCallback(lambda cl: cl.get_channel())
-        return d
+        return client.await_connected().addCallback(lambda c: c.get_channel())
 
     @inlineCallbacks
     def _check_msg(self, channel, metric, value, timestamp):

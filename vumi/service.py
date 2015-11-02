@@ -505,5 +505,5 @@ class WorkerCreator(object):
 
     def _connect(self, worker, timeout, bindAddress):
         service = self._get_service(self._get_endpoint())
-        service.connect_callbacks.append(worker._amqp_connected)
+        service.await_connected().addCallback(worker._amqp_connected)
         service.setServiceParent(worker)

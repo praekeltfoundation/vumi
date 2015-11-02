@@ -24,11 +24,9 @@ class TestAMQPService(VumiTestCase):
         """
         Get a started service.
         """
-        d = Deferred()
         service = AMQPClientService(self.fake_server.endpoint)
-        service.connect_callbacks.append(d.callback)
         service.startService()
-        return d.addCallback(lambda _: service)
+        return service.await_connected()
 
     @inlineCallbacks
     def test_connect(self):
@@ -50,8 +48,7 @@ class TestAMQPService(VumiTestCase):
         already open by the time we notice we're connected.
         """
         service = AMQPClientService(self.fake_server.endpoint)
-        d = Deferred()
-        service.connect_callbacks.append(d.callback)
+        d = service.await_connected()
         self.assertNoResult(d)
         service.startService()
         yield self.get_server_protocol()
@@ -67,8 +64,7 @@ class TestAMQPService(VumiTestCase):
         """
         self.broker.delay_server = True
         service = AMQPClientService(self.fake_server.endpoint)
-        d = Deferred()
-        service.connect_callbacks.append(d.callback)
+        d = service.await_connected()
         self.assertNoResult(d)
         service.startService()
         server = yield self.get_server_protocol()

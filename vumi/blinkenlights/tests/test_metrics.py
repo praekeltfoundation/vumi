@@ -16,11 +16,8 @@ class TestMetricPublisher(VumiTestCase):
 
     def get_channel(self, broker=None):
         client = self.worker_helper.get_fake_amqp_client(broker)
-        d = Deferred()
-        client.connect_callbacks.append(d.callback)
         client.startService()
-        d.addCallback(lambda cl: cl.get_channel())
-        return d
+        return client.await_connected().addCallback(lambda c: c.get_channel())
 
     @inlineCallbacks
     def start_publisher(self, publisher):
@@ -78,11 +75,8 @@ class TestMetricManager(VumiTestCase):
 
     def get_channel(self, broker=None):
         client = self.worker_helper.get_fake_amqp_client(broker)
-        d = Deferred()
-        client.connect_callbacks.append(d.callback)
         client.startService()
-        d.addCallback(lambda cl: cl.get_channel())
-        return d
+        return client.await_connected().addCallback(lambda c: c.get_channel())
 
     def on_publish(self, mm):
         d, self._next_publish = self._next_publish, Deferred()

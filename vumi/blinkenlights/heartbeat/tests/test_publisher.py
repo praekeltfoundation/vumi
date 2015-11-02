@@ -34,11 +34,8 @@ class TestHeartBeatPublisher(VumiTestCase):
 
     def get_channel(self, worker_helper):
         client = worker_helper.get_fake_amqp_client(worker_helper.broker)
-        d = Deferred()
-        client.connect_callbacks.append(d.callback)
         client.startService()
-        d.addCallback(lambda cl: cl.get_channel())
-        return d
+        return client.await_connected().addCallback(lambda c: c.get_channel())
 
     @inlineCallbacks
     def test_publish_heartbeat(self):

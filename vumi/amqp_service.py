@@ -1,9 +1,21 @@
 import pika
 from pika.adapters.twisted_connection import TwistedProtocolConnection
-from twisted.internet.defer import succeed, inlineCallbacks, returnValue
+from twisted.internet.defer import (
+    Deferred, succeed, inlineCallbacks, returnValue)
 from twisted.internet.protocol import ClientFactory
 
 from vumi.reconnecting_client import ReconnectingClientService
+
+
+def _fire_and_return(r, d):
+    d.callback(r)
+    return r
+
+
+def sub_deferred(parent_d):
+    d = Deferred()
+    parent_d.addCallback(_fire_and_return, d)
+    return d
 
 
 class AMQPClientService(ReconnectingClientService):
@@ -15,8 +27,10 @@ class AMQPClientService(ReconnectingClientService):
     def __init__(self, endpoint):
         factory = PikaClientFactory(pika.ConnectionParameters())
         ReconnectingClientService.__init__(self, endpoint, factory)
-        self.connect_callbacks = []
-        self.disconnect_callbacks = []
+        self._connect_d = Deferred()
+
+    def await_connected(self):
+        return sub_deferred(self._connect_d)
 
     def clientConnected(self, protocol):
         ReconnectingClientService.clientConnected(self, protocol)
@@ -33,13 +47,11 @@ class AMQPClientService(ReconnectingClientService):
 
     def clientConnectionLost(self, reason):
         self._client = None
+        self._connect_d = Deferred()
         ReconnectingClientService.clientConnectionLost(self, reason)
-        for cb in self.disconnect_callbacks:
-            cb(reason)
 
     def ready_callback(self, _ignored):
-        for cb in self.connect_callbacks:
-            cb(self)
+        self._connect_d.callback(self)
 
     def get_client(self):
         # TODO: Better exception.

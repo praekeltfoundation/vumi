@@ -30,10 +30,8 @@ class TestFakeAMQP(VumiTestCase):
             broker = self.broker
         fake_server = make_fake_server(broker)
         service = AMQPClientService(fake_server.endpoint)
-        d = Deferred()
-        service.connect_callbacks.append(d.callback)
         service.startService()
-        return d
+        return service.await_connected()
 
     @inlineCallbacks
     def make_channel(self, service=None):

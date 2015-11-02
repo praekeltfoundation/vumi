@@ -739,9 +739,7 @@ class WorkerHelper(object):
         worker = self.get_worker_raw(worker_class, config, self.broker)
 
         self._workers.append(worker)
-        d = Deferred()
-        worker._amqp_client.connect_callbacks.append(
-            lambda _: d.callback(worker))
+        d = worker._amqp_client.await_connected().addCallback(lambda _: worker)
         worker._amqp_client.startService()
         if start:
             d.addCallback(_start_and_return_worker)
