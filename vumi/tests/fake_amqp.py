@@ -488,8 +488,63 @@ class FakeAMQClient(WorkerAMQClient):
             try:
                 ch = self.channels[id]
             except KeyError:
-                ch = FakeAMQPChannel(id, self)
+                ch = FakeAMQPChannelWrapper(id, self)
                 self.channels[id] = ch
         finally:
             self.channelLock.release()
         returnValue(ch)
+
+
+class FakeAMQPChannelWrapper(object):
+    """
+    Wrapper around a FakeAMQPChannel to make it look more like a real channel
+    object.
+    """
+
+    def __init__(self, id, client):
+        self._fake_channel = FakeAMQPChannel(id, client)
+        self.client = client
+
+    def __repr__(self):
+        return '<FakeAMQPChannelWrapper: id=%s>' % (
+            self._fake_channel.channel_id,)
+
+    def channel_open(self):
+        return self._fake_channel.channel_open()
+
+    def channel_close(self):
+        return self._fake_channel.channel_close()
+
+    def channel_flow(self, active):
+        return self._fake_channel.channel_flow(active)
+
+    def close(self, _reason):
+        pass
+
+    def basic_qos(self, prefetch_size, prefetch_count, is_global):
+        return self._fake_channel.basic_qos(
+            prefetch_size, prefetch_count, is_global)
+
+    def exchange_declare(self, exchange, type, durable=None):
+        return self._fake_channel.exchange_declare(exchange, type, durable)
+
+    def queue_declare(self, queue, durable=None):
+        return self._fake_channel.queue_declare(queue, durable)
+
+    def queue_bind(self, queue, exchange, routing_key):
+        return self._fake_channel.queue_bind(queue, exchange, routing_key)
+
+    def basic_consume(self, queue, tag=None):
+        return self._fake_channel.basic_consume(queue, tag)
+
+    def basic_cancel(self, tag):
+        return self._fake_channel.basic_cancel(tag)
+
+    def basic_publish(self, exchange, routing_key, content):
+        return self._fake_channel.basic_publish(exchange, routing_key, content)
+
+    def basic_ack(self, delivery_tag, multiple):
+        return self._fake_channel.basic_ack(delivery_tag, multiple)
+
+    def basic_get(self, queue):
+        return self._fake_channel.basic_get(queue)
