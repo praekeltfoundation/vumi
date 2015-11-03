@@ -5,7 +5,7 @@ import struct
 from itertools import count
 
 from twisted.internet.task import Clock
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, DeferredQueue
 
 from vumi import log
 from vumi.transports.mtn_nigeria.xml_over_tcp import (
@@ -14,7 +14,7 @@ from vumi.transports.mtn_nigeria.tests import utils
 from vumi.tests.helpers import VumiTestCase
 
 
-class ToyXmlOverTcpClient(XmlOverTcpClient, utils.WaitForDataMixin):
+class ToyXmlOverTcpClient(XmlOverTcpClient):
     _PACKET_RECEIVED_HANDLERS = {'DummyPacket': 'dummy_packet_received'}
 
     def __init__(self):
@@ -30,13 +30,17 @@ class ToyXmlOverTcpClient(XmlOverTcpClient, utils.WaitForDataMixin):
 
         self.request_id_counter = count()
         self.generated_request_ids = []
+        self.received_queue = DeferredQueue()
+
+    def wait_for_data(self):
+        return self.received_queue.get()
 
     def connectionMade(self):
         pass
 
     def dataReceived(self, data):
         XmlOverTcpClient.dataReceived(self, data)
-        self.callback_deferred_data(data)
+        self.received_queue.put(data)
 
     def dummy_packet_received(self, session_id, params):
         self.received_dummy_packets.append((session_id, params))
