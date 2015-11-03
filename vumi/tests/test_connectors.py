@@ -97,9 +97,10 @@ class TestBaseConnector(BaseConnectorTestCase):
                           for i in range(2, -1, -1)])
 
     @inlineCallbacks
-    def test_pretech_count(self):
+    def test_prefetch_count(self):
         conn, consumer = yield self.mk_consumer(prefetch_count=10)
-        self.assertEqual(consumer.channel.qos_prefetch_count, 10)
+        fake_channel = consumer.channel._fake_channel
+        self.assertEqual(fake_channel.qos_prefetch_count, 10)
 
     @inlineCallbacks
     def test_setup_raises(self):

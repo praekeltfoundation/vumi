@@ -94,7 +94,8 @@ class TestBaseTransport(VumiTestCase):
         consumers = list(self.get_tx_consumers(transport))
         self.assertEqual(1, len(consumers))
         for consumer in consumers:
-            self.assertEqual(consumer.channel.qos_prefetch_count, 1)
+            fake_channel = consumer.channel._fake_channel
+            self.assertEqual(fake_channel.qos_prefetch_count, 1)
 
     @inlineCallbacks
     def test_transport_prefetch_count_default(self):
@@ -102,7 +103,8 @@ class TestBaseTransport(VumiTestCase):
         consumers = list(self.get_tx_consumers(transport))
         self.assertEqual(1, len(consumers))
         for consumer in consumers:
-            self.assertEqual(consumer.channel.qos_prefetch_count, 20)
+            fake_channel = consumer.channel._fake_channel
+            self.assertEqual(fake_channel.qos_prefetch_count, 20)
 
     @inlineCallbacks
     def test_add_outbound_handler(self):

@@ -219,18 +219,21 @@ class TestRoutingTableDispatcher(VumiTestCase):
         dp = yield self.get_dispatcher()
         consumers = self.get_dispatcher_consumers(dp)
         for consumer in consumers:
-            self.assertEqual(consumer.channel.qos_prefetch_count, 20)
+            fake_channel = consumer.channel._fake_channel
+            self.assertEqual(fake_channel.qos_prefetch_count, 20)
 
     @inlineCallbacks
     def test_consumer_prefetch_count_custom(self):
         dp = yield self.get_dispatcher(amqp_prefetch_count=10)
         consumers = self.get_dispatcher_consumers(dp)
         for consumer in consumers:
-            self.assertEqual(consumer.channel.qos_prefetch_count, 10)
+            fake_channel = consumer.channel._fake_channel
+            self.assertEqual(fake_channel.qos_prefetch_count, 10)
 
     @inlineCallbacks
     def test_consumer_prefetch_count_none(self):
         dp = yield self.get_dispatcher(amqp_prefetch_count=None)
         consumers = self.get_dispatcher_consumers(dp)
         for consumer in consumers:
-            self.assertFalse(consumer.channel.qos_prefetch_count)
+            fake_channel = consumer.channel._fake_channel
+            self.assertEqual(fake_channel.qos_prefetch_count, 0)
