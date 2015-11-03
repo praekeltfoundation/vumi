@@ -259,9 +259,9 @@ class Consumer(object):
 
     def __init__(self, channel):
         self.channel = channel
+        self._fake_channel = getattr(self.channel, '_fake_channel', None)
         self._notify_paused_and_quiet = []
         self.keep_consuming = False
-        self._testing = hasattr(self.channel, 'message_processed')
         self.queue = None
         self._consumer_tag = None
 
@@ -341,8 +341,8 @@ class Consumer(object):
             # broken, but we still decrement the _in_progress counter so we
             # don't wait forever for it during shutdown.
             self._in_progress -= 1
-            if self._testing:
-                self.channel.message_processed()
+            if self._fake_channel is not None:
+                self._fake_channel.message_processed()
         if result is not False:
             yield self.channel.basic_ack(message.delivery_tag, False)
         else:

@@ -496,6 +496,11 @@ class FakeAMQClient(WorkerAMQClient):
 
 
 class FakeAMQPChannelWrapper(object):
+    """
+    Wrapper around a FakeAMQPChannel to make it look more like a real channel
+    object.
+    """
+
     def __init__(self, id, client):
         self._fake_channel = FakeAMQPChannel(id, client)
         self.client = client
@@ -543,6 +548,3 @@ class FakeAMQPChannelWrapper(object):
 
     def basic_get(self, queue):
         return self._fake_channel.basic_get(queue)
-
-    def message_processed(self):
-        return self._fake_channel.message_processed()
