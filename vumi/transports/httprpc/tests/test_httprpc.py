@@ -7,7 +7,7 @@ from vumi.utils import http_request, http_request_full, basic_auth_string
 from vumi.tests.helpers import VumiTestCase
 from vumi.tests.utils import LogCatcher
 from vumi.transports.httprpc import HttpRpcTransport
-from vumi.message import TransportUserMessage
+from vumi.message import TransportUserMessage, TransportStatus
 from vumi.transports.tests.helpers import TransportHelper
 
 
@@ -39,6 +39,7 @@ class TestTransport(VumiTestCase):
             'request_timeout': 10,
             'request_timeout_status_code': 418,
             'request_timeout_body': 'I am a teapot',
+            'publish_status': True,
             }
         self.tx_helper = self.add_helper(TransportHelper(OkTransport))
         self.transport = yield self.tx_helper.get_transport(config)
@@ -82,6 +83,34 @@ class TestTransport(VumiTestCase):
             self.assertEqual(warning, 'Timing out to_addr')
         self.assertEqual(response.delivered_body, 'I am a teapot')
         self.assertEqual(response.code, 418)
+
+    @inlineCallbacks
+    def test_publish_health_status_repeated(self):
+        '''Repeated statuses should not be published, new ones should be.'''
+        yield self.transport.add_status(
+            component='foo',
+            status='ok',
+            type='bar',
+            message='test')
+
+        yield self.transport.add_status(
+            component='foo',
+            status='ok',
+            type='bar',
+            message='another test')
+
+        [status] = yield self.tx_helper.get_dispatched_statuses()
+        self.assertEqual(status['status'], 'ok')
+        yield self.tx_helper.clear_dispatched_statuses()
+
+        yield self.transport.add_status(
+            component='foo',
+            status='degraded',
+            type='bar',
+            message='another test')
+
+        [status] = yield self.tx_helper.get_dispatched_statuses()
+        self.assertEqual(status['status'], 'degraded')
 
 
 class TestTransportWithAuthentication(VumiTestCase):
