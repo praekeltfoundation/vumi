@@ -467,7 +467,7 @@ class StatusEdgeDetector(object):
         '''
         Checks to see if the current status is a repeat. If it is, None is
         returned. If it isn't, the status is returned.
-        
+
         :param status: The status to check.
         :type status: :class:`TransportStatus`
         '''
@@ -484,10 +484,10 @@ class StatusEdgeDetector(object):
     def _get_types(self, component):
         return self.types.get(component, set())
 
-    def _add_type(self, component, type):
+    def _add_type(self, component, type_):
         if component not in self.types:
             self.types[component] = set()
-        self.types[component].add(type)
+        self.types[component].add(type_)
 
     def _remove_types(self, component):
         self.types.pop(component, None)
