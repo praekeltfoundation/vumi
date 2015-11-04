@@ -7,7 +7,7 @@ from vumi.utils import http_request, http_request_full, basic_auth_string
 from vumi.tests.helpers import VumiTestCase
 from vumi.tests.utils import LogCatcher
 from vumi.transports.httprpc import HttpRpcTransport
-from vumi.message import TransportUserMessage, TransportStatus
+from vumi.message import TransportUserMessage
 from vumi.transports.tests.helpers import TransportHelper
 
 
