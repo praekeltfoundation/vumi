@@ -1,18 +1,10 @@
 import json
-from collections import namedtuple
 
 from twisted.internet.defer import inlineCallbacks, Deferred
 
 from vumi.message import Message
 from vumi.service import Worker, WorkerCreator
 from vumi.tests.helpers import VumiTestCase, WorkerHelper
-
-
-def fake_amq_message(dictionary, delivery_tag='delivery_tag'):
-    Content = namedtuple('Content', ['body'])
-    AMQMessage = namedtuple('Message', ['content', 'delivery_tag'])
-    return AMQMessage(delivery_tag=delivery_tag,
-                      content=Content(body=json.dumps(dictionary)))
 
 
 class TestService(VumiTestCase):
@@ -24,7 +16,6 @@ class TestService(VumiTestCase):
         """The consume helper should direct all incoming messages matching the
         specified routing_key, queue_name & exchange to the given callback"""
 
-        message = fake_amq_message({"key": "value"})
         worker = yield self.worker_helper.get_worker(Worker, {}, start=False)
 
         # buffer to check messages consumed
@@ -36,7 +27,7 @@ class TestService(VumiTestCase):
         # message straight to the callback, the callback will apend it to the
         # log and we can test it.
         self.worker_helper.broker.basic_publish('vumi', 'test.routing.key',
-                                                message.content)
+                                                json.dumps({"key": "value"}))
         yield self.worker_helper.broker.wait_delivery()
         self.assertEquals(log, [Message(key="value")])
 
@@ -53,6 +44,7 @@ class TestService(VumiTestCase):
         # them to the log
         consumer = yield worker.consume(
             'test.routing.key', lambda msg: log.append(msg), prefetch_count=10)
+        yield self.worker_helper.broker.wait_delivery()
         fake_channel = consumer.channel._fake_channel
         self.assertEqual(10, fake_channel._get_consumer_prefetch(
             consumer._consumer_tag))
@@ -74,12 +66,11 @@ class TestService(VumiTestCase):
             raise Exception("oops")
 
         consumer = yield worker.consume('test.routing.key', consume_func)
-        message = fake_amq_message({"key": "value"})
 
         # Assert we have no messages being processed and publish a message.
         self.assertEqual(consumer._in_progress, 0)
         self.worker_helper.broker.basic_publish(
-            'vumi', 'test.routing.key', message.content)
+            'vumi', 'test.routing.key', json.dumps({"key": "value"}))
         # Wait for the processing to start and assert that it's in progress.
         yield start_d
         self.assertEqual(consumer._in_progress, 1)
@@ -98,11 +89,11 @@ class TestService(VumiTestCase):
         publisher = yield worker.publish_to('test.routing.key')
         self.assertEquals(publisher.routing_key, 'test.routing.key')
         publisher.publish_message(Message(key="value"))
+        yield self.worker_helper.kick_delivery()
         [published_msg] = self.worker_helper.broker.get_dispatched(
             'vumi', 'test.routing.key')
 
-        self.assertEquals(published_msg.body, '{"key": "value"}')
-        self.assertEquals(published_msg.properties, {'delivery mode': 2})
+        self.assertEquals(published_msg, '{"key": "value"}')
 
 
 class LoadableTestWorker(Worker):

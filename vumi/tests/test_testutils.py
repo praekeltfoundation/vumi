@@ -2,30 +2,9 @@ from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks
 from twisted.web.client import Agent, readBody
 
-from vumi.service import Worker
-from vumi.tests.utils import get_stubbed_worker, LogCatcher, MockHttpServer
-from vumi.tests.fake_amqp import FakeAMQClient
+from vumi.tests.utils import LogCatcher, MockHttpServer
 from vumi import log
 from vumi.tests.helpers import VumiTestCase
-
-
-class ToyWorker(Worker):
-    def poke(self):
-        return "poke"
-
-
-class TestTestUtils(VumiTestCase):
-
-    def test_get_stubbed_worker(self):
-        worker = get_stubbed_worker(ToyWorker)
-        self.assertEqual("poke", worker.poke())
-        self.assertTrue(isinstance(worker._amqp_client, FakeAMQClient))
-
-    def test_get_stubbed_worker_with_config(self):
-        options = {'key': 'value'}
-        worker = get_stubbed_worker(ToyWorker, options)
-        self.assertEqual({}, worker._amqp_client.vumi_options)
-        self.assertEqual(options, worker.config)
 
 
 class TestLogCatcher(VumiTestCase):

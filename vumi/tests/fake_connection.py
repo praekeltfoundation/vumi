@@ -51,10 +51,11 @@ class FakeServer(object):
     Fake server container for testing client/server interactions.
     """
 
-    def __init__(self, server_factory, auto_accept=True):
+    def __init__(self, server_factory, auto_accept=True, on_connect=None):
         self.server_factory = server_factory
         self.auto_accept = auto_accept
         self.connection_queue = DeferredQueue()
+        self.on_connect = on_connect
 
     # Public API.
 
@@ -81,6 +82,8 @@ class FakeServer(object):
 
     def _handle_connection(self):
         conn = FakeConnection(self)
+        if self.on_connect is not None:
+            conn._connected_d.addCallback(lambda _: self.on_connect(conn))
         self.connection_queue.put(conn)
         if self.auto_accept:
             conn.accept_connection()
@@ -143,9 +146,9 @@ class FakeConnection(object):
     # Internal stuff.
 
     def _finish_connecting(self, client_protocol, finished_d):
-        self._connected_d.callback(None)
         self.client_protocol = client_protocol
         finished_d.chainDeferred(self._finished_d)
+        self._connected_d.callback(None)
 
 
 @implementer(IStreamClientEndpoint)

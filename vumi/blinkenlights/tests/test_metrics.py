@@ -17,7 +17,9 @@ class TestMetricPublisher(VumiTestCase):
     @inlineCallbacks
     def start_publisher(self, publisher):
         client = WorkerHelper.get_fake_amqp_client(self.worker_helper.broker)
-        channel = yield client.get_channel()
+        client.startService()
+        channel = yield client.await_connected().addCallback(
+            lambda c: c.get_channel())
         publisher.start(channel)
 
     def _sleep(self, delay):
@@ -54,7 +56,7 @@ class TestMetricPublisher(VumiTestCase):
         msg.append(
             ("vumi.test.%s" % (cnt.name,), cnt.aggs, [(time.time(), 1)]))
         publisher.publish_message(msg)
-        self._check_msg("vumi.test.", cnt, [1])
+        yield self._check_msg("vumi.test.", cnt, [1])
 
     def test_publisher_provides_interface(self):
         publisher = metrics.MetricPublisher()
@@ -73,12 +75,14 @@ class TestMetricManager(VumiTestCase):
         d.callback(mm)
 
     def wait_publish(self):
-        return self._next_publish
+        return self._next_publish.addCallback(self.worker_helper.broker.wait0)
 
     @inlineCallbacks
     def start_manager_as_publisher(self, manager):
         client = WorkerHelper.get_fake_amqp_client(self.worker_helper.broker)
-        channel = yield client.get_channel()
+        client.startService()
+        channel = yield client.await_connected().addCallback(
+            lambda c: c.get_channel())
         manager.start(channel)
         self.add_cleanup(manager.stop)
 
@@ -180,7 +184,7 @@ class TestMetricManager(VumiTestCase):
 
         cnt.inc()
         mm.publish_metrics()
-        self._check_msg(mm, cnt, [1])
+        yield self._check_msg(mm, cnt, [1])
 
     @inlineCallbacks
     def test_publish_metrics_oneshot(self):
@@ -190,7 +194,7 @@ class TestMetricManager(VumiTestCase):
 
         mm.oneshot(cnt, 1)
         mm.publish_metrics()
-        self._check_msg(mm, cnt, [1])
+        yield self._check_msg(mm, cnt, [1])
 
     @inlineCallbacks
     def test_start(self):
@@ -199,16 +203,16 @@ class TestMetricManager(VumiTestCase):
         yield self.start_manager_as_publisher(mm)
 
         self.assertTrue(mm._task is not None)
-        self._check_msg(mm, cnt, None)
+        yield self._check_msg(mm, cnt, None)
 
         cnt.inc()
         yield self.wait_publish()
-        self._check_msg(mm, cnt, [1])
+        yield self._check_msg(mm, cnt, [1])
 
         cnt.inc()
         cnt.inc()
         yield self.wait_publish()
-        self._check_msg(mm, cnt, [1, 1])
+        yield self._check_msg(mm, cnt, [1, 1])
 
     @inlineCallbacks
     def test_publish_metrics(self):
@@ -220,7 +224,7 @@ class TestMetricManager(VumiTestCase):
         self.assertEqual(len(mm._oneshot_msgs), 1)
         mm.publish_metrics()
         self.assertEqual(mm._oneshot_msgs, [])
-        self._check_msg(mm, cnt, [1])
+        yield self._check_msg(mm, cnt, [1])
 
     def test_publish_metrics_not_started_no_publisher(self):
         mm = metrics.MetricManager("vumi.test.")
@@ -241,12 +245,12 @@ class TestMetricManager(VumiTestCase):
         acc = mm.register(metrics.Metric("my.acc"))
         try:
             self.assertTrue(mm._task is not None)
-            self._check_msg(mm, acc, None)
+            yield self._check_msg(mm, acc, None)
 
             acc.set(1.5)
             acc.set(1.0)
             yield self.wait_publish()
-            self._check_msg(mm, acc, [1.5, 1.0])
+            yield self._check_msg(mm, acc, [1.5, 1.0])
         finally:
             mm.stop()
 
