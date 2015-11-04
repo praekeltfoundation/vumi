@@ -200,8 +200,7 @@ class HttpRpcTransport(Transport):
     def add_status(self, **kw):
         '''Publishes a status if it is not a repeat of the previously
         published status.'''
-        status = TransportStatus(**kw)
-        if self.status_detect.check_status(status):
+        if self.status_detect.check_status(**kw):
             return self.publish_status(**kw)
         return succeed(None)
 
