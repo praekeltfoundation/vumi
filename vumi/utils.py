@@ -503,3 +503,4 @@ class StatusEdgeDetector(object):
         if type_ not in types:
             self._add_type(component, type_)
             return True
+        return False
