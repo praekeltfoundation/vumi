@@ -4,9 +4,10 @@ from datetime import datetime
 from twisted.internet.defer import Deferred, succeed, inlineCallbacks
 from twisted.trial.unittest import SkipTest, TestCase, FailTest
 
+from vumi.amqp_service import AMQPClientService
 from vumi.blinkenlights.metrics import MetricMessage
 from vumi.message import TransportUserMessage, TransportEvent, TransportStatus
-from vumi.tests.fake_amqp import FakeAMQPBroker, FakeAMQClient
+from vumi.tests.fake_amqp import FakeAMQPBroker
 from vumi.tests.helpers import (
     VumiTestCase, proxyable, generate_proxies, IHelper, import_skip,
     MessageHelper, WorkerHelper, MessageDispatchHelper, PersistenceHelper,
@@ -707,15 +708,19 @@ class TestWorkerHelper(VumiTestCase):
         self.assertEqual(worker_helper._workers, [])
         self.assertEqual(d, worker_stop_d)
 
+    @inlineCallbacks
     def test_get_fake_amqp_client(self):
         """
-        WorkerHelper.get_fake_amqp_client() should return a FakeAMQClient
-        wrapping the given broker.
+        WorkerHelper.get_fake_amqp_client() should return an AMQPClientService
+        with some magic attributes that appear when it connects.
         """
-        broker = FakeBroker()
+        broker = FakeAMQPBroker()
         client = WorkerHelper.get_fake_amqp_client(broker)
-        self.assertIsInstance(client, FakeAMQClient)
-        self.assertEqual(client.broker, broker)
+        self.assertIsInstance(client, AMQPClientService)
+        self.assertEqual(getattr(client, '_fake_server', None), None)
+        client.startService()
+        yield broker.wait0()
+        self.assertEqual(client._fake_server.broker, broker)
 
     def test_get_worker_raw(self):
         """
@@ -726,8 +731,7 @@ class TestWorkerHelper(VumiTestCase):
         worker = WorkerHelper.get_worker_raw(
             BaseWorker, {'foo': 'bar'}, broker)
         self.assertIsInstance(worker, BaseWorker)
-        self.assertIsInstance(worker._amqp_client, FakeAMQClient)
-        self.assertEqual(worker._amqp_client.broker, broker)
+        self.assertIsInstance(worker._amqp_client, AMQPClientService)
         self.assertEqual(worker.config, {
             'foo': 'bar',
             # worker_name is added for us if we don't provide one.
@@ -742,8 +746,7 @@ class TestWorkerHelper(VumiTestCase):
         worker = WorkerHelper.get_worker_raw(
             BaseWorker, {'worker_name': 'Gilbert'}, broker)
         self.assertIsInstance(worker, BaseWorker)
-        self.assertIsInstance(worker._amqp_client, FakeAMQClient)
-        self.assertEqual(worker._amqp_client.broker, broker)
+        self.assertIsInstance(worker._amqp_client, AMQPClientService)
         self.assertEqual(worker.config, {'worker_name': 'Gilbert'})
 
     def test_get_worker_raw_config_None(self):
@@ -754,10 +757,10 @@ class TestWorkerHelper(VumiTestCase):
         worker = WorkerHelper.get_worker_raw(
             BaseWorker, None, broker)
         self.assertIsInstance(worker, BaseWorker)
-        self.assertIsInstance(worker._amqp_client, FakeAMQClient)
-        self.assertEqual(worker._amqp_client.broker, broker)
+        self.assertIsInstance(worker._amqp_client, AMQPClientService)
         self.assertEqual(worker.config, {})
 
+    @inlineCallbacks
     def test_get_worker(self):
         """
         WorkerHelper.get_worker() should create an instance of the given worker
@@ -765,27 +768,32 @@ class TestWorkerHelper(VumiTestCase):
         """
         worker_helper = WorkerHelper()
         worker_d = worker_helper.get_worker(ToyWorker, {'foo': 'bar'})
+        yield worker_helper.broker.wait0()
         worker = success_result_of(worker_d)
         self.assertIsInstance(worker, ToyWorker)
-        self.assertIsInstance(worker._amqp_client, FakeAMQClient)
-        self.assertEqual(worker._amqp_client.broker, worker_helper.broker)
+        self.assertIsInstance(worker._amqp_client, AMQPClientService)
+        self.assertEqual(
+            worker._amqp_client._fake_server.broker, worker_helper.broker)
         self.assertEqual(worker.config, {
             'foo': 'bar',
             # worker_name is added for us if we don't provide one.
             'worker_name': 'unnamed',
         })
-        self.assertTrue(worker.worker_started)
+        self.assertEqual(worker.worker_started, True)
 
+    @inlineCallbacks
     def test_get_worker_no_start(self):
         """
         WorkerHelper.get_worker() should not start the worker if asked not to.
         """
         worker_helper = WorkerHelper()
         worker_d = worker_helper.get_worker(ToyWorker, {}, start=False)
+        yield worker_helper.broker.wait0()
         worker = success_result_of(worker_d)
         self.assertIsInstance(worker, ToyWorker)
-        self.assertIsInstance(worker._amqp_client, FakeAMQClient)
-        self.assertEqual(worker._amqp_client.broker, worker_helper.broker)
+        self.assertIsInstance(worker._amqp_client, AMQPClientService)
+        self.assertEqual(
+            worker._amqp_client._fake_server.broker, worker_helper.broker)
         self.assertFalse(worker.worker_started)
 
     def _add_to_dispatched(self, broker, rkey, msg, kick=False):
@@ -1018,6 +1026,7 @@ class TestWorkerHelper(VumiTestCase):
         msg_helper = MessageHelper()
         worker_helper = WorkerHelper()
         d = worker_helper.wait_for_dispatched_events(connector_name='fooconn')
+        yield worker_helper.broker.wait_delivery()
         self.assertEqual(self.successResultOf(d), [])
 
         msg = msg_helper.make_ack()
@@ -1069,6 +1078,7 @@ class TestWorkerHelper(VumiTestCase):
         msg_helper = MessageHelper()
         worker_helper = WorkerHelper()
         d = worker_helper.wait_for_dispatched_inbound(connector_name='fooconn')
+        yield worker_helper.broker.wait_delivery()
         self.assertEqual(self.successResultOf(d), [])
 
         msg = msg_helper.make_inbound('message')
@@ -1121,6 +1131,7 @@ class TestWorkerHelper(VumiTestCase):
         worker_helper = WorkerHelper()
         d = worker_helper.wait_for_dispatched_outbound(
             connector_name='fooconn')
+        yield worker_helper.broker.wait_delivery()
         self.assertEqual(self.successResultOf(d), [])
 
         msg = msg_helper.make_outbound('message')
@@ -1179,6 +1190,7 @@ class TestWorkerHelper(VumiTestCase):
         worker_helper = WorkerHelper()
         d = worker_helper.wait_for_dispatched_statuses(
             connector_name='fooconn')
+        yield worker_helper.broker.wait_delivery()
         self.assertEqual(self.successResultOf(d), [])
 
         msg = msg_helper.make_status(
@@ -1543,6 +1555,7 @@ class TestWorkerHelper(VumiTestCase):
         """
         worker_helper = WorkerHelper()
         d = worker_helper.wait_for_dispatched_metrics()
+        yield worker_helper.broker.wait_delivery()
         self.assertEqual(self.successResultOf(d), [])
 
         self._add_to_dispatched_metrics(worker_helper.broker, MetricMessage())

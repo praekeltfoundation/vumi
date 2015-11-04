@@ -167,6 +167,7 @@ class TestSmppTransport(VumiTestCase):
         yield self.esme.handle_data(response2.get_bin())
         yield self.esme.handle_data(response1.get_bin())
 
+        yield self.tx_helper.kick_delivery()
         [ack1, ack2] = self.tx_helper.get_dispatched_events()
         self.assertEqual(ack1['user_message_id'], '445')
         self.assertEqual(ack1['sent_message_id'], '3rd_party_id_2')
@@ -262,6 +263,7 @@ class TestSmppTransport(VumiTestCase):
         yield self.esme.handle_data(SubmitSMResp(2, "3rd_party_5").get_bin())
         yield self.tx_helper.kick_delivery()
         yield self.esme.handle_data(SubmitSMResp(3, "3rd_party_6").get_bin())
+        yield self.tx_helper.kick_delivery()
         assert_throttled_status(
             False, ["Heimlich", "Heimlich", "Other"],
             [('447', '3rd_party_5'), ('448', '3rd_party_6')])
@@ -303,6 +305,7 @@ class TestSmppTransport(VumiTestCase):
         yield self.esme.handle_data(SubmitSMResp(2, "3rd_party_5").get_bin())
         yield self.tx_helper.kick_delivery()
         yield self.esme.handle_data(SubmitSMResp(3, "3rd_party_6").get_bin())
+        yield self.tx_helper.kick_delivery()
         assert_throttled_status(
             False, ["Heimlich", "Heimlich", "Other"],
             [('447', '3rd_party_5'), ('448', '3rd_party_6')])

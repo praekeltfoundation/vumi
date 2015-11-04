@@ -11,9 +11,7 @@ from twisted.web.resource import Resource
 from twisted.internet.defer import DeferredQueue, inlineCallbacks
 from twisted.python import log
 
-from vumi.service import get_spec, WorkerCreator
-from vumi.tests.fake_amqp import FakeAMQClient
-from vumi.utils import vumi_resource_path, flatten_generator, LogFilterSite
+from vumi.utils import flatten_generator, LogFilterSite
 
 # For backcompat:
 from vumi.tests.helpers import import_filter, import_skip
@@ -39,26 +37,6 @@ class RegexMatcher(object):
 
     def __eq__(self, other):
         return self.regex.match(other)
-
-
-def get_fake_amq_client(broker=None):
-    spec = get_spec(vumi_resource_path("amqp-spec-0-8.xml"))
-    return FakeAMQClient(spec, {}, broker)
-
-
-def get_stubbed_worker(worker_class, config=None, broker=None):
-    worker = worker_class({}, config)
-    worker._amqp_client = get_fake_amq_client(broker)
-    return worker
-
-
-class StubbedWorkerCreator(WorkerCreator):
-    broker = None
-
-    def _connect(self, worker, timeout, bindAddress):
-        amq_client = get_fake_amq_client(self.broker)
-        self.broker = amq_client.broker  # So we use the same broker for all.
-        reactor.callLater(0, worker._amqp_connected, amq_client)
 
 
 def FakeRedis():

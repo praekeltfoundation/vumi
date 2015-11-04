@@ -1,10 +1,10 @@
-from twisted.internet.defer import (Deferred, DeferredList, inlineCallbacks,
-                                    returnValue)
+from twisted.internet.defer import (
+    Deferred, DeferredList, inlineCallbacks, returnValue)
 
-from vumi.tests.utils import StubbedWorkerCreator
-from vumi.service import Worker
+from vumi.service import Worker, WorkerCreator
 from vumi.message import TransportUserMessage
 from vumi.multiworker import MultiWorker
+from vumi.tests.fake_amqp import make_fake_server
 from vumi.tests.helpers import VumiTestCase, MessageHelper, WorkerHelper
 
 
@@ -31,11 +31,19 @@ class ToyWorker(Worker):
             message.reply(''.join(reversed(message['content']))))
 
 
+class StubbedWorkerCreator(WorkerCreator):
+    endpoint = None
+
+    def _get_endpoint(self):
+        return self.endpoint
+
+
 class StubbedMultiWorker(MultiWorker):
     def WORKER_CREATOR(self, options):
-        worker_creator = StubbedWorkerCreator(options)
-        worker_creator.broker = self._amqp_client.broker
-        return worker_creator
+        wc = StubbedWorkerCreator(options)
+        broker = self._amqp_client._fake_server.broker
+        wc.endpoint = make_fake_server(broker).endpoint
+        return wc
 
     def wait_for_workers(self):
         return DeferredList([w._d for w in self.workers])
@@ -72,11 +80,11 @@ class TestMultiWorker(VumiTestCase):
 
     @inlineCallbacks
     def get_multiworker(self, config):
-        self.worker = yield self.worker_helper.get_worker(
+        worker = yield self.worker_helper.get_worker(
             StubbedMultiWorker, config, start=False)
-        yield self.worker.startService()
-        yield self.worker.wait_for_workers()
-        returnValue(self.worker)
+        yield worker.startService()
+        yield worker.wait_for_workers()
+        returnValue(worker)
 
     @inlineCallbacks
     def test_start_stop_workers(self):

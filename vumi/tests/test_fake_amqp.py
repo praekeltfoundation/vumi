@@ -1,13 +1,9 @@
-from twisted.internet.defer import inlineCallbacks, returnValue, DeferredQueue
+from twisted.internet.defer import inlineCallbacks, returnValue
 
-from vumi.service import get_spec, Worker
-from vumi.utils import vumi_resource_path
-from vumi.tests import fake_amqp
+from vumi.amqp_service import AMQPClientService
+from vumi.service import Worker
+from vumi.tests.fake_amqp import FakeAMQPBroker, make_fake_server
 from vumi.tests.helpers import VumiTestCase
-
-
-def mkmsg(body):
-    return fake_amqp.Thing("Message", body=body)
 
 
 class ToyWorker(Worker):
@@ -24,272 +20,366 @@ class ToyWorker(Worker):
         self.msgs.append(msg)
 
 
-class ToyAMQClient(object):
-    """
-    A fake fake client object for building fake channel objects.
-    """
-    def __init__(self, broker, delegate):
-        self.broker = broker
-        self.delegate = delegate
-
-
 class TestFakeAMQP(VumiTestCase):
     def setUp(self):
-        self.broker = fake_amqp.FakeAMQPBroker()
+        self.broker = FakeAMQPBroker()
         self.add_cleanup(self.broker.wait_delivery)
 
-    def make_exchange(self, exchange, exchange_type):
-        self.broker.exchange_declare(exchange, exchange_type, durable=True)
-        return self.broker.exchanges[exchange]
+    def make_service(self, broker=None):
+        if broker is None:
+            broker = self.broker
+        fake_server = make_fake_server(broker)
+        service = AMQPClientService(fake_server.endpoint)
+        service.startService()
+        return service.await_connected()
 
-    def make_queue(self, queue):
-        self.broker.queue_declare(queue)
-        return self.broker.queues[queue]
-
-    def make_channel(self, channel_id, delegate=None):
-        channel = fake_amqp.FakeAMQPChannel(
-            channel_id, ToyAMQClient(self.broker, delegate))
-        channel.channel_open()
-        return channel
-
-    def set_up_broker(self):
-        self.chan1 = self.make_channel(1)
-        self.chan2 = self.make_channel(2)
-        self.ex_direct = self.make_exchange('direct', 'direct')
-        self.ex_topic = self.make_exchange('topic', 'topic')
-        self.q1 = self.make_queue('q1')
-        self.q2 = self.make_queue('q2')
-        self.q3 = self.make_queue('q3')
+    @inlineCallbacks
+    def make_channel(self, service=None):
+        if service is None:
+            service = yield self.make_service()
+        channel = yield service.get_channel()
+        returnValue(
+            (channel, service._fake_server.channels[channel.channel_number]))
 
     @inlineCallbacks
     def get_worker(self, **config):
-        spec = get_spec(vumi_resource_path("amqp-spec-0-8.xml"))
-        amq_client = fake_amqp.FakeAMQClient(spec, {}, self.broker)
-
         worker = ToyWorker({}, config)
-        worker._amqp_client = amq_client
+        worker._amqp_client = yield self.make_service()
         yield worker.startWorker()
         returnValue(worker)
 
-    def test_misc(self):
-        str(fake_amqp.Thing('kind', foo='bar'))
-        msg = fake_amqp.Message(None, [('foo', 'bar')])
-        self.assertEqual('bar', msg.foo)
-        self.assertRaises(AttributeError, lambda: msg.bar)
-
+    @inlineCallbacks
     def test_channel_open(self):
-        channel = fake_amqp.FakeAMQPChannel(0, ToyAMQClient(self.broker, None))
-        self.assertEqual([], self.broker.channels)
-        channel.channel_open()
-        self.assertEqual([channel], self.broker.channels)
+        """
+        channel_open() creates a new channel.
+        """
+        service = yield self.make_service()
+        self.assertEqual(service._fake_server.channels, {})
+        channel = yield service.get_channel()
+        self.assertEqual(channel.channel_number, 1)
+        self.assertEqual(service._fake_server.channels.keys(), [1])
+        channel = yield service.get_channel()
+        self.assertEqual(channel.channel_number, 2)
+        self.assertEqual(sorted(service._fake_server.channels.keys()), [1, 2])
 
+    @inlineCallbacks
+    def test_channel_close(self):
+        """
+        channel_close() closes a channel.
+        """
+        service = yield self.make_service()
+        self.assertEqual(service._fake_server.channels, {})
+        channel = yield service.get_channel()
+        self.assertEqual(channel.channel_number, 1)
+        self.assertEqual(service._fake_server.channels.keys(), [1])
+
+        yield channel.close()
+        yield self.broker.wait0()
+        self.assertEqual(service._fake_server.channels, {})
+
+    @inlineCallbacks
     def test_exchange_declare(self):
-        channel = self.make_channel(0)
+        """
+        exchange_declare() creates a new exchange.
+        """
+        channel, server_channel = yield self.make_channel()
         self.assertEqual({}, self.broker.exchanges)
-        channel.exchange_declare('foo', 'direct', durable=True)
+
+        yield channel.exchange_declare(
+            exchange='foo', type='direct', durable=True)
         self.assertEqual(['foo'], self.broker.exchanges.keys())
         self.assertEqual('direct', self.broker.exchanges['foo'].exchange_type)
-        channel.exchange_declare('bar', 'topic', durable=True)
+
+        yield channel.exchange_declare(
+            exchange='bar', type='topic', durable=True)
         self.assertEqual(['bar', 'foo'], sorted(self.broker.exchanges.keys()))
         self.assertEqual('topic', self.broker.exchanges['bar'].exchange_type)
 
-    def test_declare_and_queue_bind(self):
-        channel = self.make_channel(0)
+    @inlineCallbacks
+    def test_queue_declare_and_bind(self):
+        """
+        queue_declare() creates a new queue and queue_bind() binds it to a
+        routing key.
+        """
+        channel, server_channel = yield self.make_channel()
         self.assertEqual({}, self.broker.queues)
-        channel.queue_declare('foo')
-        channel.queue_declare('foo')
+
+        yield channel.queue_declare(queue='foo')
+        yield channel.queue_declare(queue='foo')
         self.assertEqual(['foo'], self.broker.queues.keys())
-        exch = self.make_exchange('exch', 'direct')
+
+        yield channel.exchange_declare(exchange='exch', type='direct')
+        exch = self.broker.exchanges['exch']
         self.assertEqual({}, exch.binds)
-        channel.queue_bind('foo', 'exch', 'routing.key')
+
+        yield channel.queue_bind(
+            queue='foo', exchange='exch', routing_key='routing.key')
         self.assertEqual(['routing.key'], exch.binds.keys())
 
         n = len(self.broker.queues)
-        channel.queue_declare('')
+        yield channel.queue_declare(queue='')
         self.assertEqual(n + 1, len(self.broker.queues))
 
+    @inlineCallbacks
     def test_publish_direct(self):
-        self.set_up_broker()
-        self.chan1.queue_bind('q1', 'direct', 'routing.key.one')
-        self.chan1.queue_bind('q1', 'direct', 'routing.key.two')
-        self.chan1.queue_bind('q2', 'direct', 'routing.key.two')
-        delivered = []
+        """
+        Direct exchanges deliver to the right queues.
+        """
+        channel, server_channel = yield self.make_channel()
+        yield channel.exchange_declare(exchange='ed', type='direct')
+        yield channel.queue_declare(queue='q1')
+        yield channel.queue_declare(queue='q2')
+        yield channel.queue_declare(queue='q3')
 
-        def fake_put(*args):
-            delivered.append(args)
-        self.q1.put = fake_put
-        self.q2.put = fake_put
-        self.q3.put = fake_put
+        yield channel.queue_bind(
+            queue='q1', exchange='ed', routing_key='routing.key.one')
+        yield channel.queue_bind(
+            queue='q1', exchange='ed', routing_key='routing.key.two')
+        yield channel.queue_bind(
+            queue='q2', exchange='ed', routing_key='routing.key.two')
 
-        self.chan1.basic_publish('direct', 'routing.key.none', 'blah')
-        self.assertEqual([], delivered)
-
-        self.chan1.basic_publish('direct', 'routing.key.*', 'blah')
-        self.assertEqual([], delivered)
-
-        self.chan1.basic_publish('direct', 'routing.key.#', 'blah')
-        self.assertEqual([], delivered)
-
-        self.chan1.basic_publish('direct', 'routing.key.one', 'blah')
-        self.assertEqual([('direct', 'routing.key.one', 'blah')], delivered)
-
-        delivered[:] = []  # Clear without reassigning
-        self.chan1.basic_publish('direct', 'routing.key.two', 'blah')
-        self.assertEqual([('direct', 'routing.key.two', 'blah')] * 2,
-                         delivered)
-
-    def test_publish_topic(self):
-        self.set_up_broker()
-        self.chan1.queue_bind('q1', 'topic', 'routing.key.*.foo.#')
-        self.chan1.queue_bind('q2', 'topic', 'routing.key.#.foo')
-        self.chan1.queue_bind('q3', 'topic', 'routing.key.*.foo.*')
         delivered = []
 
         def mfp(q):
-            def fake_put(*args):
-                delivered.append((q,) + args)
-            return fake_put
-        self.q1.put = mfp('q1')
-        self.q2.put = mfp('q2')
-        self.q3.put = mfp('q3')
+            return lambda *args: delivered.append((q,) + args)
 
-        self.chan1.basic_publish('topic', 'routing.key.none', 'blah')
+        self.broker.queues['q1'].put = mfp('q1')
+        self.broker.queues['q2'].put = mfp('q2')
+        self.broker.queues['q3'].put = mfp('q3')
+
+        self.broker.basic_publish('ed', 'routing.key.none', 'blah')
         self.assertEqual([], delivered)
 
-        self.chan1.basic_publish('topic', 'routing.key.foo.one', 'blah')
+        self.broker.basic_publish('ed', 'routing.key.*', 'blah')
         self.assertEqual([], delivered)
 
-        self.chan1.basic_publish('topic', 'routing.key.foo', 'blah')
-        self.assertEqual([('q2', 'topic', 'routing.key.foo', 'blah')],
+        self.broker.basic_publish('ed', 'routing.key.#', 'blah')
+        self.assertEqual([], delivered)
+
+        self.broker.basic_publish('ed', 'routing.key.one', 'blah')
+        self.assertEqual([('q1', 'ed', 'routing.key.one', 'blah')], delivered)
+
+        delivered[:] = []  # Clear without reassigning
+        self.broker.basic_publish('ed', 'routing.key.two', 'blah')
+        self.assertEqual([('q1', 'ed', 'routing.key.two', 'blah'),
+                          ('q2', 'ed', 'routing.key.two', 'blah')],
+                         sorted(delivered))
+
+    @inlineCallbacks
+    def test_publish_topic(self):
+        """
+        Topic exchanges deliver to the right queues.
+        """
+        channel, server_channel = yield self.make_channel()
+        yield channel.exchange_declare(exchange='et', type='topic')
+        yield channel.queue_declare(queue='q1')
+        yield channel.queue_declare(queue='q2')
+        yield channel.queue_declare(queue='q3')
+
+        yield channel.queue_bind(
+            queue='q1', exchange='et', routing_key='routing.key.*.foo.#')
+        yield channel.queue_bind(
+            queue='q2', exchange='et', routing_key='routing.key.#.foo')
+        yield channel.queue_bind(
+            queue='q3', exchange='et', routing_key='routing.key.*.foo.*')
+
+        delivered = []
+
+        def mfp(q):
+            return lambda *args: delivered.append((q,) + args)
+
+        self.broker.queues['q1'].put = mfp('q1')
+        self.broker.queues['q2'].put = mfp('q2')
+        self.broker.queues['q3'].put = mfp('q3')
+
+        self.broker.basic_publish('et', 'routing.key.none', 'blah')
+        self.assertEqual([], delivered)
+
+        self.broker.basic_publish('et', 'routing.key.foo.one', 'blah')
+        self.assertEqual([], delivered)
+
+        self.broker.basic_publish('et', 'routing.key.foo', 'blah')
+        self.assertEqual([('q2', 'et', 'routing.key.foo', 'blah')],
                          delivered)
 
         delivered[:] = []  # Clear without reassigning
-        self.chan1.basic_publish('topic', 'routing.key.one.two.foo', 'blah')
-        self.assertEqual([('q2', 'topic', 'routing.key.one.two.foo', 'blah')],
+        self.broker.basic_publish('et', 'routing.key.one.two.foo', 'blah')
+        self.assertEqual([('q2', 'et', 'routing.key.one.two.foo', 'blah')],
                          delivered)
 
         delivered[:] = []  # Clear without reassigning
-        self.chan1.basic_publish('topic', 'routing.key.one.foo', 'blah')
-        self.assertEqual([('q1', 'topic', 'routing.key.one.foo', 'blah'),
-                          ('q2', 'topic', 'routing.key.one.foo', 'blah'),
+        self.broker.basic_publish('et', 'routing.key.one.foo', 'blah')
+        self.assertEqual([('q1', 'et', 'routing.key.one.foo', 'blah'),
+                          ('q2', 'et', 'routing.key.one.foo', 'blah'),
                           ], sorted(delivered))
 
         delivered[:] = []  # Clear without reassigning
-        self.chan1.basic_publish('topic', 'routing.key.one.foo.two', 'blah')
-        self.assertEqual([('q1', 'topic', 'routing.key.one.foo.two', 'blah'),
-                          ('q3', 'topic', 'routing.key.one.foo.two', 'blah'),
+        self.broker.basic_publish('et', 'routing.key.one.foo.two', 'blah')
+        self.assertEqual([('q1', 'et', 'routing.key.one.foo.two', 'blah'),
+                          ('q3', 'et', 'routing.key.one.foo.two', 'blah'),
                           ], sorted(delivered))
 
+    @inlineCallbacks
     def test_basic_get(self):
-        self.set_up_broker()
-        self.assertEqual('get-empty', self.chan1.basic_get('q1').method.name)
-        self.q1.put('foo', 'rkey.foo', mkmsg('blah'))
-        self.assertEqual('blah', self.chan1.basic_get('q1').content.body)
-        self.assertEqual('get-empty', self.chan1.basic_get('q1').method.name)
+        """
+        basic_get() will retrieve a single waiting message.
+        """
+        channel, server_channel = yield self.make_channel()
+        yield channel.exchange_declare(exchange='e1', type='direct')
+        yield channel.queue_declare(queue='q1')
+        yield channel.queue_bind(queue='q1', exchange='e1', routing_key='rkey')
+        self.assertEqual(len(server_channel.unacked), 0)
 
+        yield self.broker.basic_publish('e1', 'rkey', 'blah')
+        _, method, _, body = yield channel.basic_get(queue='q1')
+        self.assertEqual(method.NAME, 'Basic.GetOk')
+        self.assertEqual(body, 'blah')
+        self.assertEqual(len(server_channel.unacked), 1)
+
+    @inlineCallbacks
+    def test_basic_get_nothing(self):
+        """
+        basic_get() will return get-empty if there is no message to get.
+        """
+        channel, server_channel = yield self.make_channel()
+        yield channel.exchange_declare(exchange='e1', type='direct')
+        yield channel.queue_declare(queue='q1')
+        yield channel.queue_bind(queue='q1', exchange='e1', routing_key='rkey')
+        self.assertEqual(len(server_channel.unacked), 0)
+
+        _, method, _, body = yield channel.basic_get(queue='q1')
+        self.assertEqual(method.NAME, 'Basic.GetEmpty')
+        self.assertEqual(body, None)
+        self.assertEqual(server_channel.unacked, [])
+
+    @inlineCallbacks
     def test_consumer_wrangling(self):
-        self.set_up_broker()
-        self.chan1.queue_bind('q1', 'direct', 'foo')
-        self.assertEqual(set(), self.q1.consumers)
-        self.chan1.basic_consume('q1', 'tag1')
-        self.assertEqual(set(['tag1']), self.q1.consumers)
-        self.chan1.basic_consume('q1', 'tag2')
-        self.assertEqual(set(['tag1', 'tag2']), self.q1.consumers)
-        self.chan1.basic_cancel('tag2')
-        self.assertEqual(set(['tag1']), self.q1.consumers)
-        self.chan1.basic_cancel('tag2')
-        self.assertEqual(set(['tag1']), self.q1.consumers)
+        """
+        Various things can be done with consumers.
+        """
+        channel, server_channel = yield self.make_channel()
+        yield channel.exchange_declare(exchange='e1', type='direct')
+        yield channel.queue_declare(queue='q1')
+        yield channel.queue_bind(queue='q1', exchange='e1', routing_key='foo')
+        q1 = self.broker.queues['q1']
+        self.assertEqual(set(), q1.consumers)
 
+        yield channel.basic_consume(queue='q1', consumer_tag='tag1')
+        yield self.broker.wait0()
+        self.assertEqual(set(['tag1']), q1.consumers)
+        yield channel.basic_consume(queue='q1', consumer_tag='tag2')
+        yield self.broker.wait0()
+        self.assertEqual(set(['tag1', 'tag2']), q1.consumers)
+        yield channel.basic_cancel(consumer_tag='tag2')
+        yield self.broker.wait0()
+        self.assertEqual(set(['tag1']), q1.consumers)
+        yield channel.basic_cancel(consumer_tag='tag2')
+        yield self.broker.wait0()
+        self.assertEqual(set(['tag1']), q1.consumers)
+
+    @inlineCallbacks
     def test_basic_qos_global_unsupported(self):
         """
         basic_qos() is unsupported with global=True.
         """
-        channel = self.make_channel(0)
-        self.assertRaises(NotImplementedError, channel.basic_qos, 0, 1, True)
+        channel, server_channel = yield self.make_channel()
+        yield channel.basic_qos(
+            prefetch_size=0, prefetch_count=1, all_channels=True)
+        assert False
+    test_basic_qos_global_unsupported.skip = "Implement channel exceptions."
 
+    @inlineCallbacks
     def test_basic_qos_per_consumer(self):
         """
         basic_qos() only applies to consumers started after the call.
         """
-        channel = self.make_channel(0)
-        channel.queue_declare('q1')
-        channel.queue_declare('q2')
-        self.assertEqual(channel.qos_prefetch_count, 0)
+        channel, server_channel = yield self.make_channel()
+        yield channel.queue_declare(queue='q1')
+        yield channel.queue_declare(queue='q2')
+        self.assertEqual(server_channel.qos_prefetch_count, 0)
 
-        channel.basic_consume('q1', 'tag1')
-        self.assertEqual(channel._get_consumer_prefetch('tag1'), 0)
+        yield channel.basic_consume(queue='q1', consumer_tag='tag1')
+        yield self.broker.wait0()
+        self.assertEqual(server_channel._get_consumer_prefetch('tag1'), 0)
 
-        channel.basic_qos(0, 1, False)
-        channel.basic_consume('q2', 'tag2')
-        self.assertEqual(channel._get_consumer_prefetch('tag1'), 0)
-        self.assertEqual(channel._get_consumer_prefetch('tag2'), 1)
+        yield channel.basic_qos(
+            prefetch_size=0, prefetch_count=1, all_channels=False)
+        yield channel.basic_consume(queue='q2', consumer_tag='tag2')
+        yield self.broker.wait0()
+        self.assertEqual(server_channel._get_consumer_prefetch('tag1'), 0)
+        self.assertEqual(server_channel._get_consumer_prefetch('tag2'), 1)
 
     @inlineCallbacks
     def test_basic_ack(self):
         """
-        basic_ack() should acknowledge a message.
+        basic_ack() should acknowledge a consumed message.
         """
-        class ToyDelegate(object):
-            def __init__(self):
-                self.queue = DeferredQueue()
+        channel, server_channel = yield self.make_channel()
+        yield channel.exchange_declare(exchange='e1', type='direct')
+        yield channel.queue_declare(queue='q1')
+        yield channel.queue_bind(queue='q1', exchange='e1', routing_key='rkey')
+        consume_queue, ctag = yield channel.basic_consume(queue='q1')
 
-            def basic_deliver(self, channel, msg):
-                self.queue.put(msg)
+        self.assertEqual(len(server_channel.unacked), 0)
+        self.broker.basic_publish('e1', 'rkey', 'foo')
+        _, props, _, body = yield consume_queue.get()
+        yield channel._fake_channel.message_processed()
+        self.assertEqual(len(server_channel.unacked), 1)
 
-        delegate = ToyDelegate()
-        channel = self.make_channel(0, delegate)
-        channel.exchange_declare('e1', 'direct', durable=True)
-        channel.queue_declare('q1')
-        channel.queue_bind('q1', 'e1', 'rkey')
-        channel.basic_consume('q1', 'tag1')
+        yield channel.basic_ack(
+            delivery_tag=props.delivery_tag, multiple=False)
+        yield self.broker.wait0()
+        self.assertEqual(len(server_channel.unacked), 0)
 
-        self.assertEqual(len(channel.unacked), 0)
-        channel.basic_publish('e1', 'rkey', fake_amqp.mkContent('foo'))
-        msg = yield delegate.queue.get()
-        dtag = msg.delivery_tag
-        self.assertEqual(len(channel.unacked), 1)
-        channel.basic_ack(dtag, False)
-        self.assertEqual(len(channel.unacked), 0)
+    @inlineCallbacks
+    def test_basic_ack_get(self):
+        """
+        basic_ack() should acknowledge a got message.
+        """
+        channel, server_channel = yield self.make_channel()
+        yield channel.exchange_declare(exchange='e1', type='direct')
+        yield channel.queue_declare(queue='q1')
+        yield channel.queue_bind(queue='q1', exchange='e1', routing_key='rkey')
+        self.assertEqual(len(server_channel.unacked), 0)
+        self.broker.basic_publish('e1', 'rkey', 'foo')
 
-        # Clean up.
-        channel.message_processed()
-        yield channel.broker.wait_delivery()
+        yield self.broker.basic_publish('e1', 'rkey', 'blah')
+        _, props, _, body = yield channel.basic_get(queue='q1')
+        self.assertEqual(len(server_channel.unacked), 1)
+
+        yield channel.basic_ack(
+            delivery_tag=props.delivery_tag, multiple=False)
+        yield self.broker.wait0()
+        self.assertEqual(len(server_channel.unacked), 0)
 
     @inlineCallbacks
     def test_basic_ack_consumer_canceled(self):
         """
         basic_ack() should fail if the consumer has been canceled.
         """
-        class ToyDelegate(object):
-            def __init__(self):
-                self.queue = DeferredQueue()
+        channel, server_channel = yield self.make_channel()
+        yield channel.exchange_declare(exchange='e1', type='direct')
+        yield channel.queue_declare(queue='q1')
+        yield channel.queue_bind(queue='q1', exchange='e1', routing_key='rkey')
+        consume_queue, consumer_tag = yield channel.basic_consume(queue='q1')
 
-            def basic_deliver(self, channel, msg):
-                self.queue.put(msg)
+        self.assertEqual(len(server_channel.unacked), 0)
+        self.broker.basic_publish('e1', 'rkey', 'foo')
+        _, props, _, body = yield consume_queue.get()
+        yield channel._fake_channel.message_processed()
+        self.assertEqual(len(server_channel.unacked), 1)
 
-        delegate = ToyDelegate()
-        channel = self.make_channel(0, delegate)
-        channel.exchange_declare('e1', 'direct', durable=True)
-        channel.queue_declare('q1')
-        channel.queue_bind('q1', 'e1', 'rkey')
-        channel.basic_consume('q1', 'tag1')
+        yield channel.basic_cancel(consumer_tag)
+        yield channel.basic_ack(
+            delivery_tag=props.delivery_tag, multiple=False)
+        yield self.broker.wait0()
+        self.assertEqual(len(server_channel.unacked), 0)
 
-        self.assertEqual(len(channel.unacked), 0)
-        channel.basic_publish('e1', 'rkey', fake_amqp.mkContent('foo'))
-        msg = yield delegate.queue.get()
-        dtag = msg.delivery_tag
-        self.assertEqual(len(channel.unacked), 1)
-
-        channel.basic_cancel('tag1')
-        self.assertRaises(Exception, channel.basic_ack, dtag, False)
-        self.assertEqual(len(channel.unacked), 0)
-
-        # Clean up.
-        channel.message_processed()
-        yield channel.broker.wait_delivery()
+        assert False
+    test_basic_ack_consumer_canceled.skip = "Implement channel exceptions."
 
     @inlineCallbacks
-    def test_fake_amqclient(self):
+    def test_fake_amqservice(self):
         worker = yield self.get_worker()
         yield worker.pub.publish_json({'message': 'foo'})
         yield worker.conpub.publish_json({'message': 'bar'})
@@ -297,25 +387,24 @@ class TestFakeAMQP(VumiTestCase):
         self.assertEqual({'message': 'bar'}, worker.msgs[0].payload)
 
     @inlineCallbacks
-    def test_fake_amqclient_qos(self):
+    def test_fake_amqservice_qos(self):
         """
         Even if we set QOS, all messages should get delivered.
         """
         worker = yield self.get_worker()
-
-        yield worker.con.channel.basic_qos(0, 1, False)
+        yield worker.con.channel.basic_qos(
+            prefetch_size=0, prefetch_count=1, all_channels=False)
         yield worker.conpub.publish_json({'message': 'foo'})
         yield worker.conpub.publish_json({'message': 'bar'})
         yield self.broker.wait_delivery()
         self.assertEqual(2, len(worker.msgs))
 
     @inlineCallbacks
-    def test_fake_amqclient_pause(self):
+    def test_fake_amqservice_pause(self):
         """
         Pausing and unpausing channels should work as expected.
         """
         worker = yield self.get_worker(paused=True)
-
         yield worker.conpub.publish_json({'message': 'foo'})
         yield self.broker.wait_delivery()
         self.assertEqual([], worker.msgs)
@@ -339,60 +428,17 @@ class TestFakeAMQP(VumiTestCase):
         self.assertEqual(2, len(worker.msgs))
         yield worker.con.unpause()
 
-    # This is a test which actually connects to the AMQP broker.
-    #
-    # It originally existed purely as a mechanism for discovering what
-    # the real client/broker's behaviour is in order to duplicate it
-    # in the fake one. I've left it in here for now in case we need to
-    # do further investigation later, but we *really* don't want to
-    # run it as part of the test suite.
-
-    # @inlineCallbacks
-    # def test_zzz_real_amqclient(self):
-    #     print ""
-    #     from vumi.service import WorkerCreator
-    #     options = {
-    #         "hostname": "127.0.0.1",
-    #         "port": 5672,
-    #         "username": "vumi",
-    #         "password": "vumi",
-    #         "vhost": "/develop",
-    #         "specfile": "amqp-spec-0-8.xml",
-    #         }
-    #     wc = WorkerCreator(options)
-    #     d = Deferred()
-
-    #     class ToyWorker(Worker):
-    #         @inlineCallbacks
-    #         def startWorker(self):
-    #             self.pub = yield self.publish_to('test.pub')
-    #             self.pub.routing_key_is_bound = lambda _: True
-    #             self.conpub = yield self.publish_to('test.con')
-    #             self.con = yield self.consume('test.con', self.consume_msg,
-    #                                           paused=True)
-    #             d.callback(None)
-
-    #         def consume_msg(self, msg):
-    #             print "CONSUMED!", msg
-    #             return True
-
-    #     worker = wc.create_worker_by_class(ToyWorker, {})
-    #     worker.startService()
-    #     yield d
-    #     print "foo"
-    #     yield worker.pub.publish_json({"foo": "bar"})
-    #     yield worker.conpub.publish_json({"bar": "baz"})
-    #     yield worker.con.unpause()
-    #     yield worker.con.pause()
-    #     yield worker.con.pause()
-    #     print "bar"
-    #     yield worker.pub.channel.queue_declare(queue='test.foo')
-    #     yield worker.pub.channel.queue_bind(queue='test.foo',
-    #                                         exchange='vumi',
-    #                                         routing_key='test.pub')
-    #     yield worker.pub.publish_json({"foo": "bar"})
-    #     print "getting..."
-    #     foo = yield worker.pub.channel.basic_get(queue='test.foo')
-    #     print "got:", foo
-    #     yield worker.stopWorker()
-    #     yield worker.stopService()
+    @inlineCallbacks
+    def test_delayed_setup(self):
+        """
+        The server connection can be delayed to test client readiness handling.
+        """
+        broker = FakeAMQPBroker(delay_server=True)
+        service_d = self.make_service(broker)
+        yield self.broker.wait0()
+        [server] = broker.server_protocols
+        self.assertEqual(server.conn_state, "CONNECTING_DELAYED")
+        self.assertNoResult(service_d)
+        yield server.finish_connecting()
+        self.assertEqual(server.conn_state, "CONNECTED")
+        self.successResultOf(service_d)

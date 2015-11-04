@@ -3,13 +3,15 @@
 from uuid import uuid4
 import re
 
+from pika.frame import decode_frame, Method, Header, Body
+from pika.spec import (
+    Connection, Channel, Exchange, Queue, Basic, BasicProperties)
 from twisted.internet import reactor
-from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
-from txamqp.client import TwistedDelegate
-from txamqp.content import Content
+from twisted.internet.defer import Deferred, succeed
+from twisted.internet.protocol import Protocol, ServerFactory
 
-from vumi.service import WorkerAMQClient
 from vumi.message import Message as VumiMessage
+from vumi.tests.fake_connection import FakeServer, wait0
 
 
 def gen_id(prefix=''):
@@ -20,79 +22,15 @@ def gen_longlong():
     return uuid4().int & 0xffffffffffffffff
 
 
-class Thing(object):
-    """
-    A generic thing to reply with.
-    """
-    def __init__(self, kind, **kw):
-        self._kind = kind
-        self._kwfields = kw.keys()
-        for k, v in kw.items():
-            setattr(self, k, v)
-
-    def __str__(self):
-        return "<Thing:: %s %s>" % (self._kind,
-                                    ['[%s: %s]' % (f, getattr(self, f))
-                                     for f in self._kwfields])
-
-
-class Message(object):
-    """
-    A message is more complicated than a Thing.
-    """
-    def __init__(self, method, fields=(), content=None):
-        self.method = method
-        self._fields = fields
-        self.content = content
-
-    def __getattr__(self, key):
-        for k, v in self._fields:
-            if k == key:
-                return v
-        raise AttributeError(key)
-
-
-def mkMethod(name, index=-1):
-    """
-    Create a "Method" object, suitable for a ``txamqp`` message.
-
-    :param name: The name of the AMQP method, per the XML spec.
-    :param index: The index of the AMQP method, per the XML spec.
-    """
-    return Thing("Method", name=name, id=index)
-
-
-def mkContent(body, children=None, properties=None):
-    return Thing("Content", body=body, children=children,
-                 properties=properties)
-
-
-def mk_deliver(body, exchange, routing_key, ctag, dtag):
-    return Message(mkMethod('deliver', 60), [
-            ('consumer_tag', ctag),
-            ('delivery_tag', dtag),
-            ('redelivered', False),
-            ('exchange', exchange),
-            ('routing_key', routing_key),
-            ], mkContent(body))
-
-
-def mk_get_ok(body, exchange, routing_key, dtag):
-    return Message(mkMethod('get-ok', 71), [
-            ('delivery_tag', dtag),
-            ('redelivered', False),
-            ('exchange', exchange),
-            ('routing_key', routing_key),
-            ], mkContent(body))
-
-
 class FakeAMQPBroker(object):
-    def __init__(self):
+    def __init__(self, delay_server=False, noisy=False):
         self.queues = {}
         self.exchanges = {}
-        self.channels = []
+        self.server_protocols = []
         self.dispatched = {}
-        self._delivering = None
+        self._content_pending = None
+        self.delay_server = delay_server
+        self.noisy = noisy
 
     def _get_queue(self, queue):
         assert queue in self.queues
@@ -101,16 +39,6 @@ class FakeAMQPBroker(object):
     def _get_exchange(self, exchange):
         assert exchange in self.exchanges
         return self.exchanges[exchange]
-
-    def channel_open(self, channel):
-        assert channel not in self.channels
-        self.channels.append(channel)
-        return Message(mkMethod("open-ok", 11))
-
-    def channel_close(self, channel):
-        if channel in self.channels:
-            self.channels.remove(channel)
-        return Message(mkMethod("close-ok", 41))
 
     def exchange_declare(self, exchange, exchange_type, durable):
         exchange_class = None
@@ -122,41 +50,38 @@ class FakeAMQPBroker(object):
         self.exchanges.setdefault(exchange, exchange_class(exchange, durable))
         assert exchange_type == self.exchanges[exchange].exchange_type
         assert durable == self.exchanges[exchange].durable
-        return Message(mkMethod("declare-ok", 11))
+        return Exchange.DeclareOk()
 
     def queue_declare(self, queue):
         if not queue:
             queue = gen_id('queue.')
         self.queues.setdefault(queue, FakeAMQPQueue(queue))
         queue_obj = self._get_queue(queue)
-        return Message(mkMethod("declare-ok", 11), [
-                ('queue', queue),
-                ('message_count', queue_obj.message_count()),
-                ('consumer_count', queue_obj.consumer_count()),
-                ])
+        return Queue.DeclareOk(
+            queue=queue,
+            message_count=queue_obj.message_count(),
+            consumer_count=queue_obj.consumer_count())
 
     def queue_bind(self, queue, exchange, routing_key):
-        self._get_exchange(exchange).queue_bind(routing_key,
-                                            self._get_queue(queue))
-        return Message(mkMethod("bind-ok", 21))
+        self._get_exchange(exchange).queue_bind(
+            routing_key, self._get_queue(queue))
+        return Queue.BindOk()
 
     def basic_consume(self, queue, tag):
         self._get_queue(queue).add_consumer(tag)
         self.kick_delivery()
-        return Message(mkMethod("consume-ok", 21), [("consumer_tag", tag)])
 
     def basic_cancel(self, tag, queue):
         if queue in self.queues:
             self.queues[queue].remove_consumer(tag)
-        return Message(mkMethod("cancel-ok", 31), [("consumer_tag", tag)])
 
-    def basic_publish(self, exchange, routing_key, content):
+    def basic_publish(self, exchange, routing_key, body):
         exc = self.dispatched.setdefault(exchange, {})
-        exc.setdefault(routing_key, []).append(content)
+        exc.setdefault(routing_key, []).append(body)
         if exchange not in self.exchanges:
             # This is to test, so we don't care about missing queues
             return None
-        self._get_exchange(exchange).basic_publish(routing_key, content)
+        self._get_exchange(exchange).basic_publish(routing_key, body)
         self.kick_delivery()
         return None
 
@@ -170,10 +95,11 @@ class FakeAMQPBroker(object):
     def deliver_to_channels(self):
         # Since all delivery goes through kick_delivery(), this can
         # only happen if message_processed() is called too many times.
-        assert self._delivering is not None
+        assert self._content_pending is not None
 
-        for channel in self.channels:
-            self.try_deliver_to_channel(channel)
+        for server_protocol in self.server_protocols:
+            for channel in server_protocol.channels.values():
+                self.try_deliver_to_channel(channel)
 
         # Process the sentinel "message" we added in kick_delivery().
         self.message_processed()
@@ -185,12 +111,20 @@ class FakeAMQPBroker(object):
                 dtag, msg = self._get_queue(queue).get_message()
                 if dtag is None:
                     break
-                dmsg = mk_deliver(msg['content'], msg['exchange'],
-                                  msg['routing_key'], ctag, dtag)
-                self._delivering['count'] += 1
-                channel.deliver_message(dmsg, ctag)
+                dmsg = Basic.Deliver(
+                    ctag, dtag, False, msg['exchange'], msg['routing_key'])
+                self._content_pending['delivering_count'] += 1
+                channel.deliver_message(dmsg, msg['content'])
                 delivered = True
         return delivered
+
+    def set_content_pending(self):
+        if self._content_pending is None:
+            self._content_pending = {
+                'deferred': Deferred(),
+                'delivering_count': 0,
+                'publishing_count': 0,
+            }
 
     def kick_delivery(self):
         """
@@ -201,16 +135,12 @@ class FakeAMQPBroker(object):
         This is useful for manually triggering a delivery run from
         inside a test.
         """
-        if self._delivering is None:
-            self._delivering = {
-                'deferred': Deferred(),
-                'count': 0,
-                }
+        self.set_content_pending()
         # Add a sentinel "message" that gets processed after this
         # delivery run, making the delivery process re-entrant. This
         # is important, because delivered messages can trigger more
         # messages to be published, which kicks delivery again.
-        self._delivering['count'] += 1
+        self._content_pending['delivering_count'] += 1
         # Schedule this for later, so that we don't block whatever it
         # is we're currently doing.
         reactor.callLater(0, self.deliver_to_channels)
@@ -223,21 +153,19 @@ class FakeAMQPBroker(object):
         Returns a deferred that will fire when the broker is finished
         delivering any messages from the current run. This should not
         leave any messages undelivered, because basic_publish() kicks
-        off a delivery run.
-
-        Each call returns a new deferred to avoid callback chain ordering
-        issues when several things want to wait for delivery.
+        off a delivery run and we wait for the reactor to start it if
+        it's still scheduled for the next tick.
 
         NOTE: This method should be called during test teardown to make
         sure there are no pending delivery cleanups that will cause a
         dirty reactor race.
         """
-        d = Deferred()
-        if self._delivering is None:
-            d.callback(None)
-        else:
-            self._delivering['deferred'].chainDeferred(d)
-        return d
+        return wait0().addCallback(self._wait_delivery_cb)
+
+    def _wait_delivery_cb(self, r):
+        if self._content_pending is not None:
+            return self._content_pending['deferred']
+        return succeed(None)
 
     def wait_messages(self, exchange, rkey, n):
         def check(d):
@@ -264,8 +192,7 @@ class FakeAMQPBroker(object):
 
     def get_messages(self, exchange, rkey):
         contents = self.get_dispatched(exchange, rkey)
-        messages = [VumiMessage.from_json(content.body)
-                    for content in contents]
+        messages = [VumiMessage.from_json(content) for content in contents]
         return messages
 
     def publish_message(self, exchange, routing_key, message):
@@ -273,49 +200,78 @@ class FakeAMQPBroker(object):
 
     def publish_raw(self, exchange, routing_key, data):
         assert exchange in self.exchanges
-        amq_message = Content(data)
-        return self.basic_publish(exchange, routing_key, amq_message)
+        return self.basic_publish(exchange, routing_key, data)
+
+    def check_pending_content(self):
+        if self._content_pending['delivering_count'] > 0:
+            return
+        if self._content_pending['publishing_count'] > 0:
+            return
+        d = self._content_pending['deferred']
+        self._content_pending = None
+        d.callback(None)
+
+    def start_publishing(self):
+        self.set_content_pending()
+        self._content_pending['publishing_count'] += 1
+
+    def finish_publishing(self):
+        assert self._content_pending is not None
+        self._content_pending['publishing_count'] -= 1
+        self.check_pending_content()
 
     def message_processed(self):
-        assert self._delivering is not None
-        self._delivering['count'] -= 1
-        if self._delivering['count'] <= 0:
-            d = self._delivering['deferred']
-            self._delivering = None
-            d.callback(None)
+        """
+        Track that a delivered message has been processed.
+
+        The wait0() allows the reactor to finish anything that was scheduled by
+        the message processor but hasn't actually run yet and ensures that
+        wait_delivery() is actually waiting for all delivered messages to be
+        processed.
+        """
+        return wait0().addCallback(self._message_processed_cb)
+
+    def _message_processed_cb(self, _r):
+        assert self._content_pending is not None
+        self._content_pending['delivering_count'] -= 1
+        self.check_pending_content()
+
+    def wait0(self, r=None):
+        return wait0(r)
 
 
 class FakeAMQPChannel(object):
-    def __init__(self, channel_id, client):
+    def __init__(self, channel_id, server_protocol):
         self.channel_id = channel_id
-        self.client = client
-        self.broker = client.broker
+        self.server_protocol = server_protocol
+        self.broker = server_protocol.broker
         self.qos_prefetch_count = 0
         self.consumers = {}
-        self.delegate = client.delegate
         self.unacked = []
         self._consumer_prefetch = {}
+        self._publishing = None
 
     def __repr__(self):
         return '<FakeAMQPChannel: id=%s>' % (self.channel_id,)
 
     def channel_open(self):
-        return self.broker.channel_open(self)
+        assert self.channel_id not in self.server_protocol.channels
+        self.server_protocol.channels[self.channel_id] = self
+        return Channel.OpenOk()
 
     def channel_close(self):
-        return self.broker.channel_close(self)
+        self.server_protocol.channels.pop(self.channel_id)
+        return Channel.CloseOk()
 
     def channel_flow(self, active):
         raise NotImplementedError(
             "channel.flow() is no longer supported in RabbitMQ 3.3.0.")
 
-    def close(self, _reason):
-        pass
-
-    def basic_qos(self, _prefetch_size, prefetch_count, is_global):
+    def basic_qos(self, prefetch_size, prefetch_count, is_global):
         if is_global:
             raise NotImplementedError("global prefetch limits not supported.")
         self.qos_prefetch_count = prefetch_count
+        return Basic.QosOk()
 
     def exchange_declare(self, exchange, type, durable=None):
         return self.broker.exchange_declare(exchange, type, durable)
@@ -326,23 +282,26 @@ class FakeAMQPChannel(object):
     def queue_bind(self, queue, exchange, routing_key):
         return self.broker.queue_bind(queue, exchange, routing_key)
 
-    def basic_consume(self, queue, tag=None):
-        if not tag:
-            tag = gen_id('consumer.')
+    def basic_consume(self, queue, tag):
         assert tag not in self.consumers
         self._consumer_prefetch[tag] = self.qos_prefetch_count
         self.consumers[tag] = queue
-        return self.broker.basic_consume(queue, tag)
+        self.broker.basic_consume(queue, tag)
+        return Basic.ConsumeOk(consumer_tag=tag)
 
     def basic_cancel(self, tag):
         queue = self.consumers.pop(tag, None)
         if queue:
             self.broker.basic_cancel(tag, queue)
         self._consumer_prefetch.pop(tag, None)
-        return Message(mkMethod("cancel-ok", 31))
+        return Basic.CancelOk(consumer_tag=tag)
 
-    def basic_publish(self, exchange, routing_key, content):
-        return self.broker.basic_publish(exchange, routing_key, content)
+    def basic_publish(self, exchange, routing_key):
+        self._publishing = {
+            'exchange': exchange,
+            'routing_key': routing_key,
+        }
+        self.broker.start_publishing()
 
     def basic_ack(self, delivery_tag, multiple):
         assert delivery_tag in [dtag for dtag, _ctag, _queue in self.unacked]
@@ -366,25 +325,88 @@ class FakeAMQPChannel(object):
             return True
         return len(self.unacked) < prefetch
 
-    def deliver_message(self, msg, consumer_tag):
-        self.unacked.append(
-            (msg.delivery_tag, consumer_tag, self.consumers[consumer_tag]))
-        self.delegate.basic_deliver(self, msg)
+    def deliver_message(self, method, body, unack=True):
+        if unack:
+            ctag = method.consumer_tag
+            self.unacked.append(
+                (method.delivery_tag, ctag, self.consumers[ctag]))
+        self.server_protocol.send_method(self.channel_id, method)
+        self._send_body(body)
 
     def basic_get(self, queue):
         dtag, msg = self.broker.basic_get(queue)
         if msg:
             self.unacked.append((dtag, None, queue))
-            return mk_get_ok(msg['content'], msg['exchange'],
-                             msg['routing_key'], dtag)
-        return Message(mkMethod("get-empty", 72))
+            method = Basic.GetOk(
+                dtag, False, msg['exchange'], msg['routing_key'], 1)
+            return self.deliver_message(method, msg['content'], unack=False)
+        return Basic.GetEmpty()
+
+    def _send_body(self, body):
+        self.server_protocol.send_frame(Header(
+            self.channel_id, len(body), BasicProperties()))
+        self.server_protocol.send_frame(Body(self.channel_id, body))
+
+    def _reset_publishing(self):
+        if self._publishing is not None:
+            self._publishing = None
+            self.broker.finish_publishing()
+
+    def _dispatch_method(self, method):
+        self._reset_publishing()
+        if method.NAME == Channel.Open.NAME:
+            return self.channel_open()
+        if method.NAME == Channel.Close.NAME:
+            return self.channel_close()
+        elif method.NAME == Exchange.Declare.NAME:
+            return self.exchange_declare(
+                method.exchange, method.type, method.durable)
+        elif method.NAME == Queue.Declare.NAME:
+            return self.queue_declare(method.queue)
+        elif method.NAME == Queue.Bind.NAME:
+            return self.queue_bind(
+                method.queue, method.exchange, method.routing_key)
+        elif method.NAME == Basic.Consume.NAME:
+            return self.basic_consume(method.queue, method.consumer_tag)
+        elif method.NAME == Basic.Publish.NAME:
+            return self.basic_publish(method.exchange, method.routing_key)
+        elif method.NAME == Basic.Ack.NAME:
+            return self.basic_ack(method.delivery_tag, method.multiple)
+        elif method.NAME == Basic.Cancel.NAME:
+            return self.basic_cancel(method.consumer_tag)
+        elif method.NAME == Basic.Get.NAME:
+            return self.basic_get(method.queue)
+        elif method.NAME == Basic.Qos.NAME:
+            return self.basic_qos(
+                method.prefetch_size, method.prefetch_count, method.global_)
+        else:
+            raise NotImplementedError("Unexpected method: %s" % method.NAME)
+
+    def _handle_header(self, header):
+        assert self._publishing is not None, "Header without publishing."
+        assert 'remaining' not in self._publishing, "Already seen header."
+        self._publishing['remaining'] = header.body_size
+        self._publishing['body'] = ""
+        self._check_publish_done()
+
+    def _check_publish_done(self):
+        if self._publishing['remaining'] > 0:
+            return
+        self.broker.basic_publish(
+            self._publishing['exchange'],
+            self._publishing['routing_key'],
+            self._publishing['body'])
+        self._reset_publishing()
+
+    def _handle_body(self, body):
+        assert self._publishing is not None, "Body without publishing."
+        assert 'remaining' in self._publishing, "Body without header."
+        self._publishing['body'] += body.fragment
+        self._publishing['remaining'] -= len(body.fragment)
+        self._check_publish_done()
 
     def message_processed(self):
-        """
-        Notify the broker that a message has been processed, in order
-        to make delivery sane.
-        """
-        self.broker.message_processed()
+        return self.broker.message_processed()
 
 
 class FakeAMQPExchange(object):
@@ -460,10 +482,10 @@ class FakeAMQPQueue(object):
 
     def put(self, exchange, routing_key, content):
         self.messages.append({
-                'exchange': exchange,
-                'routing_key': routing_key,
-                'content': content.body,
-                })
+            'exchange': exchange,
+            'routing_key': routing_key,
+            'content': content,
+        })
 
     def ack(self, delivery_tag):
         self.unacked_messages.pop(delivery_tag)
@@ -478,79 +500,122 @@ class FakeAMQPQueue(object):
         return (dtag, msg)
 
 
-class FakeAMQClient(WorkerAMQClient):
-    def __init__(self, spec, vumi_options=None, broker=None):
-        WorkerAMQClient.__init__(self, TwistedDelegate(), '', spec)
-        if vumi_options is not None:
-            self.vumi_options = vumi_options
+class FakeAMQPServerProtocol(Protocol):
+    """
+    A very basic wrapper around pika's AMQP wire protocol implementation.
+    """
+    def __init__(self, broker):
+        self._buffer = b""
+        self.broker = broker
+        self.broker.server_protocols.append(self)
+        self.conn_state = "NEW"
+        self.channels = {}
+
+    def dataReceived(self, data):
+        self._buffer = self._parse_frames(self._buffer + data)
+
+    def _parse_frames(self, data):
+        bytes_consumed, frame = decode_frame(data)
+        while bytes_consumed > 0:
+            try:
+                self._handle_frame(frame)
+            except:
+                # These exceptions would otherwise vanish beyond our reach.
+                import traceback
+                traceback.print_exc()
+                raise
+            data = data[bytes_consumed:]
+            bytes_consumed, frame = decode_frame(data)
+        return data
+
+    def _handle_frame(self, frame):
+        if self.broker.noisy:
+            print "C->S", frame
+        if self.conn_state == "NEW":
+            return self._handle_connection_header(frame)
+        elif self.conn_state == "CONNECTING":
+            return self._handle_connecting_method(frame.method)
+        assert self.conn_state == "CONNECTED"
+        if frame.NAME == Method.NAME:
+            self._handle_method(frame.channel_number, frame.method)
+        elif frame.NAME == "Header":
+            self.channels[frame.channel_number]._handle_header(frame)
+        elif frame.NAME == "Body":
+            self.channels[frame.channel_number]._handle_body(frame)
+
+    def _handle_connection_header(self, header):
+        assert header.NAME == "ProtocolHeader"
+        self.conn_state = "CONNECTING"
+        self.send_method(0, Connection.Start())
+
+    def _handle_connecting_method(self, method):
+        if method.NAME == Connection.StartOk.NAME:
+            return self.send_method(0, Connection.Tune(
+                channel_max=1024, frame_max=1024*1024))
+        elif method.NAME == Connection.TuneOk.NAME:
+            return
+        elif method.NAME == Connection.Open.NAME:
+            return self.finish_connecting()
+        assert False, "Unexpected method while connecting: %s" % method.NAME
+
+    def finish_connecting(self):
+        if self.broker.delay_server and self.conn_state == "CONNECTING":
+            self.conn_state = "CONNECTING_DELAYED"
+            return
+        assert self.conn_state in ("CONNECTING", "CONNECTING_DELAYED")
+        self.conn_state = "CONNECTED"
+        self.send_method(0, Connection.OpenOk())
+        return wait0()
+
+    def _handle_method(self, channel_number, method):
+        if channel_number == 0:
+            return self.send_method(0, self._handle_connection_method(method))
+        if method.NAME == Channel.Open.NAME:
+            channel = FakeAMQPChannel(channel_number, self)
+        else:
+            channel = self.channels[channel_number]
+        resp = channel._dispatch_method(method)
+        if resp is not None:
+            return self.send_method(channel_number, resp)
+
+    def connectionLost(self, reason):
+        self.connected = False
+
+    def send_method(self, channel, method):
+        """
+        Write an AMQP method frame.
+        """
+        return self.send_frame(Method(channel, method))
+
+    def send_frame(self, frame):
+        if self.broker.noisy:
+            print "S->C", frame
+        return self.write(frame.marshal())
+
+    def write(self, data):
+        """
+        Write some bytes and allow the reactor to send them.
+        """
+        self.transport.write(data)
+        return wait0()
+
+
+class FakeAMQPFactory(ServerFactory):
+    def __init__(self, broker=None):
         if broker is None:
             broker = FakeAMQPBroker()
         self.broker = broker
 
-    @inlineCallbacks
-    def channel(self, id):
-        yield self.channelLock.acquire()
-        try:
-            try:
-                ch = self.channels[id]
-            except KeyError:
-                ch = FakeAMQPChannelWrapper(id, self)
-                self.channels[id] = ch
-        finally:
-            self.channelLock.release()
-        returnValue(ch)
+    def protocol(self):
+        return FakeAMQPServerProtocol(self.broker)
 
 
-class FakeAMQPChannelWrapper(object):
-    """
-    Wrapper around a FakeAMQPChannel to make it look more like a real channel
-    object.
-    """
+def make_fake_server(broker=None):
+    factory = FakeAMQPFactory(broker)
+    fake_server = FakeServer(factory, on_connect=_fake_server_connect_cb)
+    fake_server.broker = factory.broker
+    return fake_server
 
-    def __init__(self, id, client):
-        self._fake_channel = FakeAMQPChannel(id, client)
-        self.client = client
 
-    def __repr__(self):
-        return '<FakeAMQPChannelWrapper: id=%s>' % (
-            self._fake_channel.channel_id,)
-
-    def channel_open(self):
-        return self._fake_channel.channel_open()
-
-    def channel_close(self):
-        return self._fake_channel.channel_close()
-
-    def channel_flow(self, active):
-        return self._fake_channel.channel_flow(active)
-
-    def close(self, _reason):
-        pass
-
-    def basic_qos(self, prefetch_size, prefetch_count, is_global):
-        return self._fake_channel.basic_qos(
-            prefetch_size, prefetch_count, is_global)
-
-    def exchange_declare(self, exchange, type, durable=None):
-        return self._fake_channel.exchange_declare(exchange, type, durable)
-
-    def queue_declare(self, queue, durable=None):
-        return self._fake_channel.queue_declare(queue, durable)
-
-    def queue_bind(self, queue, exchange, routing_key):
-        return self._fake_channel.queue_bind(queue, exchange, routing_key)
-
-    def basic_consume(self, queue, tag=None):
-        return self._fake_channel.basic_consume(queue, tag)
-
-    def basic_cancel(self, tag):
-        return self._fake_channel.basic_cancel(tag)
-
-    def basic_publish(self, exchange, routing_key, content):
-        return self._fake_channel.basic_publish(exchange, routing_key, content)
-
-    def basic_ack(self, delivery_tag, multiple):
-        return self._fake_channel.basic_ack(delivery_tag, multiple)
-
-    def basic_get(self, queue):
-        return self._fake_channel.basic_get(queue)
+def _fake_server_connect_cb(conn):
+    conn.client_protocol._fake_server = conn.server_protocol
