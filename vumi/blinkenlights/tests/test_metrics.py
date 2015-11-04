@@ -4,7 +4,6 @@ from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, Deferred
 
 from vumi.blinkenlights import metrics
-from vumi.tests.utils import get_stubbed_channel
 from vumi.message import Message
 from vumi.service import Worker
 from vumi.tests.helpers import VumiTestCase, WorkerHelper
@@ -17,7 +16,8 @@ class TestMetricPublisher(VumiTestCase):
 
     @inlineCallbacks
     def start_publisher(self, publisher):
-        channel = yield get_stubbed_channel(self.worker_helper.broker)
+        client = WorkerHelper.get_fake_amqp_client(self.worker_helper.broker)
+        channel = yield client.get_channel()
         publisher.start(channel)
 
     def _sleep(self, delay):
@@ -76,7 +76,8 @@ class TestMetricManager(VumiTestCase):
 
     @inlineCallbacks
     def start_manager_as_publisher(self, manager):
-        channel = yield get_stubbed_channel(self.worker_helper.broker)
+        client = WorkerHelper.get_fake_amqp_client(self.worker_helper.broker)
+        channel = yield client.get_channel()
         manager.start(channel)
         self.add_cleanup(manager.stop)
 
@@ -108,9 +109,7 @@ class TestMetricManager(VumiTestCase):
         mm = metrics.MetricManager("vumi.test.")
         self.assertEqual(mm._publisher, None)
         self.assertEqual(mm._task, None)
-        channel = yield get_stubbed_channel(self.worker_helper.broker)
-        mm.start(channel)
-        self.add_cleanup(mm.stop)
+        yield self.start_manager_as_publisher(mm)
         self.assertIsInstance(mm._publisher, metrics.MetricPublisher)
         self.assertNotEqual(mm._task, None)
 
@@ -120,8 +119,8 @@ class TestMetricManager(VumiTestCase):
         mm = metrics.MetricManager("vumi.test.", publisher=publisher)
         self.assertEqual(mm._publisher, publisher)
         self.assertEqual(mm._task, None)
-        channel = yield get_stubbed_channel(self.worker_helper.broker)
-        self.assertRaises(RuntimeError, mm.start, channel)
+        yield self.assertFailure(
+            self.start_manager_as_publisher(mm), RuntimeError)
 
     def test_start_polling_no_publisher(self):
         mm = metrics.MetricManager("vumi.test.")
@@ -251,7 +250,6 @@ class TestMetricManager(VumiTestCase):
 
     @inlineCallbacks
     def test_task_failure(self):
-        channel = yield get_stubbed_channel()
         mm = metrics.MetricManager("vumi.test.", 0.1)
         wait_error = Deferred()
 
@@ -264,7 +262,7 @@ class TestMetricManager(VumiTestCase):
                 raise BadMetricError("bad metric")
 
         mm.register(BadMetric("bad"))
-        mm.start(channel)
+        yield self.start_manager_as_publisher(mm)
         yield wait_error
         yield self._sleep(0)  # allow log message to be processed
         error, = self.flushLoggedErrors(BadMetricError)
