@@ -452,3 +452,54 @@ def safe_routing_key(routing_key):
 
 def generate_worker_id(system_id, worker_id):
     return "%s:%s" % (system_id, worker_id,)
+
+
+class StatusEdgeDetector(object):
+    '''Assists with finding if a TransportStatus is a change in the status,
+    compared to previous statuses, or just a repeat. Will be useful to only
+    publish statuses on state change.'''
+
+    def __init__(self):
+        self.state = dict()
+        self.types = dict()
+
+    def check_status(self, status):
+        '''
+        Checks to see if the current status is a repeat. If it is, None is
+        returned. If it isn't, the status is returned.
+        
+        :param status: The status to check.
+        :type status: :class:`TransportStatus`
+        '''
+        self._check_state(status['status'], status['component'])
+        if self._check_type(status['type'], status['component']):
+            return status
+
+    def _get_state(self, component):
+        return self.state.get(component, None)
+
+    def _set_state(self, component, state):
+        self.state[component] = state
+
+    def _get_types(self, component):
+        return self.types.get(component, set())
+
+    def _add_type(self, component, type):
+        if component not in self.types:
+            self.types[component] = set()
+        self.types[component].add(type)
+
+    def _remove_types(self, component):
+        self.types.pop(component, None)
+
+    def _check_state(self, status, component):
+        state = self._get_state(component)
+        if state != status:
+            self._remove_types(component)
+            self._set_state(component, status)
+
+    def _check_type(self, type, component):
+        types = self._get_types(component)
+        if type not in types:
+            self._add_type(component, type)
+            return True
