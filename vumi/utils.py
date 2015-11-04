@@ -498,8 +498,8 @@ class StatusEdgeDetector(object):
             self._remove_types(component)
             self._set_state(component, status)
 
-    def _check_type(self, type, component):
+    def _check_type(self, type_, component):
         types = self._get_types(component)
-        if type not in types:
-            self._add_type(component, type)
+        if type_ not in types:
+            self._add_type(component, type_)
             return True
