@@ -13,7 +13,9 @@ from twisted.web.client import WebClientContextFactory, ResponseFailed
 from vumi.utils import (
     normalize_msisdn, vumi_resource_path, cleanup_msisdn, get_operator_name,
     http_request, http_request_full, get_first_word, redis_from_config,
-    build_web_site, LogFilterSite, PkgResources, HttpTimeoutError)
+    build_web_site, LogFilterSite, PkgResources, HttpTimeoutError,
+    StatusEdgeDetector)
+from vumi.message import TransportStatus
 from vumi.persist.fake_redis import FakeRedis
 from vumi.tests.fake_connection import (
     FakeServer, FakeHttpServer, ProxyAgentWithContext, wait0)
@@ -439,3 +441,89 @@ class TestPkgResources(VumiTestCase):
         pkg = PkgResources("vumi.tests")
         self.assertEqual(os.path.join(self.vumi_tests_path, 'foo/bar'),
                          pkg.path('foo/bar'))
+
+
+class TestStatusEdgeDetector(VumiTestCase):
+    def test_status_not_change(self):
+        '''If the status doesn't change, None should be returned.'''
+        sed = StatusEdgeDetector()
+        status1 = TransportStatus(
+            component='foo',
+            status='ok',
+            type='bar',
+            message='test')
+        self.assertEqual(sed.check_status(status1), status1)
+
+        status2 = TransportStatus(
+            component='foo',
+            status='ok',
+            type='bar',
+            message='another test')
+        self.assertEqual(sed.check_status(status2), None)
+
+    def test_status_change(self):
+        '''If the status does change, the status should be returned.'''
+        sed = StatusEdgeDetector()
+        status1 = TransportStatus(
+            component='foo',
+            status='ok',
+            type='bar',
+            message='test')
+        self.assertEqual(sed.check_status(status1), status1)
+
+        status2 = TransportStatus(
+            component='foo',
+            status='degraded',
+            type='bar',
+            message='another test')
+        self.assertEqual(sed.check_status(status2), status2)
+
+    def test_components_separate(self):
+        '''A state change in one component should not affect other
+        components.'''
+        sed = StatusEdgeDetector()
+        comp1_status1 = TransportStatus(
+            component='foo',
+            status='ok',
+            type='bar',
+            message='test')
+        self.assertEqual(sed.check_status(comp1_status1), comp1_status1)
+
+        comp2_status1 = TransportStatus(
+            component='bar',
+            status='ok',
+            type='bar',
+            message='another test')
+        self.assertEqual(sed.check_status(comp2_status1), comp2_status1)
+
+        comp2_status2 = TransportStatus(
+            component='bar',
+            status='degraded',
+            type='bar',
+            message='another test')
+        self.assertEqual(sed.check_status(comp2_status2), comp2_status2)
+
+        comp1_status2 = TransportStatus(
+            component='foo',
+            status='ok',
+            type='bar',
+            message='test')
+        self.assertEqual(sed.check_status(comp1_status2), None)
+
+    def test_type_change(self):
+        '''A change in status type should result in the status being
+        returned.'''
+        sed = StatusEdgeDetector()
+        status1 = TransportStatus(
+            component='foo',
+            status='ok',
+            type='bar',
+            message='test')
+        self.assertEqual(sed.check_status(status1), status1)
+
+        status2 = TransportStatus(
+            component='foo',
+            status='ok',
+            type='baz',
+            message='test')
+        self.assertEqual(sed.check_status(status2), status2)
