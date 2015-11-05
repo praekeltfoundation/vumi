@@ -1131,6 +1131,17 @@ class WorkerHelper(object):
         return [json.loads(msg.body)['datapoints'] for msg in msgs]
 
     @proxyable
+    def wait_for_dispatched_metrics(self):
+        """
+        Get dispatched metrics after waiting for any pending deliveries.
+
+        The list of datapoints from each dispatched metrics message is
+        returned.
+        """
+        return self.broker.wait_delivery().addCallback(
+            lambda _: self.get_dispatched_metrics())
+
+    @proxyable
     def clear_dispatched_metrics(self):
         """
         Clear dispatched metrics messages from the broker.

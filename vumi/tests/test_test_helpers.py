@@ -1539,6 +1539,28 @@ class TestWorkerHelper(VumiTestCase):
         dispatched = worker_helper.get_dispatched_metrics()
         self.assertEqual(dispatched, [[], ['fake metric 1', 'fake metric 2']])
 
+    @inlineCallbacks
+    def test_wait_for_dispatched_metrics(self):
+        """
+        WorkerHelper.wait_for_dispatched_metrics() waits for pending
+        deliveries to finish and then gets dispatched metrics.
+        """
+        worker_helper = WorkerHelper()
+        d = worker_helper.wait_for_dispatched_metrics()
+        self.assertEqual(self.successResultOf(d), [])
+
+        self._add_to_dispatched_metrics(worker_helper.broker, MetricMessage())
+        msg = MetricMessage()
+        msg.append('fake metric 1')
+        msg.append('fake metric 2')
+        self._add_to_dispatched_metrics(worker_helper.broker, msg)
+        worker_helper.kick_delivery()
+        d = worker_helper.wait_for_dispatched_metrics()
+        self.assertNoResult(d)
+        yield worker_helper.broker.wait_delivery()
+        self.assertEqual(
+            self.successResultOf(d), [[], ['fake metric 1', 'fake metric 2']])
+
     def test_clear_dispatched_metrics(self):
         """
         WorkerHelper.clear_dispatched_metrics() should clear metrics messages
