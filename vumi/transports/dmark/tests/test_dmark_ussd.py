@@ -337,3 +337,14 @@ class TestDmarkUssdTransport(VumiTestCase):
         self.assertEqual(status['component'], 'response')
         self.assertEqual(status['type'], 'slow_response')
         self.assertEqual(status['message'], 'Very slow response')
+
+    @inlineCallbacks
+    def test_no_response_status_for_message_not_found(self):
+        '''If we cannot find the starting timestamp for a message, no status
+        message should be sent'''
+        reply = self.tx_helper.make_outbound(
+            'There are some who call me ... Tim!', message_id='23',
+            in_reply_to='some-number')
+        self.tx_helper.dispatch_outbound(reply)
+        statuses = yield self.tx_helper.get_dispatched_statuses()
+        self.assertEqual(len(statuses), 0)
