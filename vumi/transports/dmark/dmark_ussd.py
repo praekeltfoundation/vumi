@@ -108,7 +108,30 @@ class DmarkUssdTransport(HttpRpcTransport):
 
     @inlineCallbacks
     def handle_raw_inbound_message(self, request_id, request):
-        values, errors = self.get_field_values(request, self.EXPECTED_FIELDS)
+        try:
+            values, errors = self.get_field_values(request, self.EXPECTED_FIELDS)
+        except UnicodeDecodeError:
+            log.msg('Bad request encoding: %r' % request)
+            request_dict = {
+                'uri': request.uri,
+                'method': request.method,
+                'path': request.path,
+                'content': request.content.read(),
+                'headers': dict(request.requestHeaders.getAllRawHeaders()),
+            }
+            self.finish_request(
+                request_id, json.dumps({'invalid_request': request_dict}),
+                code=http.BAD_REQUEST)
+            yield self.add_status(
+                component='request',
+                status='down',
+                type='invalid_encoding',
+                message='Invalid encoding',
+                details={
+                    'request': request_dict,
+                })
+            return
+
         if errors:
             log.msg('Unhappy incoming message: %r' % (errors,))
             self.finish_request(
