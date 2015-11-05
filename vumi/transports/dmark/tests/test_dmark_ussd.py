@@ -275,3 +275,62 @@ class TestDmarkUssdTransport(VumiTestCase):
         [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assert_nack(
             nack, reply, 'Could not find original request.')
+
+    @inlineCallbacks
+    def test_no_status_quick_response(self):
+        '''No status event should be sent if the response is quick.'''
+        d = self.tx_helper.mk_request()
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        yield self.tx_helper.clear_dispatched_statuses()
+
+        self.tx_helper.dispatch_outbound(msg.reply('foo'))
+        response = yield d
+
+        statuses = yield self.tx_helper.get_dispatched_statuses()
+        self.assertEqual(len(statuses), 0)
+
+    @inlineCallbacks
+    def test_status_degraded_slow_response(self):
+        '''A degraded status event should be sent if the response took longer
+        than 1 second.'''
+        d = self.tx_helper.mk_request()
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        yield self.tx_helper.clear_dispatched_statuses()
+
+        # 1.5 second reply
+        timestamp = self.transport.session_timestamps[msg['message_id']]
+        self.transport.session_timestamps[msg['message_id']] = timestamp - 1.5
+
+        self.tx_helper.dispatch_outbound(msg.reply('foo'))
+        response = yield d
+
+        [status] = yield self.tx_helper.get_dispatched_statuses()
+        self.assertEqual(status['status'], 'degraded')
+        self.assertEqual(
+            status['reasons'], ['Response took longer than 1 second'])
+        self.assertEqual(status['component'], 'response')
+        self.assertEqual(status['type'], 'slow_response')
+        self.assertEqual(status['message'], 'Slow response')
+
+    @inlineCallbacks
+    def test_status_down_very_slow_response(self):
+        '''A down status event should be sent if the response took longer
+        than 10 seconds.'''
+        d = self.tx_helper.mk_request()
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        yield self.tx_helper.clear_dispatched_statuses()
+
+        # 10.5 second reply
+        timestamp = self.transport.session_timestamps[msg['message_id']]
+        self.transport.session_timestamps[msg['message_id']] = timestamp - 10.5
+
+        self.tx_helper.dispatch_outbound(msg.reply('foo'))
+        response = yield d
+
+        [status] = yield self.tx_helper.get_dispatched_statuses()
+        self.assertEqual(status['status'], 'down')
+        self.assertEqual(
+            status['reasons'], ['Response took longer than 10 seconds'])
+        self.assertEqual(status['component'], 'response')
+        self.assertEqual(status['type'], 'slow_response')
+        self.assertEqual(status['message'], 'Very slow response')
