@@ -113,6 +113,12 @@ class DmarkUssdTransport(HttpRpcTransport):
             log.msg('Unhappy incoming message: %r' % (errors,))
             self.finish_request(
                 request_id, json.dumps(errors), code=http.BAD_REQUEST)
+            yield self.add_status(
+                component='request',
+                status='down',
+                type='invalid_inbound_fields',
+                message='Invalid inbound fields',
+                details=errors)
             return
 
         to_addr = values["ussdServiceCode"]
