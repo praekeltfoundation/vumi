@@ -12,7 +12,8 @@ from twisted.web.resource import Resource
 from twisted.web.server import NOT_DONE_YET
 
 from vumi import log
-from vumi.config import ConfigText, ConfigInt, ConfigBool, ConfigError
+from vumi.config import (
+    ConfigText, ConfigInt, ConfigBool, ConfigError, ConfigFloat)
 from vumi.message import TransportStatus
 from vumi.transports.base import Transport
 from vumi.transports.httprpc.auth import HttpRpcRealm, StaticAuthChecker
@@ -71,6 +72,14 @@ class HttpRpcTransportConfig(Transport.CONFIG_CLASS):
         " nor in IGNORED_FIELDS will raise an error. If 'permissive' then no"
         " error is raised as long as all the EXPECTED_FIELDS are present.",
         default='strict', static=True)
+    response_time_down = ConfigFloat(
+        "The maximum time allowed for a response before the service is "
+        "considered `down`",
+        default=10.0, static=True)
+    response_time_degraded = ConfigFloat(
+        "The maximum time allowed for a response before the service is "
+        "considered `degraded`",
+        default=1.0, static=True)
 
     def post_validate(self):
         auth_supplied = (self.web_username is None, self.web_password is None)
@@ -148,6 +157,8 @@ class HttpRpcTransport(Transport):
         self.request_timeout_body = config.request_timeout_body
         self.gc_requests_interval = config.request_cleanup_interval
         self._validation_mode = config.validation_mode
+        self.response_time_down = config.response_time_down
+        self.response_time_degraded = config.response_time_degraded
         if self._validation_mode not in self.KNOWN_VALIDATION_MODES:
             raise ConfigError('Invalid validation mode: %s' % (
                 self._validation_mode,))
@@ -196,6 +207,7 @@ class HttpRpcTransport(Transport):
             self.web_port)
 
         self.status_detect = StatusEdgeDetector()
+        self.session_timestamps = {}
 
     def add_status(self, **kw):
         '''Publishes a status if it is not a repeat of the previously
@@ -330,3 +342,58 @@ class HttpRpcTransport(Transport):
     def set_request_to_addr(self, request_id, to_addr):
         if request_id in self._requests:
             self._requests[request_id]['to_addr'] = to_addr
+
+    def set_request_start(self, message_id):
+        '''Saves the current timestamp to use later to determine the response
+        time.'''
+        self.session_timestamps[message_id] = self.clock.seconds()
+    
+    def set_request_end(self, message_id):
+        '''Checks the saved timestamp to see the response time.
+        If the starting timestamp for the message cannot be found, nothing is
+        done.
+        If the time is more than `response_time_down`, a `down` status event
+        is sent.
+        If the time more than `response_time_degraded`, a `degraded` status
+        event is sent.
+        If the time is less than `response_time_degraded`, an `ok` status
+        event is sent.
+        '''
+        start_time = self.session_timestamps.pop(message_id, None)
+        if start_time is not None:
+            response_time = self.clock.seconds() - start_time
+            if response_time > self.response_time_down:
+                return self.add_status(
+                    component='response',
+                    status='down',
+                    type='slow_response',
+                    message='Very slow response',
+                    reasons=[
+                        'Response took longer than %fs' % (
+                            self.response_time_down,)
+                    ],
+                    details={
+                        'response_time': response_time,
+                    })
+            elif response_time > self.response_time_degraded:
+                return self.add_status(
+                    component='response',
+                    status='degraded',
+                    type='slow_response',
+                    message='Slow response',
+                    reasons=[
+                        'Response took longer than %fs' % (
+                            self.response_time_degraded,)
+                    ],
+                    details={
+                        'response_time': response_time,
+                    })
+            else:
+                return self.add_status(
+                    component='response',
+                    status='ok',
+                    type='response_sent',
+                    message='Response sent',
+                    details={
+                        'response_time': response_time,
+                    })

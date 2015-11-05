@@ -7,6 +7,7 @@ import json
 import urllib
 
 from twisted.internet.defer import inlineCallbacks
+from twisted.internet.task import Clock
 
 from vumi.message import TransportUserMessage
 from vumi.tests.helpers import VumiTestCase
@@ -31,6 +32,9 @@ class TestDmarkUssdTransport(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
+        self.clock = Clock()
+        self.patch(DmarkUssdTransport, 'get_clock', lambda _: self.clock)
+
         self.config = {
             'web_port': 0,
             'web_path': '/api/v1/dmark/ussd/',
@@ -44,6 +48,7 @@ class TestDmarkUssdTransport(VumiTestCase):
         self.transport_url = self.transport.get_transport_url(
             self.config['web_path'])
         yield self.session_manager.redis._purge_all()  # just in case
+        self.session_timestamps = {}
 
     @inlineCallbacks
     def mk_session(self, transaction_id=_transaction_id):
@@ -108,10 +113,10 @@ class TestDmarkUssdTransport(VumiTestCase):
     def test_inbound_status(self):
         d = self.tx_helper.mk_request()
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        [status] = yield self.tx_helper.get_dispatched_statuses()
         self.tx_helper.dispatch_outbound(msg.reply('foo'))
         yield d
 
-        [status] = yield self.tx_helper.get_dispatched_statuses()
         self.assertEqual(status['status'], 'ok')
         self.assertEqual(status['component'], 'request')
         self.assertEqual(status['type'], 'request_parsed')
@@ -275,3 +280,72 @@ class TestDmarkUssdTransport(VumiTestCase):
         [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assert_nack(
             nack, reply, 'Could not find original request.')
+
+    @inlineCallbacks
+    def test_status_quick_response(self):
+        '''Ok status event should be sent if the response is quick.'''
+        d = self.tx_helper.mk_request()
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        yield self.tx_helper.clear_dispatched_statuses()
+
+        self.tx_helper.dispatch_outbound(msg.reply('foo'))
+        response = yield d
+
+        [status] = yield self.tx_helper.get_dispatched_statuses()
+        self.assertEqual(status['status'], 'ok')
+        self.assertEqual(status['component'], 'response')
+        self.assertEqual(status['message'], 'Response sent')
+        self.assertEqual(status['type'], 'response_sent')
+
+    @inlineCallbacks
+    def test_status_degraded_slow_response(self):
+        '''A degraded status event should be sent if the response took longer
+        than 1 second.'''
+        d = self.tx_helper.mk_request()
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        yield self.tx_helper.clear_dispatched_statuses()
+
+        self.clock.advance(self.transport.response_time_degraded + 0.1)
+
+        self.tx_helper.dispatch_outbound(msg.reply('foo'))
+        response = yield d
+
+        [status] = yield self.tx_helper.get_dispatched_statuses()
+        self.assertEqual(status['status'], 'degraded')
+        self.assertTrue(
+            str(self.transport.response_time_degraded) in status['reasons'][0])
+        self.assertEqual(status['component'], 'response')
+        self.assertEqual(status['type'], 'slow_response')
+        self.assertEqual(status['message'], 'Slow response')
+
+    @inlineCallbacks
+    def test_status_down_very_slow_response(self):
+        '''A down status event should be sent if the response took longer
+        than 10 seconds.'''
+        d = self.tx_helper.mk_request()
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        yield self.tx_helper.clear_dispatched_statuses()
+
+        self.clock.advance(self.transport.response_time_down + 0.1)
+
+        self.tx_helper.dispatch_outbound(msg.reply('foo'))
+        response = yield d
+
+        [status] = yield self.tx_helper.get_dispatched_statuses()
+        self.assertEqual(status['status'], 'down')
+        self.assertTrue(
+            str(self.transport.response_time_down) in status['reasons'][0])
+        self.assertEqual(status['component'], 'response')
+        self.assertEqual(status['type'], 'slow_response')
+        self.assertEqual(status['message'], 'Very slow response')
+
+    @inlineCallbacks
+    def test_no_response_status_for_message_not_found(self):
+        '''If we cannot find the starting timestamp for a message, no status
+        message should be sent'''
+        reply = self.tx_helper.make_outbound(
+            'There are some who call me ... Tim!', message_id='23',
+            in_reply_to='some-number')
+        self.tx_helper.dispatch_outbound(reply)
+        statuses = yield self.tx_helper.get_dispatched_statuses()
+        self.assertEqual(len(statuses), 0)

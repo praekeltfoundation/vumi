@@ -2,6 +2,8 @@
 
 import json
 
+import time
+
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.web import http
 
@@ -145,6 +147,8 @@ class DmarkUssdTransport(HttpRpcTransport):
                 details=errors)
             return
 
+        yield self.set_request_start(request_id)
+
         yield self.add_status(
             component='request',
             status='ok',
@@ -172,12 +176,14 @@ class DmarkUssdTransport(HttpRpcTransport):
                 }
             })
 
+    @inlineCallbacks
     def handle_outbound_message(self, message):
         self.emit("DmarkUssdTransport consuming %r" % (message,))
         missing_fields = self.ensure_message_values(message,
                             ['in_reply_to', 'content'])
         if missing_fields:
-            return self.reject_message(message, missing_fields)
+            nack = yield self.reject_message(message, missing_fields)
+            returnValue(nack)
 
         if message["session_event"] == TransportUserMessage.SESSION_CLOSE:
             action = "end"
@@ -191,12 +197,17 @@ class DmarkUssdTransport(HttpRpcTransport):
 
         response_id = self.finish_request(
             message['in_reply_to'], json.dumps(response_data))
+
+        yield self.set_request_end(message['in_reply_to'])
+
         if response_id is not None:
-            return self.publish_ack(
+            ack = yield self.publish_ack(
                 user_message_id=message['message_id'],
                 sent_message_id=message['message_id'])
+            returnValue(ack)
         else:
-            return self.publish_nack(
+            nack = yield self.publish_nack(
                 user_message_id=message['message_id'],
                 sent_message_id=message['message_id'],
                 reason="Could not find original request.")
+            returnValue(nack)
