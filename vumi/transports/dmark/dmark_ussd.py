@@ -2,6 +2,8 @@
 
 import json
 
+import time
+
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.web import http
 
@@ -85,6 +87,7 @@ class DmarkUssdTransport(HttpRpcTransport):
         self.session_manager = yield SessionManager.from_redis_config(
             config.redis_manager, r_prefix,
             max_session_length=config.ussd_session_timeout)
+        self.session_timestamps = {}
 
     @inlineCallbacks
     def teardown_transport(self):
@@ -145,6 +148,8 @@ class DmarkUssdTransport(HttpRpcTransport):
                 details=errors)
             return
 
+        yield self._set_request_start(request_id)
+
         yield self.add_status(
             component='request',
             status='ok',
@@ -172,12 +177,14 @@ class DmarkUssdTransport(HttpRpcTransport):
                 }
             })
 
+    @inlineCallbacks
     def handle_outbound_message(self, message):
         self.emit("DmarkUssdTransport consuming %r" % (message,))
         missing_fields = self.ensure_message_values(message,
                             ['in_reply_to', 'content'])
         if missing_fields:
-            return self.reject_message(message, missing_fields)
+            nack = yield self.reject_message(message, missing_fields)
+            returnValue(nack)
 
         if message["session_event"] == TransportUserMessage.SESSION_CLOSE:
             action = "end"
@@ -191,12 +198,39 @@ class DmarkUssdTransport(HttpRpcTransport):
 
         response_id = self.finish_request(
             message['in_reply_to'], json.dumps(response_data))
+
+        yield self._set_request_end(message['in_reply_to'])
+
         if response_id is not None:
-            return self.publish_ack(
+            ack = yield self.publish_ack(
                 user_message_id=message['message_id'],
                 sent_message_id=message['message_id'])
+            returnValue(ack)
         else:
-            return self.publish_nack(
+            nack = yield self.publish_nack(
                 user_message_id=message['message_id'],
                 sent_message_id=message['message_id'],
                 reason="Could not find original request.")
+            returnValue(nack)
+
+    def _set_request_start(self, message_id):
+        self.session_timestamps[message_id] = time.time()
+    
+    def _set_request_end(self, message_id):
+        start_time = self.session_timestamps.pop(message_id, None)
+        if start_time:
+            response_time = time.time() - start_time
+            if response_time > 10:
+                return self.add_status(
+                    component='response',
+                    status='down',
+                    type='slow_response',
+                    message='Very slow response',
+                    reasons=['Response took longer than 10 seconds'])
+            elif response_time > 1:
+                return self.add_status(
+                    component='response',
+                    status='degraded',
+                    type='slow_response',
+                    message='Slow response',
+                    reasons=['Response took longer than 1 second'])
