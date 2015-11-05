@@ -207,6 +207,7 @@ class HttpRpcTransport(Transport):
             self.web_port)
 
         self.status_detect = StatusEdgeDetector()
+        self.session_timestamps = {}
 
     def add_status(self, **kw):
         '''Publishes a status if it is not a repeat of the previously
