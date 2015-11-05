@@ -147,8 +147,8 @@ class DmarkUssdTransport(HttpRpcTransport):
         yield self.add_status(
             component='request',
             status='ok',
-            type='request_decoded',
-            message='Request decoded',)
+            type='request_parsed',
+            message='Request parsed',)
 
         to_addr = values["ussdServiceCode"]
         from_addr = values["msisdn"]

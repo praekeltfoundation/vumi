@@ -114,8 +114,8 @@ class TestDmarkUssdTransport(VumiTestCase):
         [status] = yield self.tx_helper.get_dispatched_statuses()
         self.assertEqual(status['status'], 'ok')
         self.assertEqual(status['component'], 'request')
-        self.assertEqual(status['type'], 'request_decoded')
-        self.assertEqual(status['message'], 'Request decoded')
+        self.assertEqual(status['type'], 'request_parsed')
+        self.assertEqual(status['message'], 'Request parsed')
 
     @inlineCallbacks
     def test_inbound_cannot_decode(self):
