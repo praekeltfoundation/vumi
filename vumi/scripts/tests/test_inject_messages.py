@@ -39,7 +39,7 @@ class TestMessageInjector(VumiTestCase):
         worker = yield self.get_worker('inbound')
         data = self.make_data()
         worker.process_line(json.dumps(data))
-        [msg] = self.worker_helper.get_dispatched_inbound()
+        [msg] = yield self.worker_helper.wait_for_dispatched_inbound()
         self.check_msg(msg, data)
 
     @inlineCallbacks
@@ -47,7 +47,7 @@ class TestMessageInjector(VumiTestCase):
         worker = yield self.get_worker('outbound')
         data = self.make_data()
         worker.process_line(json.dumps(data))
-        [msg] = self.worker_helper.get_dispatched_outbound()
+        [msg] = yield self.worker_helper.wait_for_dispatched_outbound()
         self.check_msg(msg, data)
 
     @inlineCallbacks
@@ -58,7 +58,7 @@ class TestMessageInjector(VumiTestCase):
         in_file = StringIO.StringIO(data_string)
         out_file = StringIO.StringIO()
         yield worker.process_file(in_file, out_file)
-        msgs = self.worker_helper.get_dispatched_inbound()
+        msgs = yield self.worker_helper.wait_for_dispatched_inbound()
         for msg, datum in zip(msgs, data):
             self.check_msg(msg, datum)
         self.assertEqual(out_file.getvalue(), data_string + "\n")
@@ -71,7 +71,7 @@ class TestMessageInjector(VumiTestCase):
         in_file = StringIO.StringIO(data_string)
         out_file = StringIO.StringIO()
         yield worker.process_file(in_file, out_file)
-        msgs = self.worker_helper.get_dispatched_outbound()
+        msgs = yield self.worker_helper.wait_for_dispatched_outbound()
         for msg, datum in zip(msgs, data):
             self.check_msg(msg, datum)
         self.assertEqual(out_file.getvalue(), data_string + "\n")
