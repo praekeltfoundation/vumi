@@ -121,6 +121,12 @@ class DmarkUssdTransport(HttpRpcTransport):
                 details=errors)
             return
 
+        yield self.add_status(
+            component='request',
+            status='ok',
+            type='request_decoded',
+            message='Request decoded',)
+
         to_addr = values["ussdServiceCode"]
         from_addr = values["msisdn"]
         session_event = yield self.session_event_for_transaction(
