@@ -32,6 +32,7 @@ class TestDmarkUssdTransport(VumiTestCase):
         self.config = {
             'web_port': 0,
             'web_path': '/api/v1/dmark/ussd/',
+            'publish_status': True,
         }
         self.tx_helper = self.add_helper(
             HttpRpcTransportHelper(DmarkUssdTransport,
@@ -165,6 +166,21 @@ class TestDmarkUssdTransport(VumiTestCase):
         self.assertEqual(response.code, 400)
 
     @inlineCallbacks
+    def test_status_with_missing_parameters(self):
+        '''A request with missing parameters should send a TransportStatus
+        with the relevant details.'''
+        response = yield self.tx_helper.mk_request_raw(
+            params={"ussdServiceCode": '', "msisdn": '', "creationTime": ''})
+
+        [status] = yield self.tx_helper.get_dispatched_statuses()
+        self.assertEqual(status['status'], 'down')
+        self.assertEqual(status['component'], 'request')
+        self.assertEqual(status['type'], 'invalid_inbound_fields')
+        self.assertEqual(sorted(status['details']['missing_parameter']), [
+            'response', 'transactionId', 'transactionTime',
+            'ussdRequestString'])
+
+    @inlineCallbacks
     def test_request_with_unexpected_parameters(self):
         response = yield self.tx_helper.mk_request(
             unexpected_p1='', unexpected_p2='')
@@ -175,6 +191,20 @@ class TestDmarkUssdTransport(VumiTestCase):
         self.assertEqual(
             sorted(body['unexpected_parameter']),
             ['unexpected_p1', 'unexpected_p2'])
+
+    @inlineCallbacks
+    def test_status_with_unexpected_parameters(self):
+        '''A request with unexpected parameters should send a TransportStatus
+        with the relevant details.'''
+        response = yield self.tx_helper.mk_request(
+            unexpected_p1='', unexpected_p2='')
+
+        [status] = yield self.tx_helper.get_dispatched_statuses()
+        self.assertEqual(status['status'], 'down')
+        self.assertEqual(status['component'], 'request')
+        self.assertEqual(status['type'], 'invalid_inbound_fields')
+        self.assertEqual(sorted(status['details']['unexpected_parameter']), [
+            'unexpected_p1', 'unexpected_p2'])
 
     @inlineCallbacks
     def test_nack_insufficient_message_fields(self):
