@@ -169,7 +169,7 @@ class TestDmarkUssdTransport(VumiTestCase):
     def test_status_with_missing_parameters(self):
         '''A request with missing parameters should send a TransportStatus
         with the relevant details.'''
-        response = yield self.tx_helper.mk_request_raw(
+        yield self.tx_helper.mk_request_raw(
             params={"ussdServiceCode": '', "msisdn": '', "creationTime": ''})
 
         [status] = yield self.tx_helper.get_dispatched_statuses()
@@ -196,7 +196,7 @@ class TestDmarkUssdTransport(VumiTestCase):
     def test_status_with_unexpected_parameters(self):
         '''A request with unexpected parameters should send a TransportStatus
         with the relevant details.'''
-        response = yield self.tx_helper.mk_request(
+        yield self.tx_helper.mk_request(
             unexpected_p1='', unexpected_p2='')
 
         [status] = yield self.tx_helper.get_dispatched_statuses()
