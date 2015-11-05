@@ -226,11 +226,17 @@ class DmarkUssdTransport(HttpRpcTransport):
                     status='down',
                     type='slow_response',
                     message='Very slow response',
-                    reasons=['Response took longer than 10 seconds'])
+                    reasons=['Response took longer than 10 seconds'],
+                    details={
+                        'response_time': response_time,
+                    })
             elif response_time > 1:
                 return self.add_status(
                     component='response',
                     status='degraded',
                     type='slow_response',
                     message='Slow response',
-                    reasons=['Response took longer than 1 second'])
+                    reasons=['Response took longer than 1 second'],
+                    details={
+                        'response_time': response_time,
+                    })
