@@ -1705,12 +1705,27 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_starting_status(self):
+        """
+        The SMPP bind process emits three status events.
+        """
         yield self.get_transport({'publish_status': True})
-        [msg] = self.tx_helper.get_dispatched_statuses()[:1]
-        self.assertEqual(msg['status'], 'down')
-        self.assertEqual(msg['component'], 'smpp')
-        self.assertEqual(msg['type'], 'starting')
-        self.assertEqual(msg['message'], 'Starting')
+        msgs = yield self.tx_helper.wait_for_dispatched_statuses()
+        [msg_starting, msg_binding, msg_bound] = msgs
+
+        self.assertEqual(msg_starting['status'], 'down')
+        self.assertEqual(msg_starting['component'], 'smpp')
+        self.assertEqual(msg_starting['type'], 'starting')
+        self.assertEqual(msg_starting['message'], 'Starting')
+
+        self.assertEqual(msg_binding['status'], 'down')
+        self.assertEqual(msg_binding['component'], 'smpp')
+        self.assertEqual(msg_binding['type'], 'binding')
+        self.assertEqual(msg_binding['message'], 'Binding')
+
+        self.assertEqual(msg_bound['status'], 'ok')
+        self.assertEqual(msg_bound['component'], 'smpp')
+        self.assertEqual(msg_bound['type'], 'bound')
+        self.assertEqual(msg_bound['message'], 'Bound')
 
     @inlineCallbacks
     def test_connect_status(self):
@@ -1725,7 +1740,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.clock.advance(transport.service.delay)
         yield self.fake_smsc.await_connected()
 
-        [msg] = self.tx_helper.get_dispatched_statuses()
+        [msg] = yield self.tx_helper.wait_for_dispatched_statuses()
         self.assertEqual(msg['status'], 'down')
         self.assertEqual(msg['component'], 'smpp')
         self.assertEqual(msg['type'], 'binding')
@@ -1737,7 +1752,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.tx_helper.clear_dispatched_statuses()
         yield transport.service.get_protocol().unbind()
 
-        [msg] = self.tx_helper.get_dispatched_statuses()
+        [msg] = yield self.tx_helper.wait_for_dispatched_statuses()
         self.assertEqual(msg['status'], 'down')
         self.assertEqual(msg['component'], 'smpp')
         self.assertEqual(msg['type'], 'unbinding')
@@ -1751,7 +1766,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
         yield self.fake_smsc.bind()
 
-        [msg] = self.tx_helper.get_dispatched_statuses()
+        [msg] = yield self.tx_helper.wait_for_dispatched_statuses()
         self.assertEqual(msg['status'], 'ok')
         self.assertEqual(msg['component'], 'smpp')
         self.assertEqual(msg['type'], 'bound')
@@ -1770,7 +1785,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.tx_helper.clear_dispatched_statuses()
         self.clock.advance(3)
 
-        [msg] = self.tx_helper.get_dispatched_statuses()
+        [msg] = yield self.tx_helper.wait_for_dispatched_statuses()
         self.assertEqual(msg['status'], 'down')
         self.assertEqual(msg['component'], 'smpp')
         self.assertEqual(msg['type'], 'bind_timeout')
@@ -1785,7 +1800,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.tx_helper.clear_dispatched_statuses()
         yield self.fake_smsc.disconnect()
 
-        [msg] = self.tx_helper.get_dispatched_statuses()
+        [msg] = yield self.tx_helper.wait_for_dispatched_statuses()
         self.assertEqual(msg['status'], 'down')
         self.assertEqual(msg['status'], 'down')
         self.assertEqual(msg['component'], 'smpp')
@@ -1813,7 +1828,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
                          message_id='foo',
                          command_status='ESME_RTHROTTLED'))
 
-        [msg] = self.tx_helper.get_dispatched_statuses()
+        [msg] = yield self.tx_helper.wait_for_dispatched_statuses()
         self.assertEqual(msg['status'], 'degraded')
         self.assertEqual(msg['component'], 'smpp')
         self.assertEqual(msg['type'], 'throttled')
@@ -1830,7 +1845,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
         self.clock.advance(0)
 
-        [msg] = self.tx_helper.get_dispatched_statuses()
+        [msg] = yield self.tx_helper.wait_for_dispatched_statuses()
         self.assertEqual(msg['status'], 'ok')
         self.assertEqual(msg['component'], 'smpp')
         self.assertEqual(msg['type'], 'throttled_end')
@@ -1859,7 +1874,8 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
         yield self.fake_smsc.bind()
 
-        [msg1, msg2, msg3] = self.tx_helper.get_dispatched_statuses()
+        msgs = yield self.tx_helper.wait_for_dispatched_statuses()
+        [msg1, msg2, msg3] = msgs
 
         self.assertEqual(msg1['type'], 'binding')
         self.assertEqual(msg2['type'], 'bound')
@@ -1883,6 +1899,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.tx_helper.make_dispatch_outbound('hello world 3')
         yield self.fake_smsc.await_pdus(2)
 
+        # We can't wait here because that requires throttling to end.
         [msg] = self.tx_helper.get_dispatched_statuses()
         self.assertEqual(msg['status'], 'degraded')
         self.assertEqual(msg['component'], 'smpp')
@@ -1893,7 +1910,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
         self.clock.advance(1)
 
-        [msg] = self.tx_helper.get_dispatched_statuses()
+        [msg] = yield self.tx_helper.wait_for_dispatched_statuses()
         self.assertEqual(msg['status'], 'ok')
         self.assertEqual(msg['component'], 'smpp')
         self.assertEqual(msg['type'], 'throttled_end')
@@ -1919,7 +1936,8 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
         yield self.fake_smsc.bind()
 
-        [msg1, msg2, msg3] = self.tx_helper.get_dispatched_statuses()
+        msgs = yield self.tx_helper.wait_for_dispatched_statuses()
+        [msg1, msg2, msg3] = msgs
 
         self.assertEqual(msg1['type'], 'binding')
         self.assertEqual(msg2['type'], 'bound')
