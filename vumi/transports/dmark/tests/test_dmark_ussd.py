@@ -140,7 +140,6 @@ class TestDmarkUssdTransport(VumiTestCase):
         self.assertEqual(status['type'], 'invalid_encoding')
         self.assertEqual(status['message'], 'Invalid encoding')
 
-
     @inlineCallbacks
     def test_inbound_resume_and_reply_with_end(self):
         yield self.mk_session(self._transaction_id)
