@@ -130,6 +130,8 @@ class TestDmarkUssdTransport(VumiTestCase):
         self.assertEqual(request['path'], self.config['web_path'])
         self.assertEqual(request['method'], 'GET')
         self.assertEqual(request['headers']['Connection'], ['close'])
+        encoded_str = urllib.urlencode({'ussdRequestString': user_content})
+        self.assertTrue(encoded_str in request['uri'])
 
     @inlineCallbacks
     def test_inbound_cannot_decode_status(self):
@@ -148,6 +150,8 @@ class TestDmarkUssdTransport(VumiTestCase):
         self.assertEqual(request['path'], self.config['web_path'])
         self.assertEqual(request['method'], 'GET')
         self.assertEqual(request['headers']['Connection'], ['close'])
+        encoded_str = urllib.urlencode({'ussdRequestString': user_content})
+        self.assertTrue(encoded_str in request['uri'])
 
     @inlineCallbacks
     def test_inbound_resume_and_reply_with_end(self):
