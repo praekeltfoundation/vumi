@@ -126,7 +126,10 @@ class TestDmarkUssdTransport(VumiTestCase):
 
         body = json.loads(response.delivered_body)
         request = body['invalid_request']
+        self.assertEqual(request['content'], '')
+        self.assertEqual(request['path'], self.config['web_path'])
         self.assertEqual(request['method'], 'GET')
+        self.assertEqual(request['headers']['Connection'], ['close'])
 
     @inlineCallbacks
     def test_inbound_cannot_decode_status(self):
@@ -139,6 +142,12 @@ class TestDmarkUssdTransport(VumiTestCase):
         self.assertEqual(status['status'], 'down')
         self.assertEqual(status['type'], 'invalid_encoding')
         self.assertEqual(status['message'], 'Invalid encoding')
+
+        request = status['details']['request']
+        self.assertEqual(request['content'], '')
+        self.assertEqual(request['path'], self.config['web_path'])
+        self.assertEqual(request['method'], 'GET')
+        self.assertEqual(request['headers']['Connection'], ['close'])
 
     @inlineCallbacks
     def test_inbound_resume_and_reply_with_end(self):
