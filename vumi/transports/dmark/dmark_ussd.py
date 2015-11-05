@@ -87,7 +87,6 @@ class DmarkUssdTransport(HttpRpcTransport):
         self.session_manager = yield SessionManager.from_redis_config(
             config.redis_manager, r_prefix,
             max_session_length=config.ussd_session_timeout)
-        self.session_timestamps = {}
 
     @inlineCallbacks
     def teardown_transport(self):
@@ -148,7 +147,7 @@ class DmarkUssdTransport(HttpRpcTransport):
                 details=errors)
             return
 
-        yield self._set_request_start(request_id)
+        yield self.set_request_start(request_id)
 
         yield self.add_status(
             component='request',
@@ -199,7 +198,7 @@ class DmarkUssdTransport(HttpRpcTransport):
         response_id = self.finish_request(
             message['in_reply_to'], json.dumps(response_data))
 
-        yield self._set_request_end(message['in_reply_to'])
+        yield self.set_request_end(message['in_reply_to'])
 
         if response_id is not None:
             ack = yield self.publish_ack(
@@ -212,40 +211,3 @@ class DmarkUssdTransport(HttpRpcTransport):
                 sent_message_id=message['message_id'],
                 reason="Could not find original request.")
             returnValue(nack)
-
-    def _set_request_start(self, message_id):
-        self.session_timestamps[message_id] = self.clock.seconds()
-    
-    def _set_request_end(self, message_id):
-        start_time = self.session_timestamps.pop(message_id, None)
-        if start_time is not None:
-            response_time = self.clock.seconds() - start_time
-            if response_time > 10:
-                return self.add_status(
-                    component='response',
-                    status='down',
-                    type='slow_response',
-                    message='Very slow response',
-                    reasons=['Response took longer than 10 seconds'],
-                    details={
-                        'response_time': response_time,
-                    })
-            elif response_time > 1:
-                return self.add_status(
-                    component='response',
-                    status='degraded',
-                    type='slow_response',
-                    message='Slow response',
-                    reasons=['Response took longer than 1 second'],
-                    details={
-                        'response_time': response_time,
-                    })
-            else:
-                return self.add_status(
-                    component='response',
-                    status='ok',
-                    type='response_sent',
-                    message='Response sent',
-                    details={
-                        'response_time': response_time,
-                    })

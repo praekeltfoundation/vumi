@@ -48,6 +48,7 @@ class TestDmarkUssdTransport(VumiTestCase):
         self.transport_url = self.transport.get_transport_url(
             self.config['web_path'])
         yield self.session_manager.redis._purge_all()  # just in case
+        self.session_timestamps = {}
 
     @inlineCallbacks
     def mk_session(self, transaction_id=_transaction_id):
@@ -304,15 +305,15 @@ class TestDmarkUssdTransport(VumiTestCase):
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         yield self.tx_helper.clear_dispatched_statuses()
 
-        self.clock.advance(1.5)
+        self.clock.advance(self.transport.response_time_degraded + 0.1)
 
         self.tx_helper.dispatch_outbound(msg.reply('foo'))
         response = yield d
 
         [status] = yield self.tx_helper.get_dispatched_statuses()
         self.assertEqual(status['status'], 'degraded')
-        self.assertEqual(
-            status['reasons'], ['Response took longer than 1 second'])
+        self.assertTrue(
+            str(self.transport.response_time_degraded) in status['reasons'][0])
         self.assertEqual(status['component'], 'response')
         self.assertEqual(status['type'], 'slow_response')
         self.assertEqual(status['message'], 'Slow response')
@@ -325,15 +326,15 @@ class TestDmarkUssdTransport(VumiTestCase):
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         yield self.tx_helper.clear_dispatched_statuses()
 
-        self.clock.advance(10.5)
+        self.clock.advance(self.transport.response_time_down + 0.1)
 
         self.tx_helper.dispatch_outbound(msg.reply('foo'))
         response = yield d
 
         [status] = yield self.tx_helper.get_dispatched_statuses()
         self.assertEqual(status['status'], 'down')
-        self.assertEqual(
-            status['reasons'], ['Response took longer than 10 seconds'])
+        self.assertTrue(
+            str(self.transport.response_time_down) in status['reasons'][0])
         self.assertEqual(status['component'], 'response')
         self.assertEqual(status['type'], 'slow_response')
         self.assertEqual(status['message'], 'Very slow response')
