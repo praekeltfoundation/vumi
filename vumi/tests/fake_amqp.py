@@ -224,14 +224,18 @@ class FakeAMQPBroker(object):
         leave any messages undelivered, because basic_publish() kicks
         off a delivery run.
 
+        Each call returns a new deferred to avoid callback chain ordering
+        issues when several things want to wait for delivery.
+
         NOTE: This method should be called during test teardown to make
         sure there are no pending delivery cleanups that will cause a
         dirty reactor race.
         """
-        if self._delivering is not None:
-            return self._delivering['deferred']
         d = Deferred()
-        d.callback(None)
+        if self._delivering is None:
+            d.callback(None)
+        else:
+            self._delivering['deferred'].chainDeferred(d)
         return d
 
     def wait_messages(self, exchange, rkey, n):
