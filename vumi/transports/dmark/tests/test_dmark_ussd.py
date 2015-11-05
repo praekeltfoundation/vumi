@@ -4,6 +4,8 @@
 
 import json
 
+import urllib
+
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.message import TransportUserMessage
@@ -32,6 +34,7 @@ class TestDmarkUssdTransport(VumiTestCase):
         self.config = {
             'web_port': 0,
             'web_path': '/api/v1/dmark/ussd/',
+            'publish_status': True,
         }
         self.tx_helper = self.add_helper(
             HttpRpcTransportHelper(DmarkUssdTransport,
@@ -102,6 +105,56 @@ class TestDmarkUssdTransport(VumiTestCase):
         self.assert_ack(ack, reply)
 
     @inlineCallbacks
+    def test_inbound_status(self):
+        d = self.tx_helper.mk_request()
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        self.tx_helper.dispatch_outbound(msg.reply('foo'))
+        yield d
+
+        [status] = yield self.tx_helper.get_dispatched_statuses()
+        self.assertEqual(status['status'], 'ok')
+        self.assertEqual(status['component'], 'request')
+        self.assertEqual(status['type'], 'request_parsed')
+        self.assertEqual(status['message'], 'Request parsed')
+
+    @inlineCallbacks
+    def test_inbound_cannot_decode(self):
+        '''If the content cannot be decoded, an error shoould be sent back'''
+        user_content = "Who are you?".encode('utf-32')
+        response = yield self.tx_helper.mk_request(
+            ussdRequestString=user_content)
+        self.assertEqual(response.code, 400)
+
+        body = json.loads(response.delivered_body)
+        request = body['invalid_request']
+        self.assertEqual(request['content'], '')
+        self.assertEqual(request['path'], self.config['web_path'])
+        self.assertEqual(request['method'], 'GET')
+        self.assertEqual(request['headers']['Connection'], ['close'])
+        encoded_str = urllib.urlencode({'ussdRequestString': user_content})
+        self.assertTrue(encoded_str in request['uri'])
+
+    @inlineCallbacks
+    def test_inbound_cannot_decode_status(self):
+        '''If the request cannot be decoded, a status event should be sent'''
+        user_content = "Who are you?".encode('utf-32')
+        yield self.tx_helper.mk_request(ussdRequestString=user_content)
+
+        [status] = self.tx_helper.get_dispatched_statuses()
+        self.assertEqual(status['component'], 'request')
+        self.assertEqual(status['status'], 'down')
+        self.assertEqual(status['type'], 'invalid_encoding')
+        self.assertEqual(status['message'], 'Invalid encoding')
+
+        request = status['details']['request']
+        self.assertEqual(request['content'], '')
+        self.assertEqual(request['path'], self.config['web_path'])
+        self.assertEqual(request['method'], 'GET')
+        self.assertEqual(request['headers']['Connection'], ['close'])
+        encoded_str = urllib.urlencode({'ussdRequestString': user_content})
+        self.assertTrue(encoded_str in request['uri'])
+
+    @inlineCallbacks
     def test_inbound_resume_and_reply_with_end(self):
         yield self.mk_session(self._transaction_id)
 
@@ -165,6 +218,21 @@ class TestDmarkUssdTransport(VumiTestCase):
         self.assertEqual(response.code, 400)
 
     @inlineCallbacks
+    def test_status_with_missing_parameters(self):
+        '''A request with missing parameters should send a TransportStatus
+        with the relevant details.'''
+        yield self.tx_helper.mk_request_raw(
+            params={"ussdServiceCode": '', "msisdn": '', "creationTime": ''})
+
+        [status] = yield self.tx_helper.get_dispatched_statuses()
+        self.assertEqual(status['status'], 'down')
+        self.assertEqual(status['component'], 'request')
+        self.assertEqual(status['type'], 'invalid_inbound_fields')
+        self.assertEqual(sorted(status['details']['missing_parameter']), [
+            'response', 'transactionId', 'transactionTime',
+            'ussdRequestString'])
+
+    @inlineCallbacks
     def test_request_with_unexpected_parameters(self):
         response = yield self.tx_helper.mk_request(
             unexpected_p1='', unexpected_p2='')
@@ -175,6 +243,20 @@ class TestDmarkUssdTransport(VumiTestCase):
         self.assertEqual(
             sorted(body['unexpected_parameter']),
             ['unexpected_p1', 'unexpected_p2'])
+
+    @inlineCallbacks
+    def test_status_with_unexpected_parameters(self):
+        '''A request with unexpected parameters should send a TransportStatus
+        with the relevant details.'''
+        yield self.tx_helper.mk_request(
+            unexpected_p1='', unexpected_p2='')
+
+        [status] = yield self.tx_helper.get_dispatched_statuses()
+        self.assertEqual(status['status'], 'down')
+        self.assertEqual(status['component'], 'request')
+        self.assertEqual(status['type'], 'invalid_inbound_fields')
+        self.assertEqual(sorted(status['details']['unexpected_parameter']), [
+            'unexpected_p1', 'unexpected_p2'])
 
     @inlineCallbacks
     def test_nack_insufficient_message_fields(self):
