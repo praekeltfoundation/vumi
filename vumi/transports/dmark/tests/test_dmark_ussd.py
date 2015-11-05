@@ -4,6 +4,8 @@
 
 import json
 
+import urllib
+
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.message import TransportUserMessage
@@ -114,6 +116,30 @@ class TestDmarkUssdTransport(VumiTestCase):
         self.assertEqual(status['component'], 'request')
         self.assertEqual(status['type'], 'request_decoded')
         self.assertEqual(status['message'], 'Request decoded')
+
+    @inlineCallbacks
+    def test_inbound_cannot_decode(self):
+        '''If the content cannot be decoded, an error shoould be sent back'''
+        user_content = "Who are you?".encode('utf-32')
+        response = yield self.tx_helper.mk_request(ussdRequestString=user_content)
+        self.assertEqual(response.code, 400)
+
+        body = json.loads(response.delivered_body)
+        request = body['invalid_request']
+        self.assertEqual(request['method'], 'GET')
+
+    @inlineCallbacks
+    def test_inbound_cannot_decode_status(self):
+        '''If the request cannot be decoded, a status event should be sent'''
+        user_content = "Who are you?".encode('utf-32')
+        response = yield self.tx_helper.mk_request(ussdRequestString=user_content)
+
+        [status] = self.tx_helper.get_dispatched_statuses()
+        self.assertEqual(status['component'], 'request')
+        self.assertEqual(status['status'], 'down')
+        self.assertEqual(status['type'], 'invalid_encoding')
+        self.assertEqual(status['message'], 'Invalid encoding')
+
 
     @inlineCallbacks
     def test_inbound_resume_and_reply_with_end(self):
