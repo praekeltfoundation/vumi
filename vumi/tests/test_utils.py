@@ -447,83 +447,83 @@ class TestStatusEdgeDetector(VumiTestCase):
     def test_status_not_change(self):
         '''If the status doesn't change, None should be returned.'''
         sed = StatusEdgeDetector()
-        status1 = TransportStatus(
-            component='foo',
-            status='ok',
-            type='bar',
-            message='test')
-        self.assertEqual(sed.check_status(status1), status1)
+        status1 = {
+            'component': 'foo',
+            'status': 'ok',
+            'type': 'bar',
+            'message': 'test'}
+        self.assertEqual(sed.check_status(**status1), status1)
 
-        status2 = TransportStatus(
-            component='foo',
-            status='ok',
-            type='bar',
-            message='another test')
-        self.assertEqual(sed.check_status(status2), None)
+        status2 = {
+            'component': 'foo',
+            'status': 'ok',
+            'type': 'bar',
+            'message': 'another test'}
+        self.assertEqual(sed.check_status(**status2), None)
 
     def test_status_change(self):
         '''If the status does change, the status should be returned.'''
         sed = StatusEdgeDetector()
-        status1 = TransportStatus(
-            component='foo',
-            status='ok',
-            type='bar',
-            message='test')
-        self.assertEqual(sed.check_status(status1), status1)
+        status1 = {
+            'component': 'foo',
+            'status': 'ok',
+            'type': 'bar',
+            'message': 'test'}
+        self.assertEqual(sed.check_status(**status1), status1)
 
-        status2 = TransportStatus(
-            component='foo',
-            status='degraded',
-            type='bar',
-            message='another test')
-        self.assertEqual(sed.check_status(status2), status2)
+        status2 = {
+            'component': 'foo',
+            'status': 'degraded',
+            'type': 'bar',
+            'message': 'another test'}
+        self.assertEqual(sed.check_status(**status2), status2)
 
     def test_components_separate(self):
         '''A state change in one component should not affect other
         components.'''
         sed = StatusEdgeDetector()
-        comp1_status1 = TransportStatus(
-            component='foo',
-            status='ok',
-            type='bar',
-            message='test')
-        self.assertEqual(sed.check_status(comp1_status1), comp1_status1)
+        comp1_status1 = {
+            'component': 'foo',
+            'status': 'ok',
+            'type': 'bar',
+            'message': 'test'}
+        self.assertEqual(sed.check_status(**comp1_status1), comp1_status1)
 
-        comp2_status1 = TransportStatus(
-            component='bar',
-            status='ok',
-            type='bar',
-            message='another test')
-        self.assertEqual(sed.check_status(comp2_status1), comp2_status1)
+        comp2_status1 = {
+            'component': 'bar',
+            'status': 'ok',
+            'type': 'bar',
+            'message': 'another test'}
+        self.assertEqual(sed.check_status(**comp2_status1), comp2_status1)
 
-        comp2_status2 = TransportStatus(
-            component='bar',
-            status='degraded',
-            type='bar',
-            message='another test')
-        self.assertEqual(sed.check_status(comp2_status2), comp2_status2)
+        comp2_status2 = {
+            'component': 'bar',
+            'status': 'degraded',
+            'type': 'bar',
+            'message': 'another test'}
+        self.assertEqual(sed.check_status(**comp2_status2), comp2_status2)
 
-        comp1_status2 = TransportStatus(
-            component='foo',
-            status='ok',
-            type='bar',
-            message='test')
-        self.assertEqual(sed.check_status(comp1_status2), None)
+        comp1_status2 = {
+            'component': 'foo',
+            'status': 'ok',
+            'type': 'bar',
+            'message': 'test'}
+        self.assertEqual(sed.check_status(**comp1_status2), None)
 
     def test_type_change(self):
         '''A change in status type should result in the status being
         returned.'''
         sed = StatusEdgeDetector()
-        status1 = TransportStatus(
-            component='foo',
-            status='ok',
-            type='bar',
-            message='test')
-        self.assertEqual(sed.check_status(status1), status1)
+        status1 = {
+            'component': 'foo',
+            'status': 'ok',
+            'type': 'bar',
+            'message': 'test'}
+        self.assertEqual(sed.check_status(**status1), status1)
 
-        status2 = TransportStatus(
-            component='foo',
-            status='ok',
-            type='baz',
-            message='test')
-        self.assertEqual(sed.check_status(status2), status2)
+        status2 = {
+            'component': 'foo',
+            'status': 'ok',
+            'type': 'baz',
+            'message': 'test'}
+        self.assertEqual(sed.check_status(**status2), status2)

@@ -3,7 +3,7 @@
 import json
 
 from twisted.cred.portal import Portal
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, succeed
 from twisted.internet import reactor
 from twisted.internet.task import LoopingCall
 from twisted.web import http
@@ -13,8 +13,10 @@ from twisted.web.server import NOT_DONE_YET
 
 from vumi import log
 from vumi.config import ConfigText, ConfigInt, ConfigBool, ConfigError
+from vumi.message import TransportStatus
 from vumi.transports.base import Transport
 from vumi.transports.httprpc.auth import HttpRpcRealm, StaticAuthChecker
+from vumi.utils import StatusEdgeDetector
 
 
 class HttpRpcTransportConfig(Transport.CONFIG_CLASS):
@@ -192,6 +194,15 @@ class HttpRpcTransport(Transport):
                 (HttpRpcHealthResource(self), self.health_path),
             ],
             self.web_port)
+
+        self.status_detect = StatusEdgeDetector()
+
+    def add_status(self, **kw):
+        '''Publishes a status if it is not a repeat of the previously
+        published status.'''
+        if self.status_detect.check_status(**kw):
+            return self.publish_status(**kw)
+        return succeed(None)
 
     @inlineCallbacks
     def teardown_transport(self):

@@ -463,7 +463,7 @@ class StatusEdgeDetector(object):
         self.state = dict()
         self.types = dict()
 
-    def check_status(self, status):
+    def check_status(self, **status):
         '''
         Checks to see if the current status is a repeat. If it is, None is
         returned. If it isn't, the status is returned.
