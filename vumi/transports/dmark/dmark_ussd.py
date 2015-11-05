@@ -214,12 +214,12 @@ class DmarkUssdTransport(HttpRpcTransport):
             returnValue(nack)
 
     def _set_request_start(self, message_id):
-        self.session_timestamps[message_id] = time.time()
+        self.session_timestamps[message_id] = self.clock.seconds()
     
     def _set_request_end(self, message_id):
         start_time = self.session_timestamps.pop(message_id, None)
-        if start_time:
-            response_time = time.time() - start_time
+        if start_time is not None:
+            response_time = self.clock.seconds() - start_time
             if response_time > 10:
                 return self.add_status(
                     component='response',

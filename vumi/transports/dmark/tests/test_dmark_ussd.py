@@ -7,6 +7,7 @@ import json
 import urllib
 
 from twisted.internet.defer import inlineCallbacks
+from twisted.internet.task import Clock
 
 from vumi.message import TransportUserMessage
 from vumi.tests.helpers import VumiTestCase
@@ -31,6 +32,9 @@ class TestDmarkUssdTransport(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
+        self.clock = Clock()
+        self.patch(DmarkUssdTransport, 'get_clock', lambda _: self.clock)
+
         self.config = {
             'web_port': 0,
             'web_path': '/api/v1/dmark/ussd/',
@@ -300,9 +304,7 @@ class TestDmarkUssdTransport(VumiTestCase):
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         yield self.tx_helper.clear_dispatched_statuses()
 
-        # 1.5 second reply
-        timestamp = self.transport.session_timestamps[msg['message_id']]
-        self.transport.session_timestamps[msg['message_id']] = timestamp - 1.5
+        self.clock.advance(1.5)
 
         self.tx_helper.dispatch_outbound(msg.reply('foo'))
         response = yield d
@@ -323,9 +325,7 @@ class TestDmarkUssdTransport(VumiTestCase):
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         yield self.tx_helper.clear_dispatched_statuses()
 
-        # 10.5 second reply
-        timestamp = self.transport.session_timestamps[msg['message_id']]
-        self.transport.session_timestamps[msg['message_id']] = timestamp - 10.5
+        self.clock.advance(10.5)
 
         self.tx_helper.dispatch_outbound(msg.reply('foo'))
         response = yield d
