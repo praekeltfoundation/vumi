@@ -240,3 +240,12 @@ class DmarkUssdTransport(HttpRpcTransport):
                     details={
                         'response_time': response_time,
                     })
+            else:
+                return self.add_status(
+                    component='response',
+                    status='ok',
+                    type='response_sent',
+                    message='Response sent',
+                    details={
+                        'response_time': response_time,
+                    })
