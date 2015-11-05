@@ -121,7 +121,8 @@ class TestDmarkUssdTransport(VumiTestCase):
     def test_inbound_cannot_decode(self):
         '''If the content cannot be decoded, an error shoould be sent back'''
         user_content = "Who are you?".encode('utf-32')
-        response = yield self.tx_helper.mk_request(ussdRequestString=user_content)
+        response = yield self.tx_helper.mk_request(
+            ussdRequestString=user_content)
         self.assertEqual(response.code, 400)
 
         body = json.loads(response.delivered_body)
@@ -137,7 +138,7 @@ class TestDmarkUssdTransport(VumiTestCase):
     def test_inbound_cannot_decode_status(self):
         '''If the request cannot be decoded, a status event should be sent'''
         user_content = "Who are you?".encode('utf-32')
-        response = yield self.tx_helper.mk_request(ussdRequestString=user_content)
+        yield self.tx_helper.mk_request(ussdRequestString=user_content)
 
         [status] = self.tx_helper.get_dispatched_statuses()
         self.assertEqual(status['component'], 'request')
