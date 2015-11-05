@@ -103,6 +103,19 @@ class TestDmarkUssdTransport(VumiTestCase):
         self.assert_ack(ack, reply)
 
     @inlineCallbacks
+    def test_inbound_status(self):
+        d = self.tx_helper.mk_request()
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        self.tx_helper.dispatch_outbound(msg.reply('foo'))
+        yield d
+
+        [status] = yield self.tx_helper.get_dispatched_statuses()
+        self.assertEqual(status['status'], 'ok')
+        self.assertEqual(status['component'], 'request')
+        self.assertEqual(status['type'], 'request_decoded')
+        self.assertEqual(status['message'], 'Request decoded')
+
+    @inlineCallbacks
     def test_inbound_resume_and_reply_with_end(self):
         yield self.mk_session(self._transaction_id)
 
