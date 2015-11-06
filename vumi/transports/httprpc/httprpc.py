@@ -207,7 +207,6 @@ class HttpRpcTransport(Transport):
             self.web_port)
 
         self.status_detect = StatusEdgeDetector()
-        self.session_timestamps = {}
 
     def add_status(self, **kw):
         '''Publishes a status if it is not a repeat of the previously
@@ -318,6 +317,7 @@ class HttpRpcTransport(Transport):
             request.setResponseCode(code)
             request.write(data)
             request.finish()
+            self.set_request_end(request_id)
             self.remove_request(request_id)
             response_id = "%s:%s:%s" % (request.client.host,
                                         request.client.port,
@@ -343,11 +343,6 @@ class HttpRpcTransport(Transport):
         if request_id in self._requests:
             self._requests[request_id]['to_addr'] = to_addr
 
-    def set_request_start(self, message_id):
-        '''Saves the current timestamp to use later to determine the response
-        time.'''
-        self.session_timestamps[message_id] = self.clock.seconds()
-    
     def set_request_end(self, message_id):
         '''Checks the saved timestamp to see the response time.
         If the starting timestamp for the message cannot be found, nothing is
@@ -359,41 +354,30 @@ class HttpRpcTransport(Transport):
         If the time is less than `response_time_degraded`, an `ok` status
         event is sent.
         '''
-        start_time = self.session_timestamps.pop(message_id, None)
-        if start_time is not None:
-            response_time = self.clock.seconds() - start_time
+        request = self._requests.get(message_id, None)
+        if request is not None:
+            response_time = self.clock.seconds() - request['timestamp']
             if response_time > self.response_time_down:
-                return self.add_status(
-                    component='response',
-                    status='down',
-                    type='slow_response',
-                    message='Very slow response',
-                    reasons=[
-                        'Response took longer than %fs' % (
-                            self.response_time_down,)
-                    ],
-                    details={
-                        'response_time': response_time,
-                    })
+                return self.on_down_response_time(message_id, response_time)
             elif response_time > self.response_time_degraded:
-                return self.add_status(
-                    component='response',
-                    status='degraded',
-                    type='slow_response',
-                    message='Slow response',
-                    reasons=[
-                        'Response took longer than %fs' % (
-                            self.response_time_degraded,)
-                    ],
-                    details={
-                        'response_time': response_time,
-                    })
+                return self.on_degraded_response_time(message_id, response_time)
             else:
-                return self.add_status(
-                    component='response',
-                    status='ok',
-                    type='response_sent',
-                    message='Response sent',
-                    details={
-                        'response_time': response_time,
-                    })
+                return self.on_good_response_time(message_id, response_time)
+
+    def on_down_response_time(self, message_id, time):
+        '''Can be overridden by subclasses to do something when the
+        response time is high enough for the transport to be considered
+        non-functioning.'''
+        pass
+
+    def on_degraded_response_time(self, message_id, time):
+        '''Can be overridden by subclasses to do something when the
+        response time is high enough for the transport to be considered
+        running in a degraded state.'''
+        pass
+
+    def on_good_response_time(self, message_id, time):
+        '''Can be overridden by subclasses to do something when the
+        response time is low enough for the transport to be considered
+        running normally.'''
+        pass
