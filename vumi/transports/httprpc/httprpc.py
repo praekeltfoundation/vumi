@@ -253,7 +253,9 @@ class HttpRpcTransport(Transport):
     def manually_close_requests(self):
         for request_id, request_data in self._requests.items():
             timestamp = request_data['timestamp']
-            if timestamp < self.clock.seconds() - self.request_timeout:
+            response_time = self.clock.seconds() - timestamp
+            if response_time > self.request_timeout:
+                self.on_timeout(request_id, response_time)
                 self.close_request(request_id)
 
     def close_request(self, request_id):
@@ -380,4 +382,9 @@ class HttpRpcTransport(Transport):
         '''Can be overridden by subclasses to do something when the
         response time is low enough for the transport to be considered
         running normally.'''
+        pass
+
+    def on_timeout(self, message_id, time):
+        '''Can be overridden by subclasses to do something when the
+        response times out.'''
         pass

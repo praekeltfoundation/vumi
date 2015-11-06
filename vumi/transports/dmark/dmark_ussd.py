@@ -257,3 +257,17 @@ class DmarkUssdTransport(HttpRpcTransport):
             details={
                 'response_time': time,
             })
+
+    def on_timeout(self, message_id, time):
+        return self.add_status(
+            component='response',
+            status='down',
+            type='timeout',
+            message='Response timed out',
+            reasons=[
+                'Response took longer than %fs' % (
+                    self.request_timeout,)
+            ],
+            details={
+                'response_time': time,
+            })
