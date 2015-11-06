@@ -424,3 +424,6 @@ class TestDmarkUssdTransport(VumiTestCase):
         self.assertEqual(status['component'], 'response')
         self.assertEqual(status['type'], 'timeout')
         self.assertEqual(status['message'], 'Response timed out')
+        self.assertEqual(status['details'], {
+            'response_time': self.transport.request_timeout + 0.1,
+        })
