@@ -404,3 +404,23 @@ class TestDmarkUssdTransport(VumiTestCase):
 
         statuses = yield self.tx_helper.get_dispatched_statuses()
         self.assertEqual(len(statuses), 0)
+
+    @inlineCallbacks
+    def test_status_down_timeout(self):
+        '''A down status event should be sent if the response timed out'''
+        d = self.tx_helper.mk_request()
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        yield self.tx_helper.clear_dispatched_statuses()
+
+        self.clock.advance(self.transport.request_timeout + 0.1)
+
+        self.tx_helper.dispatch_outbound(msg.reply('foo'))
+        response = yield d
+
+        [status] = yield self.tx_helper.get_dispatched_statuses()
+        self.assertEqual(status['status'], 'down')
+        self.assertTrue(
+            str(self.transport.request_timeout) in status['reasons'][0])
+        self.assertEqual(status['component'], 'response')
+        self.assertEqual(status['type'], 'timeout')
+        self.assertEqual(status['message'], 'Response timed out')
