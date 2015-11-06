@@ -147,8 +147,6 @@ class DmarkUssdTransport(HttpRpcTransport):
                 details=errors)
             return
 
-        yield self.set_request_start(request_id)
-
         yield self.add_status(
             component='request',
             status='ok',
@@ -198,8 +196,6 @@ class DmarkUssdTransport(HttpRpcTransport):
         response_id = self.finish_request(
             message['in_reply_to'], json.dumps(response_data))
 
-        yield self.set_request_end(message['in_reply_to'])
-
         if response_id is not None:
             ack = yield self.publish_ack(
                 user_message_id=message['message_id'],
@@ -211,3 +207,53 @@ class DmarkUssdTransport(HttpRpcTransport):
                 sent_message_id=message['message_id'],
                 reason="Could not find original request.")
             returnValue(nack)
+
+    def on_down_response_time(self, message_id, time):
+        request = self.get_request(message_id)
+        # We send different status events for error responses
+        if request.code < 200 or request.code >= 300:
+            return
+        return self.add_status(
+            component='response',
+            status='down',
+            type='very_slow_response',
+            message='Very slow response',
+            reasons=[
+                'Response took longer than %fs' % (
+                    self.response_time_down,)
+            ],
+            details={
+                'response_time': time,
+            })
+
+    def on_degraded_response_time(self, message_id, time):
+        request = self.get_request(message_id)
+        # We send different status events for error responses
+        if request.code < 200 or request.code >= 300:
+            return
+        return self.add_status(
+            component='response',
+            status='degraded',
+            type='slow_response',
+            message='Slow response',
+            reasons=[
+                'Response took longer than %fs' % (
+                    self.response_time_degraded,)
+            ],
+            details={
+                'response_time': time,
+            })
+
+    def on_good_response_time(self, message_id, time):
+        request = self.get_request(message_id)
+        # We send different status events for error responses
+        if request.code < 200 or request.code >= 400:
+            return
+        return self.add_status(
+            component='response',
+            status='ok',
+            type='response_sent',
+            message='Response sent',
+            details={
+                'response_time': time,
+            })
