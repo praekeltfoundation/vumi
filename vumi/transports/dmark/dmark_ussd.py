@@ -247,7 +247,7 @@ class DmarkUssdTransport(HttpRpcTransport):
     def on_good_response_time(self, message_id, time):
         request = self.get_request(message_id)
         # We send different status events for error responses
-        if request.code < 200 or request.code >= 300:
+        if request.code < 200 or request.code >= 400:
             return
         return self.add_status(
             component='response',

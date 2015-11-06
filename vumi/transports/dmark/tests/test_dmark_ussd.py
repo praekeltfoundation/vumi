@@ -349,3 +349,58 @@ class TestDmarkUssdTransport(VumiTestCase):
         self.tx_helper.dispatch_outbound(reply)
         statuses = yield self.tx_helper.get_dispatched_statuses()
         self.assertEqual(len(statuses), 0)
+
+    @inlineCallbacks
+    def test_no_good_status_event_for_bad_responses(self):
+        '''If the http response is not a good (200-399) response, then a
+        status event shouldn't be sent, because we send different status
+        events for those errors.'''
+        d = self.tx_helper.mk_request()
+
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        yield self.tx_helper.clear_dispatched_statuses()
+
+        self.transport.finish_request(msg['message_id'], '', code=500)
+
+        response = yield d
+
+        statuses = yield self.tx_helper.get_dispatched_statuses()
+        self.assertEqual(len(statuses), 0)
+
+    @inlineCallbacks
+    def test_no_degraded_status_event_for_bad_responses(self):
+        '''If the http response is not a good (200-399) response, then a
+        status event shouldn't be sent, because we send different status
+        events for those errors.'''
+        d = self.tx_helper.mk_request()
+
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        yield self.tx_helper.clear_dispatched_statuses()
+
+        self.clock.advance(self.transport.response_time_degraded + 0.1)
+
+        self.transport.finish_request(msg['message_id'], '', code=500)
+
+        response = yield d
+
+        statuses = yield self.tx_helper.get_dispatched_statuses()
+        self.assertEqual(len(statuses), 0)
+
+    @inlineCallbacks
+    def test_no_down_status_event_for_bad_responses(self):
+        '''If the http response is not a good (200-399) response, then a
+        status event shouldn't be sent, because we send different status
+        events for those errors.'''
+        d = self.tx_helper.mk_request()
+
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        yield self.tx_helper.clear_dispatched_statuses()
+
+        self.clock.advance(self.transport.response_time_down + 0.1)
+
+        self.transport.finish_request(msg['message_id'], '', code=500)
+
+        response = yield d
+
+        statuses = yield self.tx_helper.get_dispatched_statuses()
+        self.assertEqual(len(statuses), 0)
