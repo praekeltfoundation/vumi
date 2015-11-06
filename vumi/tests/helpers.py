@@ -770,13 +770,18 @@ class WorkerHelper(object):
             probably be :class:`~vumi.message.TransportUserMessage` or
             :class:`~vumi.message.TransportEvent`.
         """
-        msgs = self.broker.get_dispatched(
-            'vumi', self._rkey(connector_name, name))
+        rkey = self._rkey(connector_name, name)
+        msgs = self.broker.get_dispatched('vumi', rkey)
         return [message_class.from_json(msg.body) for msg in msgs]
 
     def _wait_for_dispatched(self, connector_name, name, amount):
         rkey = self._rkey(connector_name, name)
-        return self.broker.wait_messages('vumi', rkey, amount)
+        if amount is not None:
+            # The broker knows how to wait for a specific number of messages.
+            return self.broker.wait_messages('vumi', rkey, amount)
+        # Wait for delivery to finish, then return whatever we have.
+        return self.broker.wait_delivery().addCallback(
+            lambda _: self.broker.get_messages('vumi', rkey))
 
     @proxyable
     def clear_all_dispatched(self):
@@ -852,12 +857,14 @@ class WorkerHelper(object):
             connector_name, 'status', TransportStatus)
 
     @proxyable
-    def wait_for_dispatched_events(self, amount, connector_name=None):
+    def wait_for_dispatched_events(self, amount=None, connector_name=None):
         """
         Wait for events dispatched to a connector.
 
         :param int amount:
-            Number of events to wait for.
+            Number of messages to wait for. If ``None``, this will wait for the
+            end of the current delivery run instead of a specific number of
+            messages.
 
         :param str connector_name:
             Connector name. If ``None``, the default connector name for the
@@ -873,12 +880,14 @@ class WorkerHelper(object):
         return d
 
     @proxyable
-    def wait_for_dispatched_inbound(self, amount, connector_name=None):
+    def wait_for_dispatched_inbound(self, amount=None, connector_name=None):
         """
         Wait for inbound messages dispatched to a connector.
 
         :param int amount:
-            Number of messages to wait for.
+            Number of messages to wait for. If ``None``, this will wait for the
+            end of the current delivery run instead of a specific number of
+            messages.
 
         :param str connector_name:
             Connector name. If ``None``, the default connector name for the
@@ -894,12 +903,14 @@ class WorkerHelper(object):
         return d
 
     @proxyable
-    def wait_for_dispatched_outbound(self, amount, connector_name=None):
+    def wait_for_dispatched_outbound(self, amount=None, connector_name=None):
         """
         Wait for outbound messages dispatched to a connector.
 
         :param int amount:
-            Number of messages to wait for.
+            Number of messages to wait for. If ``None``, this will wait for the
+            end of the current delivery run instead of a specific number of
+            messages.
 
         :param str connector_name:
             Connector name. If ``None``, the default connector name for the
@@ -915,12 +926,14 @@ class WorkerHelper(object):
         return d
 
     @proxyable
-    def wait_for_dispatched_statuses(self, amount, connector_name=None):
+    def wait_for_dispatched_statuses(self, amount=None, connector_name=None):
         """
         Wait for statuses dispatched to a connector.
 
         :param int amount:
-            Number of events to wait for.
+            Number of messages to wait for. If ``None``, this will wait for the
+            end of the current delivery run instead of a specific number of
+            messages.
 
         :param str connector_name:
             Connector name. If ``None``, the default status connector name for
@@ -1116,6 +1129,17 @@ class WorkerHelper(object):
         """
         msgs = self.broker.get_dispatched('vumi.metrics', 'vumi.metrics')
         return [json.loads(msg.body)['datapoints'] for msg in msgs]
+
+    @proxyable
+    def wait_for_dispatched_metrics(self):
+        """
+        Get dispatched metrics after waiting for any pending deliveries.
+
+        The list of datapoints from each dispatched metrics message is
+        returned.
+        """
+        return self.broker.wait_delivery().addCallback(
+            lambda _: self.get_dispatched_metrics())
 
     @proxyable
     def clear_dispatched_metrics(self):

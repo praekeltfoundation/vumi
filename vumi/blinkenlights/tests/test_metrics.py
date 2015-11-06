@@ -25,8 +25,9 @@ class TestMetricPublisher(VumiTestCase):
         reactor.callLater(delay, lambda: d.callback(None))
         return d
 
+    @inlineCallbacks
     def _check_msg(self, prefix, metric, values):
-        msgs = self.worker_helper.get_dispatched_metrics()
+        msgs = yield self.worker_helper.wait_for_dispatched_metrics()
         if values is None:
             self.assertEqual(msgs, [])
             return
@@ -86,8 +87,9 @@ class TestMetricManager(VumiTestCase):
         reactor.callLater(delay, lambda: d.callback(None))
         return d
 
+    @inlineCallbacks
     def _check_msg(self, manager, metric, values):
-        msgs = self.worker_helper.get_dispatched_metrics()
+        msgs = yield self.worker_helper.wait_for_dispatched_metrics()
         if values is None:
             self.assertEqual(msgs, [])
             return
