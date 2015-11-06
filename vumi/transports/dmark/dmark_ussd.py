@@ -216,7 +216,7 @@ class DmarkUssdTransport(HttpRpcTransport):
         return self.add_status(
             component='response',
             status='down',
-            type='slow_response',
+            type='very_slow_response',
             message='Very slow response',
             reasons=[
                 'Response took longer than %fs' % (

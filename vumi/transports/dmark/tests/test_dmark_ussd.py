@@ -336,7 +336,7 @@ class TestDmarkUssdTransport(VumiTestCase):
         self.assertTrue(
             str(self.transport.response_time_down) in status['reasons'][0])
         self.assertEqual(status['component'], 'response')
-        self.assertEqual(status['type'], 'slow_response')
+        self.assertEqual(status['type'], 'very_slow_response')
         self.assertEqual(status['message'], 'Very slow response')
 
     @inlineCallbacks
