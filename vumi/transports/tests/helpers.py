@@ -92,3 +92,27 @@ class TransportHelper(object):
             instances.
         """
         return self.get_dispatched(connector_name, 'failures', FailureMessage)
+
+    def wait_for_dispatched_failures(self, amount=None, connector_name=None):
+        """
+        Wait for failures dispatched by a transport.
+
+        :param int amount:
+            Number of messages to wait for. If ``None``, this will wait for the
+            end of the current delivery run instead of a specific number of
+            messages.
+
+        :param str connector_name:
+            Connector name. If ``None``, the default connector name for the
+            helper instance will be used.
+
+        :returns:
+            A :class:`Deferred` that fires with a list of
+            :class:`~vumi.message.transports.failures.FailureMessage`
+            instances.
+        """
+        d = self.worker_helper._wait_for_dispatched(
+            connector_name, 'failures', amount)
+        d.addCallback(lambda msgs: [
+            FailureMessage(**msg.payload) for msg in msgs])
+        return d
