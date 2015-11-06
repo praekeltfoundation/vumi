@@ -17,7 +17,7 @@ from vumi.transports.smpp.smpp_transport import (
 from vumi.transports.smpp.pdu_utils import (
     pdu_ok, short_message, command_id, seq_no, pdu_tlv, unpacked_pdu_opts)
 from vumi.transports.smpp.processors import SubmitShortMessageProcessor
-from vumi.transports.smpp.tests.fake_smsc import FakeSMSC, wait0
+from vumi.transports.smpp.tests.fake_smsc import FakeSMSC
 from vumi.transports.tests.helpers import TransportHelper
 
 
@@ -95,13 +95,6 @@ class SmppTransportTestCase(VumiTestCase):
         if bind:
             yield self.fake_smsc.bind()
         returnValue(transport)
-
-    @inlineCallbacks
-    def get_and_clear_statuses(self):
-        yield wait0()
-        statuses = self.tx_helper.get_dispatched_statuses()
-        self.tx_helper.clear_dispatched_statuses()
-        returnValue(statuses)
 
 
 class SmppTransceiverTransportTestCase(SmppTransportTestCase):
@@ -718,8 +711,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         # There should be a nack
         [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
 
-        yield wait0()
-        [failure] = self.tx_helper.get_dispatched_failures()
+        [failure] = yield self.tx_helper.wait_for_dispatched_failures()
         self.assertEqual(failure['reason'], 'ESME_RSUBMITFAIL')
         self.assertEqual(failure['message'], message.payload)
 
@@ -1780,13 +1772,14 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
         # disconnect
         yield self.fake_smsc.disconnect()
-        yield self.get_and_clear_statuses()
+        yield self.tx_helper.wait_for_dispatched_statuses()
+        self.tx_helper.clear_dispatched_statuses()
 
         # reconnect
         self.clock.advance(transport.service.delay)
         yield self.fake_smsc.await_connected()
 
-        [msg] = yield self.get_and_clear_statuses()
+        [msg] = yield self.tx_helper.wait_for_dispatched_statuses()
         self.assertEqual(msg['status'], 'down')
         self.assertEqual(msg['component'], 'smpp')
         self.assertEqual(msg['type'], 'binding')
@@ -1795,10 +1788,10 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
     @inlineCallbacks
     def test_unbinding_status(self):
         transport = yield self.get_transport({'publish_status': True})
-        yield self.get_and_clear_statuses()
+        self.tx_helper.clear_dispatched_statuses()
         yield transport.service.get_protocol().unbind()
 
-        [msg] = yield self.get_and_clear_statuses()
+        [msg] = yield self.tx_helper.wait_for_dispatched_statuses()
         self.assertEqual(msg['status'], 'down')
         self.assertEqual(msg['component'], 'smpp')
         self.assertEqual(msg['type'], 'unbinding')
@@ -1807,11 +1800,13 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
     @inlineCallbacks
     def test_bind_status(self):
         yield self.get_transport({'publish_status': True}, bind=False)
-        yield self.get_and_clear_statuses()
+
+        yield self.tx_helper.wait_for_dispatched_statuses()
+        self.tx_helper.clear_dispatched_statuses()
 
         yield self.fake_smsc.bind()
 
-        [msg] = yield self.get_and_clear_statuses()
+        [msg] = yield self.tx_helper.wait_for_dispatched_statuses()
         self.assertEqual(msg['status'], 'ok')
         self.assertEqual(msg['component'], 'smpp')
         self.assertEqual(msg['type'], 'bound')
@@ -1827,10 +1822,10 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         # wait for bind pdu
         yield self.fake_smsc.await_pdu()
 
-        yield self.get_and_clear_statuses()
+        self.tx_helper.clear_dispatched_statuses()
         self.clock.advance(3)
 
-        [msg] = yield self.get_and_clear_statuses()
+        [msg] = yield self.tx_helper.wait_for_dispatched_statuses()
         self.assertEqual(msg['status'], 'down')
         self.assertEqual(msg['component'], 'smpp')
         self.assertEqual(msg['type'], 'bind_timeout')
@@ -1842,10 +1837,10 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
     def test_connection_lost_status(self):
         yield self.get_transport({'publish_status': True})
 
-        yield self.get_and_clear_statuses()
+        self.tx_helper.clear_dispatched_statuses()
         yield self.fake_smsc.disconnect()
 
-        [msg] = yield self.get_and_clear_statuses()
+        [msg] = yield self.tx_helper.wait_for_dispatched_statuses()
         self.assertEqual(msg['status'], 'down')
         self.assertEqual(msg['status'], 'down')
         self.assertEqual(msg['component'], 'smpp')
@@ -1862,7 +1857,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
             'throttle_delay': 3
         })
 
-        yield self.get_and_clear_statuses()
+        self.tx_helper.clear_dispatched_statuses()
 
         msg = self.tx_helper.make_outbound("throttle me")
         yield self.tx_helper.dispatch_outbound(msg)
@@ -1873,13 +1868,13 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
                          message_id='foo',
                          command_status='ESME_RTHROTTLED'))
 
-        [msg] = yield self.get_and_clear_statuses()
+        [msg] = yield self.tx_helper.wait_for_dispatched_statuses()
         self.assertEqual(msg['status'], 'degraded')
         self.assertEqual(msg['component'], 'smpp')
         self.assertEqual(msg['type'], 'throttled')
         self.assertEqual(msg['message'], 'Throttled')
 
-        yield self.get_and_clear_statuses()
+        self.tx_helper.clear_dispatched_statuses()
         self.clock.advance(3)
 
         submit_sm_pdu_retry = yield self.fake_smsc.await_pdu()
@@ -1890,7 +1885,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
         self.clock.advance(0)
 
-        [msg] = yield self.get_and_clear_statuses()
+        [msg] = yield self.tx_helper.wait_for_dispatched_statuses()
         self.assertEqual(msg['status'], 'ok')
         self.assertEqual(msg['component'], 'smpp')
         self.assertEqual(msg['type'], 'throttled_end')
@@ -1912,12 +1907,14 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
                          command_status='ESME_RTHROTTLED'))
 
         yield self.fake_smsc.disconnect()
-        yield self.get_and_clear_statuses()
+        yield self.tx_helper.wait_for_dispatched_statuses()
+        self.tx_helper.clear_dispatched_statuses()
         self.clock.advance(transport.service.delay)
 
         yield self.fake_smsc.bind()
 
-        [msg1, msg2, msg3] = yield self.get_and_clear_statuses()
+        msgs = yield self.tx_helper.wait_for_dispatched_statuses()
+        [msg1, msg2, msg3] = msgs
 
         self.assertEqual(msg1['type'], 'binding')
         self.assertEqual(msg2['type'], 'bound')
@@ -1934,23 +1931,28 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
             'mt_tps': 2
         })
 
-        yield self.get_and_clear_statuses()
+        self.tx_helper.clear_dispatched_statuses()
 
         yield self.tx_helper.make_dispatch_outbound('hello world 1')
         yield self.tx_helper.make_dispatch_outbound('hello world 2')
         self.tx_helper.make_dispatch_outbound('hello world 3')
         yield self.fake_smsc.await_pdus(2)
 
-        [msg] = yield self.get_and_clear_statuses()
-        yield self.get_and_clear_statuses()
+        # We can't wait for delivery here, because that requires throttling to
+        # end. Instead, we allow the reactor to process any immediately pending
+        # things.
+        yield self.tx_helper.worker_helper.broker.wait0()
+        [msg] = self.tx_helper.get_dispatched_statuses()
         self.assertEqual(msg['status'], 'degraded')
         self.assertEqual(msg['component'], 'smpp')
         self.assertEqual(msg['type'], 'throttled')
         self.assertEqual(msg['message'], 'Throttled')
 
+        self.tx_helper.clear_dispatched_statuses()
+
         self.clock.advance(1)
 
-        [msg] = yield self.get_and_clear_statuses()
+        [msg] = yield self.tx_helper.wait_for_dispatched_statuses()
         self.assertEqual(msg['status'], 'ok')
         self.assertEqual(msg['component'], 'smpp')
         self.assertEqual(msg['type'], 'throttled_end')
@@ -1969,12 +1971,14 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         yield self.fake_smsc.await_pdus(2)
 
         yield self.fake_smsc.disconnect()
-        yield self.get_and_clear_statuses()
         self.clock.advance(transport.service.delay)
 
         yield self.fake_smsc.bind()
 
-        [msg1, msg2, msg3] = yield self.get_and_clear_statuses()
+        # We can't wait and clear above (because that would require throttling
+        # to end) so we only look at the last three statuses.
+        msgs = yield self.tx_helper.wait_for_dispatched_statuses()
+        [msg1, msg2, msg3] = msgs[-3:]
 
         self.assertEqual(msg1['type'], 'binding')
         self.assertEqual(msg2['type'], 'bound')
