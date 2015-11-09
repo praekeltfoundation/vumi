@@ -126,6 +126,28 @@ class TestFakeConnection(TestCase):
         client = self.successResultOf(client_d)
         self.assert_connected(conn, client)
 
+    def test_client_connect_hook(self):
+        """
+        An on_connect function can be passed to the server to be called
+        whenever a connection is made.
+        """
+        def on_connect(conn):
+            conn.hook_was_called = True
+            conn.client_id_from_hook = id(conn.client_protocol)
+            conn.server_id_from_hook = id(conn.server_protocol)
+
+        fake_server = FakeServer(self.server_factory, on_connect=on_connect)
+        conn_d = fake_server.await_connection()
+        self.assertNoResult(conn_d)
+
+        client_d = fake_server.endpoint.connect(self.client_factory)
+        client = self.successResultOf(client_d)
+        conn = self.successResultOf(conn_d)
+        self.assert_connected(conn, client)
+        self.assertEqual(conn.hook_was_called, True)
+        self.assertEqual(conn.client_id_from_hook, id(client))
+        self.assertEqual(conn.server_id_from_hook, id(conn.server_protocol))
+
     def test_reject_connection(self):
         """
         Connections can be rejected manually if desired.
