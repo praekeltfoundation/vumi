@@ -112,15 +112,16 @@ class FakeAMQPBroker(object):
             self.channels.remove(channel)
         return Message(mkMethod("close-ok", 41))
 
-    def exchange_declare(self, exchange, exchange_type):
+    def exchange_declare(self, exchange, exchange_type, durable):
         exchange_class = None
         if exchange_type == 'direct':
             exchange_class = FakeAMQPExchangeDirect
         elif exchange_type == 'topic':
             exchange_class = FakeAMQPExchangeTopic
         assert exchange_class is not None
-        self.exchanges.setdefault(exchange, exchange_class(exchange))
+        self.exchanges.setdefault(exchange, exchange_class(exchange, durable))
         assert exchange_type == self.exchanges[exchange].exchange_type
+        assert durable == self.exchanges[exchange].durable
         return Message(mkMethod("declare-ok", 11))
 
     def queue_declare(self, queue):
@@ -317,7 +318,7 @@ class FakeAMQPChannel(object):
         self.qos_prefetch_count = prefetch_count
 
     def exchange_declare(self, exchange, type, durable=None):
-        return self.broker.exchange_declare(exchange, type)
+        return self.broker.exchange_declare(exchange, type, durable)
 
     def queue_declare(self, queue, durable=None):
         return self.broker.queue_declare(queue)
@@ -387,9 +388,10 @@ class FakeAMQPChannel(object):
 
 
 class FakeAMQPExchange(object):
-    def __init__(self, name):
+    def __init__(self, name, durable):
         self.name = name
         self.binds = {}
+        self.durable = durable
 
     def queue_bind(self, routing_key, queue):
         binds = self.binds.setdefault(routing_key, set())
