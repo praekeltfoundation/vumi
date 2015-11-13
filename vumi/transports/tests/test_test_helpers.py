@@ -114,7 +114,7 @@ class TestTransportHelper(VumiTestCase):
         self.assertIsInstance(app, RunningCheckTransport)
 
     def _add_to_dispatched(self, broker, rkey, msg):
-        broker.exchange_declare('vumi', 'direct')
+        broker.exchange_declare('vumi', 'direct', durable=True)
         broker.publish_message('vumi', rkey, msg)
 
     def test_get_dispatched_failures(self):

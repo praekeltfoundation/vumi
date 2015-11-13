@@ -39,7 +39,7 @@ class TestFakeAMQP(VumiTestCase):
         self.add_cleanup(self.broker.wait_delivery)
 
     def make_exchange(self, exchange, exchange_type):
-        self.broker.exchange_declare(exchange, exchange_type)
+        self.broker.exchange_declare(exchange, exchange_type, durable=True)
         return self.broker.exchanges[exchange]
 
     def make_queue(self, queue):
@@ -86,10 +86,10 @@ class TestFakeAMQP(VumiTestCase):
     def test_exchange_declare(self):
         channel = self.make_channel(0)
         self.assertEqual({}, self.broker.exchanges)
-        channel.exchange_declare('foo', 'direct')
+        channel.exchange_declare('foo', 'direct', durable=True)
         self.assertEqual(['foo'], self.broker.exchanges.keys())
         self.assertEqual('direct', self.broker.exchanges['foo'].exchange_type)
-        channel.exchange_declare('bar', 'topic')
+        channel.exchange_declare('bar', 'topic', durable=True)
         self.assertEqual(['bar', 'foo'], sorted(self.broker.exchanges.keys()))
         self.assertEqual('topic', self.broker.exchanges['bar'].exchange_type)
 
@@ -238,7 +238,7 @@ class TestFakeAMQP(VumiTestCase):
 
         delegate = ToyDelegate()
         channel = self.make_channel(0, delegate)
-        channel.exchange_declare('e1', 'direct')
+        channel.exchange_declare('e1', 'direct', durable=True)
         channel.queue_declare('q1')
         channel.queue_bind('q1', 'e1', 'rkey')
         channel.basic_consume('q1', 'tag1')
@@ -269,7 +269,7 @@ class TestFakeAMQP(VumiTestCase):
 
         delegate = ToyDelegate()
         channel = self.make_channel(0, delegate)
-        channel.exchange_declare('e1', 'direct')
+        channel.exchange_declare('e1', 'direct', durable=True)
         channel.queue_declare('q1')
         channel.queue_bind('q1', 'e1', 'rkey')
         channel.basic_consume('q1', 'tag1')

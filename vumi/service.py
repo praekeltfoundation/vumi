@@ -443,6 +443,8 @@ class DynamicPublisher(_Publisher):
     A single-routing-key publisher.
     """
 
+    durable = True
+
     def __init__(self, channel, routing_key):
         self.channel = channel
         self.check_routing_key(routing_key)
