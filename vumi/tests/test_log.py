@@ -2,6 +2,7 @@ import logging
 
 from vumi.tests.utils import LogCatcher
 from vumi import log
+from vumi.log import WrappingLogger
 from vumi.tests.helpers import VumiTestCase
 
 
@@ -45,3 +46,19 @@ class TestVumiLog(VumiTestCase):
             failure = entry['failure']
             exception = failure.trap(TracerException)
             self.assertEqual(exception, TracerException)
+
+
+class TestWrappingLogger(VumiTestCase):
+    def test_logging_methods(self):
+        log = WrappingLogger(system='test', bar='foo')
+
+        for method in (
+                log.debug, log.info, log.warning, log.error, log.critical,
+                log.msg, log.err):
+            with LogCatcher() as lc:
+                method('Test log')
+            [log] = lc.logs
+
+            self.assertEqual(log['system'], 'test')
+            self.assertEqual(log['bar'], 'foo')
+
