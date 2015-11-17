@@ -10,8 +10,9 @@ from twisted.web import http
 from twisted.web.server import NOT_DONE_YET
 from twisted.trial.unittest import SkipTest
 
+from vumi.tests.fake_connection import FakeHttpServer
 from vumi.tests.helpers import VumiTestCase
-from vumi.tests.utils import MockHttpServer, LogCatcher
+from vumi.tests.utils import LogCatcher
 from vumi.transports.tests.helpers import TransportHelper
 from vumi.transports.wechat import WeChatTransport
 from vumi.transports.wechat.errors import WeChatApiException
@@ -52,17 +53,17 @@ class WeChatTestCase(VumiTestCase):
     def setUp(self):
         self.tx_helper = self.add_helper(TransportHelper(WeChatTransport))
         self.request_queue = DeferredQueue()
-        self.mock_server = MockHttpServer(self.handle_api_request)
-        self.add_cleanup(self.mock_server.stop)
-        return self.mock_server.start()
+        self.fake_http = FakeHttpServer(self.handle_api_request)
+        self.api_url = 'https://api.wechat.com/cgi-bin/'
 
     def handle_api_request(self, request):
+        self.assertEqual(request.path[:len(self.api_url)], self.api_url)
         self.request_queue.put(request)
         return NOT_DONE_YET
 
+    @inlineCallbacks
     def get_transport(self, **config):
         defaults = {
-            'api_url': self.mock_server.url,
             'auth_token': 'token',
             'twisted_endpoint': 'tcp:0',
             'wechat_appid': 'appid',
@@ -70,7 +71,9 @@ class WeChatTestCase(VumiTestCase):
             'embed_user_profile': False,
         }
         defaults.update(config)
-        return self.tx_helper.get_transport(defaults)
+        transport = yield self.tx_helper.get_transport(defaults)
+        transport.agent_factory = self.fake_http.get_agent
+        returnValue(transport)
 
     @inlineCallbacks
     def get_transport_with_access_token(self, access_token, **config):
@@ -268,7 +271,7 @@ class TestWeChatOutboundMessaging(WeChatTestCase):
         msg_d = self.dispatch_push_message('foo', {}, to_addr='toaddr')
 
         request = yield self.request_queue.get()
-        self.assertEqual(request.path, '/message/custom/send')
+        self.assertEqual(request.path, self.api_url + 'message/custom/send')
         self.assertEqual(request.args, {
             'access_token': ['foo']
         })
@@ -313,7 +316,7 @@ class TestWeChatOutboundMessaging(WeChatTestCase):
             content, {}, to_addr='toaddr')
 
         request = yield self.request_queue.get()
-        self.assertEqual(request.path, '/message/custom/send')
+        self.assertEqual(request.path, self.api_url + 'message/custom/send')
         self.assertEqual(request.args, {
             'access_token': ['foo']
         })
@@ -349,7 +352,7 @@ class TestWeChatAccessToken(WeChatTestCase):
         d = transport.request_new_access_token()
 
         req = yield self.request_queue.get()
-        self.assertEqual(req.path, '/token')
+        self.assertEqual(req.path, self.api_url + 'token')
         self.assertEqual(req.args, {
             'grant_type': ['client_credential'],
             'appid': [config.wechat_appid],
@@ -544,7 +547,7 @@ class TestWeChatMenuCreation(WeChatTestCase):
 
         d = transport.create_wechat_menu('foo', self.MENU)
         req = yield self.request_queue.get()
-        self.assertEqual(req.path, '/menu/create')
+        self.assertEqual(req.path, self.api_url + 'menu/create')
         self.assertEqual(req.args, {
             'access_token': ['foo'],
         })
@@ -695,8 +698,7 @@ class TestWeChatInsanity(WeChatTestCase):
         resp1_d = request(transport, 'POST', data=xml)
 
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
-        reply_msg = yield self.tx_helper.make_dispatch_reply(
-            msg, 'foo')
+        yield self.tx_helper.make_dispatch_reply(msg, 'foo')
 
         resp1 = yield resp1_d
         reply1 = WeChatXMLParser.parse(resp1.delivered_body)
@@ -736,8 +738,7 @@ class TestWeChatInsanity(WeChatTestCase):
         self.assertEqual(resp2.code, http.OK)
         self.assertEqual(resp2.delivered_body, '')
 
-        reply_msg = yield self.tx_helper.make_dispatch_reply(
-            msg, 'foo')
+        yield self.tx_helper.make_dispatch_reply(msg, 'foo')
 
         resp1 = yield resp1_d
         reply1 = WeChatXMLParser.parse(resp1.delivered_body)

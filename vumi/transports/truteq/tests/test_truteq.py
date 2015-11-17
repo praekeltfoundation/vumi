@@ -2,10 +2,8 @@
 
 """Test for vumi.transport.truteq.truteq."""
 
-from twisted.internet.defer import inlineCallbacks, Deferred, returnValue
-from twisted.internet import reactor
-from twisted.internet.task import deferLater
-from twisted.test.proto_helpers import StringTransportWithDisconnection
+from twisted.internet.defer import inlineCallbacks, returnValue, DeferredQueue
+from twisted.internet.protocol import Protocol
 
 from txssmi import constants as c
 from txssmi.builder import SSMIRequest
@@ -14,11 +12,12 @@ from txssmi.commands import (
     ServerLogout)
 
 from vumi.message import TransportUserMessage
-from vumi.reconnecting_client import ReconnectingClientService
+from vumi.tests.fake_connection import FakeServer, wait0
 from vumi.tests.helpers import VumiTestCase
 from vumi.tests.utils import LogCatcher
 from vumi.transports.tests.helpers import TransportHelper
-from vumi.transports.truteq.truteq import TruteqTransport
+from vumi.transports.truteq import TruteqTransport
+from vumi.transports.truteq.truteq import TruteqTransportProtocol
 
 
 # To reduce verbosity.
@@ -28,19 +27,33 @@ SESSION_CLOSE = TransportUserMessage.SESSION_CLOSE
 SESSION_NONE = TransportUserMessage.SESSION_NONE
 
 
-class StringTransportEndpoint(object):
-    def __init__(self, connect_callback):
-        self.connect_callback = connect_callback
+class SSMIServerProtocol(Protocol):
+    delimiter = TruteqTransportProtocol.delimiter
 
-    def connect(self, protocolFactory):
-        string_transport = StringTransportWithDisconnection()
-        protocol = protocolFactory.buildProtocol(None)
-        protocol.makeConnection(string_transport)
-        string_transport.protocol = protocol
-        self.connect_callback(protocol)
-        d = Deferred()
-        d.callback(protocol)
-        return d
+    def __init__(self):
+        self.receive_queue = DeferredQueue()
+        self._buf = b""
+
+    def dataReceived(self, data):
+        self._buf += data
+        self.parse_commands()
+
+    def parse_commands(self):
+        while self.delimiter in self._buf:
+            line, _, self._buf = self._buf.partition(self.delimiter)
+            if line:
+                self.receive_queue.put(SSMIRequest.parse(line))
+
+    def send(self, command):
+        self.transport.write(str(command))
+        self.transport.write(self.delimiter)
+        return wait0()
+
+    def receive(self):
+        return self.receive_queue.get()
+
+    def disconnect(self):
+        self.transport.loseConnection()
 
 
 class TestTruteqTransport(VumiTestCase):
@@ -48,70 +61,32 @@ class TestTruteqTransport(VumiTestCase):
     @inlineCallbacks
     def setUp(self):
         self.tx_helper = self.add_helper(TransportHelper(TruteqTransport))
+        self.fake_server = FakeServer.for_protocol(SSMIServerProtocol)
         self.config = {
             'username': 'username',
             'password': 'password',
+            'twisted_endpoint': self.fake_server.endpoint,
         }
-        self.string_transport = StringTransportWithDisconnection()
-
-        # NOTE: pausing the transport before starting so we can
-        #       start the SSMIProtocol, which expects the vumi transport
-        #       as an argument.
-        self.transport = yield self.tx_helper.get_transport(
-            self.config, start=False)
-        st_endpoint = StringTransportEndpoint(self._ste_connect_callback)
-
-        def truteq_service_maker(endpoint, factory):
-            return ReconnectingClientService(st_endpoint, factory)
-
-        self.transport.service_class = truteq_service_maker
-        yield self.transport.startWorker()
-        yield self.process_login_commands('username', 'password')
-
-    def _ste_connect_callback(self, protocol):
-        self.protocol = protocol
-        self.string_transport = protocol.transport
+        self.transport = yield self.tx_helper.get_transport(self.config)
+        self.conn = yield self.fake_server.await_connection()
+        yield self.conn.await_connected()
+        self.server = self.conn.server_protocol
+        yield self.process_login_commands(self.server, 'username', 'password')
 
     @inlineCallbacks
-    def process_login_commands(self, username, password):
-        [cmd] = yield self.receive(1)
+    def process_login_commands(self, server, username, password):
+        cmd = yield server.receive()
         self.assertEqual(cmd.command_name, 'LOGIN')
         self.assertEqual(cmd.username, username)
         self.assertEqual(cmd.password, password)
-        self.send(Ack(ack_type='1'))
-        [link_check] = yield self.receive(1)
+        server.send(Ack(ack_type='1'))
+        link_check = yield server.receive()
         self.assertEqual(link_check.command_name, 'LINK_CHECK')
         returnValue(True)
 
-    def send(self, command):
-        return self.protocol.lineReceived(str(command))
-
-    def receive(self, count, clear=True):
-        d = Deferred()
-
-        def check_for_input():
-            if not self.string_transport.value():
-                reactor.callLater(0, check_for_input)
-                return
-
-            lines = self.string_transport.value().split(
-                self.protocol.delimiter)
-            commands = map(SSMIRequest.parse, filter(None, lines))
-            if len(commands) >= count:
-                if clear:
-                    self.string_transport.clear()
-                    self.string_transport.write(
-                        self.protocol.delimiter.join(
-                            map(str, commands[count:])))
-                d.callback(commands[:count])
-
-        check_for_input()
-
-        return d
-
     def incoming_ussd(self, msisdn="12345678", ussd_type=c.USSD_RESPONSE,
                       phase="ignored", message="Hello"):
-        self.send(USSDMessage(
+        self.server.send(USSDMessage(
             msisdn=msisdn, type=ussd_type, phase=c.USSD_PHASE_UNKNOWN,
             message=message))
 
@@ -142,8 +117,9 @@ class TestTruteqTransport(VumiTestCase):
 
     @inlineCallbacks
     def test_handle_inbound_ussd_new(self):
-        yield self.send(USSDMessage(msisdn='27000000000', type=c.USSD_NEW,
-                                    message='*678#', phase=c.USSD_PHASE_1))
+        yield self.server.send(USSDMessage(
+            msisdn='27000000000', type=c.USSD_NEW, message='*678#',
+            phase=c.USSD_PHASE_1))
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assertEqual(msg['to_addr'], '*678#')
         self.assertEqual(msg['session_event'], SESSION_NEW)
@@ -151,7 +127,7 @@ class TestTruteqTransport(VumiTestCase):
 
     @inlineCallbacks
     def test_handle_inbound_extended_ussd_new(self):
-        yield self.send(ExtendedUSSDMessage(
+        yield self.server.send(ExtendedUSSDMessage(
             msisdn='27000000000', type=c.USSD_NEW, message='*678#',
             genfields='::3', phase=c.USSD_PHASE_1))
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
@@ -173,7 +149,7 @@ class TestTruteqTransport(VumiTestCase):
     def test_handle_remote_logout(self):
         cmd = ServerLogout(ip='127.0.0.1')
         with LogCatcher() as logger:
-            yield self.send(cmd)
+            yield self.server.send(cmd)
             [warning] = logger.messages()
             self.assertEqual(
                 warning,
@@ -215,7 +191,7 @@ class TestTruteqTransport(VumiTestCase):
                             content="Test", encoding="utf-8"):
         yield self.tx_helper.make_dispatch_outbound(
             content, to_addr=u"+1234", session_event=vumi_session_type)
-        [ussd_call] = yield self.receive(1)
+        ussd_call = yield self.server.receive()
         data = content.encode(encoding) if content else ""
         self.assertEqual(ussd_call.message, data)
         self.assertTrue(isinstance(ussd_call.message, str))
@@ -245,7 +221,7 @@ class TestTruteqTransport(VumiTestCase):
         yield self.tx_helper.make_dispatch_outbound(
             submitted, to_addr=u"+1234", session_event=SESSION_NONE)
         # Grab what was sent to Truteq
-        [ussd_call] = yield self.receive(1)
+        ussd_call = yield self.server.receive()
         expected_msg = SendUSSDMessage(msisdn='1234', message=expected,
                                        type=c.USSD_RESPONSE)
 
@@ -277,7 +253,7 @@ class TestTruteqTransport(VumiTestCase):
     def test_handle_inbound_sms(self):
         cmd = MoMessage(msisdn='foo', message='bar', sequence='1')
         with LogCatcher() as logger:
-            yield self.send(cmd)
+            yield self.server.send(cmd)
             [warning] = logger.messages()
             self.assertEqual(
                 warning[:59],
@@ -288,14 +264,15 @@ class TestTruteqTransport(VumiTestCase):
     def test_reconnect(self):
         """
         When disconnected, the transport should attempt to reconnect.
-
-        We test this by stashing the current protocol instance, disconnecting
-        it, and asserting that we get a new protocol instance with the usual
-        login commands after reconnection.
         """
         self.transport.client_service.delay = 0
-        old_protocol = self.protocol
-        yield self.protocol.transport.loseConnection()
-        yield deferLater(reactor, 0, lambda: None)  # Let the reactor run.
-        self.assertNotEqual(old_protocol, self.protocol)
-        yield self.process_login_commands('username', 'password')
+        reconnect_d = self.fake_server.await_connection()
+        self.assertNoResult(reconnect_d)
+
+        self.server.disconnect()
+        yield self.conn.await_finished()
+        new_conn = yield reconnect_d
+        yield new_conn.await_connected()
+        new_server = new_conn.server_protocol
+        self.assertNotEqual(self.server, new_server)
+        yield self.process_login_commands(new_server, 'username', 'password')

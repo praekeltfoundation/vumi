@@ -3,7 +3,7 @@
 import json
 
 from twisted.cred.portal import Portal
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, succeed
 from twisted.internet import reactor
 from twisted.internet.task import LoopingCall
 from twisted.web import http
@@ -12,9 +12,12 @@ from twisted.web.resource import Resource
 from twisted.web.server import NOT_DONE_YET
 
 from vumi import log
-from vumi.config import ConfigText, ConfigInt, ConfigBool, ConfigError
+from vumi.config import (
+    ConfigText, ConfigInt, ConfigBool, ConfigError, ConfigFloat)
+from vumi.message import TransportStatus
 from vumi.transports.base import Transport
 from vumi.transports.httprpc.auth import HttpRpcRealm, StaticAuthChecker
+from vumi.utils import StatusEdgeDetector
 
 
 class HttpRpcTransportConfig(Transport.CONFIG_CLASS):
@@ -69,6 +72,14 @@ class HttpRpcTransportConfig(Transport.CONFIG_CLASS):
         " nor in IGNORED_FIELDS will raise an error. If 'permissive' then no"
         " error is raised as long as all the EXPECTED_FIELDS are present.",
         default='strict', static=True)
+    response_time_down = ConfigFloat(
+        "The maximum time allowed for a response before the service is "
+        "considered `down`",
+        default=10.0, static=True)
+    response_time_degraded = ConfigFloat(
+        "The maximum time allowed for a response before the service is "
+        "considered `degraded`",
+        default=1.0, static=True)
 
     def post_validate(self):
         auth_supplied = (self.web_username is None, self.web_password is None)
@@ -146,6 +157,8 @@ class HttpRpcTransport(Transport):
         self.request_timeout_body = config.request_timeout_body
         self.gc_requests_interval = config.request_cleanup_interval
         self._validation_mode = config.validation_mode
+        self.response_time_down = config.response_time_down
+        self.response_time_degraded = config.response_time_degraded
         if self._validation_mode not in self.KNOWN_VALIDATION_MODES:
             raise ConfigError('Invalid validation mode: %s' % (
                 self._validation_mode,))
@@ -193,6 +206,15 @@ class HttpRpcTransport(Transport):
             ],
             self.web_port)
 
+        self.status_detect = StatusEdgeDetector()
+
+    def add_status(self, **kw):
+        '''Publishes a status if it is not a repeat of the previously
+        published status.'''
+        if self.status_detect.check_status(**kw):
+            return self.publish_status(**kw)
+        return succeed(None)
+
     @inlineCallbacks
     def teardown_transport(self):
         yield self.web_resource.loseConnection()
@@ -231,7 +253,9 @@ class HttpRpcTransport(Transport):
     def manually_close_requests(self):
         for request_id, request_data in self._requests.items():
             timestamp = request_data['timestamp']
-            if timestamp < self.clock.seconds() - self.request_timeout:
+            response_time = self.clock.seconds() - timestamp
+            if response_time > self.request_timeout:
+                self.on_timeout(request_id, response_time)
                 self.close_request(request_id)
 
     def close_request(self, request_id):
@@ -295,6 +319,7 @@ class HttpRpcTransport(Transport):
             request.setResponseCode(code)
             request.write(data)
             request.finish()
+            self.set_request_end(request_id)
             self.remove_request(request_id)
             response_id = "%s:%s:%s" % (request.client.host,
                                         request.client.port,
@@ -319,3 +344,47 @@ class HttpRpcTransport(Transport):
     def set_request_to_addr(self, request_id, to_addr):
         if request_id in self._requests:
             self._requests[request_id]['to_addr'] = to_addr
+
+    def set_request_end(self, message_id):
+        '''Checks the saved timestamp to see the response time.
+        If the starting timestamp for the message cannot be found, nothing is
+        done.
+        If the time is more than `response_time_down`, a `down` status event
+        is sent.
+        If the time more than `response_time_degraded`, a `degraded` status
+        event is sent.
+        If the time is less than `response_time_degraded`, an `ok` status
+        event is sent.
+        '''
+        request = self._requests.get(message_id, None)
+        if request is not None:
+            response_time = self.clock.seconds() - request['timestamp']
+            if response_time > self.response_time_down:
+                return self.on_down_response_time(message_id, response_time)
+            elif response_time > self.response_time_degraded:
+                return self.on_degraded_response_time(message_id, response_time)
+            else:
+                return self.on_good_response_time(message_id, response_time)
+
+    def on_down_response_time(self, message_id, time):
+        '''Can be overridden by subclasses to do something when the
+        response time is high enough for the transport to be considered
+        non-functioning.'''
+        pass
+
+    def on_degraded_response_time(self, message_id, time):
+        '''Can be overridden by subclasses to do something when the
+        response time is high enough for the transport to be considered
+        running in a degraded state.'''
+        pass
+
+    def on_good_response_time(self, message_id, time):
+        '''Can be overridden by subclasses to do something when the
+        response time is low enough for the transport to be considered
+        running normally.'''
+        pass
+
+    def on_timeout(self, message_id, time):
+        '''Can be overridden by subclasses to do something when the
+        response times out.'''
+        pass

@@ -200,6 +200,7 @@ class WeChatTransport(Transport):
     CACHED_REPLY_KEY = 'cached_reply'
 
     transport_type = 'wechat'
+    agent_factory = None  # For swapping out the Agent we use in tests.
 
     @inlineCallbacks
     def setup_transport(self):
@@ -220,10 +221,14 @@ class WeChatTransport(Transport):
             d = self.get_access_token()
             d.addCallback(self.create_wechat_menu, config.wechat_menu)
 
+    def http_request_full(self, *args, **kw):
+        kw['agent_class'] = self.agent_factory
+        return http_request_full(*args, **kw)
+
     @inlineCallbacks
     def create_wechat_menu(self, access_token, menu_structure):
         url = self.make_url('menu/create', {'access_token': access_token})
-        response = yield http_request_full(
+        response = yield self.http_request_full(
             url, method='POST', data=json.dumps(menu_structure),
             headers={'Content-Type': ['application/json']})
         if not http_ok(response):
@@ -458,7 +463,7 @@ class WeChatTransport(Transport):
                 'access_token': access_token
             }))
         d.addCallback(
-            lambda url: http_request_full(
+            lambda url: self.http_request_full(
                 url, method='POST', data=wc_message.to_json(), headers={
                     'Content-Type': ['application/json']
                 }))
@@ -492,7 +497,7 @@ class WeChatTransport(Transport):
             returnValue(json.loads(cached_up))
 
         access_token = yield self.get_access_token()
-        response = yield http_request_full(self.make_url('user/info', {
+        response = yield self.http_request_full(self.make_url('user/info', {
             'access_token': access_token,
             'openid': open_id,
             'lang': config.embed_user_profile_lang,
@@ -505,7 +510,7 @@ class WeChatTransport(Transport):
     @inlineCallbacks
     def request_new_access_token(self):
         config = self.get_static_config()
-        response = yield http_request_full(self.make_url('token', {
+        response = yield self.http_request_full(self.make_url('token', {
             'grant_type': 'client_credential',
             'appid': config.wechat_appid,
             'secret': config.wechat_secret,

@@ -102,8 +102,8 @@ class ReceiveSMSResource(Resource):
             log.msg("Enqueued.")
         except KeyError, e:
             request.setResponseCode(http.BAD_REQUEST)
-            msg = "Need more request keys to complete this request. \n\n" \
-                    "Missing request key: %s" % e
+            msg = ("Need more request keys to complete this request. \n\n"
+                   "Missing request key: %s" % (e,))
             log.msg('Returning %s: %s' % (http.BAD_REQUEST, msg))
             request.write(msg)
         except ValueError, e:
@@ -156,8 +156,8 @@ class DeliveryReceiptResource(Resource):
                 )
         except KeyError, e:
             request.setResponseCode(http.BAD_REQUEST)
-            msg = "Need more request keys to complete this request. \n\n" \
-                    "Missing request key: %s" % e
+            msg = ("Need more request keys to complete this request. \n\n"
+                   "Missing request key: %s" % (e,))
             log.msg('Returning %s: %s' % (http.BAD_REQUEST, msg))
             request.write(msg)
         except ValueError, e:
@@ -200,6 +200,9 @@ class HttpResponseHandler(Protocol):
 
 
 class Vas2NetsTransport(Transport):
+
+    agent_factory = None  # For swapping out the Agent we use in tests.
+
     def mkres(self, cls, publish_func, path_key):
         resource = cls(self.config, publish_func)
         self._resources.append(resource)
@@ -271,7 +274,7 @@ class Vas2NetsTransport(Transport):
                 self.config['url'], urlencode(params), {
                     'User-Agent': ['Vumi Vas2Net Transport'],
                     'Content-Type': ['application/x-www-form-urlencoded'],
-                    }, 'POST')
+                    }, 'POST', agent_class=self.agent_factory)
         except ConnectionRefusedError:
             log.msg("Connection failed sending message:", message)
             raise TemporaryFailure('connection refused')
@@ -291,7 +294,8 @@ class Vas2NetsTransport(Transport):
                 )
         else:
             err_msg = 'No SmsId Header, content: %s' % response.delivered_body
-            yield self.publish_nack(user_message_id=message['message_id'],
+            yield self.publish_nack(
+                user_message_id=message['message_id'],
                 sent_message_id=message['message_id'],
                 reason=err_msg)
             raise Vas2NetsTransportError(err_msg)

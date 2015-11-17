@@ -75,7 +75,8 @@ class MetricManager(object):
         Stop the metric polling and publishing task.
         """
         if self._task:
-            self._task.stop()
+            if self._task.running:
+                self._task.stop()
             self._task = None
 
     def publish_metrics(self):

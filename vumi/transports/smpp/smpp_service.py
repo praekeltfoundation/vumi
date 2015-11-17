@@ -1,7 +1,6 @@
 from twisted.internet.defer import inlineCallbacks, returnValue, succeed
 from twisted.internet.task import LoopingCall
 
-from vumi import log
 from vumi.reconnecting_client import ReconnectingClientService
 from vumi.transports.smpp.protocol import (
     EsmeProtocol, EsmeProtocolFactory, EsmeProtocolError)
@@ -19,6 +18,7 @@ class SmppService(ReconnectingClientService):
     def __init__(self, endpoint, bind_type, transport):
         self.transport = transport
         self.transport_name = transport.transport_name
+        self.log = transport.log
         self.message_stash = self.transport.message_stash
         self.deliver_sm_processor = self.transport.deliver_sm_processor
         self.dr_processor = self.transport.dr_processor
@@ -76,7 +76,8 @@ class SmppService(ReconnectingClientService):
         if self.throttled and self.need_mt_throttling():
             if not self.is_bound():
                 # We don't have a bound SMPP connection, so try again later.
-                log.msg("Can't stop throttling while unbound, trying later.")
+                self.log.msg(
+                    "Can't stop throttling while unbound, trying later.")
                 return
             self.reset_mt_throttle_counter()
             yield self.stop_throttling()
@@ -141,13 +142,13 @@ class SmppService(ReconnectingClientService):
 
         if not self.is_bound():
             # We don't have a bound SMPP connection, so try again later.
-            log.msg("Can't check throttling while unbound, trying later.")
+            self.log.msg("Can't check throttling while unbound, trying later.")
             self.check_stop_throttling()
             return
 
         if not self._throttled_pdus:
             # We have no throttled messages waiting, so stop throttling.
-            log.msg("No more throttled messages to retry.")
+            self.log.msg("No more throttled messages to retry.")
             yield self.stop_throttling()
             return
 
@@ -159,13 +160,13 @@ class SmppService(ReconnectingClientService):
     def retry_throttled_pdu(self, pdu_data, seq_no):
         if pdu_data is None:
             # We can't find this pdu, so log it and start again.
-            log.warning(
+            self.log.warning(
                 "Could not retrieve throttled pdu: %s" % (seq_no,))
             self.check_stop_throttling(0)
         else:
             # Try handle this message again and leave the rest to our
             # submit_sm_resp handlers.
-            log.msg("Retrying throttled pdu for message: %s" % (
+            self.log.msg("Retrying throttled pdu for message: %s" % (
                 pdu_data.vumi_message_id,))
             # This is a new PDU, so it needs a new sequence number.
             new_seq_no = yield self.sequence_generator.next()
@@ -178,7 +179,7 @@ class SmppService(ReconnectingClientService):
     def start_throttling(self):
         if self.throttled:
             return
-        log.msg("Throttling outbound messages.")
+        self.log.msg("Throttling outbound messages.")
         self.throttled = True
         yield self.transport.pause_connectors()
         yield self.transport.on_throttled()
@@ -187,7 +188,7 @@ class SmppService(ReconnectingClientService):
     def stop_throttling(self):
         if not self.throttled:
             return
-        log.msg("No longer throttling outbound messages.")
+        self.log.msg("No longer throttling outbound messages.")
         self.throttled = False
         self.transport.unpause_connectors()
         yield self.transport.on_throttled_end()

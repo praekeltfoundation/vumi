@@ -177,7 +177,8 @@ class TestApplicationWorker(VumiTestCase):
             'amqp_prefetch_count': 10,
             })
         for consumer in self.get_app_consumers(app):
-            self.assertEqual(consumer.channel.qos_prefetch_count, 10)
+            fake_channel = consumer.channel._fake_channel
+            self.assertEqual(fake_channel.qos_prefetch_count, 10)
 
     @inlineCallbacks
     def test_application_prefetch_count_default(self):
@@ -185,7 +186,8 @@ class TestApplicationWorker(VumiTestCase):
             'transport_name': 'test',
             })
         for consumer in self.get_app_consumers(app):
-            self.assertEqual(consumer.channel.qos_prefetch_count, 20)
+            fake_channel = consumer.channel._fake_channel
+            self.assertEqual(fake_channel.qos_prefetch_count, 20)
 
     @inlineCallbacks
     def test_application_prefetch_count_none(self):
@@ -194,7 +196,8 @@ class TestApplicationWorker(VumiTestCase):
             'amqp_prefetch_count': None,
             })
         for consumer in self.get_app_consumers(app):
-            self.assertFalse(consumer.channel.qos_prefetch_count)
+            fake_channel = consumer.channel._fake_channel
+            self.assertEqual(fake_channel.qos_prefetch_count, 0)
 
     def assertNotRaises(self, error_class, f, *args, **kw):
         try:

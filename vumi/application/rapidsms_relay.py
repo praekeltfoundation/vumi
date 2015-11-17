@@ -155,6 +155,8 @@ class RapidSMSRelay(ApplicationWorker):
 
     ALLOWED_ENDPOINTS = None
 
+    agent_factory = None  # For swapping out the Agent we use in tests.
+
     def validate_config(self):
         self.supported_auth_methods = {
             'basic': self.generate_basic_auth_headers,
@@ -303,9 +305,9 @@ class RapidSMSRelay(ApplicationWorker):
         http_method = config.rapidsms_http_method.encode("utf-8")
         headers = self.get_auth_headers(config)
         yield self._store_message(message, config.vumi_reply_timeout)
-        response = http_request_full(config.rapidsms_url.geturl(),
-                                     message.to_json(),
-                                     headers, http_method)
+        response = http_request_full(
+            config.rapidsms_url.geturl(), message.to_json(), headers,
+            http_method, agent_class=self.agent_factory)
         response.addCallback(lambda response: log.info(response.code))
         response.addErrback(lambda failure: log.err(failure))
         yield response

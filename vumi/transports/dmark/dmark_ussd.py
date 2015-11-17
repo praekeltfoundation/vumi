@@ -5,7 +5,6 @@ import json
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.web import http
 
-from vumi import log
 from vumi.components.session import SessionManager
 from vumi.config import ConfigDict, ConfigInt
 from vumi.message import TransportUserMessage
@@ -108,12 +107,48 @@ class DmarkUssdTransport(HttpRpcTransport):
 
     @inlineCallbacks
     def handle_raw_inbound_message(self, request_id, request):
-        values, errors = self.get_field_values(request, self.EXPECTED_FIELDS)
+        try:
+            values, errors = self.get_field_values(
+                request, self.EXPECTED_FIELDS)
+        except UnicodeDecodeError:
+            self.log.msg('Bad request encoding: %r' % request)
+            request_dict = {
+                'uri': request.uri,
+                'method': request.method,
+                'path': request.path,
+                'content': request.content.read(),
+                'headers': dict(request.requestHeaders.getAllRawHeaders()),
+            }
+            self.finish_request(
+                request_id, json.dumps({'invalid_request': request_dict}),
+                code=http.BAD_REQUEST)
+            yield self.add_status(
+                component='request',
+                status='down',
+                type='invalid_encoding',
+                message='Invalid encoding',
+                details={
+                    'request': request_dict,
+                })
+            return
+
         if errors:
-            log.msg('Unhappy incoming message: %r' % (errors,))
+            self.log.msg('Unhappy incoming message: %r' % (errors,))
             self.finish_request(
                 request_id, json.dumps(errors), code=http.BAD_REQUEST)
+            yield self.add_status(
+                component='request',
+                status='down',
+                type='invalid_inbound_fields',
+                message='Invalid inbound fields',
+                details=errors)
             return
+
+        yield self.add_status(
+            component='request',
+            status='ok',
+            type='request_parsed',
+            message='Request parsed',)
 
         to_addr = values["ussdServiceCode"]
         from_addr = values["msisdn"]
@@ -136,12 +171,14 @@ class DmarkUssdTransport(HttpRpcTransport):
                 }
             })
 
+    @inlineCallbacks
     def handle_outbound_message(self, message):
         self.emit("DmarkUssdTransport consuming %r" % (message,))
-        missing_fields = self.ensure_message_values(message,
-                            ['in_reply_to', 'content'])
+        missing_fields = self.ensure_message_values(
+            message, ['in_reply_to', 'content'])
         if missing_fields:
-            return self.reject_message(message, missing_fields)
+            nack = yield self.reject_message(message, missing_fields)
+            returnValue(nack)
 
         if message["session_event"] == TransportUserMessage.SESSION_CLOSE:
             action = "end"
@@ -155,12 +192,79 @@ class DmarkUssdTransport(HttpRpcTransport):
 
         response_id = self.finish_request(
             message['in_reply_to'], json.dumps(response_data))
+
         if response_id is not None:
-            return self.publish_ack(
+            ack = yield self.publish_ack(
                 user_message_id=message['message_id'],
                 sent_message_id=message['message_id'])
+            returnValue(ack)
         else:
-            return self.publish_nack(
+            nack = yield self.publish_nack(
                 user_message_id=message['message_id'],
                 sent_message_id=message['message_id'],
                 reason="Could not find original request.")
+            returnValue(nack)
+
+    def on_down_response_time(self, message_id, time):
+        request = self.get_request(message_id)
+        # We send different status events for error responses
+        if request.code < 200 or request.code >= 300:
+            return
+        return self.add_status(
+            component='response',
+            status='down',
+            type='very_slow_response',
+            message='Very slow response',
+            reasons=[
+                'Response took longer than %fs' % (
+                    self.response_time_down,)
+            ],
+            details={
+                'response_time': time,
+            })
+
+    def on_degraded_response_time(self, message_id, time):
+        request = self.get_request(message_id)
+        # We send different status events for error responses
+        if request.code < 200 or request.code >= 300:
+            return
+        return self.add_status(
+            component='response',
+            status='degraded',
+            type='slow_response',
+            message='Slow response',
+            reasons=[
+                'Response took longer than %fs' % (
+                    self.response_time_degraded,)
+            ],
+            details={
+                'response_time': time,
+            })
+
+    def on_good_response_time(self, message_id, time):
+        request = self.get_request(message_id)
+        # We send different status events for error responses
+        if request.code < 200 or request.code >= 400:
+            return
+        return self.add_status(
+            component='response',
+            status='ok',
+            type='response_sent',
+            message='Response sent',
+            details={
+                'response_time': time,
+            })
+
+    def on_timeout(self, message_id, time):
+        return self.add_status(
+            component='response',
+            status='down',
+            type='timeout',
+            message='Response timed out',
+            reasons=[
+                'Response took longer than %fs' % (
+                    self.request_timeout,)
+            ],
+            details={
+                'response_time': time,
+            })

@@ -37,6 +37,7 @@ class HTTPRelayApplication(ApplicationWorker):
     CONFIG_CLASS = HTTPRelayConfig
 
     reply_header = 'X-Vumi-HTTPRelay-Reply'
+    agent_factory = None  # For swapping out the Agent we use in tests.
 
     def validate_config(self):
         self.supported_auth_methods = {
@@ -48,7 +49,7 @@ class HTTPRelayApplication(ApplicationWorker):
         config = self.get_static_config()
         if config.auth_method not in self.supported_auth_methods:
             raise HTTPRelayError(
-                    'HTTP Authentication method %s not supported' % (
+                'HTTP Authentication method %s not supported' % (
                     repr(config.auth_method,)))
 
     def generate_basic_auth_headers(self, username, password):
@@ -68,8 +69,9 @@ class HTTPRelayApplication(ApplicationWorker):
     def consume_user_message(self, message):
         config = yield self.get_config(message)
         headers = self.get_auth_headers(config)
-        response = yield http_request_full(config.url.geturl(),
-                            message.to_json(), headers, config.http_method)
+        response = yield http_request_full(
+            config.url.geturl(), message.to_json(), headers,
+            config.http_method, agent_class=self.agent_factory)
         headers = response.headers
         if response.code == http.OK:
             if headers.hasHeader(self.reply_header):
@@ -78,15 +80,16 @@ class HTTPRelayApplication(ApplicationWorker):
                 if (raw_headers[0].lower() == 'true') and content:
                     self.reply_to(message, content)
         else:
-            log.err('%s responded with %s' % (config.url.geturl(),
-                                                response.code))
+            log.err('%s responded with %s' % (
+                config.url.geturl(), response.code))
 
     @inlineCallbacks
     def relay_event(self, event):
         config = yield self.get_config(event)
         headers = self.get_auth_headers(config)
-        yield http_request_full(config.event_url.geturl(),
-            event.to_json(), headers, config.http_method)
+        yield http_request_full(
+            config.event_url.geturl(), event.to_json(), headers,
+            config.http_method, agent_class=self.agent_factory)
 
     @inlineCallbacks
     def consume_ack(self, event):

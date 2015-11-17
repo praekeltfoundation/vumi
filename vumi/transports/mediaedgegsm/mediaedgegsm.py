@@ -37,10 +37,11 @@ class MediaEdgeGSMTransport(HttpRpcTransport):
 
     transport_type = 'sms'
     content_type = 'text/plain; charset=utf-8'
+    agent_factory = None  # For swapping out the Agent we use in tests.
 
     ENCODING = 'utf-8'
     EXPECTED_FIELDS = set(['USN', 'PWD', 'PhoneNumber',
-        'ServiceNumber', 'Operator', 'SMSBODY'])
+                           'ServiceNumber', 'Operator', 'SMSBODY'])
 
     def setup_transport(self):
         self._username = self.config.get('username')
@@ -67,14 +68,17 @@ class MediaEdgeGSMTransport(HttpRpcTransport):
             }
 
             url = '%s?%s' % (self._outbound_url, urlencode(params))
-            response = yield http_request_full(url, '', method='GET')
-            log.msg("Response: (%s) %r" % (response.code,
-                response.delivered_body))
+            response = yield http_request_full(
+                url, '', method='GET', agent_class=self.agent_factory)
+            log.msg("Response: (%s) %r" % (
+                response.code, response.delivered_body))
             if response.code == http.OK:
-                yield self.publish_ack(user_message_id=message['message_id'],
+                yield self.publish_ack(
+                    user_message_id=message['message_id'],
                     sent_message_id=message['message_id'])
             else:
-                yield self.publish_nack(user_message_id=message['message_id'],
+                yield self.publish_nack(
+                    user_message_id=message['message_id'],
                     sent_message_id=message['message_id'],
                     reason='Unexpected response code: %s' % (response.code,))
 
@@ -92,8 +96,8 @@ class MediaEdgeGSMTransport(HttpRpcTransport):
             yield self.finish_request(message_id, json.dumps(errors), code=400)
             return
         log.msg(('MediaEdgeGSMTransport sending from %(PhoneNumber)s to '
-                    '%(ServiceNumber)s on %(Operator)s message '
-                    '"%(SMSBODY)s"') % values)
+                 '%(ServiceNumber)s on %(Operator)s message '
+                 '"%(SMSBODY)s"') % values)
         yield self.publish_message(
             message_id=message_id,
             content=values['SMSBODY'],

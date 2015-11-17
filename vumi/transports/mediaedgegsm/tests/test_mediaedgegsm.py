@@ -7,7 +7,7 @@ from twisted.internet.defer import inlineCallbacks, DeferredQueue
 from twisted.web import http
 
 from vumi.utils import http_request, http_request_full
-from vumi.tests.utils import MockHttpServer
+from vumi.tests.fake_connection import FakeHttpServer
 from vumi.tests.helpers import VumiTestCase
 from vumi.transports.mediaedgegsm import MediaEdgeGSMTransport
 from vumi.transports.tests.helpers import TransportHelper
@@ -18,16 +18,15 @@ class TestMediaEdgeGSMTransport(VumiTestCase):
     @inlineCallbacks
     def setUp(self):
         self.mediaedgegsm_calls = DeferredQueue()
-        self.mock_mediaedgegsm = MockHttpServer(self.handle_request)
-        self.add_cleanup(self.mock_mediaedgegsm.stop)
-        yield self.mock_mediaedgegsm.start()
+        self.fake_http = FakeHttpServer(self.handle_request)
+        self.base_url = "http://mediaedgegsm.example.com/"
 
         self.config = {
             'web_path': "foo",
             'web_port': 0,
             'username': 'user',
             'password': 'pass',
-            'outbound_url': self.mock_mediaedgegsm.url,
+            'outbound_url': self.base_url,
             'outbound_username': 'username',
             'outbound_password': 'password',
             'operator_mappings': {
@@ -41,6 +40,7 @@ class TestMediaEdgeGSMTransport(VumiTestCase):
         self.tx_helper = self.add_helper(
             TransportHelper(MediaEdgeGSMTransport))
         self.transport = yield self.tx_helper.get_transport(self.config)
+        self.transport.agent_factory = self.fake_http.get_agent
         self.transport_url = self.transport.get_transport_url()
         self.mediaedgegsm_response = ''
         self.mediaedgegsm_response_code = http.OK
@@ -106,19 +106,19 @@ class TestMediaEdgeGSMTransport(VumiTestCase):
         requests = [req1, req2, req3]
 
         for req in requests:
-            self.assertEqual(req.path, '/')
+            self.assertEqual(req.path, self.base_url)
             self.assertEqual(req.method, 'GET')
 
         collections = zip(msisdns, operators, sent_messages, requests)
         for msisdn, operator, msg, req in collections:
             self.assertEqual({
-                    'USN': ['username'],
-                    'PWD': ['password'],
-                    'SmsID': [msg['message_id']],
-                    'PhoneNumber': [msisdn.lstrip('+')],
-                    'Operator': [operator],
-                    'SmsBody': [msg['content']],
-                    }, req.args)
+                'USN': ['username'],
+                'PWD': ['password'],
+                'SmsID': [msg['message_id']],
+                'PhoneNumber': [msisdn.lstrip('+')],
+                'Operator': [operator],
+                'SmsBody': [msg['content']],
+            }, req.args)
 
     @inlineCallbacks
     def test_nack(self):
@@ -132,8 +132,7 @@ class TestMediaEdgeGSMTransport(VumiTestCase):
         [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(nack['user_message_id'], msg['message_id'])
         self.assertEqual(nack['sent_message_id'], msg['message_id'])
-        self.assertEqual(nack['nack_reason'],
-            'Unexpected response code: 404')
+        self.assertEqual(nack['nack_reason'], 'Unexpected response code: 404')
 
     @inlineCallbacks
     def test_bad_parameter(self):
@@ -146,7 +145,7 @@ class TestMediaEdgeGSMTransport(VumiTestCase):
     @inlineCallbacks
     def test_missing_parameters(self):
         url = self.mkurl_raw(ServiceNumber='12345', SMSBODY='hello',
-            USN='user', PWD='pass', Operator='foo')
+                             USN='user', PWD='pass', Operator='foo')
         response = yield http_request_full(url, '', method='GET')
         self.assertEqual(400, response.code)
         self.assertEqual(json.loads(response.delivered_body),
@@ -154,8 +153,9 @@ class TestMediaEdgeGSMTransport(VumiTestCase):
 
     @inlineCallbacks
     def test_invalid_credentials(self):
-        url = self.mkurl_raw(ServiceNumber='12345', SMSBODY='hello',
-            USN='something', PWD='wrong', Operator='foo', PhoneNumber='1234')
+        url = self.mkurl_raw(
+            ServiceNumber='12345', SMSBODY='hello', USN='something',
+            PWD='wrong', Operator='foo', PhoneNumber='1234')
         response = yield http_request_full(url, '', method='GET')
         self.assertEqual(400, response.code)
         self.assertEqual(json.loads(response.delivered_body),
@@ -175,6 +175,6 @@ class TestMediaEdgeGSMTransport(VumiTestCase):
 
         response = yield deferred
         self.assertEqual(response.headers.getRawHeaders('Content-Type'),
-            ['text/plain; charset=utf-8'])
+                         ['text/plain; charset=utf-8'])
         self.assertEqual(response.delivered_body,
-            u'Zoë says hi'.encode('utf-8'))
+                         u'Zoë says hi'.encode('utf-8'))
