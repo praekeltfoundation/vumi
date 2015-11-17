@@ -8,8 +8,8 @@ import socket
 
 from twisted.internet.defer import (
     inlineCallbacks, succeed, maybeDeferred, gatherResults)
-from twisted.python import log
 
+from vumi.log import WrappingLogger
 from vumi.service import Worker
 from vumi.middleware import setup_middlewares_from_config
 from vumi.connectors import (
@@ -55,9 +55,10 @@ class BaseWorker(Worker):
         self._static_config = self.CONFIG_CLASS(self.config, static=True)
         self._hb_pub = None
         self._worker_id = None
+        self.log = WrappingLogger(system=self.config.get('worker_name'))
 
     def startWorker(self):
-        log.msg('Starting a %s worker with config: %s'
+        self.log.msg('Starting a %s worker with config: %s'
                 % (self.__class__.__name__, self.config))
         d = maybeDeferred(self._validate_config)
         then_call(d, self.setup_heartbeat)
@@ -67,7 +68,7 @@ class BaseWorker(Worker):
         return d
 
     def stopWorker(self):
-        log.msg('Stopping a %s worker.' % (self.__class__.__name__,))
+        self.log.msg('Stopping a %s worker.' % (self.__class__.__name__,))
         d = succeed(None)
         then_call(d, self.teardown_worker)
         then_call(d, self.teardown_connectors)
@@ -87,12 +88,12 @@ class BaseWorker(Worker):
             self._system_id = self.options.get("system-id", "global")
             self._worker_id = generate_worker_id(self._system_id,
                                                  self._worker_name)
-            log.msg("Starting HeartBeat publisher with worker_name=%s"
+            self.log.msg("Starting HeartBeat publisher with worker_name=%s"
                     % self._worker_name)
             self._hb_pub = yield self.start_publisher(HeartBeatPublisher,
                                                 self._gen_heartbeat_attrs)
         else:
-            log.msg("HeartBeat publisher disabled. No worker_id "
+            self.log.msg("HeartBeat publisher disabled. No worker_id "
                     "field found in config.")
 
     def teardown_heartbeat(self):

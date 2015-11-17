@@ -8,7 +8,6 @@ This is likely to get used heavily fast, so try get your changes in early.
 
 from twisted.internet.defer import maybeDeferred, inlineCallbacks, succeed
 
-from vumi import log
 from vumi.config import ConfigText, ConfigBool
 from vumi.message import TransportUserMessage, TransportEvent, TransportStatus
 from vumi.worker import BaseWorker, then_call
@@ -117,7 +116,7 @@ class Transport(BaseWorker):
             d.addCallback(self.failure_publisher.publish_message)
             d.addCallback(lambda _f: self.failure_published())
         except:
-            log.err("Error publishing failure: %s, %s, %s"
+            self.log.err("Error publishing failure: %s, %s, %s"
                     % (message, exception, traceback))
             raise
         return d
@@ -182,13 +181,13 @@ class Transport(BaseWorker):
             conn = self.connectors[self.status_connector_name]
             return conn.publish_status(msg)
         else:
-            log.debug('Status publishing disabled for transport %r, ignoring '
+            self.log.debug('Status publishing disabled for transport %r, ignoring '
                       'status %r' % (self.transport_name, msg))
             return succeed(msg)
 
     def _send_failure_eb(self, f, message):
         self.send_failure(message, f.value, f.getTraceback())
-        log.err(f)
+        self.log.err(f)
         if self.SUPPRESS_FAILURE_EXCEPTIONS:
             return None
         return f

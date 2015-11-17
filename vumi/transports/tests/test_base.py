@@ -142,6 +142,7 @@ class TestBaseTransport(VumiTestCase):
     def test_publish_status_disabled(self):
         transport = yield self.tx_helper.get_transport({
             'transport_name': 'foo',
+            'worker_name': 'foo',
             'publish_status': False
         })
 
@@ -152,8 +153,6 @@ class TestBaseTransport(VumiTestCase):
                 type='bar',
                 message='baz')
 
-            logs = lc.messages()
-
         self.assertEqual(msg['status'], 'down')
         self.assertEqual(msg['component'], 'foo')
         self.assertEqual(msg['type'], 'bar')
@@ -161,6 +160,8 @@ class TestBaseTransport(VumiTestCase):
 
         msgs = self.tx_helper.get_dispatched_statuses('foo.status')
         self.assertEqual(msgs, [])
-        self.assertEqual(logs, [
+        [log] = lc.logs
+        self.assertEqual(log['message'][0], 
             "Status publishing disabled for transport 'foo', "
-            "ignoring status %r" % (msg,)])
+            "ignoring status %r" % (msg,))
+        self.assertEqual(log['system'], 'foo')
