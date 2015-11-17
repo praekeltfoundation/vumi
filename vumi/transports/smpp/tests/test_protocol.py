@@ -4,6 +4,7 @@ from twisted.internet.task import Clock
 
 from smpp.pdu_builder import (
     Unbind, UnbindResp, SubmitSMResp, DeliverSM, EnquireLink)
+from vumi.log import WrappingLogger
 from vumi.tests.helpers import VumiTestCase, PersistenceHelper
 from vumi.transports.smpp.smpp_transport import (
     SmppTransceiverTransport, SmppMessageDataStash)
@@ -17,6 +18,7 @@ from vumi.transports.smpp.tests.fake_smsc import FakeSMSC
 
 class DummySmppService(object):
     def __init__(self, clock, redis, config):
+        self.log = WrappingLogger(system=config.get('worker_name'))
         self.clock = clock
         self.redis = redis
         self._config = config
