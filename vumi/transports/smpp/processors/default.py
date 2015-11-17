@@ -5,7 +5,6 @@ from smpp.pdu_inspector import (
 from twisted.internet.defer import inlineCallbacks, returnValue, succeed
 from zope.interface import implements
 
-from vumi import log
 from vumi.config import (
     Config, ConfigDict, ConfigRegex, ConfigText, ConfigInt, ConfigBool)
 from vumi.message import TransportUserMessage
@@ -83,6 +82,7 @@ class DeliveryReportProcessor(object):
 
     def __init__(self, transport, config):
         self.transport = transport
+        self.log = transport.log
         self.config = self.CONFIG_CLASS(config, static=True)
 
     def _handle_delivery_report_optional_params(self, pdu):
@@ -141,7 +141,7 @@ class DeliveryReportProcessor(object):
         content = pdu["body"]["mandatory_parameters"]["short_message"]
         match = self.config.delivery_report_regex.search(content or '')
         if not match:
-            log.warning(
+            self.log.warning(
                 ("esm_class %s indicates delivery report, but content"
                  " does not match regex: %r") % (esm_class, content))
             # Even though this doesn't match the regex, the esm_class indicates
@@ -248,6 +248,7 @@ class DeliverShortMessageProcessor(object):
 
     def __init__(self, transport, config):
         self.transport = transport
+        self.log = transport.log
         self.redis = transport.redis
         self.codec = transport.get_static_config().codec_class()
         self.config = self.CONFIG_CLASS(config, static=True)
@@ -271,13 +272,13 @@ class DeliverShortMessageProcessor(object):
     def dcs_decode(self, obj, data_coding):
         codec_name = self.data_coding_map.get(data_coding, None)
         if codec_name is None:
-            log.msg("WARNING: Not decoding message with data_coding=%s" % (
+            self.log.msg("WARNING: Not decoding message with data_coding=%s" % (
                     data_coding,))
             return obj
         elif obj is None:
             if self.allow_empty_messages:
                 return u''
-            log.msg(
+            self.log.msg(
                 "WARNING: Not decoding `None` message with data_coding=%s" % (
                     data_coding,))
             return obj
@@ -285,9 +286,9 @@ class DeliverShortMessageProcessor(object):
         try:
             return self.codec.decode(obj, codec_name)
         except UnicodeDecodeError, e:
-            log.msg("Error decoding message with data_coding=%s" % (
+            self.log.msg("Error decoding message with data_coding=%s" % (
                 data_coding,))
-            log.err(e)
+            self.log.err(e)
         return obj
 
     def decode_pdus(self, pdus):
@@ -341,13 +342,13 @@ class DeliverShortMessageProcessor(object):
     @inlineCallbacks
     def handle_deliver_sm_multipart(self, pdu, pdu_params):
         redis_key = "multi_%s" % (multipart_key(detect_multipart(pdu)),)
-        log.debug("Redis multipart key: %s" % (redis_key))
+        self.log.debug("Redis multipart key: %s" % (redis_key))
         multi = yield self.load_multipart_message(redis_key)
         multi.add_pdu(pdu)
         completed = multi.get_completed()
         if completed:
             yield self.redis.delete(redis_key)
-            log.msg("Reassembled Message: %s" % (completed['message']))
+            self.log.msg("Reassembled Message: %s" % (completed['message']))
             # We assume that all parts have the same data_coding here, because
             # otherwise there's nothing sensible we can do.
             decoded_msg = self.dcs_decode(completed['message'],
@@ -428,7 +429,7 @@ class DeliverShortMessageProcessor(object):
     def load_multipart_message(self, redis_key):
         value = yield self.redis.get(redis_key)
         value = json.loads(value) if value else {}
-        log.debug("Retrieved value: %s" % (repr(value)))
+        self.log.debug("Retrieved value: %s" % (repr(value)))
         returnValue(MultipartMessage(self._unhex_from_redis(value)))
 
     def save_multipart_message(self, redis_key, multipart_message):
@@ -473,6 +474,7 @@ class SubmitShortMessageProcessor(object):
 
     def __init__(self, transport, config):
         self.transport = transport
+        self.log = transport.log
         self.config = self.CONFIG_CLASS(config, static=True)
 
     def handle_outbound_message(self, message, service):

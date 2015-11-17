@@ -9,7 +9,6 @@ from twisted.internet.defer import inlineCallbacks, returnValue, succeed
 
 from smpp.pdu import decode_pdu
 from smpp.pdu_builder import PDU
-from vumi import log
 from vumi.message import TransportUserMessage
 from vumi.persist.txredis_manager import TxRedisManager
 from vumi.transports.base import Transport
@@ -263,7 +262,7 @@ class SmppTransceiverTransport(Transport):
         yield self.publish_status_starting()
 
         config = self.get_static_config()
-        log.msg('Starting SMPP Transport for: %s' % (config.twisted_endpoint,))
+        self.log.msg('Starting SMPP Transport for: %s' % (config.twisted_endpoint,))
 
         default_prefix = '%s@%s' % (config.system_id,
                                     config.transport_name)
@@ -418,13 +417,13 @@ class SmppTransceiverTransport(Transport):
                 yield self.publish_ack(message_id, remote_id)
         else:
             if event_type != 'fail':
-                log.warning(
+                self.log.warning(
                     "Unexpected multipart event type %r, assuming 'fail'" % (
                         event_type,))
             err_msg = yield self.message_stash.get_cached_message(message_id)
             command_status = command_status or 'Unspecified'
             if err_msg is None:
-                log.warning(
+                self.log.warning(
                     "Could not retrieve failed message: %s" % (message_id,))
             else:
                 yield self.message_stash.delete_cached_message(message_id)
@@ -489,14 +488,14 @@ class SmppTransceiverTransport(Transport):
         #       we can't decode (e.g. data_coding == 4). We should
         #       remove the try-except once we handle such messages
         #       better.
-        return self.publish_message(**message).addErrback(log.err)
+        return self.publish_message(**message).addErrback(self.log.err)
 
     @inlineCallbacks
     def handle_delivery_report(self, receipted_message_id, delivery_status):
         message_id = yield self.message_stash.get_internal_message_id(
             receipted_message_id)
         if message_id is None:
-            log.warning("Failed to retrieve message id for delivery report."
+            self.log.warning("Failed to retrieve message id for delivery report."
                         " Delivery report from %s discarded."
                         % self.transport_name)
             return
