@@ -6,20 +6,31 @@ from urllib import urlencode
 from twisted.internet.defer import inlineCallbacks, DeferredQueue, returnValue
 
 from vumi.utils import http_request, http_request_full
-from vumi.tests.utils import MockHttpServer
+from vumi.tests.fake_connection import FakeHttpServer
 from vumi.tests.helpers import VumiTestCase
 from vumi.transports.cellulant import CellulantSmsTransport
 from vumi.transports.tests.helpers import TransportHelper
+
+
+class FakeCellulant(object):
+    def __init__(self):
+        self.cellulant_sms_calls = DeferredQueue()
+        self.fake_http = FakeHttpServer(self.handle_request)
+        self.response = ''
+        self.get_agent = self.fake_http.get_agent
+        self.get = self.cellulant_sms_calls.get
+
+    def handle_request(self, request):
+        self.cellulant_sms_calls.put(request)
+        return self.response
 
 
 class TestCellulantSmsTransport(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self.cellulant_sms_calls = DeferredQueue()
-        self.mock_cellulant_sms = MockHttpServer(self.handle_request)
-        yield self.mock_cellulant_sms.start()
-        self.add_cleanup(self.mock_cellulant_sms.stop)
+        self.fake_cellulant = FakeCellulant()
+        self.base_url = "http://cellulant.example.com/"
 
         self.config = {
             'web_path': "foo",
@@ -34,16 +45,13 @@ class TestCellulantSmsTransport(VumiTestCase):
                     'password': 'other-pass',
                 }
             },
-            'outbound_url': self.mock_cellulant_sms.url,
+            'outbound_url': self.base_url,
         }
         self.tx_helper = self.add_helper(
             TransportHelper(CellulantSmsTransport))
         self.transport = yield self.tx_helper.get_transport(self.config)
+        self.transport.agent_factory = self.fake_cellulant.get_agent
         self.transport_url = self.transport.get_transport_url()
-
-    def handle_request(self, request):
-        self.cellulant_sms_calls.put(request)
-        return ''
 
     def mkurl(self, content, from_addr="2371234567", **kw):
         params = {
@@ -84,44 +92,44 @@ class TestCellulantSmsTransport(VumiTestCase):
     def test_outbound(self):
         yield self.tx_helper.make_dispatch_outbound(
             "hello world", to_addr="2371234567")
-        req = yield self.cellulant_sms_calls.get()
-        self.assertEqual(req.path, '/')
+        req = yield self.fake_cellulant.get()
+        self.assertEqual(req.path, self.base_url)
         self.assertEqual(req.method, 'GET')
         self.assertEqual({
-                'username': ['other-user'],
-                'password': ['other-pass'],
-                'source': ['9292'],
-                'destination': ['2371234567'],
-                'message': ['hello world'],
-                }, req.args)
+            'username': ['other-user'],
+            'password': ['other-pass'],
+            'source': ['9292'],
+            'destination': ['2371234567'],
+            'message': ['hello world'],
+        }, req.args)
 
     @inlineCallbacks
     def test_outbound_creds_selection(self):
         yield self.tx_helper.make_dispatch_outbound(
             "hello world", to_addr="2371234567", from_addr='2371234567')
-        req = yield self.cellulant_sms_calls.get()
-        self.assertEqual(req.path, '/')
+        req = yield self.fake_cellulant.get()
+        self.assertEqual(req.path, self.base_url)
         self.assertEqual(req.method, 'GET')
         self.assertEqual({
-                'username': ['user'],
-                'password': ['pass'],
-                'source': ['2371234567'],
-                'destination': ['2371234567'],
-                'message': ['hello world'],
-                }, req.args)
+            'username': ['user'],
+            'password': ['pass'],
+            'source': ['2371234567'],
+            'destination': ['2371234567'],
+            'message': ['hello world'],
+        }, req.args)
 
         yield self.tx_helper.make_dispatch_outbound(
             "hello world", to_addr="2371234567", from_addr='9292')
-        req = yield self.cellulant_sms_calls.get()
-        self.assertEqual(req.path, '/')
+        req = yield self.fake_cellulant.get()
+        self.assertEqual(req.path, self.base_url)
         self.assertEqual(req.method, 'GET')
         self.assertEqual({
-                'username': ['other-user'],
-                'password': ['other-pass'],
-                'source': ['9292'],
-                'destination': ['2371234567'],
-                'message': ['hello world'],
-                }, req.args)
+            'username': ['other-user'],
+            'password': ['other-pass'],
+            'source': ['9292'],
+            'destination': ['2371234567'],
+            'message': ['hello world'],
+        }, req.args)
 
     @inlineCallbacks
     def test_handle_non_ascii_input(self):
@@ -166,11 +174,8 @@ class TestAcksCellulantSmsTransport(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self.cellulant_sms_calls = DeferredQueue()
-        self.mock_cellulant_sms = MockHttpServer(self.handle_request)
-        self._mock_response = ''
-        yield self.mock_cellulant_sms.start()
-        self.add_cleanup(self.mock_cellulant_sms.stop)
+        self.fake_cellulant = FakeCellulant()
+        self.base_url = "http://cellulant.example.com/"
 
         self.config = {
             'web_path': "foo",
@@ -185,27 +190,24 @@ class TestAcksCellulantSmsTransport(VumiTestCase):
                     'password': 'other-pass',
                 }
             },
-            'outbound_url': self.mock_cellulant_sms.url,
+            'outbound_url': self.base_url,
             'validation_mode': 'permissive',
         }
         self.tx_helper = self.add_helper(
             TransportHelper(CellulantSmsTransport))
         self.transport = yield self.tx_helper.get_transport(self.config)
+        self.transport.agent_factory = self.fake_cellulant.get_agent
         self.transport_url = self.transport.get_transport_url()
 
     def mock_response(self, response):
-        self._mock_response = response
-
-    def handle_request(self, request):
-        self.cellulant_sms_calls.put(request)
-        return self._mock_response
+        self.fake_cellulant.response = response
 
     @inlineCallbacks
     def mock_event(self, msg, nr_events):
         self.mock_response(msg)
         yield self.tx_helper.make_dispatch_outbound(
             "foo", to_addr='2371234567', message_id='id_%s' % (msg,))
-        yield self.cellulant_sms_calls.get()
+        yield self.fake_cellulant.get()
         events = yield self.tx_helper.wait_for_dispatched_events(nr_events)
         returnValue(events)
 
@@ -215,7 +217,7 @@ class TestAcksCellulantSmsTransport(VumiTestCase):
         self.assertEqual(nack['event_type'], 'nack')
         self.assertEqual(nack['user_message_id'], 'id_E0')
         self.assertEqual(nack['nack_reason'],
-            self.transport.KNOWN_ERROR_RESPONSE_CODES['E0'])
+                         self.transport.KNOWN_ERROR_RESPONSE_CODES['E0'])
 
     @inlineCallbacks
     def test_nack_login_error_E1(self):
@@ -223,7 +225,7 @@ class TestAcksCellulantSmsTransport(VumiTestCase):
         self.assertEqual(nack['event_type'], 'nack')
         self.assertEqual(nack['user_message_id'], 'id_E1')
         self.assertEqual(nack['nack_reason'],
-            self.transport.KNOWN_ERROR_RESPONSE_CODES['E1'])
+                         self.transport.KNOWN_ERROR_RESPONSE_CODES['E1'])
 
     @inlineCallbacks
     def test_nack_credits_error_E2(self):
@@ -231,7 +233,7 @@ class TestAcksCellulantSmsTransport(VumiTestCase):
         self.assertEqual(nack['event_type'], 'nack')
         self.assertEqual(nack['user_message_id'], 'id_E2')
         self.assertEqual(nack['nack_reason'],
-            self.transport.KNOWN_ERROR_RESPONSE_CODES['E2'])
+                         self.transport.KNOWN_ERROR_RESPONSE_CODES['E2'])
 
     @inlineCallbacks
     def test_nack_delivery_failed_1005(self):
@@ -239,7 +241,7 @@ class TestAcksCellulantSmsTransport(VumiTestCase):
         self.assertEqual(nack['event_type'], 'nack')
         self.assertEqual(nack['user_message_id'], 'id_1005')
         self.assertEqual(nack['nack_reason'],
-            self.transport.KNOWN_ERROR_RESPONSE_CODES['1005'])
+                         self.transport.KNOWN_ERROR_RESPONSE_CODES['1005'])
 
     @inlineCallbacks
     def test_unknown_response(self):
@@ -247,7 +249,7 @@ class TestAcksCellulantSmsTransport(VumiTestCase):
         self.assertEqual(nack['event_type'], 'nack')
         self.assertEqual(nack['user_message_id'], 'id_something_unexpected')
         self.assertEqual(nack['nack_reason'],
-            'Unknown response code: something_unexpected')
+                         'Unknown response code: something_unexpected')
 
     @inlineCallbacks
     def test_ack_success(self):
@@ -260,10 +262,8 @@ class TestPermissiveCellulantSmsTransport(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        self.cellulant_sms_calls = DeferredQueue()
-        self.mock_cellulant_sms = MockHttpServer(self.handle_request)
-        yield self.mock_cellulant_sms.start()
-        self.add_cleanup(self.mock_cellulant_sms.stop)
+        self.fake_cellulant = FakeCellulant()
+        self.base_url = "http://cellulant.example.com/"
 
         self.config = {
             'web_path': "foo",
@@ -278,17 +278,14 @@ class TestPermissiveCellulantSmsTransport(VumiTestCase):
                     'password': 'other-pass',
                 }
             },
-            'outbound_url': self.mock_cellulant_sms.url,
+            'outbound_url': self.base_url,
             'validation_mode': 'permissive',
         }
         self.tx_helper = self.add_helper(
             TransportHelper(CellulantSmsTransport))
         self.transport = yield self.tx_helper.get_transport(self.config)
+        self.transport.agent_factory = self.fake_cellulant.get_agent
         self.transport_url = self.transport.get_transport_url()
-
-    def handle_request(self, request):
-        self.cellulant_sms_calls.put(request)
-        return ''
 
     def mkurl(self, content, from_addr="2371234567", **kw):
         params = {

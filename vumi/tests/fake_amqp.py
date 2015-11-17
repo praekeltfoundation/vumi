@@ -112,15 +112,16 @@ class FakeAMQPBroker(object):
             self.channels.remove(channel)
         return Message(mkMethod("close-ok", 41))
 
-    def exchange_declare(self, exchange, exchange_type):
+    def exchange_declare(self, exchange, exchange_type, durable):
         exchange_class = None
         if exchange_type == 'direct':
             exchange_class = FakeAMQPExchangeDirect
         elif exchange_type == 'topic':
             exchange_class = FakeAMQPExchangeTopic
         assert exchange_class is not None
-        self.exchanges.setdefault(exchange, exchange_class(exchange))
+        self.exchanges.setdefault(exchange, exchange_class(exchange, durable))
         assert exchange_type == self.exchanges[exchange].exchange_type
+        assert durable == self.exchanges[exchange].durable
         return Message(mkMethod("declare-ok", 11))
 
     def queue_declare(self, queue):
@@ -224,14 +225,18 @@ class FakeAMQPBroker(object):
         leave any messages undelivered, because basic_publish() kicks
         off a delivery run.
 
+        Each call returns a new deferred to avoid callback chain ordering
+        issues when several things want to wait for delivery.
+
         NOTE: This method should be called during test teardown to make
         sure there are no pending delivery cleanups that will cause a
         dirty reactor race.
         """
-        if self._delivering is not None:
-            return self._delivering['deferred']
         d = Deferred()
-        d.callback(None)
+        if self._delivering is None:
+            d.callback(None)
+        else:
+            self._delivering['deferred'].chainDeferred(d)
         return d
 
     def wait_messages(self, exchange, rkey, n):
@@ -313,7 +318,7 @@ class FakeAMQPChannel(object):
         self.qos_prefetch_count = prefetch_count
 
     def exchange_declare(self, exchange, type, durable=None):
-        return self.broker.exchange_declare(exchange, type)
+        return self.broker.exchange_declare(exchange, type, durable)
 
     def queue_declare(self, queue, durable=None):
         return self.broker.queue_declare(queue)
@@ -383,9 +388,10 @@ class FakeAMQPChannel(object):
 
 
 class FakeAMQPExchange(object):
-    def __init__(self, name):
+    def __init__(self, name, durable):
         self.name = name
         self.binds = {}
+        self.durable = durable
 
     def queue_bind(self, routing_key, queue):
         binds = self.binds.setdefault(routing_key, set())
@@ -488,8 +494,63 @@ class FakeAMQClient(WorkerAMQClient):
             try:
                 ch = self.channels[id]
             except KeyError:
-                ch = FakeAMQPChannel(id, self)
+                ch = FakeAMQPChannelWrapper(id, self)
                 self.channels[id] = ch
         finally:
             self.channelLock.release()
         returnValue(ch)
+
+
+class FakeAMQPChannelWrapper(object):
+    """
+    Wrapper around a FakeAMQPChannel to make it look more like a real channel
+    object.
+    """
+
+    def __init__(self, id, client):
+        self._fake_channel = FakeAMQPChannel(id, client)
+        self.client = client
+
+    def __repr__(self):
+        return '<FakeAMQPChannelWrapper: id=%s>' % (
+            self._fake_channel.channel_id,)
+
+    def channel_open(self):
+        return self._fake_channel.channel_open()
+
+    def channel_close(self):
+        return self._fake_channel.channel_close()
+
+    def channel_flow(self, active):
+        return self._fake_channel.channel_flow(active)
+
+    def close(self, _reason):
+        pass
+
+    def basic_qos(self, prefetch_size, prefetch_count, is_global):
+        return self._fake_channel.basic_qos(
+            prefetch_size, prefetch_count, is_global)
+
+    def exchange_declare(self, exchange, type, durable=None):
+        return self._fake_channel.exchange_declare(exchange, type, durable)
+
+    def queue_declare(self, queue, durable=None):
+        return self._fake_channel.queue_declare(queue, durable)
+
+    def queue_bind(self, queue, exchange, routing_key):
+        return self._fake_channel.queue_bind(queue, exchange, routing_key)
+
+    def basic_consume(self, queue, tag=None):
+        return self._fake_channel.basic_consume(queue, tag)
+
+    def basic_cancel(self, tag):
+        return self._fake_channel.basic_cancel(tag)
+
+    def basic_publish(self, exchange, routing_key, content):
+        return self._fake_channel.basic_publish(exchange, routing_key, content)
+
+    def basic_ack(self, delivery_tag, multiple):
+        return self._fake_channel.basic_ack(delivery_tag, multiple)
+
+    def basic_get(self, queue):
+        return self._fake_channel.basic_get(queue)

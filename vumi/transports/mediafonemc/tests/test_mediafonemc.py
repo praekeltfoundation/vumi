@@ -7,7 +7,7 @@ from twisted.internet.defer import inlineCallbacks, DeferredQueue
 from twisted.web import http
 
 from vumi.utils import http_request, http_request_full
-from vumi.tests.utils import MockHttpServer
+from vumi.tests.fake_connection import FakeHttpServer
 from vumi.tests.helpers import VumiTestCase
 from vumi.transports.mediafonemc import MediafoneTransport
 from vumi.transports.tests.helpers import TransportHelper
@@ -18,19 +18,19 @@ class TestMediafoneTransport(VumiTestCase):
     @inlineCallbacks
     def setUp(self):
         self.mediafone_calls = DeferredQueue()
-        self.mock_mediafone = MockHttpServer(self.handle_request)
-        yield self.mock_mediafone.start()
-        self.add_cleanup(self.mock_mediafone.stop)
+        self.fake_http = FakeHttpServer(self.handle_request)
+        self.base_url = "http://mediafone.example.com/"
 
         self.config = {
             'web_path': "foo",
             'web_port': 0,
             'username': 'user',
             'password': 'pass',
-            'outbound_url': self.mock_mediafone.url,
+            'outbound_url': self.base_url,
         }
         self.tx_helper = self.add_helper(TransportHelper(MediafoneTransport))
         self.transport = yield self.tx_helper.get_transport(self.config)
+        self.transport.agent_factory = self.fake_http.get_agent
         self.transport_url = self.transport.get_transport_url()
         self.mediafonemc_response = ''
         self.mediafonemc_response_code = http.OK
@@ -79,14 +79,14 @@ class TestMediafoneTransport(VumiTestCase):
         yield self.tx_helper.make_dispatch_outbound(
             "hello world", to_addr="2371234567")
         req = yield self.mediafone_calls.get()
-        self.assertEqual(req.path, '/')
+        self.assertEqual(req.path, self.base_url)
         self.assertEqual(req.method, 'GET')
         self.assertEqual({
-                'username': ['user'],
-                'phone': ['2371234567'],
-                'password': ['pass'],
-                'msg': ['hello world'],
-                }, req.args)
+            'username': ['user'],
+            'phone': ['2371234567'],
+            'password': ['pass'],
+            'msg': ['hello world'],
+        }, req.args)
 
     @inlineCallbacks
     def test_nack(self):
@@ -100,8 +100,7 @@ class TestMediafoneTransport(VumiTestCase):
         [nack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(nack['user_message_id'], msg['message_id'])
         self.assertEqual(nack['sent_message_id'], msg['message_id'])
-        self.assertEqual(nack['nack_reason'],
-            'Unexpected response code: 404')
+        self.assertEqual(nack['nack_reason'], 'Unexpected response code: 404')
 
     @inlineCallbacks
     def test_handle_non_ascii_input(self):

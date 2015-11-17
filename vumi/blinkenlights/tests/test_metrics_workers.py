@@ -2,7 +2,6 @@ from twisted.internet.defer import inlineCallbacks, Deferred, DeferredQueue
 from twisted.internet.protocol import DatagramProtocol
 from twisted.internet import reactor
 
-from vumi.tests.utils import get_stubbed_channel
 from vumi.blinkenlights import metrics_workers
 from vumi.blinkenlights.message20110818 import MetricMessage
 from vumi.tests.helpers import VumiTestCase, WorkerHelper
@@ -269,7 +268,8 @@ class TestGraphitePublisher(VumiTestCase):
     @inlineCallbacks
     def test_publish_metric(self):
         datapoint = ("vumi.test.v1", 1.0, 1234)
-        channel = yield get_stubbed_channel(self.worker_helper.broker)
+        client = WorkerHelper.get_fake_amqp_client(self.worker_helper.broker)
+        channel = yield client.get_channel()
         pub = metrics_workers.GraphitePublisher()
         pub.start(channel)
         pub.publish_metric(*datapoint)

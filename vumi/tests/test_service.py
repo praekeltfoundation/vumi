@@ -53,7 +53,8 @@ class TestService(VumiTestCase):
         # them to the log
         consumer = yield worker.consume(
             'test.routing.key', lambda msg: log.append(msg), prefetch_count=10)
-        self.assertEqual(10, consumer.channel._get_consumer_prefetch(
+        fake_channel = consumer.channel._fake_channel
+        self.assertEqual(10, fake_channel._get_consumer_prefetch(
             consumer._consumer_tag))
 
     @inlineCallbacks
@@ -93,11 +94,11 @@ class TestService(VumiTestCase):
     @inlineCallbacks
     def test_start_publisher(self):
         """The publisher should publish"""
-        worker = WorkerHelper.get_worker_raw(Worker, {})
+        worker = yield self.worker_helper.get_worker(Worker, {}, start=False)
         publisher = yield worker.publish_to('test.routing.key')
         self.assertEquals(publisher.routing_key, 'test.routing.key')
         publisher.publish_message(Message(key="value"))
-        [published_msg] = publisher.channel.broker.get_dispatched(
+        [published_msg] = self.worker_helper.broker.get_dispatched(
             'vumi', 'test.routing.key')
 
         self.assertEquals(published_msg.body, '{"key": "value"}')

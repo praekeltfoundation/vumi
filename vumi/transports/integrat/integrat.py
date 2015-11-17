@@ -56,8 +56,8 @@ class IntegratHttpResource(Resource):
             event_type = hxg_msg['EventType'].lower()
             if event_type in self.EVENTS_TO_SKIP:
                 return ''
-            session_event = self.EVENT_TYPE_MAP.get(event_type,
-                    TransportUserMessage.SESSION_RESUME)
+            session_event = self.EVENT_TYPE_MAP.get(
+                event_type, TransportUserMessage.SESSION_RESUME)
 
         if session_event != TransportUserMessage.SESSION_RESUME:
             text = None
@@ -89,6 +89,8 @@ class HealthResource(Resource):
 class IntegratTransport(Transport):
     """Integrat USSD transport over HTTP."""
 
+    agent_factory = None  # For swapping out the Agent we use in tests.
+
     def validate_config(self):
         """
         Transport-specific config validation happens in here.
@@ -105,14 +107,12 @@ class IntegratTransport(Transport):
         """
         All transport_specific setup should happen in here.
         """
-        self.web_resource = yield self.start_web_resources(
-            [
-                (IntegratHttpResource(self.transport_name,
-                    self.transport_type, self.publish_message), self.web_path),
-                (HealthResource(), 'health'),
-            ],
-            self.web_port,
-        )
+        integrat_resource = IntegratHttpResource(
+            self.transport_name, self.transport_type, self.publish_message)
+        self.web_resource = yield self.start_web_resources([
+            (integrat_resource, self.web_path),
+            (HealthResource(), 'health'),
+        ], self.web_port)
 
     @inlineCallbacks
     def teardown_transport(self):
@@ -136,13 +136,14 @@ class IntegratTransport(Transport):
             'UserID': self.integrat_username,
         }), headers={
             'Content-Type': ['text/xml; charset=utf-8']
-        })
+        }, agent_class=self.agent_factory)
         error = hxg.parse_response(response)
         if not error:
             yield self.publish_ack(user_message_id=message['message_id'],
-                    sent_message_id=message['message_id'])
+                                   sent_message_id=message['message_id'])
         else:
-            yield self.publish_nack(user_message_id=message['message_id'],
+            yield self.publish_nack(
+                user_message_id=message['message_id'],
                 sent_message_id=message['message_id'],
                 reason=', '.join([': '.join(ef.items()[0])
-                            for ef in error['error_fields']]))
+                                  for ef in error['error_fields']]))

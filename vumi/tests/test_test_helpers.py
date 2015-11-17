@@ -643,6 +643,11 @@ class ToyWorker(BaseWorker):
 
 
 class TestWorkerHelper(VumiTestCase):
+    def setup_broker(self, worker_helper):
+        broker = worker_helper.broker
+        broker.exchange_declare('vumi', 'direct', durable=True)
+        return broker
+
     def test_implements_IHelper(self):
         """
         WorkerHelper instances should provide the IHelper interface.
@@ -784,13 +789,13 @@ class TestWorkerHelper(VumiTestCase):
         self.assertFalse(worker.worker_started)
 
     def _add_to_dispatched(self, broker, rkey, msg, kick=False):
-        broker.exchange_declare('vumi', 'direct')
+        broker.exchange_declare('vumi', 'direct', durable=True)
         broker.publish_message('vumi', rkey, msg)
         if kick:
             return broker.kick_delivery()
 
     def _add_to_dispatched_metrics(self, broker, msg):
-        broker.exchange_declare('vumi.metrics', 'direct')
+        broker.exchange_declare('vumi.metrics', 'direct', durable=True)
         broker.publish_message('vumi.metrics', 'vumi.metrics', msg)
 
     def test_get_dispatched(self):
@@ -1004,6 +1009,25 @@ class TestWorkerHelper(VumiTestCase):
         self.assertEqual(dispatched, [msg])
 
     @inlineCallbacks
+    def test_wait_for_dispatched_events_no_amount(self):
+        """
+        WorkerHelper.wait_for_dispatched_events() with no amount specified
+        waits for any pending deliveries to finish and then returns all
+        dispatched events.
+        """
+        msg_helper = MessageHelper()
+        worker_helper = WorkerHelper()
+        d = worker_helper.wait_for_dispatched_events(connector_name='fooconn')
+        self.assertEqual(self.successResultOf(d), [])
+
+        msg = msg_helper.make_ack()
+        self._add_to_dispatched(worker_helper.broker, 'fooconn.event', msg)
+        d = worker_helper.wait_for_dispatched_events(connector_name='fooconn')
+        self.assertNoResult(d)
+        yield worker_helper.broker.wait_delivery()
+        self.assertEqual(self.successResultOf(d), [msg])
+
+    @inlineCallbacks
     def test_wait_for_dispatched_events_no_connector(self):
         """
         WorkerHelper.wait_for_dispatched_events() should get use the default
@@ -1028,11 +1052,31 @@ class TestWorkerHelper(VumiTestCase):
         msg_helper = MessageHelper()
         worker_helper = WorkerHelper()
         d = worker_helper.wait_for_dispatched_inbound(1, 'fooconn')
+        self.assertNoResult(d)
         msg = msg_helper.make_inbound('message')
         yield self._add_to_dispatched(
             worker_helper.broker, 'fooconn.inbound', msg, kick=True)
         dispatched = success_result_of(d)
         self.assertEqual(dispatched, [msg])
+
+    @inlineCallbacks
+    def test_wait_for_dispatched_inbound_no_amount(self):
+        """
+        WorkerHelper.wait_for_dispatched_inbound() with no amount specified
+        waits for any pending deliveries to finish and then returns all
+        dispatched inbound messages.
+        """
+        msg_helper = MessageHelper()
+        worker_helper = WorkerHelper()
+        d = worker_helper.wait_for_dispatched_inbound(connector_name='fooconn')
+        self.assertEqual(self.successResultOf(d), [])
+
+        msg = msg_helper.make_inbound('message')
+        self._add_to_dispatched(worker_helper.broker, 'fooconn.inbound', msg)
+        d = worker_helper.wait_for_dispatched_inbound(connector_name='fooconn')
+        self.assertNoResult(d)
+        yield worker_helper.kick_delivery()
+        self.assertEqual(self.successResultOf(d), [msg])
 
     @inlineCallbacks
     def test_wait_for_dispatched_inbound_no_connector(self):
@@ -1043,6 +1087,7 @@ class TestWorkerHelper(VumiTestCase):
         msg_helper = MessageHelper()
         worker_helper = WorkerHelper(connector_name='fooconn')
         d = worker_helper.wait_for_dispatched_inbound(1)
+        self.assertNoResult(d)
         msg = msg_helper.make_inbound('message')
         yield self._add_to_dispatched(
             worker_helper.broker, 'fooconn.inbound', msg, kick=True)
@@ -1058,11 +1103,33 @@ class TestWorkerHelper(VumiTestCase):
         msg_helper = MessageHelper()
         worker_helper = WorkerHelper()
         d = worker_helper.wait_for_dispatched_outbound(1, 'fooconn')
+        self.assertNoResult(d)
         msg = msg_helper.make_outbound('message')
         yield self._add_to_dispatched(
             worker_helper.broker, 'fooconn.outbound', msg, kick=True)
         dispatched = success_result_of(d)
         self.assertEqual(dispatched, [msg])
+
+    @inlineCallbacks
+    def test_wait_for_dispatched_outbound_no_amount(self):
+        """
+        WorkerHelper.wait_for_dispatched_outbound() with no amount specified
+        waits for any pending deliveries to finish and then returns all
+        dispatched outbound messages.
+        """
+        msg_helper = MessageHelper()
+        worker_helper = WorkerHelper()
+        d = worker_helper.wait_for_dispatched_outbound(
+            connector_name='fooconn')
+        self.assertEqual(self.successResultOf(d), [])
+
+        msg = msg_helper.make_outbound('message')
+        self._add_to_dispatched(worker_helper.broker, 'fooconn.outbound', msg)
+        d = worker_helper.wait_for_dispatched_outbound(
+            connector_name='fooconn')
+        self.assertNoResult(d)
+        yield worker_helper.kick_delivery()
+        self.assertEqual(self.successResultOf(d), [msg])
 
     @inlineCallbacks
     def test_wait_for_dispatched_outbound_no_connector(self):
@@ -1088,6 +1155,7 @@ class TestWorkerHelper(VumiTestCase):
         msg_helper = MessageHelper()
         worker_helper = WorkerHelper()
         d = worker_helper.wait_for_dispatched_statuses(1, 'fooconn')
+        self.assertNoResult(d)
 
         msg = msg_helper.make_status(
             status='down',
@@ -1099,6 +1167,31 @@ class TestWorkerHelper(VumiTestCase):
             worker_helper.broker, 'fooconn.status', msg, kick=True)
         dispatched = success_result_of(d)
         self.assertEqual(dispatched, [msg])
+
+    @inlineCallbacks
+    def test_wait_for_dispatched_statuses_no_amount(self):
+        """
+        WorkerHelper.wait_for_dispatched_statuses() with no amount specified
+        waits for any pending deliveries to finish and then returns all
+        dispatched statuses.
+        """
+        msg_helper = MessageHelper()
+        worker_helper = WorkerHelper()
+        d = worker_helper.wait_for_dispatched_statuses(
+            connector_name='fooconn')
+        self.assertEqual(self.successResultOf(d), [])
+
+        msg = msg_helper.make_status(
+            status='down',
+            component='foo',
+            type='bar',
+            message='baz')
+        self._add_to_dispatched(worker_helper.broker, 'fooconn.status', msg)
+        d = worker_helper.wait_for_dispatched_statuses(
+            connector_name='fooconn')
+        self.assertNoResult(d)
+        yield worker_helper.kick_delivery()
+        self.assertEqual(self.successResultOf(d), [msg])
 
     @inlineCallbacks
     def test_wait_for_dispatched_statuses_no_connector(self):
@@ -1272,8 +1365,7 @@ class TestWorkerHelper(VumiTestCase):
         """
         msg_helper = MessageHelper()
         worker_helper = WorkerHelper()
-        broker = worker_helper.broker
-        broker.exchange_declare('vumi', 'direct')
+        broker = self.setup_broker(worker_helper)
         self.assertEqual(broker.get_messages('vumi', 'fooconn.foo'), [])
         msg = msg_helper.make_inbound('message')
         yield worker_helper.dispatch_raw('fooconn.foo', msg)
@@ -1288,7 +1380,7 @@ class TestWorkerHelper(VumiTestCase):
         msg_helper = MessageHelper()
         worker_helper = WorkerHelper()
         broker = worker_helper.broker
-        broker.exchange_declare('blah', 'direct')
+        broker.exchange_declare('blah', 'direct', durable=True)
         self.assertEqual(broker.get_messages('blah', 'fooconn.foo'), [])
         msg = msg_helper.make_inbound('message')
         yield worker_helper.dispatch_raw('fooconn.foo', msg, exchange='blah')
@@ -1301,8 +1393,7 @@ class TestWorkerHelper(VumiTestCase):
         """
         msg_helper = MessageHelper()
         worker_helper = WorkerHelper()
-        broker = worker_helper.broker
-        broker.exchange_declare('vumi', 'direct')
+        broker = self.setup_broker(worker_helper)
         self.assertEqual(broker.get_messages('vumi', 'fooconn.event'), [])
         msg = msg_helper.make_ack()
         yield worker_helper.dispatch_event(msg, 'fooconn')
@@ -1316,8 +1407,7 @@ class TestWorkerHelper(VumiTestCase):
         """
         msg_helper = MessageHelper()
         worker_helper = WorkerHelper(connector_name='fooconn')
-        broker = worker_helper.broker
-        broker.exchange_declare('vumi', 'direct')
+        broker = self.setup_broker(worker_helper)
         self.assertEqual(broker.get_messages('vumi', 'fooconn.event'), [])
         msg = msg_helper.make_ack()
         yield worker_helper.dispatch_event(msg)
@@ -1330,8 +1420,7 @@ class TestWorkerHelper(VumiTestCase):
         """
         msg_helper = MessageHelper()
         worker_helper = WorkerHelper()
-        broker = worker_helper.broker
-        broker.exchange_declare('vumi', 'direct')
+        broker = self.setup_broker(worker_helper)
         self.assertEqual(broker.get_messages('vumi', 'fooconn.inbound'), [])
         msg = msg_helper.make_inbound('message')
         yield worker_helper.dispatch_inbound(msg, 'fooconn')
@@ -1345,8 +1434,7 @@ class TestWorkerHelper(VumiTestCase):
         """
         msg_helper = MessageHelper()
         worker_helper = WorkerHelper(connector_name='fooconn')
-        broker = worker_helper.broker
-        broker.exchange_declare('vumi', 'direct')
+        broker = self.setup_broker(worker_helper)
         self.assertEqual(broker.get_messages('vumi', 'fooconn.inbound'), [])
         msg = msg_helper.make_inbound('message')
         yield worker_helper.dispatch_inbound(msg)
@@ -1359,8 +1447,7 @@ class TestWorkerHelper(VumiTestCase):
         """
         msg_helper = MessageHelper()
         worker_helper = WorkerHelper()
-        broker = worker_helper.broker
-        broker.exchange_declare('vumi', 'direct')
+        broker = self.setup_broker(worker_helper)
         self.assertEqual(broker.get_messages('vumi', 'fooconn.outbound'), [])
         msg = msg_helper.make_outbound('message')
         yield worker_helper.dispatch_outbound(msg, 'fooconn')
@@ -1375,8 +1462,7 @@ class TestWorkerHelper(VumiTestCase):
         """
         msg_helper = MessageHelper()
         worker_helper = WorkerHelper(connector_name='fooconn')
-        broker = worker_helper.broker
-        broker.exchange_declare('vumi', 'direct')
+        broker = self.setup_broker(worker_helper)
         self.assertEqual(broker.get_messages('vumi', 'fooconn.outbound'), [])
         msg = msg_helper.make_outbound('message')
         yield worker_helper.dispatch_outbound(msg)
@@ -1390,8 +1476,7 @@ class TestWorkerHelper(VumiTestCase):
         """
         msg_helper = MessageHelper()
         worker_helper = WorkerHelper()
-        broker = worker_helper.broker
-        broker.exchange_declare('vumi', 'direct')
+        broker = self.setup_broker(worker_helper)
 
         self.assertEqual(broker.get_messages('vumi', 'fooconn.status'), [])
 
@@ -1414,8 +1499,7 @@ class TestWorkerHelper(VumiTestCase):
         """
         msg_helper = MessageHelper()
         worker_helper = WorkerHelper(status_connector_name='fooconn')
-        broker = worker_helper.broker
-        broker.exchange_declare('vumi', 'direct')
+        broker = self.setup_broker(worker_helper)
 
         self.assertEqual(broker.get_messages('vumi', 'fooconn.status'), [])
 
@@ -1451,6 +1535,28 @@ class TestWorkerHelper(VumiTestCase):
         dispatched = worker_helper.get_dispatched_metrics()
         self.assertEqual(dispatched, [[], ['fake metric 1', 'fake metric 2']])
 
+    @inlineCallbacks
+    def test_wait_for_dispatched_metrics(self):
+        """
+        WorkerHelper.wait_for_dispatched_metrics() waits for pending
+        deliveries to finish and then gets dispatched metrics.
+        """
+        worker_helper = WorkerHelper()
+        d = worker_helper.wait_for_dispatched_metrics()
+        self.assertEqual(self.successResultOf(d), [])
+
+        self._add_to_dispatched_metrics(worker_helper.broker, MetricMessage())
+        msg = MetricMessage()
+        msg.append('fake metric 1')
+        msg.append('fake metric 2')
+        self._add_to_dispatched_metrics(worker_helper.broker, msg)
+        worker_helper.kick_delivery()
+        d = worker_helper.wait_for_dispatched_metrics()
+        self.assertNoResult(d)
+        yield worker_helper.broker.wait_delivery()
+        self.assertEqual(
+            self.successResultOf(d), [[], ['fake metric 1', 'fake metric 2']])
+
     def test_clear_dispatched_metrics(self):
         """
         WorkerHelper.clear_dispatched_metrics() should clear metrics messages
@@ -1469,6 +1575,11 @@ class TestMessageDispatchHelper(VumiTestCase):
     def assert_message_fields(self, msg, field_dict):
         self.assertEqual(field_dict, dict(
             (k, v) for k, v in msg.payload.iteritems() if k in field_dict))
+
+    def setup_broker(self, md_helper):
+        broker = md_helper.worker_helper.broker
+        broker.exchange_declare('vumi', 'direct', durable=True)
+        return broker
 
     def test_implements_IHelper(self):
         """
@@ -1497,8 +1608,7 @@ class TestMessageDispatchHelper(VumiTestCase):
         """
         md_helper = MessageDispatchHelper(
             MessageHelper(), WorkerHelper('fooconn'))
-        broker = md_helper.worker_helper.broker
-        broker.exchange_declare('vumi', 'direct')
+        broker = self.setup_broker(md_helper)
         self.assertEqual(broker.get_messages('vumi', 'fooconn.inbound'), [])
         msg = yield md_helper.make_dispatch_inbound('inbound message')
         self.assertEqual(broker.get_messages('vumi', 'fooconn.inbound'), [msg])
@@ -1520,8 +1630,7 @@ class TestMessageDispatchHelper(VumiTestCase):
         """
         md_helper = MessageDispatchHelper(
             MessageHelper(), WorkerHelper('fooconn'))
-        broker = md_helper.worker_helper.broker
-        broker.exchange_declare('vumi', 'direct')
+        broker = self.setup_broker(md_helper)
         self.assertEqual(broker.get_messages('vumi', 'fooconn.inbound'), [])
         msg = yield md_helper.make_dispatch_inbound(
             'inbound message', from_addr='ib_from', to_addr='ib_to')
@@ -1544,8 +1653,7 @@ class TestMessageDispatchHelper(VumiTestCase):
         """
         md_helper = MessageDispatchHelper(
             MessageHelper(), WorkerHelper('fooconn'))
-        broker = md_helper.worker_helper.broker
-        broker.exchange_declare('vumi', 'direct')
+        broker = self.setup_broker(md_helper)
         self.assertEqual(broker.get_messages('vumi', 'fooconn.outbound'), [])
         msg = yield md_helper.make_dispatch_outbound('outbound message')
         self.assertEqual(
@@ -1568,8 +1676,7 @@ class TestMessageDispatchHelper(VumiTestCase):
         """
         md_helper = MessageDispatchHelper(
             MessageHelper(), WorkerHelper('fooconn'))
-        broker = md_helper.worker_helper.broker
-        broker.exchange_declare('vumi', 'direct')
+        broker = self.setup_broker(md_helper)
         self.assertEqual(broker.get_messages('vumi', 'fooconn.outbound'), [])
         msg = yield md_helper.make_dispatch_outbound(
             'outbound message', from_addr='ob_from', to_addr='ob_to')
@@ -1592,8 +1699,7 @@ class TestMessageDispatchHelper(VumiTestCase):
         """
         md_helper = MessageDispatchHelper(
             MessageHelper(), WorkerHelper('fooconn'))
-        broker = md_helper.worker_helper.broker
-        broker.exchange_declare('vumi', 'direct')
+        broker = self.setup_broker(md_helper)
         self.assertEqual(broker.get_messages('vumi', 'fooconn.event'), [])
         event = yield md_helper.make_dispatch_ack()
         self.assertEqual(
@@ -1611,8 +1717,7 @@ class TestMessageDispatchHelper(VumiTestCase):
         """
         md_helper = MessageDispatchHelper(
             MessageHelper(), WorkerHelper('fooconn'))
-        broker = md_helper.worker_helper.broker
-        broker.exchange_declare('vumi', 'direct')
+        broker = self.setup_broker(md_helper)
         self.assertEqual(broker.get_messages('vumi', 'fooconn.event'), [])
         msg = md_helper.msg_helper.make_outbound('test message')
         event = yield md_helper.make_dispatch_ack(
@@ -1632,8 +1737,7 @@ class TestMessageDispatchHelper(VumiTestCase):
         """
         md_helper = MessageDispatchHelper(
             MessageHelper(), WorkerHelper('fooconn'))
-        broker = md_helper.worker_helper.broker
-        broker.exchange_declare('vumi', 'direct')
+        broker = self.setup_broker(md_helper)
         self.assertEqual(broker.get_messages('vumi', 'fooconn.event'), [])
         event = yield md_helper.make_dispatch_nack()
         self.assertEqual(
@@ -1651,8 +1755,7 @@ class TestMessageDispatchHelper(VumiTestCase):
         """
         md_helper = MessageDispatchHelper(
             MessageHelper(), WorkerHelper('fooconn'))
-        broker = md_helper.worker_helper.broker
-        broker.exchange_declare('vumi', 'direct')
+        broker = self.setup_broker(md_helper)
         self.assertEqual(broker.get_messages('vumi', 'fooconn.event'), [])
         msg = md_helper.msg_helper.make_outbound('test message')
         event = yield md_helper.make_dispatch_nack(
@@ -1673,8 +1776,7 @@ class TestMessageDispatchHelper(VumiTestCase):
         """
         md_helper = MessageDispatchHelper(
             MessageHelper(), WorkerHelper('fooconn'))
-        broker = md_helper.worker_helper.broker
-        broker.exchange_declare('vumi', 'direct')
+        broker = self.setup_broker(md_helper)
         self.assertEqual(broker.get_messages('vumi', 'fooconn.event'), [])
         event = yield md_helper.make_dispatch_delivery_report()
         self.assertEqual(
@@ -1692,8 +1794,7 @@ class TestMessageDispatchHelper(VumiTestCase):
         """
         md_helper = MessageDispatchHelper(
             MessageHelper(), WorkerHelper('fooconn'))
-        broker = md_helper.worker_helper.broker
-        broker.exchange_declare('vumi', 'direct')
+        broker = self.setup_broker(md_helper)
         self.assertEqual(broker.get_messages('vumi', 'fooconn.event'), [])
         msg = md_helper.msg_helper.make_outbound('test message')
         event = yield md_helper.make_dispatch_delivery_report(
@@ -1713,8 +1814,7 @@ class TestMessageDispatchHelper(VumiTestCase):
         """
         md_helper = MessageDispatchHelper(
             MessageHelper(), WorkerHelper('fooconn'))
-        broker = md_helper.worker_helper.broker
-        broker.exchange_declare('vumi', 'direct')
+        broker = self.setup_broker(md_helper)
         self.assertEqual(broker.get_messages('vumi', 'fooconn.outbound'), [])
         msg = md_helper.msg_helper.make_inbound('inbound')
         reply = yield md_helper.make_dispatch_reply(msg, 'reply content')
@@ -1734,8 +1834,7 @@ class TestMessageDispatchHelper(VumiTestCase):
         """
         md_helper = MessageDispatchHelper(
             MessageHelper(), WorkerHelper('fooconn'))
-        broker = md_helper.worker_helper.broker
-        broker.exchange_declare('vumi', 'direct')
+        broker = self.setup_broker(md_helper)
         self.assertEqual(broker.get_messages('vumi', 'fooconn.status'), [])
 
         msg = yield md_helper.make_dispatch_status(

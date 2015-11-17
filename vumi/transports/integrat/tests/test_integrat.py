@@ -1,15 +1,13 @@
 # -*- encoding: utf-8 -*-
 
-from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, DeferredQueue
-from twisted.web.server import Site
 
 from vumi.utils import http_request
-from vumi.tests.utils import MockHttpServer
 from vumi.message import TransportUserMessage
-from vumi.transports.integrat.integrat import (IntegratHttpResource,
-                                               IntegratTransport)
+from vumi.transports.integrat.integrat import (
+    IntegratHttpResource, IntegratTransport)
 from vumi.transports.tests.helpers import TransportHelper
+from vumi.tests.fake_connection import FakeHttpServer
 from vumi.tests.helpers import VumiTestCase
 
 
@@ -44,23 +42,17 @@ class TestIntegratHttpResource(VumiTestCase):
             },
         }
 
-    @inlineCallbacks
     def setUp(self):
         self.msgs = []
-        site_factory = Site(IntegratHttpResource("testgrat", "ussd",
-            self._publish))
-        self.server = yield reactor.listenTCP(
-            0, site_factory, interface='127.0.0.1')
-        self.add_cleanup(self.server.loseConnection)
-        addr = self.server.getHost()
-        self._server_url = "http://%s:%s/" % (addr.host, addr.port)
+        resource = IntegratHttpResource("testgrat", "ussd", self._publish)
+        self.fake_http = FakeHttpServer(lambda req: resource.render(req))
 
     def _publish(self, **kws):
         self.msgs.append(kws)
 
     def send_request(self, xml):
-        d = http_request(self._server_url, xml, method='GET')
-        return d
+        return http_request(
+            "/", xml, method='GET', agent_class=self.fake_http.get_agent)
 
     @inlineCallbacks
     def check_response(self, xml, responses):
@@ -77,7 +69,7 @@ class TestIntegratHttpResource(VumiTestCase):
     def make_ussd(self, ussd_type, sid=None, network_sid="netsid12345",
                   msisdn=None, connstr=None, text=""):
         sid = (self.DEFAULT_MSG['transport_metadata']['session_id']
-              if sid is None else sid)
+               if sid is None else sid)
         msisdn = self.DEFAULT_MSG['from_addr'] if msisdn is None else msisdn
         connstr = self.DEFAULT_MSG['to_addr'] if connstr is None else connstr
         return XML_TEMPLATE % {
@@ -135,18 +127,18 @@ class TestIntegratTransport(VumiTestCase):
     @inlineCallbacks
     def setUp(self):
         self.integrat_calls = DeferredQueue()
-        self.mock_integrat = MockHttpServer(self.handle_request)
-        self.add_cleanup(self.mock_integrat.stop)
-        yield self.mock_integrat.start()
+        self.fake_http = FakeHttpServer(self.handle_request)
+        self.base_url = "http://integrat.example.com/"
         config = {
             'web_path': "foo",
             'web_port': "0",
-            'url': self.mock_integrat.url,
+            'url': self.base_url,
             'username': 'testuser',
             'password': 'testpass',
             }
         self.tx_helper = self.add_helper(TransportHelper(IntegratTransport))
         self.transport = yield self.tx_helper.get_transport(config)
+        self.transport.agent_factory = self.fake_http.get_agent
         addr = self.transport.web_resource.getHost()
         self.transport_url = "http://%s:%s/" % (addr.host, addr.port)
         self.higate_response = '<Response status_code="0"/>'
@@ -169,14 +161,14 @@ class TestIntegratTransport(VumiTestCase):
             'session_id': "sess123",
         })
         req = yield self.integrat_calls.get()
-        self.assertEqual(req.path, '/')
+        self.assertEqual(req.path, self.base_url)
         self.assertEqual(req.method, 'POST')
         self.assertEqual(req.getHeader('content-type'),
                          'text/xml; charset=utf-8')
         self.assertEqual(req.content_body,
                          '<Message><Version Version="1.0" />'
                          '<Request Flags="0" SessionID="sess123"'
-                           ' Type="USSReply">'
+                         ' Type="USSReply">'
                          '<UserID Orientation="TR">testuser</UserID>'
                          '<Password>testpass</Password>'
                          '<USSText Type="TEXT">hi</USSText>'
@@ -188,14 +180,14 @@ class TestIntegratTransport(VumiTestCase):
             'session_id': "sess123",
         })
         req = yield self.integrat_calls.get()
-        self.assertEqual(req.path, '/')
+        self.assertEqual(req.path, self.base_url)
         self.assertEqual(req.method, 'POST')
         self.assertEqual(req.getHeader('content-type'),
                          'text/xml; charset=utf-8')
         self.assertEqual(req.content_body,
                          '<Message><Version Version="1.0" />'
                          '<Request Flags="0" SessionID="sess123"'
-                           ' Type="USSReply">'
+                         ' Type="USSReply">'
                          '<UserID Orientation="TR">testuser</UserID>'
                          '<Password>testpass</Password>'
                          '<USSText Type="TEXT" />'
@@ -254,4 +246,4 @@ class TestIntegratTransport(VumiTestCase):
         self.assertEqual(nack['user_message_id'], msg['message_id'])
         self.assertEqual(nack['sent_message_id'], msg['message_id'])
         self.assertEqual(nack['nack_reason'],
-            'error_code: -1, reason: Expecting POST, not GET')
+                         'error_code: -1, reason: Expecting POST, not GET')

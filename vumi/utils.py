@@ -10,7 +10,7 @@ from functools import wraps
 
 from zope.interface import implements
 from twisted.internet import defer
-from twisted.internet import reactor, protocol
+from twisted.internet import protocol
 from twisted.internet.defer import succeed
 from twisted.python.failure import Failure
 from twisted.web.client import Agent, ResponseDone, WebClientContextFactory
@@ -75,15 +75,11 @@ class SimplishReceiver(protocol.Protocol):
             response.deliverBody(self)
 
     def cancel_on_timeout(self, d):
-        self.cancel_receiving(
-            HttpTimeoutError("Timeout while receiving data")
-        )
+        self.cancel_receiving(HttpTimeoutError("Timeout while receiving data"))
 
     def cancel_on_data_limit(self):
-        self.cancel_receiving(
-            HttpDataLimitError("More than %d bytes received"
-                               % (self.data_limit,))
-        )
+        self.cancel_receiving(HttpDataLimitError(
+            "More than %d bytes received" % (self.data_limit,)))
 
     def cancel_receiving(self, err):
         self.transport.stopProducing()
@@ -107,8 +103,9 @@ class SimplishReceiver(protocol.Protocol):
         if reason.check(ResponseDone):
             self.deferred.callback(self.response)
         elif reason.check(PotentialDataLoss):
-            # This is only (and always!) raised if we have an HTTP 1.0 request
-            # with no Content-Length.
+            # This is only (and always!) raised if we get a response with no
+            # Content-Length header and no other way of determining when the
+            # response body is finished (such as chunked transfer encoding).
             # See http://twistedmatrix.com/trac/ticket/4840 for sadness.
             #
             # We ignore this and treat the call as success. If we care about
@@ -121,7 +118,12 @@ class SimplishReceiver(protocol.Protocol):
 
 def http_request_full(url, data=None, headers={}, method='POST',
                       timeout=None, data_limit=None, context_factory=None,
-                      agent_class=Agent):
+                      agent_class=None, reactor=None):
+    if reactor is None:
+        # The import replaces the local variable.
+        from twisted.internet import reactor
+    if agent_class is None:
+        agent_class = Agent
     context_factory = context_factory or WebClientContextFactory()
     agent = agent_class(reactor, contextFactory=context_factory)
     d = agent.request(method,
@@ -138,7 +140,7 @@ def http_request_full(url, data=None, headers={}, method='POST',
         cancelling_on_timeout = [False]
 
         def raise_timeout(reason):
-            if not cancelling_on_timeout[0]:
+            if not cancelling_on_timeout[0] or reason.check(HttpTimeoutError):
                 return reason
             return Failure(HttpTimeoutError("Timeout while connecting"))
 
@@ -173,8 +175,9 @@ def mkheaders(headers):
     return Headers(raw_headers)
 
 
-def http_request(url, data, headers={}, method='POST'):
-    d = http_request_full(url, data, headers=headers, method=method)
+def http_request(url, data, headers={}, method='POST', agent_class=None):
+    d = http_request_full(
+        url, data, headers=headers, method=method, agent_class=agent_class)
     return d.addCallback(lambda r: r.delivered_body)
 
 
@@ -444,8 +447,60 @@ def safe_routing_key(routing_key):
 
     """
     return reduce(lambda r_key, kv: r_key.replace(*kv),
-                    [('*', 's'), ('#', 'h')], routing_key)
+                  [('*', 's'), ('#', 'h')], routing_key)
 
 
 def generate_worker_id(system_id, worker_id):
     return "%s:%s" % (system_id, worker_id,)
+
+
+class StatusEdgeDetector(object):
+    '''Assists with finding if a TransportStatus is a change in the status,
+    compared to previous statuses, or just a repeat. Will be useful to only
+    publish statuses on state change.'''
+
+    def __init__(self):
+        self.state = dict()
+        self.types = dict()
+
+    def check_status(self, **status):
+        '''
+        Checks to see if the current status is a repeat. If it is, None is
+        returned. If it isn't, the status is returned.
+
+        :param status: The status to check.
+        :type status: :class:`TransportStatus`
+        '''
+        self._check_state(status['status'], status['component'])
+        if self._check_type(status['type'], status['component']):
+            return status
+
+    def _get_state(self, component):
+        return self.state.get(component, None)
+
+    def _set_state(self, component, state):
+        self.state[component] = state
+
+    def _get_types(self, component):
+        return self.types.get(component, set())
+
+    def _add_type(self, component, type_):
+        if component not in self.types:
+            self.types[component] = set()
+        self.types[component].add(type_)
+
+    def _remove_types(self, component):
+        self.types.pop(component, None)
+
+    def _check_state(self, status, component):
+        state = self._get_state(component)
+        if state != status:
+            self._remove_types(component)
+            self._set_state(component, status)
+
+    def _check_type(self, type_, component):
+        types = self._get_types(component)
+        if type_ not in types:
+            self._add_type(component, type_)
+            return True
+        return False

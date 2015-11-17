@@ -31,6 +31,7 @@ class MediafoneTransport(HttpRpcTransport):
     """
 
     transport_type = 'sms'
+    agent_factory = None  # For swapping out the Agent we use in tests.
 
     ENCODING = 'utf-8'
     EXPECTED_FIELDS = set(['to', 'from', 'sms'])
@@ -52,13 +53,16 @@ class MediafoneTransport(HttpRpcTransport):
         log.msg("Sending outbound message: %s" % (message,))
         url = '%s?%s' % (self._outbound_url, urlencode(params))
         log.msg("Making HTTP request: %s" % (url,))
-        response = yield http_request_full(url, '', method='GET')
+        response = yield http_request_full(
+            url, '', method='GET', agent_class=self.agent_factory)
         log.msg("Response: (%s) %r" % (response.code, response.delivered_body))
         if response.code == http.OK:
-            yield self.publish_ack(user_message_id=message['message_id'],
+            yield self.publish_ack(
+                user_message_id=message['message_id'],
                 sent_message_id=message['message_id'])
         else:
-            yield self.publish_nack(user_message_id=message['message_id'],
+            yield self.publish_nack(
+                user_message_id=message['message_id'],
                 sent_message_id=message['message_id'],
                 reason='Unexpected response code: %s' % (response.code,))
 

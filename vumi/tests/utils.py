@@ -65,12 +65,6 @@ class StubbedWorkerCreator(WorkerCreator):
         reactor.callLater(0, worker._amqp_connected, amq_client)
 
 
-def get_stubbed_channel(broker=None, id=0):
-    spec = get_spec(vumi_resource_path("amqp-spec-0-8.xml"))
-    amq_client = FakeAMQClient(spec, {}, broker)
-    return amq_client.channel(id)
-
-
 def FakeRedis():
     warnings.warn("Use of FakeRedis is deprecated. "
                   "Use persist.tests.fake_redis instead.",
@@ -156,6 +150,10 @@ class MockResource(Resource):
 
 
 class MockHttpServer(object):
+    """
+    NOTE: This is deprecated.
+          Please use :class:`vumi.tests.http_helpers.MockHttpHelper` instead.
+    """
 
     def __init__(self, handler=None):
         self.queue = DeferredQueue()
@@ -513,7 +511,7 @@ class VumiWorkerTestCase(VumiTestCase):
             )
 
     def mkmsg_nack(self, user_message_id='1', transport_metadata=None,
-                    transport_name=None, nack_reason='unknown'):
+                   transport_name=None, nack_reason='unknown'):
         if transport_metadata is None:
             transport_metadata = {}
         if transport_name is None:

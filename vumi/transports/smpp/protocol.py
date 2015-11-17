@@ -15,7 +15,6 @@ from smpp.pdu_builder import (
     EnquireLink, EnquireLinkResp,
     SubmitSM, QuerySM)
 
-from vumi import log
 from vumi.transports.smpp.pdu_utils import (
     pdu_ok, seq_no, command_status, command_id, message_id, chop_pdu_stream)
 
@@ -63,6 +62,7 @@ class EsmeProtocol(Protocol):
             SMSC.
         """
         self.service = service
+        self.log = service.log
         self.bind_pdu = self._BIND_PDU[bind_type]
         self.clock = service.clock
         self.config = self.service.get_config()
@@ -81,12 +81,12 @@ class EsmeProtocol(Protocol):
 
     def emit(self, msg):
         if self.noisy:
-            log.debug(msg)
+            self.log.debug(msg)
 
     @inlineCallbacks
     def connectionMade(self):
         self.state = self.OPEN_STATE
-        log.msg('Connection made, current state: %s' % (self.state,))
+        self.log.msg('Connection made, current state: %s' % (self.state,))
         self.bind(
             system_id=self.config.system_id,
             password=self.config.password,
@@ -130,7 +130,7 @@ class EsmeProtocol(Protocol):
         # Overly long passwords should be truncated.
         if len(password) > 8:
             password = password[:8]
-            log.warning("Password longer than 8 characters, truncating.")
+            self.log.warning("Password longer than 8 characters, truncating.")
 
         sequence_number = yield self.sequence_generator.next()
         pdu = self.bind_pdu(
@@ -164,7 +164,7 @@ class EsmeProtocol(Protocol):
             The entry to write to the log file.
         """
         if log_msg is not None:
-            log.warning(log_msg)
+            self.log.warning(log_msg)
 
         if not self.connected:
             return succeed(self.transport.loseConnection())
@@ -256,12 +256,12 @@ class EsmeProtocol(Protocol):
             The dict result one gets when calling ``smpp.pdu.unpack_pdu()``
             on the received PDU
         """
-        log.warning(
+        self.log.warning(
             'Received unsupported SMPP command_id: %r' % (command_id(pdu),))
 
     def handle_bind_transceiver_resp(self, pdu):
         if not pdu_ok(pdu):
-            log.warning('Unable to bind: %r' % (command_status(pdu),))
+            self.log.warning('Unable to bind: %r' % (command_status(pdu),))
             self.transport.loseConnection()
             return
 
@@ -270,7 +270,7 @@ class EsmeProtocol(Protocol):
 
     def handle_bind_transmitter_resp(self, pdu):
         if not pdu_ok(pdu):
-            log.warning('Unable to bind: %r' % (command_status(pdu),))
+            self.log.warning('Unable to bind: %r' % (command_status(pdu),))
             self.transport.loseConnection()
             return
 
@@ -279,7 +279,7 @@ class EsmeProtocol(Protocol):
 
     def handle_bind_receiver_resp(self, pdu):
         if not pdu_ok(pdu):
-            log.warning('Unable to bind: %r' % (command_status(pdu),))
+            self.log.warning('Unable to bind: %r' % (command_status(pdu),))
             self.transport.loseConnection()
             return
 
@@ -341,9 +341,9 @@ class EsmeProtocol(Protocol):
         if message_id is None:
             # We have no message_id, so log a warning instead of calling the
             # callback.
-            log.warning("Failed to retrieve message id for deliver_sm_resp."
-                        " ack/nack from %s discarded."
-                        % self.service.transport_name)
+            self.log.warning(
+                "Failed to retrieve message id for deliver_sm_resp."
+                " ack/nack from %s discarded." % self.service.transport_name)
         else:
             return self.service.handle_submit_sm_resp(
                 message_id, smpp_message_id, command_status, sequence_number)
@@ -370,9 +370,10 @@ class EsmeProtocol(Protocol):
         content_parts = self.deliver_sm_processor.decode_pdus([pdu])
         if not all([isinstance(part, unicode) for part in content_parts]):
             command_status = self.config.deliver_sm_decoding_error
-            log.msg('Not all parts of the PDU were able to be decoded. '
-                    'Responding with %s.' % (command_status,),
-                    parts=content_parts)
+            self.log.msg(
+                'Not all parts of the PDU were able to be decoded. '
+                'Responding with %s.' % (command_status,),
+                parts=content_parts)
             self.send_pdu(DeliverSMResp(seq_no(pdu),
                           command_status=command_status))
             return
@@ -392,9 +393,10 @@ class EsmeProtocol(Protocol):
             return
 
         command_status = self.config.deliver_sm_decoding_error
-        log.warning('Unable to process message. '
-                    'Responding with %s.' % (command_status,),
-                    content=content, pdu=pdu.get_obj())
+        self.log.warning(
+            'Unable to process message. '
+            'Responding with %s.' % (command_status,),
+            content=content, pdu=pdu.get_obj())
 
         self.send_pdu(DeliverSMResp(seq_no(pdu),
                       command_status=command_status))

@@ -94,7 +94,8 @@ class TestBaseTransport(VumiTestCase):
         consumers = list(self.get_tx_consumers(transport))
         self.assertEqual(1, len(consumers))
         for consumer in consumers:
-            self.assertEqual(consumer.channel.qos_prefetch_count, 1)
+            fake_channel = consumer.channel._fake_channel
+            self.assertEqual(fake_channel.qos_prefetch_count, 1)
 
     @inlineCallbacks
     def test_transport_prefetch_count_default(self):
@@ -102,7 +103,8 @@ class TestBaseTransport(VumiTestCase):
         consumers = list(self.get_tx_consumers(transport))
         self.assertEqual(1, len(consumers))
         for consumer in consumers:
-            self.assertEqual(consumer.channel.qos_prefetch_count, 20)
+            fake_channel = consumer.channel._fake_channel
+            self.assertEqual(fake_channel.qos_prefetch_count, 20)
 
     @inlineCallbacks
     def test_add_outbound_handler(self):
@@ -140,6 +142,7 @@ class TestBaseTransport(VumiTestCase):
     def test_publish_status_disabled(self):
         transport = yield self.tx_helper.get_transport({
             'transport_name': 'foo',
+            'worker_name': 'foo',
             'publish_status': False
         })
 
@@ -150,8 +153,6 @@ class TestBaseTransport(VumiTestCase):
                 type='bar',
                 message='baz')
 
-            logs = lc.messages()
-
         self.assertEqual(msg['status'], 'down')
         self.assertEqual(msg['component'], 'foo')
         self.assertEqual(msg['type'], 'bar')
@@ -159,6 +160,9 @@ class TestBaseTransport(VumiTestCase):
 
         msgs = self.tx_helper.get_dispatched_statuses('foo.status')
         self.assertEqual(msgs, [])
-        self.assertEqual(logs, [
+        [log] = lc.logs
+        self.assertEqual(
+            log['message'][0],
             "Status publishing disabled for transport 'foo', "
-            "ignoring status %r" % (msg,)])
+            "ignoring status %r" % (msg,))
+        self.assertEqual(log['system'], 'foo')

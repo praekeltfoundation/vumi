@@ -4,7 +4,6 @@ from vumi.config import ConfigInt
 from vumi.components.session import SessionManager
 from vumi.message import TransportUserMessage
 from vumi.transports.smpp.processors import default
-from vumi import log
 
 from twisted.internet.defer import inlineCallbacks, returnValue
 
@@ -36,6 +35,7 @@ class DeliverShortMessageProcessor(default.DeliverShortMessageProcessor):
     def __init__(self, transport, config):
         super(DeliverShortMessageProcessor, self).__init__(transport, config)
         self.transport = transport
+        self.log = transport.log
         self.redis = transport.redis
         self.config = self.CONFIG_CLASS(config, static=True)
         self.session_manager = SessionManager(
@@ -79,8 +79,9 @@ class DeliverShortMessageProcessor(default.DeliverShortMessageProcessor):
 
         else:
             if session_event != 'continue':
-                log.warning(('Received unknown %r ussd_service_op, '
-                             'assuming continue.') % (service_op,))
+                self.log.warning((
+                    'Received unknown %r ussd_service_op, assuming continue.')
+                    % (service_op,))
                 session_event = 'continue'
 
             session = yield self.session_manager.load_session(
