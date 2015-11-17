@@ -140,7 +140,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
 
     @inlineCallbacks
     def test_mo_sms_empty_sms_disallowed(self):
-        transport = yield self.get_transport()
+        yield self.get_transport()
         with LogCatcher(message=r"^(Not all parts|WARNING)") as lc:
             self.fake_smsc.send_mo(
                 sequence_number=1, short_message='', source_addr='123',
