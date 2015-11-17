@@ -92,7 +92,8 @@ class TestDmarkUssdTransport(VumiTestCase):
         user_content = "Who are you?"
         d = self.tx_helper.mk_request(ussdRequestString=user_content)
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
-        self.assert_inbound_message(msg,
+        self.assert_inbound_message(
+            msg,
             session_event=TransportUserMessage.SESSION_NEW,
             content=user_content)
 
@@ -166,7 +167,8 @@ class TestDmarkUssdTransport(VumiTestCase):
         user_content = "Well, what is it you want?"
         d = self.tx_helper.mk_request(ussdRequestString=user_content)
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
-        self.assert_inbound_message(msg,
+        self.assert_inbound_message(
+            msg,
             session_event=TransportUserMessage.SESSION_RESUME,
             content=user_content)
 
@@ -190,7 +192,8 @@ class TestDmarkUssdTransport(VumiTestCase):
         user_content = "Well, what is it you want?"
         d = self.tx_helper.mk_request(ussdRequestString=user_content)
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
-        self.assert_inbound_message(msg,
+        self.assert_inbound_message(
+            msg,
             session_event=TransportUserMessage.SESSION_RESUME,
             content=user_content)
 
@@ -289,7 +292,7 @@ class TestDmarkUssdTransport(VumiTestCase):
         yield self.tx_helper.clear_dispatched_statuses()
 
         self.tx_helper.dispatch_outbound(msg.reply('foo'))
-        response = yield d
+        yield d
 
         [status] = yield self.tx_helper.get_dispatched_statuses()
         self.assertEqual(status['status'], 'ok')
@@ -308,7 +311,7 @@ class TestDmarkUssdTransport(VumiTestCase):
         self.clock.advance(self.transport.response_time_degraded + 0.1)
 
         self.tx_helper.dispatch_outbound(msg.reply('foo'))
-        response = yield d
+        yield d
 
         [status] = yield self.tx_helper.get_dispatched_statuses()
         self.assertEqual(status['status'], 'degraded')
@@ -329,7 +332,7 @@ class TestDmarkUssdTransport(VumiTestCase):
         self.clock.advance(self.transport.response_time_down + 0.1)
 
         self.tx_helper.dispatch_outbound(msg.reply('foo'))
-        response = yield d
+        yield d
 
         [status] = yield self.tx_helper.get_dispatched_statuses()
         self.assertEqual(status['status'], 'down')
@@ -362,7 +365,7 @@ class TestDmarkUssdTransport(VumiTestCase):
 
         self.transport.finish_request(msg['message_id'], '', code=500)
 
-        response = yield d
+        yield d
 
         statuses = yield self.tx_helper.get_dispatched_statuses()
         self.assertEqual(len(statuses), 0)
@@ -381,7 +384,7 @@ class TestDmarkUssdTransport(VumiTestCase):
 
         self.transport.finish_request(msg['message_id'], '', code=500)
 
-        response = yield d
+        yield d
 
         statuses = yield self.tx_helper.get_dispatched_statuses()
         self.assertEqual(len(statuses), 0)
@@ -400,7 +403,7 @@ class TestDmarkUssdTransport(VumiTestCase):
 
         self.transport.finish_request(msg['message_id'], '', code=500)
 
-        response = yield d
+        yield d
 
         statuses = yield self.tx_helper.get_dispatched_statuses()
         self.assertEqual(len(statuses), 0)
@@ -415,7 +418,7 @@ class TestDmarkUssdTransport(VumiTestCase):
         self.clock.advance(self.transport.request_timeout + 0.1)
 
         self.tx_helper.dispatch_outbound(msg.reply('foo'))
-        response = yield d
+        yield d
 
         [status] = yield self.tx_helper.get_dispatched_statuses()
         self.assertEqual(status['status'], 'down')

@@ -2,12 +2,9 @@
 
 import json
 
-import time
-
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.web import http
 
-from vumi import log
 from vumi.components.session import SessionManager
 from vumi.config import ConfigDict, ConfigInt
 from vumi.message import TransportUserMessage
@@ -114,7 +111,7 @@ class DmarkUssdTransport(HttpRpcTransport):
             values, errors = self.get_field_values(
                 request, self.EXPECTED_FIELDS)
         except UnicodeDecodeError:
-            log.msg('Bad request encoding: %r' % request)
+            self.log.msg('Bad request encoding: %r' % request)
             request_dict = {
                 'uri': request.uri,
                 'method': request.method,
@@ -136,7 +133,7 @@ class DmarkUssdTransport(HttpRpcTransport):
             return
 
         if errors:
-            log.msg('Unhappy incoming message: %r' % (errors,))
+            self.log.msg('Unhappy incoming message: %r' % (errors,))
             self.finish_request(
                 request_id, json.dumps(errors), code=http.BAD_REQUEST)
             yield self.add_status(
@@ -177,8 +174,8 @@ class DmarkUssdTransport(HttpRpcTransport):
     @inlineCallbacks
     def handle_outbound_message(self, message):
         self.emit("DmarkUssdTransport consuming %r" % (message,))
-        missing_fields = self.ensure_message_values(message,
-                            ['in_reply_to', 'content'])
+        missing_fields = self.ensure_message_values(
+            message, ['in_reply_to', 'content'])
         if missing_fields:
             nack = yield self.reject_message(message, missing_fields)
             returnValue(nack)
