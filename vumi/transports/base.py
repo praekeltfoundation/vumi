@@ -116,8 +116,9 @@ class Transport(BaseWorker):
             d.addCallback(self.failure_publisher.publish_message)
             d.addCallback(lambda _f: self.failure_published())
         except:
-            self.log.err("Error publishing failure: %s, %s, %s"
-                    % (message, exception, traceback))
+            self.log.err(
+                "Error publishing failure: %s, %s, %s"
+                % (message, exception, traceback))
             raise
         return d
 
@@ -181,8 +182,9 @@ class Transport(BaseWorker):
             conn = self.connectors[self.status_connector_name]
             return conn.publish_status(msg)
         else:
-            self.log.debug('Status publishing disabled for transport %r, ignoring '
-                      'status %r' % (self.transport_name, msg))
+            self.log.debug(
+                'Status publishing disabled for transport %r, ignoring '
+                'status %r' % (self.transport_name, msg))
             return succeed(msg)
 
     def _send_failure_eb(self, f, message):

@@ -161,7 +161,8 @@ class TestBaseTransport(VumiTestCase):
         msgs = self.tx_helper.get_dispatched_statuses('foo.status')
         self.assertEqual(msgs, [])
         [log] = lc.logs
-        self.assertEqual(log['message'][0], 
+        self.assertEqual(
+            log['message'][0],
             "Status publishing disabled for transport 'foo', "
             "ignoring status %r" % (msg,))
         self.assertEqual(log['system'], 'foo')

@@ -341,9 +341,9 @@ class EsmeProtocol(Protocol):
         if message_id is None:
             # We have no message_id, so log a warning instead of calling the
             # callback.
-            self.log.warning("Failed to retrieve message id for deliver_sm_resp."
-                        " ack/nack from %s discarded."
-                        % self.service.transport_name)
+            self.log.warning(
+                "Failed to retrieve message id for deliver_sm_resp."
+                " ack/nack from %s discarded." % self.service.transport_name)
         else:
             return self.service.handle_submit_sm_resp(
                 message_id, smpp_message_id, command_status, sequence_number)
@@ -370,9 +370,10 @@ class EsmeProtocol(Protocol):
         content_parts = self.deliver_sm_processor.decode_pdus([pdu])
         if not all([isinstance(part, unicode) for part in content_parts]):
             command_status = self.config.deliver_sm_decoding_error
-            self.log.msg('Not all parts of the PDU were able to be decoded. '
-                    'Responding with %s.' % (command_status,),
-                    parts=content_parts)
+            self.log.msg(
+                'Not all parts of the PDU were able to be decoded. '
+                'Responding with %s.' % (command_status,),
+                parts=content_parts)
             self.send_pdu(DeliverSMResp(seq_no(pdu),
                           command_status=command_status))
             return
@@ -392,9 +393,10 @@ class EsmeProtocol(Protocol):
             return
 
         command_status = self.config.deliver_sm_decoding_error
-        self.log.warning('Unable to process message. '
-                    'Responding with %s.' % (command_status,),
-                    content=content, pdu=pdu.get_obj())
+        self.log.warning(
+            'Unable to process message. '
+            'Responding with %s.' % (command_status,),
+            content=content, pdu=pdu.get_obj())
 
         self.send_pdu(DeliverSMResp(seq_no(pdu),
                       command_status=command_status))

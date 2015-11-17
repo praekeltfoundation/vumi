@@ -2,8 +2,6 @@
 
 import json
 
-import time
-
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.web import http
 
@@ -176,8 +174,8 @@ class DmarkUssdTransport(HttpRpcTransport):
     @inlineCallbacks
     def handle_outbound_message(self, message):
         self.emit("DmarkUssdTransport consuming %r" % (message,))
-        missing_fields = self.ensure_message_values(message,
-                            ['in_reply_to', 'content'])
+        missing_fields = self.ensure_message_values(
+            message, ['in_reply_to', 'content'])
         if missing_fields:
             nack = yield self.reject_message(message, missing_fields)
             returnValue(nack)

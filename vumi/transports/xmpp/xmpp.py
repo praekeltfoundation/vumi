@@ -154,8 +154,8 @@ class XMPPTransport(Transport):
         self.log.msg("Starting XMPPTransport: %s" % self.transport_name)
 
         self.jid = JID(self.username)
-        self.xmpp_client = self._xmpp_client(self.jid, self.password,
-                                                self.host, self.port)
+        self.xmpp_client = self._xmpp_client(
+            self.jid, self.password, self.host, self.port)
         self.xmpp_client.logTraffic = self.debug
         self.xmpp_client.setServiceParent(self)
 

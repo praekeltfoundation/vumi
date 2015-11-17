@@ -262,7 +262,8 @@ class SmppTransceiverTransport(Transport):
         yield self.publish_status_starting()
 
         config = self.get_static_config()
-        self.log.msg('Starting SMPP Transport for: %s' % (config.twisted_endpoint,))
+        self.log.msg(
+            'Starting SMPP Transport for: %s' % (config.twisted_endpoint,))
 
         default_prefix = '%s@%s' % (config.system_id,
                                     config.transport_name)
@@ -495,9 +496,10 @@ class SmppTransceiverTransport(Transport):
         message_id = yield self.message_stash.get_internal_message_id(
             receipted_message_id)
         if message_id is None:
-            self.log.warning("Failed to retrieve message id for delivery report."
-                        " Delivery report from %s discarded."
-                        % self.transport_name)
+            self.log.warning(
+                "Failed to retrieve message id for delivery report."
+                " Delivery report from %s discarded."
+                % self.transport_name)
             return
 
         dr = yield self.publish_delivery_report(

@@ -58,8 +58,9 @@ class BaseWorker(Worker):
         self.log = WrappingLogger(system=self.config.get('worker_name'))
 
     def startWorker(self):
-        self.log.msg('Starting a %s worker with config: %s'
-                % (self.__class__.__name__, self.config))
+        self.log.msg(
+            'Starting a %s worker with config: %s'
+            % (self.__class__.__name__, self.config))
         d = maybeDeferred(self._validate_config)
         then_call(d, self.setup_heartbeat)
         then_call(d, self.setup_middleware)
@@ -88,13 +89,15 @@ class BaseWorker(Worker):
             self._system_id = self.options.get("system-id", "global")
             self._worker_id = generate_worker_id(self._system_id,
                                                  self._worker_name)
-            self.log.msg("Starting HeartBeat publisher with worker_name=%s"
-                    % self._worker_name)
-            self._hb_pub = yield self.start_publisher(HeartBeatPublisher,
-                                                self._gen_heartbeat_attrs)
+            self.log.msg(
+                "Starting HeartBeat publisher with worker_name=%s"
+                % self._worker_name)
+            self._hb_pub = yield self.start_publisher(
+                HeartBeatPublisher, self._gen_heartbeat_attrs)
         else:
-            self.log.msg("HeartBeat publisher disabled. No worker_id "
-                    "field found in config.")
+            self.log.msg(
+                "HeartBeat publisher disabled. No worker_id field found in "
+                "config.")
 
     def teardown_heartbeat(self):
         if self._hb_pub is not None:

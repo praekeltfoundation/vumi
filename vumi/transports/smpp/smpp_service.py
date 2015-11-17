@@ -76,7 +76,8 @@ class SmppService(ReconnectingClientService):
         if self.throttled and self.need_mt_throttling():
             if not self.is_bound():
                 # We don't have a bound SMPP connection, so try again later.
-                self.log.msg("Can't stop throttling while unbound, trying later.")
+                self.log.msg(
+                    "Can't stop throttling while unbound, trying later.")
                 return
             self.reset_mt_throttle_counter()
             yield self.stop_throttling()

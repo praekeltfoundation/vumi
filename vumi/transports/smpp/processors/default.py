@@ -272,7 +272,8 @@ class DeliverShortMessageProcessor(object):
     def dcs_decode(self, obj, data_coding):
         codec_name = self.data_coding_map.get(data_coding, None)
         if codec_name is None:
-            self.log.msg("WARNING: Not decoding message with data_coding=%s" % (
+            self.log.msg(
+                "WARNING: Not decoding message with data_coding=%s" % (
                     data_coding,))
             return obj
         elif obj is None:

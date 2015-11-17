@@ -79,8 +79,9 @@ class DeliverShortMessageProcessor(default.DeliverShortMessageProcessor):
 
         else:
             if session_event != 'continue':
-                self.log.warning(('Received unknown %r ussd_service_op, '
-                             'assuming continue.') % (service_op,))
+                self.log.warning((
+                    'Received unknown %r ussd_service_op, assuming continue.')
+                    % (service_op,))
                 session_event = 'continue'
 
             session = yield self.session_manager.load_session(
