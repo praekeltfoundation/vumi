@@ -8,7 +8,8 @@ from twisted.web.resource import NoResource, Resource
 from twisted.web.server import NOT_DONE_YET
 
 from vumi.components.message_store import MessageStore
-from vumi.components.message_formatters import JsonFormatter, CsvFormatter
+from vumi.components.message_formatters import (
+    JsonFormatter, CsvFormatter, CsvEventFormatter)
 from vumi.config import (
     ConfigDict, ConfigText, ConfigServerEndpoint, ConfigInt,
     ServerEndpointFallback)
@@ -207,7 +208,7 @@ class BatchResource(Resource):
         'events.json': (EventResource, JsonFormatter),
         'inbound.csv': (InboundResource, CsvFormatter),
         'outbound.csv': (OutboundResource, CsvFormatter),
-        'events.csv': (EventResource, CsvFormatter),
+        'events.csv': (EventResource, CsvEventFormatter),
     }
 
     def __init__(self, message_store, batch_id):
