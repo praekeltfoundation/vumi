@@ -135,9 +135,7 @@ class Event(Model):
         timestamp = self.event['timestamp']
         if not isinstance(timestamp, basestring):
             timestamp = format_vumi_date(timestamp)
-        status = self.event['event_type']
-        if status == "delivery_report":
-            status = "%s.%s" % (status, self.event['delivery_status'])
+        status = self.event.status()
         self.message_with_status = u"%s$%s$%s" % (
             self.message.key, timestamp, status)
         self.batches_with_statuses_reverse = []

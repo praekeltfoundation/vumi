@@ -430,6 +430,13 @@ class TransportEvent(TransportMessage):
             if not check(self[extra_field]):
                 raise InvalidMessageField(extra_field)
 
+    def status(self):
+        status = self['event_type']
+        if status == "delivery_report":
+            status = "%s.%s" % (status, self['delivery_status'])
+        return status
+
+
 
 class TransportStatus(TransportMessage):
     """Message about a status event emitted by a transport.
