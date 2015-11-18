@@ -479,3 +479,21 @@ class TestMessageStoreResource(VumiTestCase):
             ("%(ts)s,%(id)s,+41791234567,9292,,,føø,", msg2),
             ("%(ts)s,%(id)s,+41791234567,9292,,,føø,", msg3),
         ])
+
+    @inlineCallbacks
+    def test_get_events_for_time_range(self):
+        yield self.start_server()
+        batch_id = yield self.make_batch(('foo', 'bar'))
+        mktime = lambda day: datetime(2014, 11, day, 12, 0, 0)
+        yield self.make_ack(batch_id, timestamp=mktime(1))
+        ack2 = yield self.make_ack(batch_id, timestamp=mktime(2))
+        ack3 = yield self.make_ack(batch_id, timestamp=mktime(3))
+        yield self.make_ack(batch_id, timestamp=mktime(4))
+        resp = yield self.make_request(
+            'GET', batch_id, 'events.json', start='2014-11-02 00:00:00',
+            end='2014-11-04 00:00:00')
+        events = map(
+            json.loads, filter(None, resp.delivered_body.split('\n')))
+        self.assertEqual(
+            set([ev['event_id'] for ev in events]),
+            set([ack2['event_id'], ack3['event_id']]))
