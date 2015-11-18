@@ -113,6 +113,19 @@ class TestMessageStoreBase(VumiTestCase):
         returnValue(messages)
 
     @inlineCallbacks
+    def create_events(self, batch_id, count, start_timestamp=None,
+                      time_multiplier=10):
+        # Store via message_store
+        now = start_timestamp or datetime.now()
+        events = []
+        for i in range(count):
+            ev = self.msg_helper.make_ack(
+                timestamp=(now - timedelta(i * time_multiplier)))
+            yield self.store.add_event(ev, batch_ids=[batch_id])
+            events.append(ev)
+        returnValue(events)
+
+    @inlineCallbacks
     def create_inbound_messages(self, batch_id, count, start_timestamp=None,
                                 time_multiplier=10, from_addr=None):
         # Store via message_store
@@ -1196,6 +1209,85 @@ class TestMessageStore(TestMessageStoreBase):
         self.assertEqual(list(page), all_keys)
 
     @inlineCallbacks
+    def test_batch_event_keys_with_statuses_reverse(self):
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+        events = yield self.create_events(batch_id, 10)
+        sorted_keys = sorted(
+            [(zero_ms(ev['timestamp']), ev.status(), ev['event_id'])
+             for ev in events], reverse=True)
+        all_keys = [(key, timestamp, status)
+                    for (timestamp, status, key) in sorted_keys]
+
+        page = yield self.store.batch_event_keys_with_statuses_reverse(
+            batch_id, max_results=6)
+
+        results = list(page)
+        self.assertEqual(len(results), 6)
+        self.assertEqual(page.has_next_page(), True)
+
+        next_page = yield page.next_page()
+        results.extend(next_page)
+        self.assertEqual(len(results), 10)
+        self.assertEqual(next_page.has_next_page(), False)
+
+        self.assertEqual(results, all_keys)
+
+    @inlineCallbacks
+    def test_batch_event_keys_with_statuses_reverse_start(self):
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+        events = yield self.create_events(batch_id, 5)
+        sorted_keys = sorted(
+            [(zero_ms(ev['timestamp']), ev.status(), ev['event_id'])
+             for ev in events], reverse=True)
+        all_keys = [(key, timestamp, status)
+                    for (timestamp, status, key) in sorted_keys]
+
+        page = yield self.store.batch_event_keys_with_statuses_reverse(
+            batch_id, max_results=6, start=all_keys[-2][1])
+        self.assertEqual(list(page), all_keys[:-1])
+
+    @inlineCallbacks
+    def test_batch_event_keys_with_statuses_reverse_end(self):
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+        events = yield self.create_events(batch_id, 5)
+        sorted_keys = sorted(
+            [(zero_ms(ev['timestamp']), ev.status(), ev['event_id'])
+             for ev in events], reverse=True)
+        all_keys = [(key, timestamp, status)
+                    for (timestamp, status, key) in sorted_keys]
+
+        page = yield self.store.batch_event_keys_with_statuses_reverse(
+            batch_id, max_results=6, end=all_keys[1][1])
+        self.assertEqual(list(page), all_keys[1:])
+
+    @inlineCallbacks
+    def test_batch_event_keys_with_statuses_reverse_range(self):
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+        events = yield self.create_events(batch_id, 5)
+        sorted_keys = sorted(
+            [(zero_ms(ev['timestamp']), ev.status(), ev['event_id'])
+             for ev in events], reverse=True)
+        all_keys = [(key, timestamp, status)
+                    for (timestamp, status, key) in sorted_keys]
+
+        page = yield self.store.batch_event_keys_with_statuses_reverse(
+            batch_id, max_results=6, start=all_keys[-2][1], end=all_keys[1][1])
+        self.assertEqual(list(page), all_keys[1:-1])
+
+    @inlineCallbacks
+    def test_batch_event_keys_with_statuses_reverse_keys_only(self):
+        batch_id = yield self.store.batch_start([('pool', 'tag')])
+        events = yield self.create_events(batch_id, 10)
+        sorted_keys = sorted(
+            [(zero_ms(ev['timestamp']), ev.status(), ev['event_id'])
+             for ev in events], reverse=True)
+        all_keys = [key for (_timestamp, _status, key) in sorted_keys]
+
+        page = yield self.store.batch_event_keys_with_statuses_reverse(
+            batch_id, keys_only=True)
+        self.assertEqual(list(page), all_keys)
+
+    @inlineCallbacks
     def test_message_event_keys_with_statuses(self):
         """
         Event keys and statuses for a message can be retrieved by index.
@@ -1211,8 +1303,8 @@ class TestMessageStore(TestMessageStoreBase):
             drs.append(dr)
             yield self.store.add_event(dr)
 
-        mk_tuple = lambda e, status: (
-            e["event_id"], format_vumi_date(e["timestamp"]), status)
+        def mk_tuple(e, status):
+            return e["event_id"], format_vumi_date(e["timestamp"]), status
 
         all_keys = [mk_tuple(ack, "ack")] + [
             mk_tuple(e, "delivery_report.%s" % (e["delivery_status"],))
