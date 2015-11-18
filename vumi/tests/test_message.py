@@ -499,12 +499,12 @@ class TestTransportStatus(VumiTestCase):
     def test_validate_type_present(self):
         self.assertRaises(
             MissingMessageField, TransportStatus,
-             status='ok', component='foo', message='baz')
+            status='ok', component='foo', message='baz')
 
     def test_validate_message_present(self):
         self.assertRaises(
             MissingMessageField, TransportStatus,
-             status='ok', component='foo', type='bar')
+            status='ok', component='foo', type='bar')
 
     def test_validate_status_field(self):
         TransportStatus(

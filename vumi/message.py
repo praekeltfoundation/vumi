@@ -437,7 +437,6 @@ class TransportEvent(TransportMessage):
         return status
 
 
-
 class TransportStatus(TransportMessage):
     """Message about a status event emitted by a transport.
     """
