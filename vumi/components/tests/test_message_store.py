@@ -112,15 +112,23 @@ class TestMessageStoreBase(VumiTestCase):
             messages.append(msg)
         returnValue(messages)
 
+    def _create_event(self, event_type, timestamp):
+        assert event_type in ('ack', 'nack', 'delivery_report')
+        maker = getattr(self.msg_helper, 'make_%s' % (event_type,))
+        return maker(timestamp=timestamp)
+
     @inlineCallbacks
     def create_events(self, batch_id, count, start_timestamp=None,
-                      time_multiplier=10):
+                      time_multiplier=10, event_mix=None):
         # Store via message_store
         now = start_timestamp or datetime.now()
         events = []
-        for i in range(count):
-            ev = self.msg_helper.make_ack(
-                timestamp=(now - timedelta(i * time_multiplier)))
+        if event_mix is None:
+            event_mix = ['ack', 'nack', 'delivery_report']
+        event_types = (event_mix * count)[:count]
+        for i, event_type in enumerate(event_types):
+            ev = self._create_event(
+                event_type, timestamp=(now - timedelta(i * time_multiplier)))
             yield self.store.add_event(ev, batch_ids=[batch_id])
             events.append(ev)
         returnValue(events)
