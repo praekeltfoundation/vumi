@@ -90,7 +90,6 @@ class XMPPTransportProtocol(MessageProtocol, object):
     def connectionLost(self, reason):
         if self.connection_lost_callback is not None:
             self.connection_lost_callback(reason)
-        self.log.msg("XMPP Connection lost.")
         super(XMPPTransportProtocol, self).connectionLost(reason)
 
 
@@ -170,10 +169,14 @@ class XMPPTransport(Transport):
         roster.setHandlerParent(self.xmpp_client)
 
         self.xmpp_protocol = self._xmpp_protocol(
-            self.jid, self.publish_message, self.unpause_connectors)
+            self.jid, self.publish_message, self.unpause_connectors,
+            connection_lost_callback=self.connection_lost)
         self.xmpp_protocol.setHandlerParent(self.xmpp_client)
 
         self.log.msg("XMPPTransport %s started." % self.transport_name)
+
+    def connection_lost(self, reason):
+        self.log.msg("XMPP Connection lost. %s" % reason)
 
     def announce_presence(self):
         if not self.presence_call.running:
