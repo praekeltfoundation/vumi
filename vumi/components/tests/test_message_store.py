@@ -113,8 +113,11 @@ class TestMessageStoreBase(VumiTestCase):
         returnValue(messages)
 
     def _create_event(self, event_type, timestamp):
-        assert event_type in ('ack', 'nack', 'delivery_report')
-        maker = getattr(self.msg_helper, 'make_%s' % (event_type,))
+        maker = {
+            'ack': self.msg_helper.make_ack,
+            'nack': self.msg_helper.make_nack,
+            'delivery_report': self.msg_helper.make_delivery_report,
+        }[event_type]
         return maker(timestamp=timestamp)
 
     @inlineCallbacks
