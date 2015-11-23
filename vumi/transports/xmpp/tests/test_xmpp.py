@@ -1,3 +1,4 @@
+from twisted.python import log
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet.task import Clock
 from twisted.words.xish import domish
@@ -208,6 +209,7 @@ class TestXMPPTransport(VumiTestCase):
         with LogCatcher() as lc:
             yield transport.xmpp_protocol.connectionLost('Test connection')
 
-        [log] = lc.logs
+        [connection_lost_log] = lc.logs
         self.assertEqual(
-            log['log_text'], 'XMPP Connection lost. Test connection')
+            log.textFromEventDict(connection_lost_log),
+            'XMPP Connection lost. Test connection')
