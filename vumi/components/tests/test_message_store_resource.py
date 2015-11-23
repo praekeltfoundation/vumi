@@ -73,6 +73,14 @@ class TestMessageStoreResource(VumiTestCase):
         d.addCallback(lambda _: msg)
         return d
 
+    def make_ack(self, batch_id, timestamp=None):
+        if timestamp is None:
+            timestamp = datetime.utcnow()
+        ack = self.msg_helper.make_ack(timestamp=timestamp)
+        d = self.store.add_event(ack, batch_ids=[batch_id])
+        d.addCallback(lambda _: ack)
+        return d
+
     def make_request(self, method, batch_id, leaf, **params):
         url = '%s/%s/%s/%s' % (self.url, 'resource_path', batch_id, leaf)
         if params:
@@ -88,6 +96,15 @@ class TestMessageStoreResource(VumiTestCase):
                 'id': msg['message_id'],
                 'ts': msg['timestamp'].isoformat(),
             } for row_template, msg in expected
+        ]))
+
+    def assert_csv_event_rows(self, rows, expected):
+        self.assertEqual(sorted(rows), sorted([
+            row_template % {
+                'id': ev['event_id'],
+                'ts': ev['timestamp'].isoformat(),
+                'msg_id': ev['user_message_id'],
+            } for row_template, ev in expected
         ]))
 
     @inlineCallbacks
@@ -148,6 +165,36 @@ class TestMessageStoreResource(VumiTestCase):
         self.assert_csv_rows(rows, [
             ("%(ts)s,%(id)s,+41791234567,9292,,,føø,", msg1),
             ("%(ts)s,%(id)s,+41791234567,9292,,,føø,", msg2),
+        ])
+
+    @inlineCallbacks
+    def test_get_events(self):
+        yield self.start_server()
+        batch_id = yield self.make_batch(('foo', 'bar'))
+        ack1 = yield self.make_ack(batch_id)
+        ack2 = yield self.make_ack(batch_id)
+        resp = yield self.make_request('GET', batch_id, 'events.json')
+        events = map(
+            json.loads, filter(None, resp.delivered_body.split('\n')))
+        self.assertEqual(
+            set([ev['event_id'] for ev in events]),
+            set([ack1['event_id'], ack2['event_id']]))
+
+    @inlineCallbacks
+    def test_get_events_csv(self):
+        yield self.start_server()
+        batch_id = yield self.make_batch(('foo', 'bar'))
+        ack1 = yield self.make_ack(batch_id)
+        ack2 = yield self.make_ack(batch_id)
+        resp = yield self.make_request('GET', batch_id, 'events.csv')
+        rows = resp.delivered_body.split('\r\n')
+        header, rows = rows[0], rows[1:-1]
+        self.assertEqual(header, (
+            "timestamp,event_id,status,user_message_id,"
+            "nack_reason"))
+        self.assert_csv_event_rows(rows, [
+            ("%(ts)s,%(id)s,ack,%(msg_id)s,", ack1),
+            ("%(ts)s,%(id)s,ack,%(msg_id)s,", ack2),
         ])
 
     @inlineCallbacks
@@ -432,3 +479,21 @@ class TestMessageStoreResource(VumiTestCase):
             ("%(ts)s,%(id)s,+41791234567,9292,,,føø,", msg2),
             ("%(ts)s,%(id)s,+41791234567,9292,,,føø,", msg3),
         ])
+
+    @inlineCallbacks
+    def test_get_events_for_time_range(self):
+        yield self.start_server()
+        batch_id = yield self.make_batch(('foo', 'bar'))
+        mktime = lambda day: datetime(2014, 11, day, 12, 0, 0)
+        yield self.make_ack(batch_id, timestamp=mktime(1))
+        ack2 = yield self.make_ack(batch_id, timestamp=mktime(2))
+        ack3 = yield self.make_ack(batch_id, timestamp=mktime(3))
+        yield self.make_ack(batch_id, timestamp=mktime(4))
+        resp = yield self.make_request(
+            'GET', batch_id, 'events.json', start='2014-11-02 00:00:00',
+            end='2014-11-04 00:00:00')
+        events = map(
+            json.loads, filter(None, resp.delivered_body.split('\n')))
+        self.assertEqual(
+            set([ev['event_id'] for ev in events]),
+            set([ack2['event_id'], ack3['event_id']]))
