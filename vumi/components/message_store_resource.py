@@ -189,15 +189,18 @@ class OutboundResource(MessageStoreProxyResource):
 class EventResource(MessageStoreProxyResource):
 
     def get_keys_page(self, message_store, batch_id):
-        return message_store.batch_event_keys_page(batch_id)
+        return message_store.batch_event_keys_with_statuses_reverse(
+            batch_id, max_results=message_store.DEFAULT_MAX_RESULTS,
+            start=None, end=None)
 
     def get_keys_page_for_time(self, message_store, batch_id, start, end):
         return message_store.batch_event_keys_with_statuses_reverse(
             batch_id, max_results=message_store.DEFAULT_MAX_RESULTS,
-            start=start, end=end, keys_only=True)
+            start=start, end=end)
 
-    def get_message(self, message_store, message_id):
-        return message_store.get_event(message_id)
+    def get_message(self, message_store, event_index):
+        event_id, _, _ = event_index
+        return message_store.get_event(event_id)
 
 
 class BatchResource(Resource):

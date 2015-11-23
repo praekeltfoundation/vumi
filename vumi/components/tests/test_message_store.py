@@ -1125,19 +1125,6 @@ class TestMessageStore(TestMessageStoreBase):
         self.assertEqual(list(page), all_keys[1:-1])
 
     @inlineCallbacks
-    def test_batch_inbound_keys_with_addresses_reverse_keys_only(self):
-        batch_id = yield self.store.batch_start([('pool', 'tag')])
-        messages = yield self.create_inbound_messages(batch_id, 10)
-        sorted_keys = sorted(
-            [(zero_ms(msg['timestamp']), msg['from_addr'], msg['message_id'])
-             for msg in messages], reverse=True)
-        all_keys = [key for (_timestamp, _addr, key) in sorted_keys]
-
-        page = yield self.store.batch_inbound_keys_with_addresses_reverse(
-            batch_id, keys_only=True)
-        self.assertEqual(list(page), all_keys)
-
-    @inlineCallbacks
     def test_batch_outbound_keys_with_addresses_reverse(self):
         batch_id = yield self.store.batch_start([('pool', 'tag')])
         messages = yield self.create_outbound_messages(batch_id, 10)
@@ -1204,19 +1191,6 @@ class TestMessageStore(TestMessageStoreBase):
         self.assertEqual(list(page), all_keys[1:-1])
 
     @inlineCallbacks
-    def test_batch_outbound_keys_with_addresses_reverse_keys_only(self):
-        batch_id = yield self.store.batch_start([('pool', 'tag')])
-        messages = yield self.create_outbound_messages(batch_id, 10)
-        sorted_keys = sorted(
-            [(zero_ms(msg['timestamp']), msg['to_addr'], msg['message_id'])
-             for msg in messages], reverse=True)
-        all_keys = [key for (_timestamp, _addr, key) in sorted_keys]
-
-        page = yield self.store.batch_outbound_keys_with_addresses_reverse(
-            batch_id, keys_only=True)
-        self.assertEqual(list(page), all_keys)
-
-    @inlineCallbacks
     def test_batch_event_keys_with_statuses_reverse(self):
         batch_id = yield self.store.batch_start([('pool', 'tag')])
         events = yield self.create_events(batch_id, 10)
@@ -1281,19 +1255,6 @@ class TestMessageStore(TestMessageStoreBase):
         page = yield self.store.batch_event_keys_with_statuses_reverse(
             batch_id, max_results=6, start=all_keys[-2][1], end=all_keys[1][1])
         self.assertEqual(list(page), all_keys[1:-1])
-
-    @inlineCallbacks
-    def test_batch_event_keys_with_statuses_reverse_keys_only(self):
-        batch_id = yield self.store.batch_start([('pool', 'tag')])
-        events = yield self.create_events(batch_id, 10)
-        sorted_keys = sorted(
-            [(zero_ms(ev['timestamp']), ev.status(), ev['event_id'])
-             for ev in events], reverse=True)
-        all_keys = [key for (_timestamp, _status, key) in sorted_keys]
-
-        page = yield self.store.batch_event_keys_with_statuses_reverse(
-            batch_id, keys_only=True)
-        self.assertEqual(list(page), all_keys)
 
     @inlineCallbacks
     def test_message_event_keys_with_statuses(self):

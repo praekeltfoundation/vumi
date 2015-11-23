@@ -834,8 +834,7 @@ class MessageStore(object):
 
     def batch_inbound_keys_with_addresses_reverse(self, batch_id,
                                                   max_results=None,
-                                                  start=None, end=None,
-                                                  keys_only=False):
+                                                  start=None, end=None):
         """
         Return all inbound message keys with timestamps and addresses.
         Results are ordered from newest to oldest.
@@ -852,10 +851,6 @@ class MessageStore(object):
         :param str end:
             Optional end timestamp string matching VUMI_DATE_FORMAT.
 
-        :param bool keys_only:
-            If set to ``True``, only the keys will be returned. The results
-            will still be ordered by timestamp and address, however.
-
         This method performs a Riak index query.
         """
         # We're using reverse timestamps, so swap start and end and convert to
@@ -865,17 +860,13 @@ class MessageStore(object):
         if end is not None:
             end = to_reverse_timestamp(end)
         start, end = end, start
-        formatter = key_with_rts_and_value_formatter
-        if keys_only:
-            formatter = None
         return self._query_batch_index(
             self.inbound_messages, batch_id, 'batches_with_addresses_reverse',
-            max_results, start, end, formatter)
+            max_results, start, end, key_with_rts_and_value_formatter)
 
     def batch_outbound_keys_with_addresses_reverse(self, batch_id,
                                                    max_results=None,
-                                                   start=None, end=None,
-                                                   keys_only=False):
+                                                   start=None, end=None):
         """
         Return all outbound message keys with timestamps and addresses.
         Results are ordered from newest to oldest.
@@ -892,10 +883,6 @@ class MessageStore(object):
         :param str end:
             Optional end timestamp string matching VUMI_DATE_FORMAT.
 
-        :param bool keys_only:
-            If set to ``True``, only the keys will be returned. The results
-            will still be ordered by timestamp and address, however.
-
         This method performs a Riak index query.
         """
         # We're using reverse timestamps, so swap start and end and convert to
@@ -905,17 +892,13 @@ class MessageStore(object):
         if end is not None:
             end = to_reverse_timestamp(end)
         start, end = end, start
-        formatter = key_with_rts_and_value_formatter
-        if keys_only:
-            formatter = None
         return self._query_batch_index(
             self.outbound_messages, batch_id, 'batches_with_addresses_reverse',
-            max_results, start, end, formatter)
+            max_results, start, end, key_with_rts_and_value_formatter)
 
     def batch_event_keys_with_statuses_reverse(self, batch_id,
                                                max_results=None,
-                                               start=None, end=None,
-                                               keys_only=False):
+                                               start=None, end=None):
         """
         Return all event keys with timestamps and statuses.
         Results are ordered from newest to oldest.
@@ -932,10 +915,6 @@ class MessageStore(object):
         :param str end:
             Optional end timestamp string matching VUMI_DATE_FORMAT.
 
-        :param bool keys_only:
-            If set to ``True``, only the keys will be returned. The results
-            will still be ordered by timestamp and status, however.
-
         This method performs a Riak index query.
         """
         # We're using reverse timestamps, so swap start and end and convert to
@@ -945,12 +924,9 @@ class MessageStore(object):
         if end is not None:
             end = to_reverse_timestamp(end)
         start, end = end, start
-        formatter = key_with_rts_and_value_formatter
-        if keys_only:
-            formatter = None
         return self._query_batch_index(
             self.events, batch_id, 'batches_with_statuses_reverse',
-            max_results, start, end, formatter)
+            max_results, start, end, key_with_rts_and_value_formatter)
 
     @Manager.calls_manager
     def message_event_keys_with_statuses(self, msg_id, max_results=None):
