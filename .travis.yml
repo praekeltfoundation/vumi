@@ -6,9 +6,6 @@ python:
   - "2.7"
 node_js:
   - "0.10"
-env:
-  # Test against the latest version of Twisted using Riak 1.4.
-  - TWISTED_VERSION="Twisted" RIAK_VERSION="1.4.12"
 matrix:
   include:
     # Test against the oldest version of Twisted that we claim to support.
@@ -22,7 +19,7 @@ matrix:
     # Test on pypy without coverage, because it's unnecessary and very slow.
     # Also, we hit an obscure GC bug in pypy<=2.6.0 so we need at least 2.6.1.
     - python: "pypy"
-      env: PYPY_VERSION="4.0.1" NO_COVERAGE=1 TWISTED_VERSION="Twisted" RIAK_VERSION="1.4.12"
+      env: PYPY_VERSION="4.0.1" NO_COVERAGE=1
 
 cache:
   directories:
@@ -35,11 +32,11 @@ before_install:
   # If necessary, set up an appropriate version of pypy.
   - if [ ! -z "$PYPY_VERSION" ]; then source utils/setup-pypy-travis.sh; fi
   # Set up an appropriate version of Riak.
-  - utils/setup_travis_riak.sh "${RIAK_VERSION}"
+  - utils/setup_travis_riak.sh "${RIAK_VERSION-1.4.12}"
 install:
   # Travis seems to have pip 6.x, which doesn't build and cache wheels.
   - "pip install 'pip>=7.1.0'"
-  - "pip install ${TWISTED_VERSION}"
+  - "pip install ${TWISTED_VERSION-Twisted}"
   - "pip install -r requirements.pip"
   - "pip install coveralls"
 
