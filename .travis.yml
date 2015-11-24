@@ -22,7 +22,7 @@ matrix:
     # Test on pypy without coverage, because it's unnecessary and very slow.
     # Also, we hit an obscure GC bug in pypy<=2.6.0 so we need at least 2.6.1.
     - python: "pypy"
-      env: PYPY_VERSION="2.6.1" NO_COVERAGE=1 TWISTED_VERSION="Twisted" RIAK_VERSION="1.4.12"
+      env: PYPY_VERSION="4.0.1" NO_COVERAGE=1 TWISTED_VERSION="Twisted" RIAK_VERSION="1.4.12"
 
 cache:
   directories:
