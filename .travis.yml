@@ -30,7 +30,7 @@ services:
 
 before_install:
   # Default values for our build envvars.
-  - export RIAK_VERSION="${RIAK_VERSION-1.4.2}"
+  - export RIAK_VERSION="${RIAK_VERSION-1.4.12}"
   - export TWISTED_VERSION="${TWISTED_VERSION-Twisted}"
   # If necessary, set up an appropriate version of pypy.
   - if [ ! -z "$PYPY_VERSION" ]; then source utils/setup-pypy-travis.sh; fi
