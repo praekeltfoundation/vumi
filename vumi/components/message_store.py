@@ -135,9 +135,7 @@ class Event(Model):
         timestamp = self.event['timestamp']
         if not isinstance(timestamp, basestring):
             timestamp = format_vumi_date(timestamp)
-        status = self.event['event_type']
-        if status == "delivery_report":
-            status = "%s.%s" % (status, self.event['delivery_status'])
+        status = self.event.status()
         self.message_with_status = u"%s$%s$%s" % (
             self.message.key, timestamp, status)
         self.batches_with_statuses_reverse = []
@@ -539,6 +537,14 @@ class MessageStore(object):
         mr = self.inbound_messages.index_match(query, 'batches', batch_id)
         return mr.get_keys()
 
+    def batch_event_keys_page(self, batch_id, max_results=None,
+                              continuation=None):
+        if max_results is None:
+            max_results = self.DEFAULT_MAX_RESULTS
+        return self.events.index_keys_page(
+            'batches', batch_id, max_results=max_results,
+            continuation=continuation)
+
     def message_event_keys(self, msg_id):
         return self.events.index_keys('message', msg_id)
 
@@ -888,6 +894,38 @@ class MessageStore(object):
         start, end = end, start
         return self._query_batch_index(
             self.outbound_messages, batch_id, 'batches_with_addresses_reverse',
+            max_results, start, end, key_with_rts_and_value_formatter)
+
+    def batch_event_keys_with_statuses_reverse(self, batch_id,
+                                               max_results=None,
+                                               start=None, end=None):
+        """
+        Return all event keys with timestamps and statuses.
+        Results are ordered from newest to oldest.
+
+        :param str batch_id:
+            The batch_id to fetch keys for.
+
+        :param int max_results:
+            Number of results per page. Defaults to DEFAULT_MAX_RESULTS
+
+        :param str start:
+            Optional start timestamp string matching VUMI_DATE_FORMAT.
+
+        :param str end:
+            Optional end timestamp string matching VUMI_DATE_FORMAT.
+
+        This method performs a Riak index query.
+        """
+        # We're using reverse timestamps, so swap start and end and convert to
+        # reverse timestamps.
+        if start is not None:
+            start = to_reverse_timestamp(start)
+        if end is not None:
+            end = to_reverse_timestamp(end)
+        start, end = end, start
+        return self._query_batch_index(
+            self.events, batch_id, 'batches_with_statuses_reverse',
             max_results, start, end, key_with_rts_and_value_formatter)
 
     @Manager.calls_manager

@@ -1,8 +1,10 @@
+from twisted.python import log
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet.task import Clock
 from twisted.words.xish import domish
 
 from vumi.tests.helpers import VumiTestCase
+from vumi.tests.utils import LogCatcher
 from vumi.transports.xmpp.xmpp import (
     XMPPTransport, XMPPClient, XMPPTransportProtocol)
 from vumi.transports.tests.helpers import TransportHelper
@@ -197,3 +199,17 @@ class TestXMPPTransport(VumiTestCase):
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound()
         self.assertEqual(msg['from_addr'], 'test@case.com')
         self.assertEqual(msg['transport_metadata']['xmpp_id'], message['id'])
+
+    @inlineCallbacks
+    def test_xmpp_connection_lost(self):
+        '''When the XMPP connection is lost, the connection callback should
+        be called, which should log that the connection was lost.'''
+        transport = yield self.mk_transport()
+
+        with LogCatcher() as lc:
+            yield transport.xmpp_protocol.connectionLost('Test connection')
+
+        [connection_lost_log] = lc.logs
+        self.assertEqual(
+            log.textFromEventDict(connection_lost_log),
+            'XMPP Connection lost. Test connection')
