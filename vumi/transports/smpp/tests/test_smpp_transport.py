@@ -61,6 +61,7 @@ class SmppTransportTestCase(VumiTestCase):
         self.tx_helper = self.add_helper(TransportHelper(self.transport_class))
         self.default_config = {
             'transport_name': self.tx_helper.transport_name,
+            'worker_name': self.tx_helper.transport_name,
             'twisted_endpoint': self.fake_smsc.endpoint,
             'delivery_report_processor': 'vumi.transports.smpp.processors.'
                                          'DeliveryReportProcessor',
@@ -154,6 +155,8 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
             "Not all parts of the PDU were able to be decoded. "
             "Responding with ESME_RDELIVERYFAILURE.",
         ])
+        for l in lc.logs:
+            self.assertEqual(l['system'], 'sphex')
 
         inbound = self.tx_helper.get_dispatched_inbound()
         self.assertEqual(inbound, [])
@@ -319,6 +322,8 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
             warning["message"][0],
             "esm_class 4 indicates delivery report, but content does not"
             " match regex: 'foo'")
+        for l in lc.logs:
+            self.assertEqual(l['system'], 'sphex')
 
         inbound = self.tx_helper.get_dispatched_inbound()
         self.assertEqual(inbound, [])
@@ -347,6 +352,8 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
             warning["message"][0],
             "esm_class 4 indicates delivery report, but content does not"
             " match regex: None")
+        for l in lc.logs:
+            self.assertEqual(l['system'], 'sphex')
 
         inbound = self.tx_helper.get_dispatched_inbound()
         self.assertEqual(inbound, [])
@@ -572,6 +579,8 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
             "Failed to retrieve message id for delivery report. Delivery"
             " report from %s discarded.") % (self.tx_helper.transport_name,)
         self.assertEqual(warning['message'], (expected_msg,))
+        for l in lc.logs:
+            self.assertEqual(l['system'], 'sphex')
 
     @inlineCallbacks
     def test_mt_sms(self):
@@ -747,6 +756,8 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
             "Failed to retrieve message id for deliver_sm_resp. ack/nack"
             " from %s discarded.") % (self.tx_helper.transport_name,)
         self.assertEqual(warning['message'], (expected_msg,))
+        for l in lc.logs:
+            self.assertEqual(l['system'], 'sphex')
 
     @inlineCallbacks
     def test_mt_sms_throttled(self):
@@ -763,6 +774,8 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
                              command_status='ESME_RTHROTTLED'))
         [logmsg] = lc.logs
         self.assertEqual(logmsg['logLevel'], logging.INFO)
+        for l in lc.logs:
+            self.assertEqual(l['system'], 'sphex')
 
         self.clock.advance(transport_config.throttle_delay)
 
@@ -786,6 +799,8 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
             self.clock.advance(0)
         [logmsg] = lc.logs
         self.assertEqual(logmsg['logLevel'], logging.INFO)
+        for l in lc.logs:
+            self.assertEqual(l['system'], 'sphex')
 
     @inlineCallbacks
     def test_mt_sms_multipart_throttled(self):
@@ -911,6 +926,8 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.assertEqual(
             logmsg["message"][0],
             "Can't check throttling while unbound, trying later.")
+        for l in lc.logs:
+            self.assertEqual(l['system'], 'sphex')
 
         # Fast-forward to reconnect (but don't bind) and check throttling.
         self.clock.advance(transport.service.delay)
@@ -923,6 +940,8 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.assertEqual(
             logmsg["message"][0],
             "Can't check throttling while unbound, trying later.")
+        for l in lc.logs:
+            self.assertEqual(l['system'], 'sphex')
 
         # Bind and check throttling.
         yield self.fake_smsc.bind(bind_pdu)
@@ -951,6 +970,8 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
             msg3_d = self.tx_helper.make_dispatch_outbound('hello world 3')
         [logmsg] = lc.logs
         self.assertEqual(logmsg['logLevel'], logging.INFO)
+        for l in lc.logs:
+            self.assertEqual(l['system'], 'sphex')
 
         self.assertTrue(transport.throttled)
         [submit_sm_pdu1, submit_sm_pdu2] = yield self.fake_smsc.await_pdus(2)
@@ -962,6 +983,8 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
             self.clock.advance(1)
         [logmsg] = lc.logs
         self.assertEqual(logmsg['logLevel'], logging.INFO)
+        for l in lc.logs:
+            self.assertEqual(l['system'], 'sphex')
 
         self.assertFalse(transport.throttled)
         yield msg3_d
@@ -987,6 +1010,8 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
             msg3_d = self.tx_helper.make_dispatch_outbound('3' * 200 + 'c')
         [logmsg] = lc.logs
         self.assertEqual(logmsg['logLevel'], logging.INFO)
+        for l in lc.logs:
+            self.assertEqual(l['system'], 'sphex')
         self.assertEqual(transport.throttled, True)
         [pdu1_1, pdu1_2, pdu2_1, pdu2_2] = yield self.fake_smsc.await_pdus(4)
         self.assertEqual(short_message(pdu1_1)[-5:], '11111')
@@ -1000,6 +1025,8 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         [logmsg] = lc.logs
         self.assertEqual(logmsg['logLevel'], logging.INFO)
         self.assertEqual(transport.throttled, False)
+        for l in lc.logs:
+            self.assertEqual(l['system'], 'sphex')
 
         yield msg3_d
         [pdu3_1, pdu3_2] = yield self.fake_smsc.await_pdus(2)
@@ -1020,6 +1047,8 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
             msg3_d = self.tx_helper.make_dispatch_outbound('hello world 3')
         [logmsg] = lc.logs
         self.assertEqual(logmsg['logLevel'], logging.INFO)
+        for l in lc.logs:
+            self.assertEqual(l['system'], 'sphex')
 
         self.assertTrue(transport.throttled)
         [submit_sm_pdu1, submit_sm_pdu2] = yield self.fake_smsc.await_pdus(2)
@@ -1034,6 +1063,8 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         [logmsg] = lc.logs
         self.assertEqual(logmsg['logLevel'], logging.INFO)
         self.assertTrue(transport.throttled)
+        for l in lc.logs:
+            self.assertEqual(l['system'], 'sphex')
 
         # Fast-forward to reconnect (but don't bind) and check throttling.
         self.clock.advance(transport.service.delay)
@@ -1045,6 +1076,8 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         [logmsg] = lc.logs
         self.assertEqual(logmsg['logLevel'], logging.INFO)
         self.assertTrue(transport.throttled)
+        for l in lc.logs:
+            self.assertEqual(l['system'], 'sphex')
 
         # Bind and check throttling.
         yield self.fake_smsc.bind(bind_pdu)
@@ -1052,6 +1085,8 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
             self.clock.advance(1)
         [logmsg] = lc.logs
         self.assertEqual(logmsg['logLevel'], logging.INFO)
+        for l in lc.logs:
+            self.assertEqual(l['system'], 'sphex')
 
         self.assertFalse(transport.throttled)
         submit_sm_pdu2 = yield self.fake_smsc.await_pdu()
@@ -1646,6 +1681,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         lc = LogCatcher(message="Password longer than 8 characters,")
         with lc:
             yield self.get_transport({
+                'worker_name': 'sphex',
                 'system_id': 'myusername',
                 'password': 'mypass789',
                 'system_type': 'SMPP',
@@ -1670,6 +1706,8 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         [warning] = lc.logs
         expected_msg = "Password longer than 8 characters, truncating."
         self.assertEqual(warning['message'], (expected_msg,))
+        for l in lc.logs:
+            self.assertEqual(l['system'], 'sphex')
 
     @inlineCallbacks
     def test_default_bind_params(self):
@@ -1967,6 +2005,7 @@ class SmppTransceiverTransportWithOldConfigTestCase(
         self.tx_helper = self.add_helper(TransportHelper(self.transport_class))
         self.default_config = {
             'transport_name': self.tx_helper.transport_name,
+            'worker_name': self.tx_helper.transport_name,
             'twisted_endpoint': self.fake_smsc.endpoint,
             'system_id': 'foo',
             'password': 'bar',

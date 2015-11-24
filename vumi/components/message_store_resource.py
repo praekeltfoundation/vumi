@@ -8,7 +8,8 @@ from twisted.web.resource import NoResource, Resource
 from twisted.web.server import NOT_DONE_YET
 
 from vumi.components.message_store import MessageStore
-from vumi.components.message_formatters import JsonFormatter, CsvFormatter
+from vumi.components.message_formatters import (
+    JsonFormatter, CsvFormatter, CsvEventFormatter)
 from vumi.config import (
     ConfigDict, ConfigText, ConfigServerEndpoint, ConfigInt,
     ServerEndpointFallback)
@@ -185,13 +186,32 @@ class OutboundResource(MessageStoreProxyResource):
         return message_store.get_outbound_message(message_id)
 
 
+class EventResource(MessageStoreProxyResource):
+
+    def get_keys_page(self, message_store, batch_id):
+        return message_store.batch_event_keys_with_statuses_reverse(
+            batch_id, max_results=message_store.DEFAULT_MAX_RESULTS,
+            start=None, end=None)
+
+    def get_keys_page_for_time(self, message_store, batch_id, start, end):
+        return message_store.batch_event_keys_with_statuses_reverse(
+            batch_id, max_results=message_store.DEFAULT_MAX_RESULTS,
+            start=start, end=end)
+
+    def get_message(self, message_store, event_index):
+        event_id, _, _ = event_index
+        return message_store.get_event(event_id)
+
+
 class BatchResource(Resource):
 
     RESOURCES = {
         'inbound.json': (InboundResource, JsonFormatter),
         'outbound.json': (OutboundResource, JsonFormatter),
+        'events.json': (EventResource, JsonFormatter),
         'inbound.csv': (InboundResource, CsvFormatter),
         'outbound.csv': (OutboundResource, CsvFormatter),
+        'events.csv': (EventResource, CsvEventFormatter),
     }
 
     def __init__(self, message_store, batch_id):

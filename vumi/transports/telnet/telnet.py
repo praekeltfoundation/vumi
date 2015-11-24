@@ -7,7 +7,6 @@ from twisted.internet.defer import inlineCallbacks, Deferred, gatherResults
 from twisted.conch.telnet import (
     TelnetTransport, TelnetProtocol, StatefulTelnetProtocol)
 
-from vumi import log
 from vumi.config import (
     ConfigServerEndpoint, ConfigText, ConfigInt, ServerEndpointFallback)
 from vumi.transports import Transport
@@ -159,13 +158,13 @@ class TelnetServerTransport(Transport):
         # fire it after we're finished with our own deregistration process.
         client.registration_d = Deferred()
         client_addr = client.getAddress()
-        log.msg("Registering client connected from %r" % client_addr)
+        self.log.msg("Registering client connected from %r" % client_addr)
         self._clients[client_addr] = client
         self.send_inbound_message(client, None,
                                   TransportUserMessage.SESSION_NEW)
 
     def deregister_client(self, client):
-        log.msg("Deregistering client.")
+        self.log.msg("Deregistering client.")
         self.send_inbound_message(
             client, None, TransportUserMessage.SESSION_CLOSE)
         del self._clients[client.getAddress()]
