@@ -86,3 +86,23 @@ class CsvFormatter(object):
 
     def _format_field_timestamp(self, message):
         return message['timestamp'].isoformat()
+
+
+class CsvEventFormatter(CsvFormatter):
+    """ Formatter for writing messages to requests as CSV. """
+
+    implements(IMessageFormatter)
+
+    FIELDS = (
+        'timestamp',
+        'event_id',
+        'status',
+        'user_message_id',
+        'nack_reason',
+    )
+
+    def _format_field_status(self, message):
+        return message.status()
+
+    def _format_field_nack_reason(self, message):
+        return message.get('nack_reason', u'') or u''

@@ -432,6 +432,7 @@ class TransportEventTest(TransportMessageTestMixin, VumiTestCase):
             )
         self.assertEqual('event', msg['message_type'])
         self.assertEqual('ack', msg['event_type'])
+        self.assertEqual('ack', msg.status())
         self.assertEqual('def', msg['event_id'])
         self.assertEqual('abc', msg['user_message_id'])
         self.assertEqual('20110921', msg['message_version'])
@@ -447,6 +448,7 @@ class TransportEventTest(TransportMessageTestMixin, VumiTestCase):
             )
         self.assertEqual('event', msg['message_type'])
         self.assertEqual('nack', msg['event_type'])
+        self.assertEqual('nack', msg.status())
         self.assertEqual('unknown', msg['nack_reason'])
         self.assertEqual('def', msg['event_id'])
         self.assertEqual('abc', msg['user_message_id'])
@@ -465,6 +467,7 @@ class TransportEventTest(TransportMessageTestMixin, VumiTestCase):
             )
         self.assertEqual('event', msg['message_type'])
         self.assertEqual('delivery_report', msg['event_type'])
+        self.assertEqual('delivery_report.delivered', msg.status())
         self.assertEqual('def', msg['event_id'])
         self.assertEqual('abc', msg['user_message_id'])
         self.assertEqual('20110921', msg['message_version'])
@@ -496,12 +499,12 @@ class TestTransportStatus(VumiTestCase):
     def test_validate_type_present(self):
         self.assertRaises(
             MissingMessageField, TransportStatus,
-             status='ok', component='foo', message='baz')
+            status='ok', component='foo', message='baz')
 
     def test_validate_message_present(self):
         self.assertRaises(
             MissingMessageField, TransportStatus,
-             status='ok', component='foo', type='bar')
+            status='ok', component='foo', type='bar')
 
     def test_validate_status_field(self):
         TransportStatus(
