@@ -1,6 +1,13 @@
 Vumi
 ====
 
+NOTE: Version 0.6.x is backward-compatible with 0.5.x for the most part, with
+some caveats. The first few releases will be removing a bunch of obsolete and
+deprecated code and replacing some of the internals of the base worker. While
+this will almost certainly not break the majority of things built on vumi, old
+code or code that relies too heavily on the details of worker setup may need to
+be fixed.
+
 Documentation available online at http://vumi.readthedocs.org/ and in the `docs` directory of the repository.
 
 |vumi-ver| |vumi-ci| |vumi-cover| |python-ver| |vumi-docs| |vumi-downloads| |vumi-license|
