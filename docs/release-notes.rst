@@ -1,6 +1,28 @@
 Release Notes
 =============
 
+Version 0.6
+-----------
+
+NOTE: Version 0.6.x is backward-compatible with 0.5.x for the most part, with
+some caveats. The first few releases will be removing a bunch of obsolete and
+deprecated code and replacing some of the internals of the base worker. While
+this will almost certainly not break the majority of things built on vumi, old
+code or code that relies too heavily on the details of worker setup may need to
+be fixed.
+
+:Version: 0.6.0
+:Date released: 7 Dec 2015
+
+* Removed various obsolete test helper code in preparation for AMQP client
+  changes.
+* Started writing release notes again.
+
+Version 0.5
+-----------
+
+No release notes for three and a half years. Sorry. :-(
+
 Version 0.4
 -----------
 
