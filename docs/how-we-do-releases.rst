@@ -81,7 +81,7 @@ Register the release with PyPI::
 
     $ python setup.py register
 
-Build the source distribution pacakge::
+Build the source distribution package::
 
     $ python setup.py sdist
 
