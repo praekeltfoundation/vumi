@@ -148,6 +148,13 @@ class TestWeChatInboundMessaging(WeChatTestCase):
         self.assertEqual(ack['user_message_id'], reply_msg['message_id'])
         self.assertEqual(ack['sent_message_id'], reply_msg['message_id'])
 
+        [status] = yield self.tx_helper.wait_for_dispatched_statuses(1)
+
+        self.assertEquals(status['status'], 'ok')
+        self.assertEquals(status['component'], 'inbound')
+        self.assertEquals(status['type'], 'good_request')
+        self.assertEquals(status['message'], 'Good request received')
+
     @inlineCallbacks
     def test_inbound_bad_request(self):
         transport = yield self.get_transport_with_access_token('foo')

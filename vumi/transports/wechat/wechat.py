@@ -115,11 +115,14 @@ class WeChatResource(Resource):
         request.setResponseCode(http.BAD_REQUEST)
         return ''
 
+    @inlineCallbacks
     def validate_request(self, request):
         if not (is_verifiable(request)
                 and verify(self.config.auth_token, request)):
             raise WeChatException('Bad request for incoming message')
-        return request
+        elif is_verifiable(request):
+            yield self.transport.add_status_good_req()
+        returnValue(request)
 
     def render_POST(self, request):
         d = Deferred()
@@ -211,6 +214,11 @@ class WeChatTransport(Transport):
         return self.add_status(
             status='down', component='inbound', type='bad_request',
             message='Bad request received')
+
+    def add_status_good_req(self):
+        return self.add_status(
+            status='ok', component='inbound', type='good_request',
+            message='Good request received')
 
     @inlineCallbacks
     def setup_transport(self):
