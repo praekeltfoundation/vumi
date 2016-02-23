@@ -21,7 +21,8 @@ from vumi.transports.httprpc.httprpc import HttpRpcHealthResource
 from vumi.transports.wechat.errors import WeChatException, WeChatApiException
 from vumi.transports.wechat.message_types import (
     TextMessage, EventMessage, NewsMessage, WeChatXMLParser)
-from vumi.utils import build_web_site, http_request_full
+from vumi.utils import build_web_site, http_request_full, StatusEdgeDetector
+
 from vumi.message import TransportUserMessage
 from vumi.persist.txredis_manager import TxRedisManager
 
@@ -114,23 +115,29 @@ class WeChatResource(Resource):
         request.setResponseCode(http.BAD_REQUEST)
         return ''
 
-    def render_POST(self, request):
+    @inlineCallbacks
+    def validate_request(self, request):
         if not (is_verifiable(request)
                 and verify(self.config.auth_token, request)):
-            request.setResponseCode(http.BAD_REQUEST)
-            return ''
+            raise WeChatException('Bad request for incoming message')
+        yield self.transport.add_status_good_req()
+        returnValue(request)
 
+    def render_POST(self, request):
         d = Deferred()
+        d.addCallback(self.validate_request)
         d.addCallback(self.handle_request)
         d.addCallback(self.transport.queue_request, request)
         d.addErrback(self.handle_error, request)
         reactor.callLater(0, d.callback, request)
         return NOT_DONE_YET
 
+    @inlineCallbacks
     def handle_error(self, failure, request):
         if not failure.trap(WeChatException):
             raise failure
 
+        yield self.transport.add_status_bad_req()
         request.setResponseCode(http.BAD_REQUEST)
         request.write(failure.getErrorMessage())
         request.finish()
@@ -202,6 +209,16 @@ class WeChatTransport(Transport):
     transport_type = 'wechat'
     agent_factory = None  # For swapping out the Agent we use in tests.
 
+    def add_status_bad_req(self):
+        return self.add_status(
+            status='down', component='inbound', type='bad_request',
+            message='Bad request received')
+
+    def add_status_good_req(self):
+        return self.add_status(
+            status='ok', component='inbound', type='good_request',
+            message='Good request received')
+
     @inlineCallbacks
     def setup_transport(self):
         config = self.get_static_config()
@@ -215,11 +232,19 @@ class WeChatTransport(Transport):
 
         self.redis = yield TxRedisManager.from_config(config.redis_manager)
         self.server = yield self.endpoint.listen(self.factory)
+        self.status_detect = StatusEdgeDetector()
 
         if config.wechat_menu:
             # not yielding because this shouldn't block startup
             d = self.get_access_token()
             d.addCallback(self.create_wechat_menu, config.wechat_menu)
+
+    @inlineCallbacks
+    def add_status(self, **kw):
+        '''Publishes a status if it is not a repeat of the previously
+        published status.'''
+        if self.status_detect.check_status(**kw):
+            yield self.publish_status(**kw)
 
     def http_request_full(self, *args, **kw):
         kw['agent_class'] = self.agent_factory
@@ -473,13 +498,16 @@ class WeChatTransport(Transport):
                 lambda ack: self.clear_addr_mask(wc_message.from_user_name))
         return d
 
+    @inlineCallbacks
     def handle_api_response(self, response, message):
         if http_ok(response):
-            return self.publish_ack(user_message_id=message['message_id'],
-                                    sent_message_id=message['message_id'])
-        return self.publish_nack(
+            ack = yield self.publish_ack(user_message_id=message['message_id'],
+                                         sent_message_id=message['message_id'])
+            returnValue(ack)
+        nack = yield self.publish_nack(
             message['message_id'],
             reason='Received status code: %s' % (response.code,))
+        returnValue(nack)
 
     @inlineCallbacks
     def get_access_token(self):
