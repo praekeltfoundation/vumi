@@ -24,8 +24,6 @@ from vumi.persist.fake_redis import FakeRedis
 
 
 def request(transport, *a, **kw):
-    underrides = kw.setdefault('params', {})
-
     nonce = '1234'
     timestamp = '2014-01-01T00:00:00'
     token = transport.get_static_config().auth_token
@@ -39,7 +37,7 @@ def request(transport, *a, **kw):
         'nonce': nonce,
     }
 
-    params.update(underrides)
+    params.update(kw.get('params', {}))
     kw['params'] = params
     return raw_request(transport, *a, **kw)
 
