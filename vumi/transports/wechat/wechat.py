@@ -120,8 +120,7 @@ class WeChatResource(Resource):
         if not (is_verifiable(request)
                 and verify(self.config.auth_token, request)):
             raise WeChatException('Bad request for incoming message')
-        elif is_verifiable(request):
-            yield self.transport.add_status_good_req()
+        yield self.transport.add_status_good_req()
         returnValue(request)
 
     def render_POST(self, request):
