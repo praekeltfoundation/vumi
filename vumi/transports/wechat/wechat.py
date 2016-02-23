@@ -195,7 +195,7 @@ class WeChatTransport(Transport):
     1) When a user subscribes to the Vumi account, and opens
      up the contact for the first time, the contact will
      send the first message.
-	2) When the session ends, every time after that, the
+    2) When the session ends, every time after that, the
      user has to send a text to the contact for it to respond
      (unlike when the user adds the contact for the first
      time as seen in 1.) The user can send anything to the
