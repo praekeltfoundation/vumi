@@ -40,6 +40,16 @@ class FakeRedisTestMixin(object):
         raise NotImplementedError(".wait() method not implemented.")
 
     @inlineCallbacks
+    def test_rename(self):
+        redis = yield self.get_redis()
+        yield redis.set("old_me", "oldval")
+        yield self.assert_redis_op(redis, True, 'rename', "old_me", "new_me")
+        self.assertEqual((yield redis.exists("old_me")), False)
+        self.assertEqual((yield redis.get("new_me")), "oldval")
+        yield self.assert_redis_error(redis, 'rename', "old_me", "old_me")
+        yield self.assert_redis_error(redis, 'rename', "other", "new_me")
+
+    @inlineCallbacks
     def test_delete(self):
         redis = yield self.get_redis()
         yield redis.set("delete_me", 1)
