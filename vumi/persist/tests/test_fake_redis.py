@@ -707,7 +707,8 @@ class RedisPairWrapper(object):
         # Now handle results.
         self._test_case.assertEqual(
             results[0], results[1],
-            "Fake redis (a) and real redis (b) responses different:")
+            "Fake redis (a) and real redis (b) responses different:"
+            "\n a = %r\n b = %r" % tuple(results))
         returnValue(results[0])
 
     def __getattr__(self, name):
