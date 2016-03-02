@@ -2,7 +2,6 @@ sudo: false # We want container builds.
 
 language: python
 python:
-  - "2.6"
   - "2.7"
 node_js:
   - "0.10"

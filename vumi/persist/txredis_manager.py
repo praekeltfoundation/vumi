@@ -100,6 +100,11 @@ class VumiRedis(txr.Redis):
     def setex(self, key, seconds, value):
         return self.set(key, value, expire=seconds)
 
+    def rename(self, key, newkey):
+        d = super(VumiRedis, self).rename(key, newkey)
+        d.addCallback(self._ok_to_true)
+        return d
+
     # setnx() is implemented in txredis 2.2.1 (which is in Ubuntu), but not 2.2
     # (which is in pypi). Annoyingly, set() in 2.2.1 calls setnx(), so we can't
     # just delegate to that as we did before.
