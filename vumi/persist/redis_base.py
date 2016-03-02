@@ -222,6 +222,7 @@ class Manager(object):
     setnx = RedisCall(['key', 'value'])
     delete = RedisCall(['key'])
     setex = RedisCall(['key', 'seconds', 'value'])
+    rename = RedisCall(['key', 'newkey'], key_args=('key', 'newkey'))
 
     # Integer operations
     incr = RedisCall(['key', 'amount'], defaults=[1])

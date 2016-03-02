@@ -23,23 +23,32 @@ from vumi.message import TransportUserMessage
 from vumi.persist.fake_redis import FakeRedis
 
 
-def request(transport, method, path='', params={}, data=None):
-    addr = transport.server.getHost()
-    token = transport.get_static_config().auth_token
-
+def request(transport, *a, **kw):
     nonce = '1234'
     timestamp = '2014-01-01T00:00:00'
+    token = transport.get_static_config().auth_token
+
     good_signature = hashlib.sha1(
         ''.join(sorted([timestamp, nonce, token]))).hexdigest()
 
-    default_params = {
+    params = {
         'signature': good_signature,
         'timestamp': timestamp,
         'nonce': nonce,
     }
 
-    default_params.update(params)
-    path += '?%s' % (urlencode(default_params),)
+    params.update(kw.get('params', {}))
+    kw['params'] = params
+    return raw_request(transport, *a, **kw)
+
+
+def raw_request(transport, method, path='', params=None, data=None):
+    if params is None:
+        params = {}
+
+    addr = transport.server.getHost()
+
+    path += '?%s' % (urlencode(params),)
     url = 'http://%s:%s%s%s' % (
         addr.host,
         addr.port,
@@ -69,6 +78,7 @@ class WeChatTestCase(VumiTestCase):
             'wechat_appid': 'appid',
             'wechat_secret': 'secret',
             'embed_user_profile': False,
+            'publish_status': True,
         }
         defaults.update(config)
         transport = yield self.tx_helper.get_transport(defaults)
@@ -135,6 +145,33 @@ class TestWeChatInboundMessaging(WeChatTestCase):
         self.assertEqual(ack['event_type'], 'ack')
         self.assertEqual(ack['user_message_id'], reply_msg['message_id'])
         self.assertEqual(ack['sent_message_id'], reply_msg['message_id'])
+
+        [status] = yield self.tx_helper.wait_for_dispatched_statuses(1)
+
+        self.assertEquals(status['status'], 'ok')
+        self.assertEquals(status['component'], 'inbound')
+        self.assertEquals(status['type'], 'good_request')
+        self.assertEquals(status['message'], 'Good request received')
+
+    @inlineCallbacks
+    def test_inbound_bad_request(self):
+        transport = yield self.get_transport_with_access_token('foo')
+        yield raw_request(
+            transport, 'POST', params={'bad': 'params'}, data="""
+            <xml>
+            <ToUserName><![CDATA[toUser]]></ToUserName>
+            <FromUserName><![CDATA[fromUser]]></FromUserName>
+            <CreateTime>1348831860</CreateTime>
+            <MsgType><![CDATA[THIS_IS_UNSUPPORTED]]></MsgType>
+            <Content><![CDATA[this is a test]]></Content>
+            </xml>
+            """.strip())
+        [status] = yield self.tx_helper.wait_for_dispatched_statuses(1)
+
+        self.assertEquals(status['status'], 'down')
+        self.assertEquals(status['component'], 'inbound')
+        self.assertEquals(status['type'], 'bad_request')
+        self.assertEquals(status['message'], 'Bad request received')
 
     @inlineCallbacks
     def test_inbound_event_subscribe_message(self):
