@@ -220,6 +220,16 @@ class FakeRedis(object):
             self._known_key_existence[key] = False
         return existed
 
+    @maybe_async
+    def rename(self, key, newkey):
+        if key == newkey:
+            raise ResponseError("source and destination objects are the same")
+        if key not in self._data:
+            raise ResponseError("no such key")
+        data = self._data.pop(key)
+        self._set_key(newkey, data)
+        return True
+
     # Integer operations
 
     # The python redis lib combines incr & incrby into incr(key, amount=1)
