@@ -1,9 +1,11 @@
 # -*- test-case-name: vumi.persist.tests.test_redis_manager -*-
 
 import redis
+import redis.exceptions
 
 from vumi.persist.redis_base import Manager
-from vumi.persist.fake_redis import FakeRedis
+from vumi.persist.fake_redis import (
+    FakeRedis, ResponseError as FakeResponseError)
 from vumi.utils import flatten_generator
 
 
@@ -48,6 +50,8 @@ class VumiRedis(redis.Redis):
 
 class RedisManager(Manager):
 
+    RESPONSE_ERROR = redis.exceptions.ResponseError
+
     call_decorator = staticmethod(flatten_generator)
 
     @classmethod
@@ -58,6 +62,7 @@ class RedisManager(Manager):
         manager = cls(fake_redis, **manager_config)
         # Because ._close() assumes a real connection.
         manager._close = fake_redis.teardown
+        manager.RESPONSE_ERROR = FakeResponseError
         return manager
 
     @classmethod
