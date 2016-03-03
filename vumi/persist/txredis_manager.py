@@ -10,12 +10,14 @@ try:
 except ImportError:
     import txredis.protocol as txrp
     txr = txrp
+import txredis.exceptions
 
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, succeed, Deferred
 
 from vumi.persist.redis_base import Manager
-from vumi.persist.fake_redis import FakeRedis
+from vumi.persist.fake_redis import (
+    FakeRedis, ResponseError as FakeResponseError)
 
 
 class VumiRedis(txr.Redis):
@@ -238,6 +240,8 @@ class TxRedisManager(Manager):
 
     call_decorator = staticmethod(inlineCallbacks)
 
+    RESPONSE_ERROR = txredis.exceptions.ResponseError
+
     def __init__(self, *args, **kwargs):
         super(TxRedisManager, self).__init__(*args, **kwargs)
         self._sub_managers = []
@@ -250,6 +254,7 @@ class TxRedisManager(Manager):
         manager = cls(fake_redis, **manager_config)
         # Because ._close() assumes a real connection.
         manager._close = fake_redis.teardown
+        manager.RESPONSE_ERROR = FakeResponseError
         return succeed(manager)
 
     @classmethod
