@@ -633,7 +633,8 @@ class TestFakeRedis(FakeRedisUnverifiedTestMixin, FakeRedisTestMixin,
         self.assertEqual(expected, getattr(redis, op)(*args, **kw))
 
     def assert_redis_error(self, redis, op, *args, **kw):
-        self.assertRaises(Exception, getattr(redis, op), *args, **kw)
+        self.assertRaises(
+            ResponseError, getattr(redis, op), *args, **kw)
 
     def wait(self, redis, delay):
         redis.clock.advance(delay)
@@ -653,7 +654,7 @@ class TestFakeRedisAsync(FakeRedisUnverifiedTestMixin, FakeRedisTestMixin,
 
     def assert_redis_error(self, redis, op, *args, **kw):
         d = getattr(redis, op)(*args, **kw)
-        return self.assertFailure(d, Exception)
+        return self.assertFailure(d, ResponseError)
 
     def wait(self, redis, delay):
         redis.clock.advance(delay)
@@ -695,11 +696,14 @@ class RedisPairWrapper(object):
 
         # First, handle errors.
         if errors:
-            # We match based on the exception type name so that ResponseErrors
-            # from different places are considered equal. We ignore the error
-            # message in the check, but we display it to aid debugging.
+            # We convert ResponseErrors from the real redis to the fake redis
+            # ResponseError type. We ignore the error message in the check, but
+            # we display it to aid debugging.
+            fake_type, real_type = type(errors[0]), type(errors[1])
+            if real_type is self._real_redis.RESPONSE_ERROR:
+                real_type = self._fake_redis.RESPONSE_ERROR
             self._test_case.assertEqual(
-                type(errors[0]).__name__, type(errors[1]).__name__,
+                fake_type, real_type,
                 ("Fake redis (a) and real redis (b) errors different:"
                  "\n a = %r\n b = %r") % tuple(errors))
             raise errors[0]
@@ -724,8 +728,11 @@ class TestFakeRedisVerify(FakeRedisTestMixin, VumiTestCase):
     def get_redis(self, **kwargs):
         from vumi.persist.redis_manager import RedisManager
         # Fake redis
-        fake_redis = FakeRedis(**kwargs)
-        self.add_cleanup(fake_redis.teardown)
+        fake_redis = RedisManager._fake_manager(FakeRedis(**kwargs), {
+            "config": {},
+            "key_prefix": 'redistest',
+        })
+        self.add_cleanup(fake_redis._close)
         # Real redis
         config = {
             'FAKE_REDIS': 'yes',
@@ -749,7 +756,7 @@ class TestFakeRedisVerify(FakeRedisTestMixin, VumiTestCase):
         self.assertRaises(ResponseError, getattr(redis, op), *args, **kw)
 
     def wait(self, redis, delay):
-        redis._fake_redis.clock.advance(delay)
+        redis._fake_redis._client.clock.advance(delay)
         d = Deferred()
         reactor.callLater(delay, d.callback, None)
         return d
@@ -765,8 +772,12 @@ class TestFakeRedisVerifyAsync(FakeRedisTestMixin, VumiTestCase):
     def get_redis(self, **kwargs):
         from vumi.persist.txredis_manager import TxRedisManager
         # Fake redis
-        fake_redis = FakeRedis(async=True, **kwargs)
-        self.add_cleanup(fake_redis.teardown)
+        fake_redis = yield TxRedisManager._fake_manager(
+            FakeRedis(async=True, **kwargs), {
+                "config": {},
+                "key_prefix": 'redistest',
+            })
+        self.add_cleanup(fake_redis._close)
         # Real redis
         config = {
             'FAKE_REDIS': 'yes',
@@ -794,7 +805,7 @@ class TestFakeRedisVerifyAsync(FakeRedisTestMixin, VumiTestCase):
         return self.assertFailure(d, ResponseError)
 
     def wait(self, redis, delay):
-        redis._fake_redis.clock.advance(delay)
+        redis._fake_redis._client.clock.advance(delay)
         d = Deferred()
         reactor.callLater(delay, d.callback, None)
         return d
