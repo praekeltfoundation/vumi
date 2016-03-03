@@ -633,7 +633,8 @@ class TestFakeRedis(FakeRedisUnverifiedTestMixin, FakeRedisTestMixin,
         self.assertEqual(expected, getattr(redis, op)(*args, **kw))
 
     def assert_redis_error(self, redis, op, *args, **kw):
-        self.assertRaises(Exception, getattr(redis, op), *args, **kw)
+        self.assertRaises(
+            ResponseError, getattr(redis, op), *args, **kw)
 
     def wait(self, redis, delay):
         redis.clock.advance(delay)
@@ -653,7 +654,7 @@ class TestFakeRedisAsync(FakeRedisUnverifiedTestMixin, FakeRedisTestMixin,
 
     def assert_redis_error(self, redis, op, *args, **kw):
         d = getattr(redis, op)(*args, **kw)
-        return self.assertFailure(d, Exception)
+        return self.assertFailure(d, ResponseError)
 
     def wait(self, redis, delay):
         redis.clock.advance(delay)
