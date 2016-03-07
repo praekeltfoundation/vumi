@@ -3,28 +3,28 @@
 TWISTD_COMMAND="${TWISTD_COMMAND:-vumi_worker}"
 
 WORKER_CLASS_OPT=""
-if [ -n "$WORKER_CLASS" ]; do
+if [ -n "$WORKER_CLASS" ]; then
   WORKER_CLASS_OPT="--worker-class $WORKER_CLASS"
-done
+fi
 
 CONFIG_OPT=""
-if [ -n "$CONFIG_FILE" ]; do
+if [ -n "$CONFIG_FILE" ]; then
   CONFIG_OPT="--config $CONFIG_FILE"
-done
+fi
 
 AMQP_OPTS=""
-if [ -n "$AMQP_HOST" ]; do
+if [ -n "$AMQP_HOST" ]; then
   AMQP_OPTS="--hostname $AMQP_HOST \
     --port ${AMQP_PORT:-5672} \
     --vhost ${AMQP_VHOST:-/} \
     --username ${AMQP_USERNAME:-guest} \
     --password ${AMQP_PASSWORD:-guest}"
-done
+fi
 
 SENTRY_OPT=""
-if [ -n "$SENTRY_DSN" ]; do
+if [ -n "$SENTRY_DSN" ]; then
   SENTRY_OPT="--sentry $SENTRY_DSN"
-done
+fi
 
 SET_OPTS=$(env | grep ^VUMI_OPT_ | sed -e 's/^VUMI_OPT_//' -e 's/=/ /' | awk '{printf("%s=%s:%s ", "--set-option", tolower($1), $2);}')
 
