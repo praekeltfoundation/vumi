@@ -1,6 +1,6 @@
 #!/bin/bash -e
 
-TWISTD_APPLICATION="${TWISTD_APPLICATION:-vumi_worker}"
+TWISTD_COMMAND="${TWISTD_COMMAND:-vumi_worker}"
 
 WORKER_CLASS_OPT=""
 if [ -n "$WORKER_CLASS" ]; do
@@ -29,7 +29,7 @@ done
 SET_OPTS=$(env | grep ^VUMI_OPT_ | sed -e 's/^VUMI_OPT_//' -e 's/=/ /' | awk '{printf("%s=%s:%s ", "--set-option", tolower($1), $2);}')
 
 exec twistd --nodaemon \
-  "$TWISTD_APPLICATION" \
+  "$TWISTD_COMMAND" \
   "$WORKER_CLASS_OPT" \
   "$CONFIG_OPT" \
   "$AMQP_OPTS" \
