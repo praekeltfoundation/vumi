@@ -190,9 +190,7 @@ class TestGoConversationTransport(TestGoConversationTransportBase):
         return self.assertFailure(self.get_transport(), ConfigError)
 
     def get_configured_transport(self):
-        return self.get_transport(
-            message_path='messages.json', event_path='events.json',
-            web_port='0')
+        return self.get_transport(web_path='', web_port='0')
 
     def post_msg(self, url, msg_json):
         data = msg_json.encode('utf-8')

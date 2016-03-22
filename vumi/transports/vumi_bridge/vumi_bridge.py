@@ -57,11 +57,8 @@ class VumiBridgeTransportConfig(Transport.CONFIG_CLASS):
     web_port = ConfigInt(
         "The port to listen for requests on, defaults to `0`.",
         default=0, static=True)
-    message_path = ConfigText(
-        "The path to listen for message requests on.", required=True,
-        static=True)
-    event_path = ConfigText(
-        "The path to listen for event requests on.", required=True,
+    web_path = ConfigText(
+        "The path to listen for inbound requests on.", required=True,
         static=True)
     health_path = ConfigText(
         "The path to listen for downstream health checks on"
@@ -191,9 +188,9 @@ class GoConversationTransport(GoConversationTransportBase):
 
         self.web_resource = yield self.start_web_resources([
             (GoConversationResource(self.handle_raw_inbound_message),
-             config.message_path),
+             "%s/messages.json" % (config.web_path)),
             (GoConversationResource(self.handle_raw_inbound_event),
-             config.event_path),
+             "%s/events.json" % (config.web_path)),
             (GoConversationHealthResource(self), config.health_path),
         ], config.web_port)
 
