@@ -11,8 +11,7 @@ from vumi.message import TransportUserMessage
 from vumi.tests.fake_connection import FakeHttpServer
 from vumi.tests.helpers import VumiTestCase
 from vumi.transports.tests.helpers import TransportHelper
-from vumi.transports.vumi_bridge import (
-    GoConversationClientTransport, GoConversationServerTransport)
+from vumi.transports.vumi_bridge import GoConversationTransport
 from vumi.config import ConfigError
 from vumi.utils import http_request_full
 
@@ -65,7 +64,7 @@ class TestGoConversationTransportBase(VumiTestCase):
 
 class TestGoConversationTransport(TestGoConversationTransportBase):
 
-    transport_class = GoConversationClientTransport
+    transport_class = GoConversationTransport
 
     @inlineCallbacks
     def setup_transport(self, transport):
@@ -183,9 +182,9 @@ class TestGoConversationTransport(TestGoConversationTransportBase):
         self.assertFalse(transport.reconnect_call)
 
 
-class TestGoConversationServerTransport(TestGoConversationTransportBase):
+class TestGoConversationTransport(TestGoConversationTransportBase):
 
-    transport_class = GoConversationServerTransport
+    transport_class = GoConversationTransport
 
     def test_server_settings_without_configs(self):
         return self.assertFailure(self.get_transport(), ConfigError)
