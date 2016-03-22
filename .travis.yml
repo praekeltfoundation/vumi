@@ -42,7 +42,7 @@ install:
   - "pip install 'pip>=7.1.0'"
   - "pip install ${TWISTED_VERSION}"
   # If requested, install PyCrypto
-  - if [ ! -z "$PYCRYPTO_VERSION" ]; then pip install "$PYCRYPTO_VERSION"
+  - if [ ! -z "$PYCRYPTO_VERSION" ]; then pip install "$PYCRYPTO_VERSION"; fi
   - "pip install -r requirements.pip"
   - "pip install coveralls"
 
