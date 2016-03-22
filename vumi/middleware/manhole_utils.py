@@ -27,10 +27,10 @@ class ClientUserAuth(userauth.SSHUserAuthClient):
         return
 
     def getPublicKey(self):
-        return public_key.blob()
+        return public_key
 
     def getPrivateKey(self):
-        return defer.succeed(private_key.keyObject)
+        return defer.succeed(private_key)
 
 
 class ClientConnection(connection.SSHConnection):
