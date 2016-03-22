@@ -6,13 +6,11 @@ from vumi.middleware import BaseMiddleware
 from vumi.middleware.base import BaseMiddlewareConfig
 from vumi.config import ConfigServerEndpoint
 
-from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks
 from twisted.cred import portal
 from twisted.conch import manhole_ssh, manhole_tap
 from twisted.conch.checkers import SSHPublicKeyDatabase
 from twisted.python.filepath import FilePath
-from twisted.internet.endpoints import serverFromString
 
 
 class ManholeMiddlewareConfig(BaseMiddlewareConfig):
@@ -73,8 +71,7 @@ class ManholeMiddleware(BaseMiddleware):
         })
         ssh_portal = portal.Portal(ssh_realm, [checker])
         factory = manhole_ssh.ConchFactory(ssh_portal)
-        endpoint = serverFromString(reactor, self.twisted_endpoint)
-        self.socket = yield endpoint.listen(factory)
+        self.socket = yield self.twisted_endpoint.listen(factory)
 
     def teardown_middleware(self):
         return self.socket.stopListening()
