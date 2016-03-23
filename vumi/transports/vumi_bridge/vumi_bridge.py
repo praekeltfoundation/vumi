@@ -152,12 +152,12 @@ class GoConversationTransportBase(Transport):
 
     def add_status_bad_req(self):
         return self.update_status(
-            status='down', component='inbound', type='bad_request',
+            status='down', component='outbound', type='bad_request',
             message='Bad request received')
 
     def add_status_good_req(self):
         return self.update_status(
-            status='ok', component='inbound', type='good_request',
+            status='ok', component='outbound', type='good_request',
             message='Good request received')
 
 

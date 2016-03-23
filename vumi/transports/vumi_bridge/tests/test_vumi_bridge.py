@@ -151,6 +151,24 @@ class TestGoConversationTransport(TestGoConversationTransportBase):
         [status] = yield self.tx_helper.wait_for_dispatched_statuses(1)
 
         self.assertEquals(status['status'], 'ok')
-        self.assertEquals(status['component'], 'inbound')
+        self.assertEquals(status['component'], 'outbound')
         self.assertEquals(status['type'], 'good_request')
         self.assertEquals(status['message'], 'Good request received')
+
+    @inlineCallbacks
+    def test_sending_bad_messages(self):
+        yield self.get_configured_transport()
+        msg = self.tx_helper.make_outbound(
+            "outbound", session_event=TransportUserMessage.SESSION_CLOSE)
+        self.tx_helper.dispatch_outbound(msg)
+        req = yield self.get_next_request()
+        req.setResponseCode(400, "Bad Request")
+
+        req.finish()
+
+        [status] = yield self.tx_helper.wait_for_dispatched_statuses(1)
+
+        self.assertEquals(status['status'], 'down')
+        self.assertEquals(status['component'], 'outbound')
+        self.assertEquals(status['type'], 'bad_request')
+        self.assertEquals(status['message'], 'Bad request received')
