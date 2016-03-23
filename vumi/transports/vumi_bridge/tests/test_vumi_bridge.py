@@ -34,6 +34,7 @@ class TestGoConversationTransportBase(VumiTestCase):
             'account_key': 'account-key',
             'conversation_key': 'conversation-key',
             'access_token': 'access-token',
+            'publish_status': True,
         }
         defaults.update(config)
         transport = yield self.tx_helper.get_transport(defaults, start=False)
@@ -269,3 +270,10 @@ class TestGoConversationTransport(TestGoConversationTransportBase):
         [ack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(ack['user_message_id'], msg['message_id'])
         self.assertEqual(ack['sent_message_id'], remote_id)
+
+        [status] = yield self.tx_helper.wait_for_dispatched_statuses(1)
+
+        self.assertEquals(status['status'], 'ok')
+        self.assertEquals(status['component'], 'inbound')
+        self.assertEquals(status['type'], 'good_request')
+        self.assertEquals(status['message'], 'Good request received')

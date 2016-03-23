@@ -12,7 +12,7 @@ from vumi.transports import Transport
 from vumi.config import ConfigText, ConfigDict, ConfigInt, ConfigFloat
 from vumi.persist.txredis_manager import TxRedisManager
 from vumi.message import TransportUserMessage, TransportEvent
-from vumi.utils import to_kwargs, http_request_full
+from vumi.utils import to_kwargs, http_request_full, StatusEdgeDetector
 from vumi import log
 
 
@@ -122,6 +122,7 @@ class GoConversationTransportBase(Transport):
         if resp.code != http.OK:
             log.warning('Unexpected status code: %s, body: %s' % (
                 resp.code, resp.delivered_body))
+            self.add_status_bad_req()
             yield self.publish_nack(message['message_id'],
                                     reason='Unexpected status code: %s' % (
                                         resp.code,))
@@ -130,6 +131,7 @@ class GoConversationTransportBase(Transport):
         remote_message = json.loads(resp.delivered_body)
         yield self.map_message_id(
             remote_message['message_id'], message['message_id'])
+        self.add_status_good_req()
         yield self.publish_ack(user_message_id=message['message_id'],
                                sent_message_id=remote_message['message_id'])
 
@@ -139,6 +141,24 @@ class GoConversationTransportBase(Transport):
             'Authorization': ['Basic ' + base64.b64encode('%s:%s' % (
                 config.account_key, config.access_token))],
         }
+
+    @inlineCallbacks
+    def update_status(self, **kw):
+        '''Publishes a status if it is not a repeat of the previously
+        published status.'''
+        if self.status_detect.check_status(**kw):
+            yield self.publish_status(**kw)
+            # TODO: Notify Junebug
+
+    def add_status_bad_req(self):
+        return self.update_status(
+            status='down', component='inbound', type='bad_request',
+            message='Bad request received')
+
+    def add_status_good_req(self):
+        return self.update_status(
+            status='ok', component='inbound', type='good_request',
+            message='Good request received')
 
 
 class GoConversationHealthResource(Resource):
@@ -193,6 +213,7 @@ class GoConversationTransport(GoConversationTransportBase):
              "%s/events.json" % (config.web_path)),
             (GoConversationHealthResource(self), config.health_path),
         ], config.web_port)
+        self.status_detect = StatusEdgeDetector()
 
     def teardown_transport(self):
         return self.web_resource.loseConnection()
