@@ -227,7 +227,8 @@ class GoConversationTransport(GoConversationTransportBase):
         balancer or proxy.
         """
         addr = self.web_resource.getHost()
-        return "http://%s:%s/%s" % (addr.host, addr.port, suffix.lstrip('/'))
+        return "http://%s:%s/%s/%s" % (
+            addr.host, addr.port, self.config["web_path"], suffix.lstrip('/'))
 
     @inlineCallbacks
     def handle_raw_inbound_event(self, request):
