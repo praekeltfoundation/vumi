@@ -126,8 +126,8 @@ class TestGoConversationTransport(TestGoConversationTransportBase):
         [status] = yield self.tx_helper.wait_for_dispatched_statuses(1)
         self.assertEquals(status['status'], 'ok')
         self.assertEquals(status['component'], 'sent-by-vumi-go')
-        self.assertEquals(status['type'], 'good_request')
-        self.assertEquals(status['message'], 'Good request received')
+        self.assertEquals(status['type'], 'vumi_go_sent')
+        self.assertEquals(status['message'], 'Sent by VumiGo')
 
     @inlineCallbacks
     def test_receiving_nack_events(self):
@@ -147,8 +147,8 @@ class TestGoConversationTransport(TestGoConversationTransportBase):
         [status] = yield self.tx_helper.wait_for_dispatched_statuses(1)
         self.assertEquals(status['status'], 'down')
         self.assertEquals(status['component'], 'sent-by-vumi-go')
-        self.assertEquals(status['type'], 'bad_request')
-        self.assertEquals(status['message'], 'Bad request received')
+        self.assertEquals(status['type'], 'vumi_go_failed')
+        self.assertEquals(status['message'], 'VumiGo failed to send')
 
     @inlineCallbacks
     def test_receive_bad_event(self):
@@ -163,7 +163,7 @@ class TestGoConversationTransport(TestGoConversationTransportBase):
         self.assertEquals(status['status'], 'down')
         self.assertEquals(status['component'], 'sent-by-vumi-go')
         self.assertEquals(status['type'], 'bad_request')
-        self.assertEquals(status['message'], 'Bad request received')
+        self.assertEquals(status['message'], 'Bad request sent')
 
     @inlineCallbacks
     def test_sending_messages(self):
@@ -197,7 +197,7 @@ class TestGoConversationTransport(TestGoConversationTransportBase):
         self.assertEquals(status['status'], 'ok')
         self.assertEquals(status['component'], 'submitted-to-vumi-go')
         self.assertEquals(status['type'], 'good_request')
-        self.assertEquals(status['message'], 'Good request received')
+        self.assertEquals(status['message'], 'Good request sent')
 
     @inlineCallbacks
     def test_sending_bad_messages(self):
@@ -214,4 +214,4 @@ class TestGoConversationTransport(TestGoConversationTransportBase):
         self.assertEquals(status['status'], 'down')
         self.assertEquals(status['component'], 'submitted-to-vumi-go')
         self.assertEquals(status['type'], 'bad_request')
-        self.assertEquals(status['message'], 'Bad request received')
+        self.assertEquals(status['message'], 'Bad request sent')

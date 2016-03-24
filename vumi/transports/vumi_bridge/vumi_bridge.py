@@ -122,7 +122,9 @@ class GoConversationTransportBase(Transport):
         if resp.code != http.OK:
             log.warning('Unexpected status code: %s, body: %s' % (
                 resp.code, resp.delivered_body))
-            self.add_status_bad_req('submitted-to-vumi-go')
+            self.update_status(
+                status='down', component='submitted-to-vumi-go',
+                type='bad_request', message='Bad request sent')
             yield self.publish_nack(message['message_id'],
                                     reason='Unexpected status code: %s' % (
                                         resp.code,))
@@ -131,7 +133,9 @@ class GoConversationTransportBase(Transport):
         remote_message = json.loads(resp.delivered_body)
         yield self.map_message_id(
             remote_message['message_id'], message['message_id'])
-        self.add_status_good_req('submitted-to-vumi-go')
+        self.update_status(
+            status='ok', component='submitted-to-vumi-go',
+            type='good_request', message='Good request sent')
         yield self.publish_ack(user_message_id=message['message_id'],
                                sent_message_id=remote_message['message_id'])
 
@@ -148,16 +152,6 @@ class GoConversationTransportBase(Transport):
         published status.'''
         if self.status_detect.check_status(**kw):
             yield self.publish_status(**kw)
-
-    def add_status_bad_req(self, component):
-        return self.update_status(
-            status='down', component=component, type='bad_request',
-            message='Bad request received')
-
-    def add_status_good_req(self, component):
-        return self.update_status(
-            status='ok', component=component, type='good_request',
-            message='Good request received')
 
 
 class GoConversationHealthResource(Resource):
@@ -237,14 +231,20 @@ class GoConversationTransport(GoConversationTransportBase):
             yield self.handle_inbound_event(msg)
             request.finish()
             if msg.payload["event_type"] == "ack":
-                self.add_status_good_req('sent-by-vumi-go')
+                self.update_status(
+                    status='ok', component='sent-by-vumi-go',
+                    type='vumi_go_sent', message='Sent by VumiGo')
             else:
-                self.add_status_bad_req('sent-by-vumi-go')
+                self.update_status(
+                    status='down', component='sent-by-vumi-go',
+                    type='vumi_go_failed', message='VumiGo failed to send')
         except Exception as e:
             log.err(e)
             request.setResponseCode(400)
             request.finish()
-            self.add_status_bad_req('sent-by-vumi-go')
+            self.update_status(
+                status='down', component='sent-by-vumi-go',
+                type='bad_request', message='Bad request sent')
 
     @inlineCallbacks
     def handle_raw_inbound_message(self, request):
@@ -254,9 +254,13 @@ class GoConversationTransport(GoConversationTransportBase):
                 _process_fields=True, **to_kwargs(data))
             yield self.handle_inbound_message(msg)
             request.finish()
-            self.add_status_good_req('received-from-vumi-go')
+            self.update_status(
+                status='ok', component='received-from-vumi-go',
+                type='good_request', message='Good request received')
         except Exception as e:
             log.err(e)
             request.setResponseCode(400)
             request.finish()
-            self.add_status_bad_req('received-from-vumi-go')
+            self.update_status(
+                status='down', component='received-from-vumi-go',
+                type='bad_request', message='Bad request received')
