@@ -122,7 +122,7 @@ class GoConversationTransportBase(Transport):
         if resp.code != http.OK:
             log.warning('Unexpected status code: %s, body: %s' % (
                 resp.code, resp.delivered_body))
-            self.add_status_bad_req()
+            self.add_status_bad_req('outbound')
             yield self.publish_nack(message['message_id'],
                                     reason='Unexpected status code: %s' % (
                                         resp.code,))
@@ -131,7 +131,7 @@ class GoConversationTransportBase(Transport):
         remote_message = json.loads(resp.delivered_body)
         yield self.map_message_id(
             remote_message['message_id'], message['message_id'])
-        self.add_status_good_req()
+        self.add_status_good_req('outbound')
         yield self.publish_ack(user_message_id=message['message_id'],
                                sent_message_id=remote_message['message_id'])
 
@@ -149,14 +149,14 @@ class GoConversationTransportBase(Transport):
         if self.status_detect.check_status(**kw):
             yield self.publish_status(**kw)
 
-    def add_status_bad_req(self):
+    def add_status_bad_req(self, component):
         return self.update_status(
-            status='down', component='outbound', type='bad_request',
+            status='down', component=component, type='bad_request',
             message='Bad request received')
 
-    def add_status_good_req(self):
+    def add_status_good_req(self, component):
         return self.update_status(
-            status='ok', component='outbound', type='good_request',
+            status='ok', component=component, type='good_request',
             message='Good request received')
 
 
@@ -249,7 +249,9 @@ class GoConversationTransport(GoConversationTransportBase):
                 _process_fields=True, **to_kwargs(data))
             yield self.handle_inbound_message(msg)
             request.finish()
+            self.add_status_good_req('inbound')
         except Exception as e:
             log.err(e)
             request.setResponseCode(400)
             request.finish()
+            self.add_status_bad_req('inbound')

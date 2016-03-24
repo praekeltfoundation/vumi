@@ -87,6 +87,13 @@ class TestGoConversationTransport(TestGoConversationTransportBase):
         [received_msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assertEqual(received_msg['message_id'], msg['message_id'])
 
+        [status] = yield self.tx_helper.wait_for_dispatched_statuses(1)
+
+        self.assertEquals(status['status'], 'ok')
+        self.assertEquals(status['component'], 'inbound')
+        self.assertEquals(status['type'], 'good_request')
+        self.assertEquals(status['message'], 'Good request received')
+
     @inlineCallbacks
     def test_receive_bad_message(self):
         transport = yield self.get_configured_transport()
@@ -95,6 +102,13 @@ class TestGoConversationTransport(TestGoConversationTransportBase):
         self.assertEqual(resp.code, 400)
         [failure] = self.flushLoggedErrors()
         self.assertTrue('No JSON object' in str(failure))
+
+        [status] = yield self.tx_helper.wait_for_dispatched_statuses(1)
+
+        self.assertEquals(status['status'], 'down')
+        self.assertEquals(status['component'], 'inbound')
+        self.assertEquals(status['type'], 'bad_request')
+        self.assertEquals(status['message'], 'Bad request received')
 
     @inlineCallbacks
     def test_receiving_events(self):
