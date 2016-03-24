@@ -88,9 +88,8 @@ class TestGoConversationTransport(TestGoConversationTransportBase):
         self.assertEqual(received_msg['message_id'], msg['message_id'])
 
         [status] = yield self.tx_helper.wait_for_dispatched_statuses(1)
-
         self.assertEquals(status['status'], 'ok')
-        self.assertEquals(status['component'], 'inbound')
+        self.assertEquals(status['component'], 'inbound-from-vumi-go')
         self.assertEquals(status['type'], 'good_request')
         self.assertEquals(status['message'], 'Good request received')
 
@@ -104,14 +103,13 @@ class TestGoConversationTransport(TestGoConversationTransportBase):
         self.assertTrue('No JSON object' in str(failure))
 
         [status] = yield self.tx_helper.wait_for_dispatched_statuses(1)
-
         self.assertEquals(status['status'], 'down')
-        self.assertEquals(status['component'], 'inbound')
+        self.assertEquals(status['component'], 'inbound-from-vumi-go')
         self.assertEquals(status['type'], 'bad_request')
         self.assertEquals(status['message'], 'Bad request received')
 
     @inlineCallbacks
-    def test_receiving_events(self):
+    def test_receiving_ack_events(self):
         transport = yield self.get_configured_transport()
         url = transport.get_transport_url('events.json')
         # prime the mapping
@@ -125,6 +123,33 @@ class TestGoConversationTransport(TestGoConversationTransportBase):
         self.assertEqual(received_ack['user_message_id'], 'local')
         self.assertEqual(received_ack['sent_message_id'], 'remote')
 
+        [status] = yield self.tx_helper.wait_for_dispatched_statuses(1)
+        self.assertEquals(status['status'], 'ok')
+        self.assertEquals(status['component'], 'event-from-vumi-go')
+        self.assertEquals(status['type'], 'good_request')
+        self.assertEquals(status['message'], 'Good request received')
+
+    @inlineCallbacks
+    def test_receiving_nack_events(self):
+        transport = yield self.get_configured_transport()
+        url = transport.get_transport_url('events.json')
+        # prime the mapping
+        yield transport.map_message_id('remote', 'local')
+        nack = self.tx_helper.make_nack(event_id='event-id')
+        nack['user_message_id'] = 'remote'
+        resp = yield self.post_msg(url, nack.to_json())
+        self.assertEqual(resp.code, 200)
+        [received_nack] = yield self.tx_helper.wait_for_dispatched_events(1)
+        self.assertEqual(received_nack['event_id'], nack['event_id'])
+        self.assertEqual(received_nack['user_message_id'], 'local')
+        self.assertEqual(received_nack['sent_message_id'], 'remote')
+
+        [status] = yield self.tx_helper.wait_for_dispatched_statuses(1)
+        self.assertEquals(status['status'], 'down')
+        self.assertEquals(status['component'], 'event-from-vumi-go')
+        self.assertEquals(status['type'], 'bad_request')
+        self.assertEquals(status['message'], 'Bad request received')
+
     @inlineCallbacks
     def test_receive_bad_event(self):
         transport = yield self.get_configured_transport()
@@ -133,6 +158,12 @@ class TestGoConversationTransport(TestGoConversationTransportBase):
         self.assertEqual(resp.code, 400)
         [failure] = self.flushLoggedErrors()
         self.assertTrue('No JSON object' in str(failure))
+
+        [status] = yield self.tx_helper.wait_for_dispatched_statuses(1)
+        self.assertEquals(status['status'], 'down')
+        self.assertEquals(status['component'], 'event-from-vumi-go')
+        self.assertEquals(status['type'], 'bad_request')
+        self.assertEquals(status['message'], 'Bad request received')
 
     @inlineCallbacks
     def test_sending_messages(self):
@@ -163,9 +194,8 @@ class TestGoConversationTransport(TestGoConversationTransportBase):
         self.assertEqual(ack['sent_message_id'], remote_id)
 
         [status] = yield self.tx_helper.wait_for_dispatched_statuses(1)
-
         self.assertEquals(status['status'], 'ok')
-        self.assertEquals(status['component'], 'outbound')
+        self.assertEquals(status['component'], 'outbound-to-vumi-go')
         self.assertEquals(status['type'], 'good_request')
         self.assertEquals(status['message'], 'Good request received')
 
@@ -181,8 +211,7 @@ class TestGoConversationTransport(TestGoConversationTransportBase):
         req.finish()
 
         [status] = yield self.tx_helper.wait_for_dispatched_statuses(1)
-
         self.assertEquals(status['status'], 'down')
-        self.assertEquals(status['component'], 'outbound')
+        self.assertEquals(status['component'], 'outbound-to-vumi-go')
         self.assertEquals(status['type'], 'bad_request')
         self.assertEquals(status['message'], 'Bad request received')
