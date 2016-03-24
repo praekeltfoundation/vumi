@@ -122,7 +122,7 @@ class GoConversationTransportBase(Transport):
         if resp.code != http.OK:
             log.warning('Unexpected status code: %s, body: %s' % (
                 resp.code, resp.delivered_body))
-            self.add_status_bad_req('outbound-to-vumi-go')
+            self.add_status_bad_req('submitted-to-vumi-go')
             yield self.publish_nack(message['message_id'],
                                     reason='Unexpected status code: %s' % (
                                         resp.code,))
@@ -131,7 +131,7 @@ class GoConversationTransportBase(Transport):
         remote_message = json.loads(resp.delivered_body)
         yield self.map_message_id(
             remote_message['message_id'], message['message_id'])
-        self.add_status_good_req('outbound-to-vumi-go')
+        self.add_status_good_req('submitted-to-vumi-go')
         yield self.publish_ack(user_message_id=message['message_id'],
                                sent_message_id=remote_message['message_id'])
 
@@ -237,14 +237,14 @@ class GoConversationTransport(GoConversationTransportBase):
             yield self.handle_inbound_event(msg)
             request.finish()
             if msg.payload["event_type"] == "ack":
-                self.add_status_good_req('event-from-vumi-go')
+                self.add_status_good_req('sent-by-vumi-go')
             else:
-                self.add_status_bad_req('event-from-vumi-go')
+                self.add_status_bad_req('sent-by-vumi-go')
         except Exception as e:
             log.err(e)
             request.setResponseCode(400)
             request.finish()
-            self.add_status_bad_req('event-from-vumi-go')
+            self.add_status_bad_req('sent-by-vumi-go')
 
     @inlineCallbacks
     def handle_raw_inbound_message(self, request):
@@ -254,9 +254,9 @@ class GoConversationTransport(GoConversationTransportBase):
                 _process_fields=True, **to_kwargs(data))
             yield self.handle_inbound_message(msg)
             request.finish()
-            self.add_status_good_req('inbound-from-vumi-go')
+            self.add_status_good_req('received-from-vumi-go')
         except Exception as e:
             log.err(e)
             request.setResponseCode(400)
             request.finish()
-            self.add_status_bad_req('inbound-from-vumi-go')
+            self.add_status_bad_req('received-from-vumi-go')

@@ -89,7 +89,7 @@ class TestGoConversationTransport(TestGoConversationTransportBase):
 
         [status] = yield self.tx_helper.wait_for_dispatched_statuses(1)
         self.assertEquals(status['status'], 'ok')
-        self.assertEquals(status['component'], 'inbound-from-vumi-go')
+        self.assertEquals(status['component'], 'received-from-vumi-go')
         self.assertEquals(status['type'], 'good_request')
         self.assertEquals(status['message'], 'Good request received')
 
@@ -104,7 +104,7 @@ class TestGoConversationTransport(TestGoConversationTransportBase):
 
         [status] = yield self.tx_helper.wait_for_dispatched_statuses(1)
         self.assertEquals(status['status'], 'down')
-        self.assertEquals(status['component'], 'inbound-from-vumi-go')
+        self.assertEquals(status['component'], 'received-from-vumi-go')
         self.assertEquals(status['type'], 'bad_request')
         self.assertEquals(status['message'], 'Bad request received')
 
@@ -125,7 +125,7 @@ class TestGoConversationTransport(TestGoConversationTransportBase):
 
         [status] = yield self.tx_helper.wait_for_dispatched_statuses(1)
         self.assertEquals(status['status'], 'ok')
-        self.assertEquals(status['component'], 'event-from-vumi-go')
+        self.assertEquals(status['component'], 'sent-by-vumi-go')
         self.assertEquals(status['type'], 'good_request')
         self.assertEquals(status['message'], 'Good request received')
 
@@ -146,7 +146,7 @@ class TestGoConversationTransport(TestGoConversationTransportBase):
 
         [status] = yield self.tx_helper.wait_for_dispatched_statuses(1)
         self.assertEquals(status['status'], 'down')
-        self.assertEquals(status['component'], 'event-from-vumi-go')
+        self.assertEquals(status['component'], 'sent-by-vumi-go')
         self.assertEquals(status['type'], 'bad_request')
         self.assertEquals(status['message'], 'Bad request received')
 
@@ -161,7 +161,7 @@ class TestGoConversationTransport(TestGoConversationTransportBase):
 
         [status] = yield self.tx_helper.wait_for_dispatched_statuses(1)
         self.assertEquals(status['status'], 'down')
-        self.assertEquals(status['component'], 'event-from-vumi-go')
+        self.assertEquals(status['component'], 'sent-by-vumi-go')
         self.assertEquals(status['type'], 'bad_request')
         self.assertEquals(status['message'], 'Bad request received')
 
@@ -195,7 +195,7 @@ class TestGoConversationTransport(TestGoConversationTransportBase):
 
         [status] = yield self.tx_helper.wait_for_dispatched_statuses(1)
         self.assertEquals(status['status'], 'ok')
-        self.assertEquals(status['component'], 'outbound-to-vumi-go')
+        self.assertEquals(status['component'], 'submitted-to-vumi-go')
         self.assertEquals(status['type'], 'good_request')
         self.assertEquals(status['message'], 'Good request received')
 
@@ -212,6 +212,6 @@ class TestGoConversationTransport(TestGoConversationTransportBase):
 
         [status] = yield self.tx_helper.wait_for_dispatched_statuses(1)
         self.assertEquals(status['status'], 'down')
-        self.assertEquals(status['component'], 'outbound-to-vumi-go')
+        self.assertEquals(status['component'], 'submitted-to-vumi-go')
         self.assertEquals(status['type'], 'bad_request')
         self.assertEquals(status['message'], 'Bad request received')
