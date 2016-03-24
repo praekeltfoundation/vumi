@@ -148,7 +148,6 @@ class GoConversationTransportBase(Transport):
         published status.'''
         if self.status_detect.check_status(**kw):
             yield self.publish_status(**kw)
-            # TODO: Notify Junebug
 
     def add_status_bad_req(self):
         return self.update_status(
