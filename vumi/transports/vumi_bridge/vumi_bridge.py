@@ -233,11 +233,11 @@ class GoConversationTransport(GoConversationTransportBase):
             if msg.payload["event_type"] == "ack":
                 self.update_status(
                     status='ok', component='sent-by-vumi-go',
-                    type='vumi_go_sent', message='Sent by VumiGo')
+                    type='vumi_go_sent', message='Sent by Vumi Go')
             else:
                 self.update_status(
                     status='down', component='sent-by-vumi-go',
-                    type='vumi_go_failed', message='VumiGo failed to send')
+                    type='vumi_go_failed', message='Vumi Go failed to send')
         except Exception as e:
             log.err(e)
             request.setResponseCode(400)

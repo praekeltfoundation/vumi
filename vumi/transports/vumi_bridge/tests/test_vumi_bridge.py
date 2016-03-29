@@ -127,7 +127,7 @@ class TestGoConversationTransport(TestGoConversationTransportBase):
         self.assertEquals(status['status'], 'ok')
         self.assertEquals(status['component'], 'sent-by-vumi-go')
         self.assertEquals(status['type'], 'vumi_go_sent')
-        self.assertEquals(status['message'], 'Sent by VumiGo')
+        self.assertEquals(status['message'], 'Sent by Vumi Go')
 
     @inlineCallbacks
     def test_receiving_nack_events(self):
@@ -148,7 +148,7 @@ class TestGoConversationTransport(TestGoConversationTransportBase):
         self.assertEquals(status['status'], 'down')
         self.assertEquals(status['component'], 'sent-by-vumi-go')
         self.assertEquals(status['type'], 'vumi_go_failed')
-        self.assertEquals(status['message'], 'VumiGo failed to send')
+        self.assertEquals(status['message'], 'Vumi Go failed to send')
 
     @inlineCallbacks
     def test_receive_bad_event(self):
