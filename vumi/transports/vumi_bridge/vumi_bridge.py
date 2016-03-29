@@ -124,7 +124,8 @@ class GoConversationTransportBase(Transport):
                 resp.code, resp.delivered_body))
             self.update_status(
                 status='down', component='submitted-to-vumi-go',
-                type='bad_request', message='Bad request sent')
+                type='bad_request',
+                message='Message submission rejected by Vumi Go')
             yield self.publish_nack(message['message_id'],
                                     reason='Unexpected status code: %s' % (
                                         resp.code,))
@@ -135,7 +136,7 @@ class GoConversationTransportBase(Transport):
             remote_message['message_id'], message['message_id'])
         self.update_status(
             status='ok', component='submitted-to-vumi-go',
-            type='good_request', message='Good request sent')
+            type='good_request', message='Message accepted by Vumi Go')
         yield self.publish_ack(user_message_id=message['message_id'],
                                sent_message_id=remote_message['message_id'])
 
