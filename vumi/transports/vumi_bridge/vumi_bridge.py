@@ -239,12 +239,16 @@ class GoConversationTransport(GoConversationTransportBase):
                 self.update_status(
                     status='down', component='sent-by-vumi-go',
                     type='vumi_go_failed', message='Vumi Go failed to send')
+            self.update_status(
+                status='ok', component='vumi-go-event',
+                type='good_request',
+                message='Good event received from Vumi Go')
         except Exception as e:
             log.err(e)
             request.setResponseCode(400)
             request.finish()
             self.update_status(
-                status='down', component='vumi-go-bad-event',
+                status='down', component='vumi-go-event',
                 type='bad_request', message='Bad event received from Vumi Go')
 
     @inlineCallbacks

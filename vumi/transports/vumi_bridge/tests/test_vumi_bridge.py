@@ -123,11 +123,17 @@ class TestGoConversationTransport(TestGoConversationTransportBase):
         self.assertEqual(received_ack['user_message_id'], 'local')
         self.assertEqual(received_ack['sent_message_id'], 'remote')
 
-        [status] = yield self.tx_helper.wait_for_dispatched_statuses(1)
-        self.assertEquals(status['status'], 'ok')
-        self.assertEquals(status['component'], 'sent-by-vumi-go')
-        self.assertEquals(status['type'], 'vumi_go_sent')
-        self.assertEquals(status['message'], 'Sent by Vumi Go')
+        statuses = yield self.tx_helper.wait_for_dispatched_statuses(1)
+        self.assertEqual(len(statuses), 2)
+        self.assertEquals(statuses[0]['status'], 'ok')
+        self.assertEquals(statuses[0]['component'], 'sent-by-vumi-go')
+        self.assertEquals(statuses[0]['type'], 'vumi_go_sent')
+        self.assertEquals(statuses[0]['message'], 'Sent by Vumi Go')
+        self.assertEquals(statuses[1]['status'], 'ok')
+        self.assertEquals(statuses[1]['component'], 'vumi-go-event')
+        self.assertEquals(statuses[1]['type'], 'good_request')
+        self.assertEquals(statuses[1]['message'],
+                          'Good event received from Vumi Go')
 
     @inlineCallbacks
     def test_receiving_nack_events(self):
@@ -144,11 +150,17 @@ class TestGoConversationTransport(TestGoConversationTransportBase):
         self.assertEqual(received_nack['user_message_id'], 'local')
         self.assertEqual(received_nack['sent_message_id'], 'remote')
 
-        [status] = yield self.tx_helper.wait_for_dispatched_statuses(1)
-        self.assertEquals(status['status'], 'down')
-        self.assertEquals(status['component'], 'sent-by-vumi-go')
-        self.assertEquals(status['type'], 'vumi_go_failed')
-        self.assertEquals(status['message'], 'Vumi Go failed to send')
+        statuses = yield self.tx_helper.wait_for_dispatched_statuses(1)
+        self.assertEqual(len(statuses), 2)
+        self.assertEquals(statuses[0]['status'], 'down')
+        self.assertEquals(statuses[0]['component'], 'sent-by-vumi-go')
+        self.assertEquals(statuses[0]['type'], 'vumi_go_failed')
+        self.assertEquals(statuses[0]['message'], 'Vumi Go failed to send')
+        self.assertEquals(statuses[1]['status'], 'ok')
+        self.assertEquals(statuses[1]['component'], 'vumi-go-event')
+        self.assertEquals(statuses[1]['type'], 'good_request')
+        self.assertEquals(statuses[1]['message'],
+                          'Good event received from Vumi Go')
 
     @inlineCallbacks
     def test_receive_bad_event(self):
@@ -161,7 +173,7 @@ class TestGoConversationTransport(TestGoConversationTransportBase):
 
         [status] = yield self.tx_helper.wait_for_dispatched_statuses(1)
         self.assertEquals(status['status'], 'down')
-        self.assertEquals(status['component'], 'vumi-go-bad-event')
+        self.assertEquals(status['component'], 'vumi-go-event')
         self.assertEquals(status['type'], 'bad_request')
         self.assertEquals(status['message'], 'Bad event received from Vumi Go')
 
