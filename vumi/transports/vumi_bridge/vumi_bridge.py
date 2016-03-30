@@ -239,18 +239,6 @@ class GoConversationTransport(GoConversationTransportBase):
                 self.update_status(
                     status='down', component='sent-by-vumi-go',
                     type='vumi_go_failed', message='Vumi Go failed to send')
-            elif msg.payload["event_type"] == "delivery_report":
-                self.update_status(
-                    status='ok', component='delivery-report-from-vumi-go',
-                    type='del_report_from_vumi_go',
-                    message='Delivery report received from Vumi Go: ' +
-                    msg.payload["delivery_status"])
-            else:
-                self.update_status(
-                    status='ok', component='event-from-vumi-go',
-                    type='unknown_event_from_vumi_go',
-                    message='Unknown event from Vumi Go: ' +
-                    msg.payload["event_type"])
         except Exception as e:
             log.err(e)
             request.setResponseCode(400)

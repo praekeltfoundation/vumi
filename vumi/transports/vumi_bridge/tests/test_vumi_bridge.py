@@ -151,31 +151,6 @@ class TestGoConversationTransport(TestGoConversationTransportBase):
         self.assertEquals(status['message'], 'Vumi Go failed to send')
 
     @inlineCallbacks
-    def test_receiving_dr_events(self):
-        transport = yield self.get_configured_transport()
-        url = transport.get_transport_url('events.json')
-        # prime the mapping
-        yield transport.map_message_id('remote', 'local')
-        report = yield self.tx_helper.make_dispatch_delivery_report(
-            event_id='event-id')
-        report['user_message_id'] = 'remote'
-        resp = yield self.post_msg(url, report.to_json())
-        self.assertEqual(resp.code, 200)
-        [first_report, second_report] = \
-            yield self.tx_helper.wait_for_dispatched_events(1)
-        self.assertEqual(second_report['event_id'], report['event_id'])
-        self.assertEqual(second_report['user_message_id'], 'local')
-        self.assertEqual(second_report['sent_message_id'], 'remote')
-
-        [status] = yield self.tx_helper.wait_for_dispatched_statuses(1)
-        self.assertEquals(status['status'], 'ok')
-        self.assertEquals(status['component'], 'delivery-report-from-vumi-go')
-        self.assertEquals(status['type'], 'del_report_from_vumi_go')
-        self.assertEquals(status['message'],
-                          'Delivery report received from Vumi Go: ' +
-                          report['delivery_status'])
-
-    @inlineCallbacks
     def test_receive_bad_event(self):
         transport = yield self.get_configured_transport()
         url = transport.get_transport_url('events.json')
