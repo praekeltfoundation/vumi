@@ -1,7 +1,7 @@
 from twisted.trial.unittest import SkipTest
 
 from twisted.internet import defer, protocol, reactor
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet.endpoints import TCP4ClientEndpoint
 
 from vumi.tests.helpers import VumiTestCase
@@ -29,6 +29,7 @@ class DummyWorker(object):
 
 class TestManholeMiddleware(VumiTestCase):
 
+    @inlineCallbacks
     def setUp(self):
         if not ssh:
             raise SkipTest('Crypto requirements missing. Skipping Test.')
@@ -38,10 +39,7 @@ class TestManholeMiddleware(VumiTestCase):
         self.pub_key_file.write(public_key.toString('OPENSSH'))
         self.pub_key_file.flush()
 
-        self._middlewares = []
-        self._client_sockets = []
-
-        self.mw = self.get_middleware({
+        self.mw = yield self.get_middleware({
             'authorized_keys': [self.pub_key_file.name]
         })
 
@@ -53,17 +51,17 @@ class TestManholeMiddleware(VumiTestCase):
         factory.channelConnected = defer.Deferred()
 
         endpoint = TCP4ClientEndpoint(reactor, host.host, host.port)
-        proto = yield endpoint.connect(factory)
+        transport = yield endpoint.connect(factory)
 
         channel = yield factory.channelConnected
         conn = channel.conn
         term = session.packRequest_pty_req("vt100", (0, 0, 0, 0), '')
         yield conn.sendRequest(channel, 'pty-req', term, wantReply=1)
         yield conn.sendRequest(channel, 'shell', '', wantReply=1)
-        self._client_sockets.append(proto)
-        self.add_cleanup(proto.loseConnection)
+        self.add_cleanup(transport.loseConnection)
         defer.returnValue(channel)
 
+    @inlineCallbacks
     def get_middleware(self, config={}):
         config = dict({
             'port': '0',
@@ -73,10 +71,9 @@ class TestManholeMiddleware(VumiTestCase):
         worker.transport_name = 'foo'
 
         mw = ManholeMiddleware("test_manhole_mw", config, worker)
-        mw.setup_middleware()
-        self._middlewares.append(mw)
+        yield mw.setup_middleware()
         self.add_cleanup(mw.teardown_middleware)
-        return mw
+        returnValue(mw)
 
     @inlineCallbacks
     def test_mw(self):

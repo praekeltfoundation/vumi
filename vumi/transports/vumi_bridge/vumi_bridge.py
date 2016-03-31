@@ -2,25 +2,21 @@
 
 import base64
 import json
-import random
 
 from twisted.internet.defer import inlineCallbacks
-from twisted.internet import reactor
-from twisted.web.http_headers import Headers
 from twisted.web import http
 from twisted.web.resource import Resource
 from twisted.web.server import NOT_DONE_YET
 
 from vumi.transports import Transport
-from vumi.transports.vumi_bridge.client import StreamingClient
 from vumi.config import ConfigText, ConfigDict, ConfigInt, ConfigFloat
 from vumi.persist.txredis_manager import TxRedisManager
 from vumi.message import TransportUserMessage, TransportEvent
-from vumi.utils import to_kwargs, http_request_full
+from vumi.utils import to_kwargs, http_request_full, StatusEdgeDetector
 from vumi import log
 
 
-class VumiBridgeClientTransportConfig(Transport.CONFIG_CLASS):
+class VumiBridgeTransportConfig(Transport.CONFIG_CLASS):
     account_key = ConfigText(
         'The account key to connect with.', static=True, required=True)
     conversation_key = ConfigText(
@@ -58,19 +54,11 @@ class VumiBridgeClientTransportConfig(Transport.CONFIG_CLASS):
         # molar Planck constant times c, joule meter/mole
         default=0.11962656472,
         static=True)
-
-
-class VumiBridgeServerTransportConfig(VumiBridgeClientTransportConfig):
-    # Most of this copied wholesale from vumi.transports.httprpc.
-
     web_port = ConfigInt(
         "The port to listen for requests on, defaults to `0`.",
         default=0, static=True)
-    message_path = ConfigText(
-        "The path to listen for message requests on.", required=True,
-        static=True)
-    event_path = ConfigText(
-        "The path to listen for event requests on.", required=True,
+    web_path = ConfigText(
+        "The path to listen for inbound requests on.", required=True,
         static=True)
     health_path = ConfigText(
         "The path to listen for downstream health checks on"
@@ -134,6 +122,10 @@ class GoConversationTransportBase(Transport):
         if resp.code != http.OK:
             log.warning('Unexpected status code: %s, body: %s' % (
                 resp.code, resp.delivered_body))
+            self.update_status(
+                status='down', component='submitted-to-vumi-go',
+                type='bad_request',
+                message='Message submission rejected by Vumi Go')
             yield self.publish_nack(message['message_id'],
                                     reason='Unexpected status code: %s' % (
                                         resp.code,))
@@ -142,6 +134,9 @@ class GoConversationTransportBase(Transport):
         remote_message = json.loads(resp.delivered_body)
         yield self.map_message_id(
             remote_message['message_id'], message['message_id'])
+        self.update_status(
+            status='ok', component='submitted-to-vumi-go',
+            type='good_request', message='Message accepted by Vumi Go')
         yield self.publish_ack(user_message_id=message['message_id'],
                                sent_message_id=remote_message['message_id'])
 
@@ -152,101 +147,12 @@ class GoConversationTransportBase(Transport):
                 config.account_key, config.access_token))],
         }
 
-
-class GoConversationClientTransport(GoConversationTransportBase):
-    """
-    This transport essentially connects as a client to Vumi Go's streaming
-    HTTP API [1]_.
-
-    It allows one to bridge Vumi and Vumi Go installations.
-
-    NOTE:   Since we're basically bridging two separate installations we're
-            leaving some of the attributes that we would normally change the
-            same. Specifically `transport_type`.
-
-    .. [1] https://github.com/praekelt/vumi-go/blob/develop/docs/http_api.rst
-
-    """
-
-    CONFIG_CLASS = VumiBridgeClientTransportConfig
-    continue_trying = True
-    clock = reactor
-
     @inlineCallbacks
-    def setup_transport(self):
-        config = self.get_static_config()
-        self.redis = yield TxRedisManager.from_config(
-            config.redis_manager)
-        self.retries = 0
-        self.delay = config.initial_delay
-        self.reconnect_call = None
-        self.client = StreamingClient(self.agent_factory)
-        self.connect_api_clients()
-
-    def teardown_transport(self):
-        if self.reconnect_call:
-            self.reconnect_call.cancel()
-            self.reconnect_call = None
-        self.continue_trying = False
-        self.disconnect_api_clients()
-
-    def connect_api_clients(self):
-        self.message_client = self.client.stream(
-            TransportUserMessage, self.handle_inbound_message,
-            log.error, self.get_url('messages.json'),
-            headers=Headers(self.get_auth_headers()),
-            on_connect=self.reset_reconnect_delay,
-            on_disconnect=self.reconnect_api_clients)
-        self.event_client = self.client.stream(
-            TransportEvent, self.handle_inbound_event,
-            log.error, self.get_url('events.json'),
-            headers=Headers(self.get_auth_headers()),
-            on_connect=self.reset_reconnect_delay,
-            on_disconnect=self.reconnect_api_clients)
-
-    def reconnect_api_clients(self, reason):
-        self.disconnect_api_clients()
-        if not self.continue_trying:
-            log.msg('Not retrying because of explicit request')
-            return
-
-        config = self.get_static_config()
-        self.retries += 1
-        if (config.max_retries is not None
-                and (self.retries > config.max_retries)):
-            log.warning('Abandoning reconnecting after %s attempts.' % (
-                self.retries))
-            return
-
-        self.delay = min(self.delay * config.factor,
-                         config.max_reconnect_delay)
-        if config.jitter:
-            self.delay = random.normalvariate(self.delay,
-                                              self.delay * config.jitter)
-        log.msg('Will retry in %s seconds' % (self.delay,))
-        self.reconnect_call = self.clock.callLater(self.delay,
-                                                   self.connect_api_clients)
-
-    def reset_reconnect_delay(self):
-        config = self.get_static_config()
-        self.delay = config.initial_delay
-        self.retries = 0
-        self.reconnect_call = None
-        self.continue_trying = True
-
-    def disconnect_api_clients(self):
-        self.message_client.disconnect()
-        self.event_client.disconnect()
-
-
-class GoConversationTransport(GoConversationClientTransport):
-
-    def setup_transport(self, *args, **kwargs):
-        log.warning(
-            'GoConversationTransport is deprecated, please use '
-            '`GoConversationClientTransport` instead.')
-        return super(GoConversationTransport, self).setup_transport(
-            *args, **kwargs)
+    def update_status(self, **kw):
+        '''Publishes a status if it is not a repeat of the previously
+        published status.'''
+        if self.status_detect.check_status(**kw):
+            yield self.publish_status(**kw)
 
 
 class GoConversationHealthResource(Resource):
@@ -283,10 +189,10 @@ class GoConversationResource(Resource):
         return self.render_(request)
 
 
-class GoConversationServerTransport(GoConversationTransportBase):
+class GoConversationTransport(GoConversationTransportBase):
     # Most of this copied wholesale from vumi.transports.httprpc.
 
-    CONFIG_CLASS = VumiBridgeServerTransportConfig
+    CONFIG_CLASS = VumiBridgeTransportConfig
 
     @inlineCallbacks
     def setup_transport(self):
@@ -296,11 +202,12 @@ class GoConversationServerTransport(GoConversationTransportBase):
 
         self.web_resource = yield self.start_web_resources([
             (GoConversationResource(self.handle_raw_inbound_message),
-             config.message_path),
+             "%s/messages.json" % (config.web_path)),
             (GoConversationResource(self.handle_raw_inbound_event),
-             config.event_path),
+             "%s/events.json" % (config.web_path)),
             (GoConversationHealthResource(self), config.health_path),
         ], config.web_port)
+        self.status_detect = StatusEdgeDetector()
 
     def teardown_transport(self):
         return self.web_resource.loseConnection()
@@ -314,7 +221,8 @@ class GoConversationServerTransport(GoConversationTransportBase):
         balancer or proxy.
         """
         addr = self.web_resource.getHost()
-        return "http://%s:%s/%s" % (addr.host, addr.port, suffix.lstrip('/'))
+        return "http://%s:%s/%s/%s" % (
+            addr.host, addr.port, self.config["web_path"], suffix.lstrip('/'))
 
     @inlineCallbacks
     def handle_raw_inbound_event(self, request):
@@ -323,10 +231,25 @@ class GoConversationServerTransport(GoConversationTransportBase):
             msg = TransportEvent(_process_fields=True, **to_kwargs(data))
             yield self.handle_inbound_event(msg)
             request.finish()
+            if msg.payload["event_type"] == "ack":
+                self.update_status(
+                    status='ok', component='sent-by-vumi-go',
+                    type='vumi_go_sent', message='Sent by Vumi Go')
+            elif msg.payload["event_type"] == "nack":
+                self.update_status(
+                    status='down', component='sent-by-vumi-go',
+                    type='vumi_go_failed', message='Vumi Go failed to send')
+            self.update_status(
+                status='ok', component='vumi-go-event',
+                type='good_request',
+                message='Good event received from Vumi Go')
         except Exception as e:
             log.err(e)
             request.setResponseCode(400)
             request.finish()
+            self.update_status(
+                status='down', component='vumi-go-event',
+                type='bad_request', message='Bad event received from Vumi Go')
 
     @inlineCallbacks
     def handle_raw_inbound_message(self, request):
@@ -336,7 +259,13 @@ class GoConversationServerTransport(GoConversationTransportBase):
                 _process_fields=True, **to_kwargs(data))
             yield self.handle_inbound_message(msg)
             request.finish()
+            self.update_status(
+                status='ok', component='received-from-vumi-go',
+                type='good_request', message='Good request received')
         except Exception as e:
             log.err(e)
             request.setResponseCode(400)
             request.finish()
+            self.update_status(
+                status='down', component='received-from-vumi-go',
+                type='bad_request', message='Bad request received')
