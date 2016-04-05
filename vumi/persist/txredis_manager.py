@@ -244,7 +244,6 @@ class TxRedisManager(Manager):
 
     def __init__(self, *args, **kwargs):
         super(TxRedisManager, self).__init__(*args, **kwargs)
-        self._sub_managers = []
 
     @classmethod
     def _fake_manager(cls, fake_redis, manager_config):
@@ -283,15 +282,8 @@ class TxRedisManager(Manager):
         cls._attach_reconnector(manager)
         return manager
 
-    def sub_manager(self, sub_prefix):
-        sub_man = super(TxRedisManager, self).sub_manager(sub_prefix)
-        self._sub_managers.append(sub_man)
-        return sub_man
-
     def set_client(self, client):
-        self._client = client
-        for sub_man in self._sub_managers:
-            sub_man.set_client(client)
+        self._client_proxy.client = client
         return client
 
     @staticmethod
