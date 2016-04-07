@@ -37,8 +37,9 @@ class TestBaseRedisManager(VumiTestCase):
     def test_client_and_client_proxy_disallowed(self):
         '''If both the client and the client proxy are specified when creating
         a manager, then an exception should be raised.'''
-        with self.assertRaises(AssertionError) as e:
-            Manager(object(), None, None, client_proxy=object())
+        e = self.assertRaises(
+            AssertionError, Manager, object(), None, None,
+            client_proxy=object())
         self.assertEqual(
-            str(e.exception),
+            str(e),
             'Only one of client or client_proxy may be specified')
