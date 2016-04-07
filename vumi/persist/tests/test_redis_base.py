@@ -33,3 +33,12 @@ class TestBaseRedisManager(VumiTestCase):
         self.assertEqual(sub_manager._key_prefix, "foo")
         self.assertEqual(sub_manager._client, manager._client)
         self.assertEqual(sub_manager._key_separator, manager._key_separator)
+
+    def test_client_and_client_proxy_disallowed(self):
+        '''If both the client and the client proxy are specified when creating
+        a manager, then an exception should be raised.'''
+        with self.assertRaises(AssertionError) as e:
+            Manager(object(), None, None, client_proxy=object())
+        self.assertEqual(
+            str(e.exception),
+            'Only one of client or client_proxy may be specified')

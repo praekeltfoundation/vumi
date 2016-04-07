@@ -67,6 +67,10 @@ class Manager(object):
     def __init__(
             self, client, config, key_prefix, key_separator=None,
             client_proxy=None):
+        assert \
+            (client is None and client_proxy is not None) or \
+            (client is not None and client_proxy is None), \
+            'Only one of client or client_proxy may be specified'
         if key_separator is None:
             key_separator = ':'
         if client_proxy is None:
@@ -92,7 +96,7 @@ class Manager(object):
     def sub_manager(self, sub_prefix):
         key_prefix = self._key(sub_prefix)
         sub_man = self.__class__(
-            self._client, self._config, key_prefix,
+            None, self._config, key_prefix,
             client_proxy=self._client_proxy)
         if isinstance(self._client, FakeRedis):
             sub_man._close = self._client.teardown
