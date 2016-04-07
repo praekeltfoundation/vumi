@@ -55,14 +55,28 @@ class CallMakerMetaclass(type):
         return type.__new__(meta, classname, bases, new_class_dict)
 
 
+class ClientProxy(object):
+    def __init__(self, client):
+        self.client = client
+
+
 class Manager(object):
 
     __metaclass__ = CallMakerMetaclass
 
-    def __init__(self, client, config, key_prefix, key_separator=None):
+    def __init__(
+            self, client, config, key_prefix, key_separator=None,
+            client_proxy=None):
+        assert \
+            (client is None and client_proxy is not None) or \
+            (client is not None and client_proxy is None), \
+            'Only one of client or client_proxy may be specified'
         if key_separator is None:
             key_separator = ':'
-        self._client = client
+        if client_proxy is None:
+            self._client_proxy = ClientProxy(client)
+        else:
+            self._client_proxy = client_proxy
         self._config = config
         self._key_prefix = key_prefix
         self._key_separator = key_separator
@@ -71,13 +85,19 @@ class Manager(object):
         "This is to let managers pass through config deepcopies in tests."
         return self
 
+    @property
+    def _client(self):
+        return self._client_proxy.client
+
     def get_key_prefix(self):
         """This is only intended for use in testing, not production."""
         return self._key_prefix
 
     def sub_manager(self, sub_prefix):
         key_prefix = self._key(sub_prefix)
-        sub_man = self.__class__(self._client, self._config, key_prefix)
+        sub_man = self.__class__(
+            None, self._config, key_prefix,
+            client_proxy=self._client_proxy)
         if isinstance(self._client, FakeRedis):
             sub_man._close = self._client.teardown
         return sub_man
