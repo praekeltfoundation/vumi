@@ -217,8 +217,12 @@ def patch_transport_fake_push_producer(transport):
 
 def patch_transport_abortConnection(transport, protocol):
     """
-    Patch abortConnection() onto the transport if it doesn't already have it.
-    (`Agent` assumes its transport has this.)
+    Patch abortConnection() on the transport or add it if it doesn't already
+    exist (`Agent` assumes its transport has this).
+
+    The patched method sets an internal flag recording the abort and then calls
+    the original method (if it existed) or transport.loseConnection (if it
+    didn't).
     """
     _old_abortConnection = getattr(
         transport, 'abortConnection', transport.loseConnection)
