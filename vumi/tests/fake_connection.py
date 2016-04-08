@@ -220,14 +220,12 @@ def patch_transport_abortConnection(transport, protocol):
     Patch abortConnection() onto the transport if it doesn't already have it.
     (`Agent` assumes its transport has this.)
     """
-    _old_abortConnection = getattr(transport, 'abortConnection', None)
+    _old_abortConnection = getattr(
+        transport, 'abortConnection', transport.loseConnection)
 
     def abortConnection():
         protocol._fake_connection_aborted = True
-        if _old_abortConnection:
-            _old_abortConnection()
-        else:
-            transport.loseConnection()
+        _old_abortConnection()
 
     transport.abortConnection = abortConnection
 
