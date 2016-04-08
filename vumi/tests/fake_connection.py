@@ -220,10 +220,16 @@ def patch_transport_abortConnection(transport, protocol):
     Patch abortConnection() onto the transport if it doesn't already have it.
     (`Agent` assumes its transport has this.)
     """
+    _old_abortConnection = getattr(transport, 'abortConnection', None)
+
     def abortConnection():
         protocol._fake_connection_aborted = True
-        transport.loseConnection()
-    patch_if_missing(transport, 'abortConnection', abortConnection)
+        if _old_abortConnection:
+            _old_abortConnection()
+        else:
+            transport.loseConnection()
+
+    transport.abortConnection = abortConnection
 
 
 class FakeServerProtocolWrapper(Protocol):
