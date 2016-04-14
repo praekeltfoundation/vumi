@@ -2,6 +2,9 @@
 
 import base64
 import json
+import os
+
+import certifi
 
 from twisted.internet.defer import inlineCallbacks
 from twisted.web import http
@@ -198,6 +201,7 @@ class GoConversationTransport(GoConversationTransportBase):
 
     @inlineCallbacks
     def setup_transport(self):
+        self.setup_cacerts()
         config = self.get_static_config()
         self.redis = yield TxRedisManager.from_config(
             config.redis_manager)
@@ -213,6 +217,13 @@ class GoConversationTransport(GoConversationTransportBase):
 
     def teardown_transport(self):
         return self.web_resource.loseConnection()
+
+    def setup_cacerts(self):
+        # TODO: This installs an older CA certificate chain that allows
+        #       some weak CA certificates. We should switch to .where() when
+        #       Vumi Go's certificate doesn't rely on older intermediate
+        #       certificates.
+        os.environ["SSL_CERT_FILE"] = certifi.old_where()
 
     def get_transport_url(self, suffix=''):
         """
