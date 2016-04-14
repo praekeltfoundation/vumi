@@ -1,8 +1,11 @@
 import json
+import os
 
 from twisted.internet.defer import inlineCallbacks, returnValue, DeferredQueue
 from twisted.internet.task import Clock
 from twisted.web.server import NOT_DONE_YET
+
+import certifi
 
 from vumi.message import TransportUserMessage
 from vumi.tests.fake_connection import FakeHttpServer
@@ -172,6 +175,11 @@ class TestGoConversationTransport(TestGoConversationTransportBase):
         self.assertEquals(status['component'], 'vumi-go-event')
         self.assertEquals(status['type'], 'bad_request')
         self.assertEquals(status['message'], 'Bad event received from Vumi Go')
+
+    @inlineCallbacks
+    def test_weak_cacerts_installed(self):
+        yield self.get_configured_transport()
+        self.assertEqual(os.environ["SSL_CERT_FILE"], certifi.old_where())
 
     @inlineCallbacks
     def test_sending_messages(self):
