@@ -37,11 +37,7 @@ class TestGoConversationTransportBase(VumiTestCase):
         transport = yield self.tx_helper.get_transport(defaults, start=False)
         transport.agent_factory = self.fake_http.get_agent
         yield transport.startWorker()
-        yield self.setup_transport(transport)
         returnValue(transport)
-
-    def setup_transport(self, transport):
-        pass
 
     @inlineCallbacks
     def finish_requests(self):
