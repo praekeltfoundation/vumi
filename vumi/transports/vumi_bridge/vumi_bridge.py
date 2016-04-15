@@ -2,17 +2,22 @@
 
 import base64
 import json
+import os
+
+import certifi
 
 from twisted.internet.defer import inlineCallbacks
 from twisted.web import http
 from twisted.web.resource import Resource
 from twisted.web.server import NOT_DONE_YET
 
+from treq.client import HTTPClient
+
 from vumi.transports import Transport
 from vumi.config import ConfigText, ConfigDict, ConfigInt, ConfigFloat
 from vumi.persist.txredis_manager import TxRedisManager
 from vumi.message import TransportUserMessage, TransportEvent
-from vumi.utils import to_kwargs, http_request_full, StatusEdgeDetector
+from vumi.utils import to_kwargs, StatusEdgeDetector
 from vumi import log
 
 
@@ -112,16 +117,16 @@ class GoConversationTransportBase(Transport):
         if 'helper_metadata' in message:
             params['helper_metadata'] = message['helper_metadata']
 
-        resp = yield http_request_full(
+        http_client = HTTPClient(self.agent_factory())
+        resp = yield http_client.put(
             self.get_url('messages.json'),
             data=json.dumps(params).encode('utf-8'),
-            headers=headers,
-            method='PUT',
-            agent_class=self.agent_factory)
+            headers=headers)
+        resp_body = yield resp.content()
 
         if resp.code != http.OK:
             log.warning('Unexpected status code: %s, body: %s' % (
-                resp.code, resp.delivered_body))
+                resp.code, resp_body))
             self.update_status(
                 status='down', component='submitted-to-vumi-go',
                 type='bad_request',
@@ -131,7 +136,7 @@ class GoConversationTransportBase(Transport):
                                         resp.code,))
             return
 
-        remote_message = json.loads(resp.delivered_body)
+        remote_message = json.loads(resp_body)
         yield self.map_message_id(
             remote_message['message_id'], message['message_id'])
         self.update_status(
@@ -199,6 +204,7 @@ class GoConversationTransport(GoConversationTransportBase):
 
     @inlineCallbacks
     def setup_transport(self):
+        self.setup_cacerts()
         config = self.get_static_config()
         self.redis = yield TxRedisManager.from_config(
             config.redis_manager)
@@ -218,6 +224,13 @@ class GoConversationTransport(GoConversationTransportBase):
             yield self.web_resource.loseConnection()
         if self.redis is not None:
             self.redis.close_manager()
+
+    def setup_cacerts(self):
+        # TODO: This installs an older CA certificate chain that allows
+        #       some weak CA certificates. We should switch to .where() when
+        #       Vumi Go's certificate doesn't rely on older intermediate
+        #       certificates.
+        os.environ["SSL_CERT_FILE"] = certifi.old_where()
 
     def get_transport_url(self, suffix=''):
         """
