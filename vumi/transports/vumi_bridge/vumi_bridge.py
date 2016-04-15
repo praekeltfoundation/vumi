@@ -199,6 +199,9 @@ class GoConversationTransport(GoConversationTransportBase):
 
     CONFIG_CLASS = VumiBridgeTransportConfig
 
+    redis = None
+    web_resource = None
+
     @inlineCallbacks
     def setup_transport(self):
         self.setup_cacerts()
@@ -215,8 +218,12 @@ class GoConversationTransport(GoConversationTransportBase):
         ], config.web_port)
         self.status_detect = StatusEdgeDetector()
 
+    @inlineCallbacks
     def teardown_transport(self):
-        return self.web_resource.loseConnection()
+        if self.web_resource is not None:
+            yield self.web_resource.loseConnection()
+        if self.redis is not None:
+            self.redis.close_manager()
 
     def setup_cacerts(self):
         # TODO: This installs an older CA certificate chain that allows

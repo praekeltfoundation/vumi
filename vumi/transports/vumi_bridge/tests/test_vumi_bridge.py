@@ -29,7 +29,7 @@ class TestGoConversationTransportBase(VumiTestCase):
         self.add_cleanup(self.finish_requests)
 
     @inlineCallbacks
-    def get_transport(self, **config):
+    def get_transport(self, start=True, **config):
         defaults = {
             'account_key': 'account-key',
             'conversation_key': 'conversation-key',
@@ -39,7 +39,8 @@ class TestGoConversationTransportBase(VumiTestCase):
         defaults.update(config)
         transport = yield self.tx_helper.get_transport(defaults, start=False)
         transport.agent_factory = self.fake_http.get_agent
-        yield transport.startWorker()
+        if start:
+            yield transport.startWorker()
         returnValue(transport)
 
     @inlineCallbacks
@@ -66,8 +67,8 @@ class TestGoConversationTransport(TestGoConversationTransportBase):
     def test_server_settings_without_configs(self):
         return self.assertFailure(self.get_transport(), ConfigError)
 
-    def get_configured_transport(self):
-        return self.get_transport(web_path='test', web_port='0')
+    def get_configured_transport(self, start=True):
+        return self.get_transport(start=start, web_path='test', web_port='0')
 
     def post_msg(self, url, msg_json):
         data = msg_json.encode('utf-8')
@@ -232,3 +233,8 @@ class TestGoConversationTransport(TestGoConversationTransportBase):
         self.assertEquals(status['type'], 'bad_request')
         self.assertEquals(status['message'],
                           'Message submission rejected by Vumi Go')
+
+    @inlineCallbacks
+    def test_teardown_before_start(self):
+        transport = yield self.get_configured_transport(start=False)
+        yield transport.teardown_transport()
