@@ -1,8 +1,11 @@
 import json
+import os
 
 from twisted.internet.defer import inlineCallbacks, returnValue, DeferredQueue
 from twisted.internet.task import Clock
 from twisted.web.server import NOT_DONE_YET
+
+import certifi
 
 from vumi.message import TransportUserMessage
 from vumi.tests.fake_connection import FakeHttpServer
@@ -26,7 +29,7 @@ class TestGoConversationTransportBase(VumiTestCase):
         self.add_cleanup(self.finish_requests)
 
     @inlineCallbacks
-    def get_transport(self, **config):
+    def get_transport(self, start=True, **config):
         defaults = {
             'account_key': 'account-key',
             'conversation_key': 'conversation-key',
@@ -36,12 +39,9 @@ class TestGoConversationTransportBase(VumiTestCase):
         defaults.update(config)
         transport = yield self.tx_helper.get_transport(defaults, start=False)
         transport.agent_factory = self.fake_http.get_agent
-        yield transport.startWorker()
-        yield self.setup_transport(transport)
+        if start:
+            yield transport.startWorker()
         returnValue(transport)
-
-    def setup_transport(self, transport):
-        pass
 
     @inlineCallbacks
     def finish_requests(self):
@@ -67,8 +67,8 @@ class TestGoConversationTransport(TestGoConversationTransportBase):
     def test_server_settings_without_configs(self):
         return self.assertFailure(self.get_transport(), ConfigError)
 
-    def get_configured_transport(self):
-        return self.get_transport(web_path='test', web_port='0')
+    def get_configured_transport(self, start=True):
+        return self.get_transport(start=start, web_path='test', web_port='0')
 
     def post_msg(self, url, msg_json):
         data = msg_json.encode('utf-8')
@@ -178,6 +178,11 @@ class TestGoConversationTransport(TestGoConversationTransportBase):
         self.assertEquals(status['message'], 'Bad event received from Vumi Go')
 
     @inlineCallbacks
+    def test_weak_cacerts_installed(self):
+        yield self.get_configured_transport()
+        self.assertEqual(os.environ["SSL_CERT_FILE"], certifi.old_where())
+
+    @inlineCallbacks
     def test_sending_messages(self):
         yield self.get_configured_transport()
         msg = self.tx_helper.make_outbound(
@@ -228,3 +233,8 @@ class TestGoConversationTransport(TestGoConversationTransportBase):
         self.assertEquals(status['type'], 'bad_request')
         self.assertEquals(status['message'],
                           'Message submission rejected by Vumi Go')
+
+    @inlineCallbacks
+    def test_teardown_before_start(self):
+        transport = yield self.get_configured_transport(start=False)
+        yield transport.teardown_transport()

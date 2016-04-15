@@ -12,7 +12,7 @@ if platform.python_implementation() == "PyPy":
 
 setup(
     name="vumi",
-    version="0.6.3",
+    version="0.6.4",
     url='http://github.com/praekelt/vumi',
     license='BSD',
     description="Super-scalable messaging engine for the delivery of SMS, "
@@ -41,6 +41,7 @@ setup(
         'PyYAML',
         'iso8601',
         'pyOpenSSL',
+        'certifi',
         'service_identity',
         'txssmi>=0.3.0',
         'wokkel',
