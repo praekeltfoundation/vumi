@@ -10,6 +10,7 @@ from twisted.internet.defer import inlineCallbacks
 from twisted.web import http
 from twisted.web.resource import Resource
 from twisted.web.server import NOT_DONE_YET
+from twisted.web.client import Agent
 
 from treq.client import HTTPClient
 
@@ -72,7 +73,7 @@ class VumiBridgeTransportConfig(Transport.CONFIG_CLASS):
 
 class GoConversationTransportBase(Transport):
 
-    agent_factory = None  # For swapping out the Agent we use in tests.
+    agent_factory = Agent  # For swapping out the Agent we use in tests.
 
     def get_url(self, path):
         config = self.get_static_config()
