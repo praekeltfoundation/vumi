@@ -3,6 +3,7 @@ import os
 
 from twisted.internet.defer import inlineCallbacks, returnValue, DeferredQueue
 from twisted.internet.task import Clock
+from twisted.web.client import Agent
 from twisted.web.server import NOT_DONE_YET
 
 import certifi
@@ -238,3 +239,6 @@ class TestGoConversationTransport(TestGoConversationTransportBase):
     def test_teardown_before_start(self):
         transport = yield self.get_configured_transport(start=False)
         yield transport.teardown_transport()
+
+    def test_agent_factory_default(self):
+        self.assertEqual(GoConversationTransport.agent_factory, Agent)
