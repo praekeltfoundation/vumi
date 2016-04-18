@@ -11,6 +11,54 @@ this will almost certainly not break the majority of things built on vumi, old
 code or code that relies too heavily on the details of worker setup may need to
 be fixed.
 
+:Version: 0.6.6
+:Date released: 18 April 2016
+
+* Fix bug in Vumi Bridge transport that prevented it making outbound requests.
+
+:Version: 0.6.5
+:Date released: 15 April 2016
+
+* Update the Vumi Bridge transport to perform teardown more carefully (including
+  tearing down the Redis manager and successfully tearing down even if start up
+  failed halfway).
+* Add support for older SSL CA certificates when using the Vumi Bridge
+  transport to connect to Vumi Go.
+
+:Version: 0.6.4
+:Date released: 8 April 2016
+
+* Fix object leak caused by creating lots of Redis submanagers.
+* Remove deprecated manhole middleware.
+* Update fake_connections wrapping of abortConnection to work with Twisted
+  16.1.
+
+:Version: 0.6.3
+:Date released: 31 March 2016
+
+* Refactor and update the Vumi Bridge non-streaming HTTP API client, including
+  adding status events and a web_path configuration option for use with Junebug.
+* Remove the deprecated Vumi Bridge streaming HTTP API client.
+* Add a Dockerfile entrypoint script.
+* Rename the TWISTD_APPLICATION Dockerfile variable to TWISTD_COMMAND.
+* Pin the version of Vumi installed in the Dockerfile.
+* Update manhole middleware so that tests pass with Twisted 16.0.
+
+:Version: 0.6.2
+:Date released: 3 March 2016
+
+* Add support for uniformly handling Redis ResponseErrors across different
+  Redis implementations.
+
+:Version: 0.6.1
+:Date released: 2 March 2016
+
+* Removed support for Python 2.6.
+* Publish status messages from WeChat transport (for use with Junebug).
+* A support for the rename command to FakeRedis.
+* Add Dockerfile for running Vumi.
+* Fixed typo in "How we do releases" documentation.
+
 :Version: 0.6.0
 :Date released: 7 Dec 2015
 
