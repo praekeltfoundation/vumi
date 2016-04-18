@@ -6,6 +6,7 @@ import os
 
 import certifi
 
+from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks
 from twisted.web import http
 from twisted.web.resource import Resource
@@ -73,7 +74,10 @@ class VumiBridgeTransportConfig(Transport.CONFIG_CLASS):
 
 class GoConversationTransportBase(Transport):
 
-    agent_factory = Agent  # For swapping out the Agent we use in tests.
+    @classmethod
+    def agent_factory(cls):
+        """For swapping out the Agent we use in tests."""
+        return Agent(reactor)
 
     def get_url(self, path):
         config = self.get_static_config()
