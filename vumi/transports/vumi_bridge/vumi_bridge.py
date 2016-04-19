@@ -33,7 +33,7 @@ class VumiBridgeTransportConfig(Transport.CONFIG_CLASS):
         required=True)
     base_url = ConfigText(
         'The base URL for the API', static=True,
-        default='https://go.vumi.org/api/v1/go/http_api/')
+        default='https://go.vumi.org/api/v1/go/http_api_nostream/')
     message_life_time = ConfigInt(
         'How long to keep message_ids around for.', static=True,
         default=48 * 60 * 60)  # default is 48 hours.
