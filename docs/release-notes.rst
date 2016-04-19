@@ -11,6 +11,12 @@ this will almost certainly not break the majority of things built on vumi, old
 code or code that relies too heavily on the details of worker setup may need to
 be fixed.
 
+:Version: 0.6.7
+:Date released: 19 April 2016
+
+* Re-fix the bug in the Vumi Bridge transport that prevents it making outbound
+  requests.
+
 :Version: 0.6.6
 :Date released: 18 April 2016
 

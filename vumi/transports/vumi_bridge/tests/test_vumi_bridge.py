@@ -241,4 +241,5 @@ class TestGoConversationTransport(TestGoConversationTransportBase):
         yield transport.teardown_transport()
 
     def test_agent_factory_default(self):
-        self.assertEqual(GoConversationTransport.agent_factory, Agent)
+        self.assertTrue(isinstance(
+            GoConversationTransport.agent_factory(), Agent))
