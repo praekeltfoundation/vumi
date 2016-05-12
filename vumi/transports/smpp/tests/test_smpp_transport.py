@@ -663,6 +663,20 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.assertEqual(event['sent_message_id'], 'foo')
 
     @inlineCallbacks
+    def assert_no_events(self):
+        # NOTE: We can't test for the absence of an event in isolation but we
+        #       can test that for the presence of a second event only.
+        fail_msg = self.tx_helper.make_outbound('hello fail')
+        yield self.tx_helper.dispatch_outbound(fail_msg)
+        submit_sm_fail_pdu = yield self.fake_smsc.await_pdu()
+        self.fake_smsc.send_pdu(
+            SubmitSMResp(sequence_number=seq_no(submit_sm_fail_pdu),
+                         message_id='__assert_no_events__',
+                         command_status='ESME_RINVDSTADR'))
+        [fail] = yield self.tx_helper.wait_for_dispatched_events(1)
+        self.assertEqual(fail['event_type'], 'nack')
+
+    @inlineCallbacks
     def test_mt_sms_disabled_ack(self):
         yield self.get_transport({'disable_ack': True})
         msg = self.tx_helper.make_outbound('hello world')
@@ -671,16 +685,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.fake_smsc.send_pdu(
             SubmitSMResp(sequence_number=seq_no(submit_sm_pdu),
                          message_id='foo'))
-        # NOTE: We can't test for the absence of an event in isolation but we
-        #       can test that for the presence of a second event only.
-        fail_msg = self.tx_helper.make_outbound('hello fail')
-        yield self.tx_helper.dispatch_outbound(fail_msg)
-        submit_sm_fail_pdu = yield self.fake_smsc.await_pdu()
-        self.fake_smsc.send_pdu(
-            SubmitSMResp(sequence_number=seq_no(submit_sm_fail_pdu),
-                         message_id='foo', command_status='ESME_RINVDSTADR'))
-        [fail] = yield self.tx_helper.wait_for_dispatched_events(1)
-        self.assertEqual(fail['event_type'], 'nack')
+        yield self.assert_no_events()
 
     @inlineCallbacks
     def test_mt_sms_nack(self):
@@ -1631,6 +1636,36 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         self.assertTrue(
             remote_id_ttl > 23,
             "remote_id_ttl (%s) <= final_dr_third_party_id_expiry (23)"
+            % (remote_id_ttl,))
+
+    @inlineCallbacks
+    def test_disable_delivery_report_delivered_delete_stored_remote_id(self):
+        transport = yield self.get_transport({
+            'final_dr_third_party_id_expiry': 23,
+            'disable_delivery_report': True,
+        })
+
+        yield transport.message_stash.set_remote_message_id('bar', 'foo')
+        remote_id_ttl = yield transport.redis.ttl(remote_message_key('foo'))
+
+        self.assertTrue(
+            remote_id_ttl > 23,
+            "remote_id_ttl (%s) <= final_dr_third_party_id_expiry (23)"
+            % (remote_id_ttl,))
+
+        pdu = DeliverSM(sequence_number=1, esm_class=4)
+        pdu.add_optional_parameter('receipted_message_id', 'foo')
+        pdu.add_optional_parameter('message_state', 2)
+        yield self.fake_smsc.handle_pdu(pdu)
+        yield self.fake_smsc.await_pdu()
+
+        yield self.assert_no_events()
+
+        remote_id_ttl = yield transport.redis.ttl(remote_message_key('foo'))
+
+        self.assertTrue(
+            remote_id_ttl <= 23,
+            "remote_id_ttl (%s) > final_dr_third_party_id_expiry (23)"
             % (remote_id_ttl,))
 
     @inlineCallbacks
