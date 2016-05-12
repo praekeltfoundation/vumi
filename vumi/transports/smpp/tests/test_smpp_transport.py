@@ -1571,7 +1571,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         pdu.add_optional_parameter('message_state', 2)
         yield self.fake_smsc.handle_pdu(pdu)
 
-        yield self.tx_helper.wait_for_dispatched_events(1)
+        [dr] = yield self.tx_helper.wait_for_dispatched_events(1)
 
         remote_id_ttl = yield transport.redis.ttl(remote_message_key('foo'))
 
@@ -1579,6 +1579,12 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
             remote_id_ttl <= 23,
             "remote_id_ttl (%s) > final_dr_third_party_id_expiry (23)"
             % (remote_id_ttl,))
+
+        self.assertEqual(dr['event_type'], u'delivery_report')
+        self.assertEqual(dr['delivery_status'], u'delivered')
+        self.assertEqual(dr['transport_metadata'], {
+            u'smpp_delivery_status': u'DELIVERED',
+        })
 
     @inlineCallbacks
     def test_delivery_report_failed_delete_stored_remote_id(self):
@@ -1600,7 +1606,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         pdu.add_optional_parameter('message_state', 8)
         yield self.fake_smsc.handle_pdu(pdu)
 
-        yield self.tx_helper.wait_for_dispatched_events(1)
+        [dr] = yield self.tx_helper.wait_for_dispatched_events(1)
 
         remote_id_ttl = yield transport.redis.ttl(remote_message_key('foo'))
 
@@ -1608,6 +1614,12 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
             remote_id_ttl <= 23,
             "remote_id_ttl (%s) > final_dr_third_party_id_expiry (23)"
             % (remote_id_ttl,))
+
+        self.assertEqual(dr['event_type'], u'delivery_report')
+        self.assertEqual(dr['delivery_status'], u'failed')
+        self.assertEqual(dr['transport_metadata'], {
+            u'smpp_delivery_status': u'REJECTED',
+        })
 
     @inlineCallbacks
     def test_delivery_report_pending_keep_stored_remote_id(self):
@@ -1629,7 +1641,7 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
         pdu.add_optional_parameter('message_state', 1)
         yield self.fake_smsc.handle_pdu(pdu)
 
-        yield self.tx_helper.wait_for_dispatched_events(1)
+        [dr] = yield self.tx_helper.wait_for_dispatched_events(1)
 
         remote_id_ttl = yield transport.redis.ttl(remote_message_key('foo'))
 
@@ -1637,6 +1649,12 @@ class SmppTransceiverTransportTestCase(SmppTransportTestCase):
             remote_id_ttl > 23,
             "remote_id_ttl (%s) <= final_dr_third_party_id_expiry (23)"
             % (remote_id_ttl,))
+
+        self.assertEqual(dr['event_type'], u'delivery_report')
+        self.assertEqual(dr['delivery_status'], u'pending')
+        self.assertEqual(dr['transport_metadata'], {
+            u'smpp_delivery_status': u'ENROUTE',
+        })
 
     @inlineCallbacks
     def test_disable_delivery_report_delivered_delete_stored_remote_id(self):
