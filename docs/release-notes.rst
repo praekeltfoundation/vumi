@@ -11,6 +11,15 @@ this will almost certainly not break the majority of things built on vumi, old
 code or code that relies too heavily on the details of worker setup may need to
 be fixed.
 
+:Version: 0.6.8
+:Date released: 12 May 2016
+
+* Allow disabling of delivery report handling as sometimes these cause more noise 
+  than signal.
+* Embed the original SMPP transports delivery report status into the message 
+  transport metadata. This is useful information that applications may chose
+  to act on.
+
 :Version: 0.6.7
 :Date released: 19 April 2016
 
