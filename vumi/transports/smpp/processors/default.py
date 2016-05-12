@@ -102,7 +102,8 @@ class DeliveryReportProcessor(object):
 
         d = self.transport.handle_delivery_report(
             receipted_message_id=receipted_message_id,
-            delivery_status=self.delivery_status(status))
+            delivery_status=self.delivery_status(status),
+            smpp_delivery_status=status)
         d.addCallback(lambda _: True)
         return d
 
@@ -115,7 +116,8 @@ class DeliveryReportProcessor(object):
         message_state = content_fields['stat']
         return self.transport.handle_delivery_report(
             receipted_message_id=receipted_message_id,
-            delivery_status=self.delivery_status(message_state))
+            delivery_status=self.delivery_status(message_state),
+            smpp_delivery_status=message_state)
 
     def _handle_delivery_report_esm_class(self, pdu):
         """

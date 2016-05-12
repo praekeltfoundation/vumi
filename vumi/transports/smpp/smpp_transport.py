@@ -492,7 +492,9 @@ class SmppTransceiverTransport(Transport):
         return self.publish_message(**message).addErrback(self.log.err)
 
     @inlineCallbacks
-    def handle_delivery_report(self, receipted_message_id, delivery_status):
+    def handle_delivery_report(
+            self, receipted_message_id, delivery_status,
+            smpp_delivery_status):
         message_id = yield self.message_stash.get_internal_message_id(
             receipted_message_id)
         if message_id is None:
@@ -504,7 +506,10 @@ class SmppTransceiverTransport(Transport):
 
         dr = yield self.publish_delivery_report(
             user_message_id=message_id,
-            delivery_status=delivery_status)
+            delivery_status=delivery_status,
+            transport_metadata={
+                'smpp_delivery_status': smpp_delivery_status,
+            })
 
         if delivery_status in ('delivered', 'failed'):
             yield self.message_stash.expire_remote_message_id(
