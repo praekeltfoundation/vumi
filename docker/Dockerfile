@@ -7,5 +7,4 @@ RUN pip install vumi==$VUMI_VERSION
 COPY ./vumi-entrypoint.sh /app/vumi-entrypoint.sh
 WORKDIR /app
 
-ENTRYPOINT ["eval-args.sh", "dinit", "/app/vumi-entrypoint.sh"]
-CMD []
+CMD ["/app/vumi-entrypoint.sh"]
