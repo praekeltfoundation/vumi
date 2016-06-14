@@ -1,4 +1,5 @@
-#!/bin/bash -e
+#!/usr/bin/env bash
+set -e
 
 TWISTD_COMMAND="${TWISTD_COMMAND:-vumi_worker}"
 
