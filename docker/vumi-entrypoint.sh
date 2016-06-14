@@ -7,7 +7,7 @@ WORKER_CLASS_OPT="${WORKER_CLASS:+--worker-class $WORKER_CLASS}"
 CONFIG_OPT="${CONFIG_FILE:+--config $CONFIG_FILE}"
 
 AMQP_OPTS=""
-if [ -n "$AMQP_HOST" ]; then
+if [[ -n "$AMQP_HOST" ]]; then
   AMQP_OPTS="--hostname $AMQP_HOST \
     --port ${AMQP_PORT:-5672} \
     --vhost ${AMQP_VHOST:-/} \
