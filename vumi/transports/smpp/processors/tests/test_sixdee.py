@@ -83,9 +83,15 @@ class SixDeeProcessorTestCase(VumiTestCase):
         returnValue(transport)
 
     def assert_udh_parts(self, pdus, texts, encoding):
-        pdu_header = lambda pdu: short_message(pdu)[:6]
-        pdu_text = lambda pdu: short_message(pdu)[6:].decode(encoding)
-        udh_header = lambda i: '\x05\x00\x03\x03\x07' + chr(i)
+        def pdu_header(pdu):
+            return short_message(pdu)[:6]
+
+        def pdu_text(pdu):
+            return short_message(pdu)[6:].decode(encoding)
+
+        def udh_header(i):
+            return '\x05\x00\x03\x03\x07' + chr(i)
+
         self.assertEqual(
             [(pdu_header(pdu), pdu_text(pdu)) for pdu in pdus],
             [(udh_header(i + 1), text) for i, text in enumerate(texts)])
