@@ -70,8 +70,10 @@ class SixDeeProcessorTestCase(VumiTestCase):
         }
 
     @inlineCallbacks
-    def get_transport(self, config={}, bind=True):
+    def get_transport(self, deliver_config={}, submit_config={}, bind=True):
         cfg = self.default_config.copy()
+        cfg['deliver_short_message_processor_config'].update(deliver_config)
+        cfg['submit_short_message_processor_config'].update(submit_config)
         transport = yield self.tx_helper.get_transport(cfg, start=False)
         transport.clock = self.clock
         yield transport.startWorker()
@@ -128,6 +130,36 @@ class SixDeeProcessorTestCase(VumiTestCase):
 
         # Server delivers a USSD message to the Client
         pdu = DeliverSM(1, short_message="*123#")
+        pdu.add_optional_parameter('ussd_service_op', '01')
+        pdu.add_optional_parameter('its_session_info', session.its_info)
+
+        yield self.fake_smsc.handle_pdu(pdu)
+
+        [mess] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+
+        self.assertEqual(mess['content'], None)
+        self.assertEqual(mess['to_addr'], '*123#')
+        self.assertEqual(mess['transport_type'], "ussd")
+        self.assertEqual(mess['session_event'],
+                         TransportUserMessage.SESSION_NEW)
+        self.assertEqual(
+            mess['transport_metadata'],
+            {
+                'session_info': {
+                    'session_identifier': session.sixdee_id,
+                    'ussd_service_op': '01',
+                }
+            })
+
+    @inlineCallbacks
+    def test_submit_and_deliver_ussd_new_custom_ussd_code_field(self):
+        session = SessionInfo()
+        yield self.get_transport(deliver_config={
+            'ussd_code_pdu_field': 'destination_addr',
+        })
+
+        # Server delivers a USSD message to the Client
+        pdu = DeliverSM(1, short_message="*IGNORE#", destination_addr="*123#")
         pdu.add_optional_parameter('ussd_service_op', '01')
         pdu.add_optional_parameter('its_session_info', session.its_info)
 
