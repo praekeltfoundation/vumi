@@ -856,3 +856,9 @@ class TestXmlOverTcpClient(VumiTestCase, XmlOverTcpClientServerMixin):
             'err',
             "Server sent error message: (1337) Unknown Code: "
             "Some Reason")
+
+    def test_gen_session_id(self):
+        sessid = XmlOverTcpClient.gen_session_id()
+        self.assertEqual(len(sessid), XmlOverTcpClient.SESSION_ID_HEADER_SIZE)
+        self.assertTrue(
+            all(c in XmlOverTcpClient.SESSION_ID_CHARACTERS for c in sessid))
