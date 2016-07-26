@@ -4,14 +4,23 @@ import base64
 from twisted.internet.defer import inlineCallbacks, DeferredQueue
 from twisted.web.http import BAD_REQUEST
 from twisted.web.server import NOT_DONE_YET
+from twisted.web.http_headers import Headers
 
 from vumi.transports.mxit import MxitTransport
 from vumi.transports.mxit.responses import ResponseParser
 from vumi.utils import http_request_full
 from vumi.tests.helpers import VumiTestCase
 from vumi.tests.fake_connection import FakeHttpServer
-from twisted.web.test.requesthelper import DummyRequest
+from twisted.web.test.requesthelper import DummyRequest as TwistedDummyRequest
 from vumi.transports.tests.helpers import TransportHelper
+
+
+class DummyRequest(TwistedDummyRequest):
+    def __init__(self, *args, **kw):
+        # Twisted 13.2.0 doesn't have .requestHeaders on DummyRequest
+        TwistedDummyRequest.__init__(self, *args, **kw)
+        if not hasattr(self, 'requestHeaders'):
+            self.requestHeaders = Headers()
 
 
 class TestMxitTransport(VumiTestCase):
