@@ -213,6 +213,7 @@ class TestTrueAfricanUssdTransport(VumiTestCase):
         self.assertEqual(nack['event_type'], 'nack')
         self.assertEqual(nack['user_message_id'], rep['message_id'])
         self.assertEqual(nack['sent_message_id'], rep['message_id'])
+        self.assertTrue('HTTP client closed connection' in nack['nack_reason'])
 
     @inlineCallbacks
     def test_nack_for_request_timeout(self):
