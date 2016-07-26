@@ -2,7 +2,7 @@ import json
 import base64
 
 from twisted.internet.defer import inlineCallbacks, DeferredQueue
-from twisted.web.http import Request, BAD_REQUEST
+from twisted.web.http import BAD_REQUEST
 from twisted.web.server import NOT_DONE_YET
 
 from vumi.transports.mxit import MxitTransport
@@ -10,6 +10,7 @@ from vumi.transports.mxit.responses import ResponseParser
 from vumi.utils import http_request_full
 from vumi.tests.helpers import VumiTestCase
 from vumi.tests.fake_connection import FakeHttpServer
+from twisted.web.test.requesthelper import DummyRequest
 from vumi.transports.tests.helpers import TransportHelper
 
 
@@ -62,7 +63,7 @@ class TestMxitTransport(VumiTestCase):
         return NOT_DONE_YET
 
     def test_is_mxit_request(self):
-        req = Request(None, True)
+        req = DummyRequest([])
         self.assertFalse(self.transport.is_mxit_request(req))
         req.requestHeaders.addRawHeader('X-Mxit-Contact', 'foo')
         self.assertTrue(self.transport.is_mxit_request(req))
@@ -100,7 +101,7 @@ class TestMxitTransport(VumiTestCase):
             self.transport.html_decode(self.sample_html_str), '<&>')
 
     def test_get_request_data(self):
-        req = Request(None, True)
+        req = DummyRequest([])
         headers = req.requestHeaders
         for key, value in self.sample_req_headers.items():
             headers.addRawHeader(key, value)
@@ -134,29 +135,29 @@ class TestMxitTransport(VumiTestCase):
         })
 
     def test_get_request_content_from_header(self):
-        req = Request(None, True)
+        req = DummyRequest([])
         req.requestHeaders.addRawHeader('X-Mxit-User-Input', 'foo')
         self.assertEqual(self.transport.get_request_content(req), 'foo')
 
     def test_get_quote_plus_request_content_from_header(self):
-        req = Request(None, True)
+        req = DummyRequest([])
         req.requestHeaders.addRawHeader('X-Mxit-User-Input', 'foo+bar')
         self.assertEqual(
             self.transport.get_request_content(req), 'foo bar')
 
     def test_get_quoted_request_content_from_header(self):
-        req = Request(None, True)
+        req = DummyRequest([])
         req.requestHeaders.addRawHeader('X-Mxit-User-Input', 'foo%20bar')
         self.assertEqual(
             self.transport.get_request_content(req), 'foo bar')
 
     def test_get_request_content_from_args(self):
-        req = Request(None, True)
+        req = DummyRequest([])
         req.args = {'input': ['bar']}
         self.assertEqual(self.transport.get_request_content(req), 'bar')
 
     def test_get_request_content_when_missing(self):
-        req = Request(None, True)
+        req = DummyRequest([])
         self.assertEqual(self.transport.get_request_content(req), None)
 
     @inlineCallbacks
