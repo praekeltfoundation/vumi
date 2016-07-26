@@ -11,12 +11,22 @@ this will almost certainly not break the majority of things built on vumi, old
 code or code that relies too heavily on the details of worker setup may need to
 be fixed.
 
+:Version: 0.6.9
+:Date released: 27 July 2016
+
+* Apply numerous cleanups to the Dockerfile.
+* Use only decimal digits for session identifiers in the MTN Nigeria USSD
+  XML over TCP transport.
+* Add the ability to configure the PDU field the dialed USSD code is taken
+  from in the 6D SMPP processor.
+* Update tests to pass with Twisted 16.3.
+
 :Version: 0.6.8
 :Date released: 12 May 2016
 
-* Allow disabling of delivery report handling as sometimes these cause more noise 
+* Allow disabling of delivery report handling as sometimes these cause more noise
   than signal.
-* Embed the original SMPP transports delivery report status into the message 
+* Embed the original SMPP transports delivery report status into the message
   transport metadata. This is useful information that applications may chose
   to act on.
 
