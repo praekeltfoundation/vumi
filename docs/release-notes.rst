@@ -11,6 +11,12 @@ this will almost certainly not break the majority of things built on vumi, old
 code or code that relies too heavily on the details of worker setup may need to
 be fixed.
 
+:Version: 0.6.10
+:Date released: 27 July 2016
+
+* Update Dmark transport to send null content at the start of a USSD session
+  rather than sending the USSD code.
+
 :Version: 0.6.9
 :Date released: 27 July 2016
 
