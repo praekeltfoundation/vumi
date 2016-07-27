@@ -152,12 +152,15 @@ class DmarkUssdTransport(HttpRpcTransport):
 
         to_addr = values["ussdServiceCode"]
         from_addr = values["msisdn"]
+        content = values["ussdRequestString"]
         session_event = yield self.session_event_for_transaction(
             values["transactionId"])
+        if session_event == TransportUserMessage.SESSION_NEW:
+            content = None
 
         yield self.publish_message(
             message_id=request_id,
-            content=values["ussdRequestString"],
+            content=content,
             to_addr=to_addr,
             from_addr=from_addr,
             provider='dmark',

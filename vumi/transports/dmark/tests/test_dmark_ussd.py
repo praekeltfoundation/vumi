@@ -89,13 +89,13 @@ class TestDmarkUssdTransport(VumiTestCase):
 
     @inlineCallbacks
     def test_inbound_begin(self):
-        user_content = "Who are you?"
+        user_content = "SHOULD BE IGNORED"
         d = self.tx_helper.mk_request(ussdRequestString=user_content)
         [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
         self.assert_inbound_message(
             msg,
             session_event=TransportUserMessage.SESSION_NEW,
-            content=user_content)
+            content=None)
 
         reply_content = "We are the Knights Who Say ... Ni!"
         reply = msg.reply(reply_content)
