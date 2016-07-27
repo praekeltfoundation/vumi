@@ -6,16 +6,22 @@ USSD Transport for TrueAfrican (Uganda)
 
 import collections
 
-from twisted.internet.defer import Deferred, returnValue, inlineCallbacks
+from twisted.internet.defer import Deferred, returnValue, inlineCallbacks, fail
 from twisted.internet.task import LoopingCall
 from twisted.internet import reactor
+from twisted.python.failure import Failure
 from twisted.web import xmlrpc, server
 
 from vumi import log
+from vumi.errors import VumiError
 from vumi.message import TransportUserMessage
 from vumi.transports.base import Transport
 from vumi.components.session import SessionManager
 from vumi.config import ConfigText, ConfigInt, ConfigDict
+
+
+class TrueAfricanError(VumiError):
+    """Raised by errors in the TrueAfrican transport."""
 
 
 class TrueAfricanUssdTransportConfig(Transport.CONFIG_CLASS):
@@ -221,7 +227,12 @@ class TrueAfricanUssdTransport(Transport):
             # Add a callback and errback, either of which will be invoked
             # depending on whether the response was written to the client
             # successfully or not
-            request.http_request.notifyFinish().addCallbacks(
+            if request.http_request.content.closed:
+                request_done = fail(Failure(TrueAfricanError(
+                    "HTTP client closed connection")))
+            else:
+                request_done = request.http_request.notifyFinish()
+            request_done.addCallbacks(
                 lambda _: self._finish_success_cb(message_id),
                 lambda f: self._finish_failure_cb(f, message_id)
             )
