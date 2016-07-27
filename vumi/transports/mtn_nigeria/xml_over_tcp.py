@@ -1,6 +1,5 @@
-import uuid
+import random
 import struct
-from random import randint
 
 from twisted.web import microdom
 from twisted.internet import reactor
@@ -58,6 +57,7 @@ class XmlOverTcpClient(Protocol):
     LENGTH_HEADER_SIZE = 16
     HEADER_SIZE = SESSION_ID_HEADER_SIZE + LENGTH_HEADER_SIZE
     HEADER_FORMAT = '!%ss%ss' % (SESSION_ID_HEADER_SIZE, LENGTH_HEADER_SIZE)
+    SESSION_ID_CHARACTERS = "0123456789"
 
     REQUEST_ID_LENGTH = 10
 
@@ -407,17 +407,16 @@ class XmlOverTcpClient(Protocol):
         """
         Generates session id. Used for packets needing a dummy session id.
         """
-        # NOTE: Slicing the generated uuid is probably a bad idea, and will
-        # affect collision resistence, but I can't think of a simpler way to
-        # generate a unique 16 char alphanumeric.
-        return uuid.uuid4().hex[:cls.SESSION_ID_HEADER_SIZE]
+        return "".join(
+            random.choice(cls.SESSION_ID_CHARACTERS)
+            for i in range(cls.SESSION_ID_HEADER_SIZE))
 
     @classmethod
     def gen_request_id(cls):
         # NOTE: The protocol requires request ids to be number only ids. With a
         # request id length of 10 digits, generating ids using randint could
         # well cause collisions to occur, although this should be unlikely.
-        return str(randint(0, (10 ** cls.REQUEST_ID_LENGTH) - 1))
+        return str(random.randint(0, (10 ** cls.REQUEST_ID_LENGTH) - 1))
 
     def login(self):
         params = [

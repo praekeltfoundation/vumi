@@ -155,7 +155,8 @@ class MessageStoreProxyResource(Resource):
         return d
 
     def write_message(self, message, request):
-        self.formatter.write_row(request, message)
+        if not request.content.closed:
+            self.formatter.write_row(request, message)
 
 
 class InboundResource(MessageStoreProxyResource):

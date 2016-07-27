@@ -278,6 +278,7 @@ class SmppTransceiverTransport(Transport):
         self.submit_sm_processor = config.submit_short_message_processor(
             self, config.submit_short_message_processor_config)
         self.disable_ack = config.disable_ack
+        self.disable_delivery_report = config.disable_delivery_report
         self.message_stash = SmppMessageDataStash(self.redis, config)
         self.service = self.start_service()
 
@@ -492,7 +493,9 @@ class SmppTransceiverTransport(Transport):
         return self.publish_message(**message).addErrback(self.log.err)
 
     @inlineCallbacks
-    def handle_delivery_report(self, receipted_message_id, delivery_status):
+    def handle_delivery_report(
+            self, receipted_message_id, delivery_status,
+            smpp_delivery_status):
         message_id = yield self.message_stash.get_internal_message_id(
             receipted_message_id)
         if message_id is None:
@@ -502,9 +505,15 @@ class SmppTransceiverTransport(Transport):
                 % self.transport_name)
             return
 
-        dr = yield self.publish_delivery_report(
-            user_message_id=message_id,
-            delivery_status=delivery_status)
+        if self.disable_delivery_report:
+            dr = None
+        else:
+            dr = yield self.publish_delivery_report(
+                user_message_id=message_id,
+                delivery_status=delivery_status,
+                transport_metadata={
+                    'smpp_delivery_status': smpp_delivery_status,
+                })
 
         if delivery_status in ('delivered', 'failed'):
             yield self.message_stash.expire_remote_message_id(

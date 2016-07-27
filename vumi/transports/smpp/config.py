@@ -32,6 +32,13 @@ class SmppTransportConfig(Transport.CONFIG_CLASS):
         'causes more noise than signal. It can optionally be turned off. '
         'Defaults to False.',
         default=False, static=True)
+    disable_delivery_report = ConfigBool(
+        'Disable publishing of `delivery_report` events. In some cases this '
+        'event causes more noise than signal. It can optionally be turned '
+        'off. Note that failed or successful delivery reports will still be '
+        'used to track which SMPP message ids can be removed from temporary '
+        'caches. Defaults to False.',
+        default=False, static=True)
     third_party_id_expiry = ConfigInt(
         'How long (in seconds) to keep 3rd party message IDs around to allow '
         'for matching submit_sm_resp and delivery report messages. Defaults '
