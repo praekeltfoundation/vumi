@@ -1,6 +1,6 @@
 # -*- test-case-name: vumi.transports.smpp.tests.test_sixdee -*-
 
-from vumi.config import ConfigInt
+from vumi.config import ConfigInt, ConfigText
 from vumi.components.session import SessionManager
 from vumi.message import TransportUserMessage
 from vumi.transports.smpp.processors import default
@@ -18,6 +18,11 @@ class DeliverShortMessageProcessorConfig(
     max_session_length = ConfigInt(
         'Maximum length a USSD sessions data is to be kept for in seconds.',
         default=60 * 3, static=True)
+
+    ussd_code_pdu_field = ConfigText(
+        'PDU field to read the message `to_addr` (USSD code) from. Possible'
+        ' options are "short_message" (the default) and "destination_addr".',
+        default='short_message', static=True)
 
 
 class DeliverShortMessageProcessor(default.DeliverShortMessageProcessor):
@@ -63,7 +68,7 @@ class DeliverShortMessageProcessor(default.DeliverShortMessageProcessor):
 
         if session_event == 'new':
             # PSSR request. Let's assume it means a new session.
-            ussd_code = pdu_params['short_message']
+            ussd_code = pdu_params[self.config.ussd_code_pdu_field]
             content = None
 
             yield self.session_manager.create_session(
