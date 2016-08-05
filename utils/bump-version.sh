@@ -22,4 +22,3 @@ inplace_sed "s/\(__version__[ ]*=[ ]*[\"']\)\(.*\)\([\"'].*\)/\1${VER}\3/" vumi/
 inplace_sed "s/\(version[ ]*=[ ]*[\"']\)\(.*\)\([\"'].*\)/\1${VER}\3/" setup.py
 inplace_sed "s/^\(release[ ]*=[ ]*[\"']\)\(.*\)\([\"'].*\)/\1${VER}\3/" docs/conf.py
 inplace_sed "s/^\(version[ ]*=[ ]*[\"']\)\(.*\)\([\"'].*\)/\1${SHORT_VER}\3/" docs/conf.py
-inplace_sed "s/^\(ENV [ ]*VUMI_VERSION [ ]*\"\)\([^\"]*\)\(\".*\)/\1${VER}\3/" docker/Dockerfile
