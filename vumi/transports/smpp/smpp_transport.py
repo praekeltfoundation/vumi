@@ -499,7 +499,7 @@ class SmppTransceiverTransport(Transport):
         message_id = yield self.message_stash.get_internal_message_id(
             receipted_message_id)
         if message_id is None:
-            self.log.warning(
+            self.log.info(
                 "Failed to retrieve message id for delivery report."
                 " Delivery report from %s discarded."
                 % self.transport_name)
