@@ -134,7 +134,8 @@ def http_request_full(url, data=None, headers={}, method='POST',
         # The import replaces the local variable.
         from twisted.internet import reactor
     pool = default_pool(reactor, pool=None, persistent=False)
-    agent = agent_class(reactor, pool=pool)
+    context_factory = context_factory or WebClientContextFactory()
+    agent = agent_class(reactor, pool=pool, contextFactory=context_factory)
     client = HTTPClient(agent)
 
     def handle_response(response):
