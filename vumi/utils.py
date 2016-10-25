@@ -19,6 +19,8 @@ from twisted.web.http_headers import Headers
 from twisted.web.iweb import IBodyProducer
 from twisted.web.http import PotentialDataLoss
 from twisted.web.resource import Resource
+from treq._utils import default_pool, default_reactor
+from treq.client import HTTPClient
 
 from vumi.errors import VumiError
 
@@ -119,6 +121,34 @@ class SimplishReceiver(protocol.Protocol):
 def http_request_full(url, data=None, headers={}, method='POST',
                       timeout=None, data_limit=None, context_factory=None,
                       agent_class=None, reactor=None):
+    """
+    This is a drop in replacement for the original `http_request_full` method
+    but it has its internals completely replaced by treq. Treq supports SNI
+    and our implementation does not for some reason. Also, we do not want
+    to continue maintaining this because we're favouring treq everywhere
+    anyway.
+
+    """
+    agent_class = agent_class or Agent
+    if reactor is None:
+        # The import replaces the local variable.
+        from twisted.internet import reactor
+    pool = default_pool(reactor, pool=None, persistent=False)
+    agent = agent_class(reactor, pool=pool)
+    client = HTTPClient(agent)
+
+    def handle_response(response):
+        return SimplishReceiver(response, data_limit).deferred
+
+    d = client.request(method, url,
+                       headers=headers, data=data, timeout=timeout)
+    d.addCallback(handle_response)
+    return d
+
+
+def old_http_request_full(url, data=None, headers={}, method='POST',
+                           timeout=None, data_limit=None, context_factory=None,
+                           agent_class=None, reactor=None):
     if reactor is None:
         # The import replaces the local variable.
         from twisted.internet import reactor
