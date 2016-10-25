@@ -141,8 +141,29 @@ def http_request_full(url, data=None, headers={}, method='POST',
     def handle_response(response):
         return SimplishReceiver(response, data_limit).deferred
 
-    d = client.request(method, url,
-                       headers=headers, data=data, timeout=timeout)
+    d = client.request(method, url, headers=headers, data=data)
+
+    if timeout is not None:
+        cancelling_on_timeout = [False]
+
+        def raise_timeout(reason):
+            if not cancelling_on_timeout[0] or reason.check(HttpTimeoutError):
+                return reason
+            return Failure(HttpTimeoutError("Timeout while connecting"))
+
+        def cancel_on_timeout():
+            cancelling_on_timeout[0] = True
+            d.cancel()
+
+        def cancel_timeout(r, delayed_call):
+            if delayed_call.active():
+                delayed_call.cancel()
+            return r
+
+        d.addErrback(raise_timeout)
+        delayed_call = reactor.callLater(timeout, cancel_on_timeout)
+        d.addCallback(cancel_timeout, delayed_call)
+
     d.addCallback(handle_response)
     return d
 
