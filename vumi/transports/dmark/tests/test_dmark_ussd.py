@@ -8,9 +8,11 @@ import urllib
 
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet.task import Clock
+from twisted.internet.error import ConnectionDone
 
 from vumi.message import TransportUserMessage
 from vumi.tests.helpers import VumiTestCase
+from vumi.tests.utils import LogCatcher
 from vumi.transports.dmark import DmarkUssdTransport
 from vumi.transports.httprpc.tests.helpers import HttpRpcTransportHelper
 
@@ -442,3 +444,16 @@ class TestDmarkUssdTransport(VumiTestCase):
         request.write('')
         request.finish()
         self.assertEqual(self.transport._requests, {})
+
+    @inlineCallbacks
+    def test_notify_finish_requests_cleanup_with_errors(self):
+        self.tx_helper.mk_request()
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        [(request_id, request_info)] = self.transport._requests.items()
+        request = request_info['request']
+        with LogCatcher() as lc:
+            request.connectionLost(ConnectionDone('Connection Done!'))
+        self.assertEqual(
+            lc.messages(),
+            ['Error cleaning up request %s: ' % (request_id,) +
+             'Connection was closed cleanly: Connection Done!.'])

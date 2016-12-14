@@ -182,6 +182,9 @@ class DmarkUssdTransport(HttpRpcTransport):
             })
 
     def cleanup_request(self, error, request_id):
+        if error:
+            self.log.msg('Error cleaning up request %s: %s' % (
+                request_id, error.getErrorMessage()))
         if request_id in self._requests:
             self.remove_request(request_id)
 
