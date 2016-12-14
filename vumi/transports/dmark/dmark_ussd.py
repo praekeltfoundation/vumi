@@ -158,6 +158,13 @@ class DmarkUssdTransport(HttpRpcTransport):
         if session_event == TransportUserMessage.SESSION_NEW:
             content = None
 
+        # NOTE: Make sure we cleanup any lingering HTTP requests
+        #       in case we timeout. Currently any timed out request
+        #       results in a failure being logged, spamming our Sentry
+        #       instance and mailboxes.
+        d = request.notifyFinish()
+        d.addBoth(self.cleanup_request, request_id)
+
         yield self.publish_message(
             message_id=request_id,
             content=content,
@@ -173,6 +180,10 @@ class DmarkUssdTransport(HttpRpcTransport):
                     'creation_time': values['creationTime'],
                 }
             })
+
+    def cleanup_request(self, error, request_id):
+        if request_id in self._requests:
+            self.remove_request(request_id)
 
     @inlineCallbacks
     def handle_outbound_message(self, message):

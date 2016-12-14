@@ -430,3 +430,15 @@ class TestDmarkUssdTransport(VumiTestCase):
         self.assertEqual(status['details'], {
             'response_time': self.transport.request_timeout + 0.1,
         })
+
+    @inlineCallbacks
+    def test_notify_finish_requests_cleanup(self):
+        self.tx_helper.mk_request()
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        [(request_id, request_info)] = self.transport._requests.items()
+        request = request_info['request']
+        # Force a request finish, this should call `notifyFinish()`
+        # which will cleanup the internal _requests registry
+        request.write('')
+        request.finish()
+        self.assertEqual(self.transport._requests, {})
