@@ -301,6 +301,7 @@ class TestDmarkUssdTransport(VumiTestCase):
         self.assertEqual(status['component'], 'response')
         self.assertEqual(status['message'], 'Response sent')
         self.assertEqual(status['type'], 'response_sent')
+        self.flushLoggedErrors()
 
     @inlineCallbacks
     def test_status_degraded_slow_response(self):

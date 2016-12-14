@@ -317,12 +317,12 @@ class HttpRpcTransport(Transport):
                 request.responseHeaders.setRawHeaders(h_name, h_values)
             request.setResponseCode(code)
             request.write(data)
-            request.finish()
             self.set_request_end(request_id)
             self.remove_request(request_id)
             response_id = "%s:%s:%s" % (request.client.host,
                                         request.client.port,
                                         Transport.generate_message_id())
+            request.finish()
             return response_id
 
     # NOTE: This hackery is required so that we know what to_addr a message
