@@ -323,6 +323,7 @@ class TestDmarkUssdTransport(VumiTestCase):
         self.assertEqual(status['component'], 'response')
         self.assertEqual(status['type'], 'slow_response')
         self.assertEqual(status['message'], 'Slow response')
+        self.flushLoggedErrors()
 
     @inlineCallbacks
     def test_status_down_very_slow_response(self):
@@ -433,6 +434,7 @@ class TestDmarkUssdTransport(VumiTestCase):
         self.assertEqual(status['details'], {
             'response_time': self.transport.request_timeout + 0.1,
         })
+        self.flushLoggedErrors()
 
     @inlineCallbacks
     def test_notify_finish_requests_cleanup(self):
