@@ -49,7 +49,7 @@ setup(
         'txredis',
         'python-smpp>=0.1.5',
         'pytz',
-        'riak>=2.1',
+        'riak>=2.1,<2.6.0',
         'txJSON-RPC==0.3.1',
         'txTwitter>=0.1.4a',
         'treq',

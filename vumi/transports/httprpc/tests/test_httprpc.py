@@ -52,6 +52,7 @@ class TestTransport(VumiTestCase):
         self.assertEqual(json.loads(result), {
             'pending_requests': 0
         })
+        self.flushLoggedErrors()
 
     @inlineCallbacks
     def test_inbound(self):
