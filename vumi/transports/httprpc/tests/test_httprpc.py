@@ -45,7 +45,7 @@ class TestTransport(VumiTestCase):
         self.tx_helper = self.add_helper(TransportHelper(OkTransport))
         self.transport = yield self.tx_helper.get_transport(config)
         self.transport_url = self.transport.get_transport_url()
-        self.cleanup(self.flushLoggedErrors, ConnectionDone)
+        self.addCleanup(self.flushLoggedErrors, ConnectionDone)
 
     @inlineCallbacks
     def test_health(self):

@@ -51,7 +51,7 @@ class TestDmarkUssdTransport(VumiTestCase):
             self.config['web_path'])
         yield self.session_manager.redis._purge_all()  # just in case
         self.session_timestamps = {}
-        self.cleanup(self.flushLoggedErrors, ConnectionDone)
+        self.addCleanup(self.flushLoggedErrors, ConnectionDone)
 
     @inlineCallbacks
     def mk_session(self, transaction_id=_transaction_id):
