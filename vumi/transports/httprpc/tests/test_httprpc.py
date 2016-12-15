@@ -63,6 +63,7 @@ class TestTransport(VumiTestCase):
         [ack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(ack['user_message_id'], rep['message_id'])
         self.assertEqual(ack['sent_message_id'], rep['message_id'])
+        self.flushLoggedErrors()
 
     @inlineCallbacks
     def test_nack(self):
