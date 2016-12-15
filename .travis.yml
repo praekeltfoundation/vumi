@@ -15,7 +15,7 @@ matrix:
     # Twisted version or Riak version without adding an additional build job.
     # Twisted 13.2 requires PyCrypto for twisted.conch.ssh support.
     - python: "2.7"
-      env: TWISTED_VERSION="Twisted==13.2.0" RIAK_VERSION="2.1.1" PYCRYPTO_VERSION="PyCrypto==2.6.1"
+      env: TWISTED_VERSION="Twisted==13.2.0" TREQ_VERSION="treq<16.12.0" RIAK_VERSION="2.1.1" PYCRYPTO_VERSION="PyCrypto==2.6.1"
     # Test on pypy without coverage, because it's unnecessary and very slow.
     # Also, we hit an obscure GC bug in pypy<=2.6.0 so we need at least 2.6.1.
     - python: "pypy"
@@ -32,6 +32,7 @@ before_install:
   # Default values for our build envvars.
   - export RIAK_VERSION="${RIAK_VERSION-1.4.12}"
   - export TWISTED_VERSION="${TWISTED_VERSION-Twisted}"
+  - export TWISTED_VERSION="${TREQ_VERSION-treq}"
   # If necessary, set up an appropriate version of pypy.
   - if [ ! -z "$PYPY_VERSION" ]; then source utils/setup-pypy-travis.sh; fi
   - if [ ! -z "$PYPY_VERSION" ]; then python --version 2>&1 | fgrep "PyPy $PYPY_VERSION"; fi
@@ -41,6 +42,7 @@ install:
   # Travis seems to have pip 6.x, which doesn't build and cache wheels.
   - "pip install 'pip>=7.1.0'"
   - "pip install ${TWISTED_VERSION}"
+  - "pip install ${TREQ_VERSION}"
   # If requested, install PyCrypto
   - if [ ! -z "$PYCRYPTO_VERSION" ]; then pip install "$PYCRYPTO_VERSION"; fi
   - "pip install -r requirements.pip"
