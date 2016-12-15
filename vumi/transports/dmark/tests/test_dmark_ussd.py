@@ -51,6 +51,7 @@ class TestDmarkUssdTransport(VumiTestCase):
             self.config['web_path'])
         yield self.session_manager.redis._purge_all()  # just in case
         self.session_timestamps = {}
+        self.cleanup(self.flushLoggedErrors, ConnectionDone)
 
     @inlineCallbacks
     def mk_session(self, transaction_id=_transaction_id):
@@ -301,7 +302,6 @@ class TestDmarkUssdTransport(VumiTestCase):
         self.assertEqual(status['component'], 'response')
         self.assertEqual(status['message'], 'Response sent')
         self.assertEqual(status['type'], 'response_sent')
-        self.flushLoggedErrors()
 
     @inlineCallbacks
     def test_status_degraded_slow_response(self):
@@ -323,7 +323,6 @@ class TestDmarkUssdTransport(VumiTestCase):
         self.assertEqual(status['component'], 'response')
         self.assertEqual(status['type'], 'slow_response')
         self.assertEqual(status['message'], 'Slow response')
-        self.flushLoggedErrors()
 
     @inlineCallbacks
     def test_status_down_very_slow_response(self):
@@ -434,7 +433,6 @@ class TestDmarkUssdTransport(VumiTestCase):
         self.assertEqual(status['details'], {
             'response_time': self.transport.request_timeout + 0.1,
         })
-        self.flushLoggedErrors()
 
     @inlineCallbacks
     def test_notify_finish_requests_cleanup(self):

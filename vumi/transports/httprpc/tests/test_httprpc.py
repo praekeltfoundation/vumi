@@ -2,6 +2,7 @@ import json
 
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet.task import Clock
+from twisted.internet.error import ConnectionDone
 
 from vumi.utils import http_request, http_request_full, basic_auth_string
 from vumi.tests.helpers import VumiTestCase
@@ -44,6 +45,7 @@ class TestTransport(VumiTestCase):
         self.tx_helper = self.add_helper(TransportHelper(OkTransport))
         self.transport = yield self.tx_helper.get_transport(config)
         self.transport_url = self.transport.get_transport_url()
+        self.cleanup(self.flushLoggedErrors, ConnectionDone)
 
     @inlineCallbacks
     def test_health(self):
@@ -52,7 +54,6 @@ class TestTransport(VumiTestCase):
         self.assertEqual(json.loads(result), {
             'pending_requests': 0
         })
-        self.flushLoggedErrors()
 
     @inlineCallbacks
     def test_inbound(self):
@@ -64,7 +65,6 @@ class TestTransport(VumiTestCase):
         [ack] = yield self.tx_helper.wait_for_dispatched_events(1)
         self.assertEqual(ack['user_message_id'], rep['message_id'])
         self.assertEqual(ack['sent_message_id'], rep['message_id'])
-        self.flushLoggedErrors()
 
     @inlineCallbacks
     def test_nack(self):
