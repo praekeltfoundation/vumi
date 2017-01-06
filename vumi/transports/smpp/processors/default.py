@@ -7,6 +7,7 @@ from zope.interface import implements
 
 from vumi.config import (
     Config, ConfigDict, ConfigRegex, ConfigText, ConfigInt, ConfigBool)
+from vumi.errors import ConfigError
 from vumi.message import TransportUserMessage
 from vumi.transports.smpp.iprocessors import (
     IDeliveryReportProcessor, IDeliverShortMessageProcessor,
@@ -209,8 +210,9 @@ class DeliverShortMessageProcessorConfig(Config):
         "setting the default encoding (0), adding additional undefined "
         "encodings (such as 4 or 8) or overriding encodings in cases where "
         "the SMSC is violating the spec (which happens a lot). Keys should "
-        "be integers, values should be strings containing valid Python "
-        "character encoding names.", default={}, static=True)
+        "be something that can be cast to an integer, values should be strings"
+        "containing valid Python character encoding names.",
+        default={}, static=True)
 
     allow_empty_messages = ConfigBool(
         "If True, send on empty messages as an empty unicode string. "
@@ -268,7 +270,15 @@ class DeliverShortMessageProcessor(object):
             9: 'shift_jis',
             10: 'iso2022_jp'
         }
-        self.data_coding_map.update(self.config.data_coding_overrides)
+        try:
+            self.data_coding_map.update({
+                int(key): value for key, value in
+                self.config.data_coding_overrides.items()})
+        except ValueError as e:
+            raise ConfigError(
+                "data_coding_overrides keys must be castable to ints. "
+                "{}".format(e.message))
+
         self.allow_empty_messages = self.config.allow_empty_messages
 
     def dcs_decode(self, obj, data_coding):
