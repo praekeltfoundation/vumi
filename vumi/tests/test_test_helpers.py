@@ -2180,38 +2180,47 @@ class TestPersistenceHelper(VumiTestCase):
         success_result_of(persistence_helper._purge_redis(manager))
         self.assertEqual(manager.purged, False)
 
+    @inlineCallbacks
     def test_cleanup_purges_managers(self):
         """
         .cleanup() should purge the Riak and Redis managers that need purging.
         """
-        persistence_helper = PersistenceHelper()
-        riak_purge = FakeRiakManagerForCleanup('bucket1')
-        riak_nopurge = FakeRiakManagerForCleanup('bucket1')
+        riak_purged = []
+
+        persistence_helper = PersistenceHelper(use_riak=True)
+        persistence_helper.setup()
+        persistence_helper._purge_riak = riak_purged.append
+
+        yield persistence_helper.get_riak_manager(
+            config={'bucket_prefix': 'bucket1'}).close_manager()
+        yield persistence_helper.get_riak_manager(
+            config={'bucket_prefix': 'bucket1'}).close_manager()
+
         redis_purge = FakeRedisManagerForCleanup('prefix1')
         redis_nopurge = FakeRedisManagerForCleanup('prefix1')
-        persistence_helper._riak_managers.extend([riak_purge, riak_nopurge])
         persistence_helper._redis_managers.extend([redis_purge, redis_nopurge])
 
-        success_result_of(persistence_helper.cleanup())
-        self.assertEqual(
-            [True, False], [riak_purge.purged, riak_nopurge.purged])
+        yield persistence_helper.cleanup()
+        self.assertEqual(len(riak_purged), 1)
         self.assertEqual(
             [True, False], [redis_purge.purged, redis_nopurge.purged])
 
+    @inlineCallbacks
     def test_cleanup_closes_riak_managers(self):
         """
         .cleanup() should close Riak client connections.
         """
-        persistence_helper = PersistenceHelper()
-        conn1 = FakeRiakClientConnection()
-        conn2 = FakeRiakClientConnection()
-        manager = FakeRiakManagerForCleanup('bucket1', [conn1, conn2])
-        persistence_helper._riak_managers.append(manager)
-        self.assertEqual(manager.fake_conns, [conn1, conn2])
-        self.assertEqual([conn1.closed, conn2.closed], [False, False])
-        success_result_of(persistence_helper.cleanup())
-        self.assertEqual(manager.fake_conns, [])
-        self.assertEqual([conn1.closed, conn2.closed], [True, True])
+        persistence_helper = PersistenceHelper(use_riak=True)
+        persistence_helper.setup()
+        # Manually override assert_closed because we want to check whether the
+        # cleanup function closes, no matter what the env var is set to.
+        persistence_helper._assert_closed = False
+
+        manager = persistence_helper.get_riak_manager()
+        self.assertEqual(manager.client._closed, False)
+
+        yield persistence_helper.cleanup()
+        self.assertEqual(manager.client._closed, True)
 
     def test_record_load_and_store(self):
         """

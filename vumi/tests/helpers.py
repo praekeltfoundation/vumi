@@ -1454,7 +1454,12 @@ class PersistenceHelper(object):
                 unclosed_managers.append(manager)
             if purge:
                 try:
-                    yield self._purge_riak(manager)
+                    # Create a new client for cleanup
+                    purge_manager = self.get_riak_manager(config={
+                        'bucket_prefix': manager.bucket_prefix
+                    })
+                    yield self._purge_riak(purge_manager)
+                    yield purge_manager.close_manager()
                 except ConnectionRefusedError:
                     pass
             yield manager.close_manager()
