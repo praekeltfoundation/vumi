@@ -1,4 +1,5 @@
 from twisted.internet.defer import inlineCallbacks
+from twisted.trial.unittest import FailTest
 
 from vumi.errors import ConfigError
 from vumi.tests.helpers import VumiTestCase
@@ -50,10 +51,13 @@ class DefaultProcessorTestCase(VumiTestCase):
                 },
             },
         }
-        with self.assertRaises(ConfigError) as e:
+        try:
             yield self.tx_helper.get_transport(config)
-        self.assertEqual(
-            e.exception.message,
-            "data_coding_overrides keys must be castable to ints. "
-            "invalid literal for int() with base 10: 'not-an-int'"
-        )
+        except ConfigError as e:
+            self.assertEqual(
+                str(e),
+                "data_coding_overrides keys must be castable to ints. "
+                "invalid literal for int() with base 10: 'not-an-int'"
+            )
+        else:
+            raise FailTest("Expected ConfigError to be raised")
