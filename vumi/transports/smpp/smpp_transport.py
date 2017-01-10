@@ -252,6 +252,8 @@ class SmppTransceiverTransport(Transport):
     bind_type = 'TRX'
     clock = reactor
     start_message_consumer = False
+    service = None
+    redis = None
 
     @property
     def throttled(self):
@@ -293,7 +295,8 @@ class SmppTransceiverTransport(Transport):
     def teardown_transport(self):
         if self.service:
             yield self.service.stopService()
-        yield self.redis._close()
+        if self.redis:
+            yield self.redis._close()
 
     def _check_address_valid(self, message, field):
         try:
