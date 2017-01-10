@@ -164,7 +164,7 @@ class EsmeProtocol(Protocol):
             The entry to write to the log file.
         """
         if log_msg is not None:
-            self.log.warning(log_msg)
+            self.log.info(log_msg)
 
         if not self.connected:
             return succeed(self.transport.loseConnection())

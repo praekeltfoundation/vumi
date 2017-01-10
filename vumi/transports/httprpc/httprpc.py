@@ -11,7 +11,6 @@ from twisted.web.guard import BasicCredentialFactory, HTTPAuthSessionWrapper
 from twisted.web.resource import Resource
 from twisted.web.server import NOT_DONE_YET
 
-from vumi import log
 from vumi.config import (
     ConfigText, ConfigInt, ConfigBool, ConfigError, ConfigFloat)
 from vumi.message import TransportStatus
@@ -259,7 +258,7 @@ class HttpRpcTransport(Transport):
                 self.close_request(request_id)
 
     def close_request(self, request_id):
-        log.warning('Timing out %s' % (self.get_request_to_addr(request_id),))
+        self.log.warning('Timing out %s' % (self.get_request_to_addr(request_id),))
         self.finish_request(request_id, self.request_timeout_body,
                             self.request_timeout_status_code)
 
@@ -285,7 +284,7 @@ class HttpRpcTransport(Transport):
 
     def emit(self, msg):
         if self.noisy:
-            log.debug(msg)
+            self.log.debug(msg)
 
     def handle_outbound_message(self, message):
         self.emit("HttpRpcTransport consuming %s" % (message))
