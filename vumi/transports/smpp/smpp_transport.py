@@ -252,6 +252,8 @@ class SmppTransceiverTransport(Transport):
     bind_type = 'TRX'
     clock = reactor
     start_message_consumer = False
+    service = None
+    redis = None
 
     @property
     def throttled(self):
@@ -293,7 +295,8 @@ class SmppTransceiverTransport(Transport):
     def teardown_transport(self):
         if self.service:
             yield self.service.stopService()
-        yield self.redis._close()
+        if self.redis:
+            yield self.redis._close()
 
     def _check_address_valid(self, message, field):
         try:
@@ -499,7 +502,7 @@ class SmppTransceiverTransport(Transport):
         message_id = yield self.message_stash.get_internal_message_id(
             receipted_message_id)
         if message_id is None:
-            self.log.warning(
+            self.log.info(
                 "Failed to retrieve message id for delivery report."
                 " Delivery report from %s discarded."
                 % self.transport_name)

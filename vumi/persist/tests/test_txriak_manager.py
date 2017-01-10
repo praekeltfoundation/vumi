@@ -53,6 +53,45 @@ class CommonRiakManagerTests(object):
             dummy.set_data(data)
         return dummy
 
+    @inlineCallbacks
+    def purge_txriak(self):
+        """
+        Creates a manager, purges all the riak data with it, then closes it.
+        """
+        manager = self.create_txriak_manager()
+        yield manager.purge_all()
+        yield manager.close_manager()
+
+    def create_txriak_manager(self):
+        """
+        Creates and returns a TxRiakManager, handling cleanup.
+        """
+        try:
+            from vumi.persist.txriak_manager import TxRiakManager
+        except ImportError, e:
+            import_skip(e, 'riak', 'riak')
+        self.add_cleanup(self.purge_txriak)
+        return TxRiakManager.from_config({'bucket_prefix': 'test.'})
+
+    def purge_riak(self):
+        """
+        Creates a manager, purges all the riak data with it, then closes it.
+        """
+        manager = self.create_riak_manager()
+        manager.purge_all()
+        manager.close_manager()
+
+    def create_riak_manager(self):
+        """
+        Creates and returns a RiakManager, handling cleanup.
+        """
+        try:
+            from vumi.persist.riak_manager import RiakManager
+        except ImportError, e:
+            import_skip(e, 'riak', 'riak')
+        self.add_cleanup(self.purge_riak)
+        return RiakManager.from_config({'bucket_prefix': 'test.'})
+
     def test_from_config(self):
         manager_cls = self.manager.__class__
         manager = manager_cls.from_config({'bucket_prefix': 'test.'})
@@ -338,12 +377,7 @@ class TestTxRiakManager(CommonRiakManagerTests, VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
-        try:
-            from vumi.persist.txriak_manager import TxRiakManager
-        except ImportError, e:
-            import_skip(e, 'riak', 'riak')
-        self.manager = TxRiakManager.from_config({'bucket_prefix': 'test.'})
-        self.add_cleanup(self.manager.purge_all)
+        self.manager = self.create_txriak_manager()
         yield self.manager.purge_all()
 
     def test_call_decorator(self):
