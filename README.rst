@@ -37,7 +37,8 @@ Documentation available online at http://vumi.readthedocs.org/ and in the `docs`
     :scale: 100%
     :target: http://vumi.readthedocs.org/
 
-.. |vumi-downloads| image:: https://img.shields.io/pypi/dm/vumi.svg
+.. This is commented out because downloads stats from PyPI are not working
+.. .. |vumi-downloads| image:: https://img.shields.io/pypi/dm/vumi.svg
     :alt: Vumi downloads from PyPI
     :scale: 100%
     :target: https://pypi.python.org/pypi/vumi
