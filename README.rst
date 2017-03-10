@@ -10,7 +10,7 @@ be fixed.
 
 Documentation available online at http://vumi.readthedocs.org/ and in the `docs` directory of the repository.
 
-|vumi-ver| |vumi-ci| |vumi-cover| |python-ver| |vumi-docs| |vumi-downloads| |vumi-license|
+|vumi-ver| |vumi-ci| |vumi-cover| |python-ver| |vumi-docs| |vumi-license|
 
 .. |vumi-ver| image:: https://img.shields.io/pypi/v/vumi.svg
     :alt: Vumi version
