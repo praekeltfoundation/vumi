@@ -6,7 +6,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.web import http
 
 from vumi.components.session import SessionManager
-from vumi.config import ConfigDict, ConfigInt
+from vumi.config import ConfigDict, ConfigInt, ConfigBool
 from vumi.message import TransportUserMessage
 from vumi.transports.httprpc import HttpRpcTransport
 
@@ -18,6 +18,10 @@ class DmarkUssdTransportConfig(HttpRpcTransport.CONFIG_CLASS):
         "Number of seconds before USSD session information stored in Redis"
         " expires.",
         default=600, static=True)
+
+    fix_to_addr = ConfigBool(
+        "Whether or not to ensure that the to_addr is always starting with a "
+        "* and ending with a #", default=False, static=True)
 
     redis_manager = ConfigDict(
         "Redis client configuration.", default={}, static=True)
@@ -150,7 +154,12 @@ class DmarkUssdTransport(HttpRpcTransport):
             type='request_parsed',
             message='Request parsed',)
 
+        config = self.get_static_config()
         to_addr = values["ussdServiceCode"]
+        if (config.fix_to_addr
+            and not to_addr.startswith('*')
+                and not to_addr.endswith('#')):
+            to_addr = '*%s#' % (to_addr,)
         from_addr = values["msisdn"]
         content = values["ussdRequestString"]
         session_event = yield self.session_event_for_transaction(
