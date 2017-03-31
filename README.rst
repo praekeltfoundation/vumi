@@ -10,9 +10,9 @@ be fixed.
 
 Documentation available online at http://vumi.readthedocs.org/ and in the `docs` directory of the repository.
 
-|vumi-ver| |vumi-ci| |vumi-cover| |python-ver| |vumi-docs| |vumi-downloads| |vumi-license|
+|vumi-ver| |vumi-ci| |vumi-cover| |python-ver| |vumi-docs| |vumi-license|
 
-.. |vumi-ver| image:: https://pypip.in/v/vumi/badge.png?text=pypi
+.. |vumi-ver| image:: https://img.shields.io/pypi/v/vumi.svg
     :alt: Vumi version
     :scale: 100%
     :target: https://pypi.python.org/pypi/vumi
@@ -27,7 +27,7 @@ Documentation available online at http://vumi.readthedocs.org/ and in the `docs`
     :scale: 100%
     :target: https://coveralls.io/r/praekelt/vumi
 
-.. |python-ver| image:: https://pypip.in/py_versions/vumi/badge.svg
+.. |python-ver| image:: https://img.shields.io/pypi/pyversions/vumi.svg
     :alt: Python version
     :scale: 100%
     :target: https://pypi.python.org/pypi/vumi
@@ -37,12 +37,13 @@ Documentation available online at http://vumi.readthedocs.org/ and in the `docs`
     :scale: 100%
     :target: http://vumi.readthedocs.org/
 
-.. |vumi-downloads| image:: https://pypip.in/download/vumi/badge.svg
+.. This is commented out because downloads stats from PyPI are not working
+.. .. |vumi-downloads| image:: https://img.shields.io/pypi/dm/vumi.svg
     :alt: Vumi downloads from PyPI
     :scale: 100%
     :target: https://pypi.python.org/pypi/vumi
 
-.. |vumi-license| image:: https://pypip.in/license/vumi/badge.svg
+.. |vumi-license| image:: https://img.shields.io/pypi/l/vumi.svg
     :target: https://pypi.python.org/pypi/vumi
     :alt: Vumi license
 
