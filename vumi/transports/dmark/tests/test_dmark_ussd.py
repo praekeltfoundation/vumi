@@ -15,7 +15,7 @@ from vumi.transports.dmark import DmarkUssdTransport
 from vumi.transports.httprpc.tests.helpers import HttpRpcTransportHelper
 
 
-class TestDmarkUssdTransport(VumiTestCase):
+class DmarkTestMixin(object):
 
     _transaction_id = u'transaction-123'
     _to_addr = '*121#'
@@ -29,26 +29,6 @@ class TestDmarkUssdTransport(VumiTestCase):
         'creationTime': '1389971950',
         'response': 'false',
     }
-
-    @inlineCallbacks
-    def setUp(self):
-        self.clock = Clock()
-        self.patch(DmarkUssdTransport, 'get_clock', lambda _: self.clock)
-
-        self.config = {
-            'web_port': 0,
-            'web_path': '/api/v1/dmark/ussd/',
-            'publish_status': True,
-        }
-        self.tx_helper = self.add_helper(
-            HttpRpcTransportHelper(DmarkUssdTransport,
-                                   request_defaults=self._request_defaults))
-        self.transport = yield self.tx_helper.get_transport(self.config)
-        self.session_manager = self.transport.session_manager
-        self.transport_url = self.transport.get_transport_url(
-            self.config['web_path'])
-        yield self.session_manager.redis._purge_all()  # just in case
-        self.session_timestamps = {}
 
     @inlineCallbacks
     def mk_session(self, transaction_id=_transaction_id):
@@ -86,6 +66,29 @@ class TestDmarkUssdTransport(VumiTestCase):
         self.assertEqual(nack.payload['event_type'], 'nack')
         self.assertEqual(nack.payload['user_message_id'], reply['message_id'])
         self.assertEqual(nack.payload['nack_reason'], reason)
+
+
+class TestDmarkUssdTransport(DmarkTestMixin, VumiTestCase):
+
+    @inlineCallbacks
+    def setUp(self):
+        self.clock = Clock()
+        self.patch(DmarkUssdTransport, 'get_clock', lambda _: self.clock)
+
+        self.config = {
+            'web_port': 0,
+            'web_path': '/api/v1/dmark/ussd/',
+            'publish_status': True,
+        }
+        self.tx_helper = self.add_helper(
+            HttpRpcTransportHelper(DmarkUssdTransport,
+                                   request_defaults=self._request_defaults))
+        self.transport = yield self.tx_helper.get_transport(self.config)
+        self.session_manager = self.transport.session_manager
+        self.transport_url = self.transport.get_transport_url(
+            self.config['web_path'])
+        yield self.session_manager.redis._purge_all()  # just in case
+        self.session_timestamps = {}
 
     @inlineCallbacks
     def test_inbound_begin(self):
@@ -430,3 +433,48 @@ class TestDmarkUssdTransport(VumiTestCase):
         self.assertEqual(status['details'], {
             'response_time': self.transport.request_timeout + 0.1,
         })
+
+
+class TestDmarkUssdAddressFixingTransport(DmarkTestMixin, VumiTestCase):
+
+    @inlineCallbacks
+    def setUp(self):
+        self.clock = Clock()
+        self.patch(DmarkUssdTransport, 'get_clock', lambda _: self.clock)
+
+        self.config = {
+            'web_port': 0,
+            'web_path': '/api/v1/dmark/ussd/',
+            'publish_status': True,
+            'fix_to_addr': True
+        }
+        self.tx_helper = self.add_helper(
+            HttpRpcTransportHelper(DmarkUssdTransport,
+                                   request_defaults=self._request_defaults))
+        self.transport = yield self.tx_helper.get_transport(self.config)
+        self.session_manager = self.transport.session_manager
+        self.transport_url = self.transport.get_transport_url(
+            self.config['web_path'])
+        yield self.session_manager.redis._purge_all()  # just in case
+        self.session_timestamps = {}
+
+    @inlineCallbacks
+    def test_inbound_malformed_to_addr(self):
+        d = self.tx_helper.mk_request(ussdRequestString='',
+                                      ussdServiceCode='128')
+        [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
+        self.assert_inbound_message(
+            msg,
+            session_event=TransportUserMessage.SESSION_NEW,
+            to_addr='*128#',
+            content=None)
+
+        reply_content = "We are the Knights Who Say ... Ni!"
+        reply = msg.reply(reply_content)
+        self.tx_helper.dispatch_outbound(reply)
+        response = yield d
+        self.assertEqual(json.loads(response.delivered_body), {
+            "responseString": reply_content,
+            "action": "request",
+        })
+        self.assertEqual(response.code, 200)

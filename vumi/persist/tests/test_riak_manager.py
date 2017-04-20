@@ -15,13 +15,11 @@ class TestRiakManager(CommonRiakManagerTests, VumiTestCase):
 
     def setUp(self):
         try:
-            from vumi.persist.riak_manager import (
-                RiakManager, flatten_generator)
+            from vumi.persist.riak_manager import flatten_generator
         except ImportError, e:
             import_skip(e, 'riak')
         self.call_decorator = flatten_generator
-        self.manager = RiakManager.from_config({'bucket_prefix': 'test.'})
-        self.add_cleanup(self.manager.purge_all)
+        self.manager = self.create_riak_manager()
         self.manager.purge_all()
 
     def test_call_decorator(self):

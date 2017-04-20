@@ -11,6 +11,26 @@ this will almost certainly not break the majority of things built on vumi, old
 code or code that relies too heavily on the details of worker setup may need to
 be fixed.
 
+:Version: 0.6.13
+:Date released: 10 January 2017
+
+* Ensure that the keys for the data coding mapping of the SMPP transport get
+  converted to ints, as it's not possible with Junebug's JSON channel config to
+  represent dictionary keys as integers.
+* Update Message Sender tests to work with the new Riak client.
+
+:Version: 0.6.12
+:Date released: 23 September 2016
+
+* Update the HttpRPCTransport to use the new vumi logging to be compatible with
+  Junebug log collection.
+
+:Version: 0.6.11
+:Date released: 12 August 2016
+
+* Change logging level from warning to info for SMPP disconnections, to reduce
+  sentry entries when being throttled.
+
 :Version: 0.6.10
 :Date released: 27 July 2016
 
