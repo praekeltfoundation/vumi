@@ -142,6 +142,7 @@ def http_request_full(url, data=None, headers={}, method='POST',
         return SimplishReceiver(response, data_limit).deferred
 
     d = client.request(method, url, headers=headers, data=data)
+    d.addCallback(handle_response)
 
     if timeout is not None:
         cancelling_on_timeout = [False]
@@ -164,7 +165,6 @@ def http_request_full(url, data=None, headers={}, method='POST',
         delayed_call = reactor.callLater(timeout, cancel_on_timeout)
         d.addCallback(cancel_timeout, delayed_call)
 
-    d.addCallback(handle_response)
     return d
 
 
