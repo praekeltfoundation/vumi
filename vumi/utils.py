@@ -13,13 +13,12 @@ from twisted.internet import defer
 from twisted.internet import protocol
 from twisted.internet.defer import succeed
 from twisted.python.failure import Failure
-from twisted.web.client import Agent, ResponseDone
+from twisted.web.client import Agent, ResponseDone, HTTPConnectionPool
 from twisted.web.server import Site
 from twisted.web.http_headers import Headers
 from twisted.web.iweb import IBodyProducer
 from twisted.web.http import PotentialDataLoss
 from twisted.web.resource import Resource
-from treq._utils import default_pool, default_reactor
 from treq.client import HTTPClient
 
 from vumi.errors import VumiError
@@ -133,7 +132,7 @@ def http_request_full(url, data=None, headers={}, method='POST',
     if reactor is None:
         # The import replaces the local variable.
         from twisted.internet import reactor
-    kwargs = {'pool': default_pool(reactor, pool=None, persistent=False)}
+    kwargs = {'pool': HTTPConnectionPool(reactor, persistent=False)}
     if context_factory is not None:
         kwargs['contextFactory'] = context_factory
     agent = agent_class(reactor, **kwargs)
