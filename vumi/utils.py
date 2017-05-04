@@ -13,7 +13,7 @@ from twisted.internet import defer
 from twisted.internet import protocol
 from twisted.internet.defer import succeed
 from twisted.python.failure import Failure
-from twisted.web.client import Agent, ResponseDone, BrowserLikePolicyForHTTPS
+from twisted.web.client import Agent, ResponseDone
 from twisted.web.server import Site
 from twisted.web.http_headers import Headers
 from twisted.web.iweb import IBodyProducer
@@ -133,9 +133,10 @@ def http_request_full(url, data=None, headers={}, method='POST',
     if reactor is None:
         # The import replaces the local variable.
         from twisted.internet import reactor
-    pool = default_pool(reactor, pool=None, persistent=False)
-    context_factory = context_factory or BrowserLikePolicyForHTTPS()
-    agent = agent_class(reactor, pool=pool, contextFactory=context_factory)
+    kwargs = {'pool': default_pool(reactor, pool=None, persistent=False)}
+    if context_factory is not None:
+        kwargs['contextFactory'] = context_factory
+    agent = agent_class(reactor, **kwargs)
     client = HTTPClient(agent)
 
     def handle_response(response):
@@ -176,8 +177,10 @@ def old_http_request_full(url, data=None, headers={}, method='POST',
         from twisted.internet import reactor
     if agent_class is None:
         agent_class = Agent
-    context_factory = context_factory or BrowserLikePolicyForHTTPS()
-    agent = agent_class(reactor, contextFactory=context_factory)
+    kwargs = {}
+    if context_factory is not None:
+        kwargs['contextFactory'] = context_factory
+    agent = agent_class(reactor, **kwargs)
     d = agent.request(method,
                       url,
                       mkheaders(headers),
