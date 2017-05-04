@@ -22,7 +22,7 @@ from twisted.internet.defer import (
     succeed)
 from twisted.internet.error import ProcessDone
 from twisted.python.failure import Failure
-from twisted.web.client import WebClientContextFactory, Agent
+from twisted.web.client import Agent
 
 from OpenSSL.SSL import (
     VERIFY_PEER, VERIFY_FAIL_IF_NO_PEER_CERT, VERIFY_CLIENT_ONCE, VERIFY_NONE,
@@ -918,9 +918,6 @@ class HttpClientResource(SandboxResource):
     def _make_request(self, method, url, headers=None, data=None, files=None,
                       timeout=None, context_factory=None,
                       data_limit=None):
-        context_factory = (context_factory if context_factory is not None
-                           else WebClientContextFactory())
-
         if headers is not None:
             headers = dict((k.encode("utf-8"), [x.encode("utf-8") for x in v])
                            for k, v in headers.items())
@@ -936,7 +933,10 @@ class HttpClientResource(SandboxResource):
                      StringIO(base64.b64decode(value['data']))))
                 for key, value in files.iteritems()])
 
-        agent = self.agent_class(reactor, contextFactory=context_factory)
+        kwargs = {}
+        if context_factory is not None:
+            kwargs['contextFactory'] = context_factory
+        agent = self.agent_class(reactor, **kwargs)
         http_client = self.http_client_class(agent)
 
         d = http_client.request(method, url, headers=headers, data=data,
