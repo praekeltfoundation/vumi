@@ -13,12 +13,13 @@ from twisted.internet import defer
 from twisted.internet import protocol
 from twisted.internet.defer import succeed
 from twisted.python.failure import Failure
-from twisted.web.client import Agent, ResponseDone, WebClientContextFactory
+from twisted.web.client import Agent, ResponseDone, HTTPConnectionPool
 from twisted.web.server import Site
 from twisted.web.http_headers import Headers
 from twisted.web.iweb import IBodyProducer
 from twisted.web.http import PotentialDataLoss
 from twisted.web.resource import Resource
+from treq.client import HTTPClient
 
 from vumi.errors import VumiError
 
@@ -119,13 +120,66 @@ class SimplishReceiver(protocol.Protocol):
 def http_request_full(url, data=None, headers={}, method='POST',
                       timeout=None, data_limit=None, context_factory=None,
                       agent_class=None, reactor=None):
+    """
+    This is a drop in replacement for the original `http_request_full` method
+    but it has its internals completely replaced by treq. Treq supports SNI
+    and our implementation does not for some reason. Also, we do not want
+    to continue maintaining this because we're favouring treq everywhere
+    anyway.
+
+    """
+    agent_class = agent_class or Agent
+    if reactor is None:
+        # The import replaces the local variable.
+        from twisted.internet import reactor
+    kwargs = {'pool': HTTPConnectionPool(reactor, persistent=False)}
+    if context_factory is not None:
+        kwargs['contextFactory'] = context_factory
+    agent = agent_class(reactor, **kwargs)
+    client = HTTPClient(agent)
+
+    def handle_response(response):
+        return SimplishReceiver(response, data_limit).deferred
+
+    d = client.request(method, url, headers=headers, data=data)
+    d.addCallback(handle_response)
+
+    if timeout is not None:
+        cancelling_on_timeout = [False]
+
+        def raise_timeout(reason):
+            if not cancelling_on_timeout[0] or reason.check(HttpTimeoutError):
+                return reason
+            return Failure(HttpTimeoutError("Timeout while connecting"))
+
+        def cancel_on_timeout():
+            cancelling_on_timeout[0] = True
+            d.cancel()
+
+        def cancel_timeout(r, delayed_call):
+            if delayed_call.active():
+                delayed_call.cancel()
+            return r
+
+        d.addErrback(raise_timeout)
+        delayed_call = reactor.callLater(timeout, cancel_on_timeout)
+        d.addCallback(cancel_timeout, delayed_call)
+
+    return d
+
+
+def old_http_request_full(url, data=None, headers={}, method='POST',
+                           timeout=None, data_limit=None, context_factory=None,
+                           agent_class=None, reactor=None):
     if reactor is None:
         # The import replaces the local variable.
         from twisted.internet import reactor
     if agent_class is None:
         agent_class = Agent
-    context_factory = context_factory or WebClientContextFactory()
-    agent = agent_class(reactor, contextFactory=context_factory)
+    kwargs = {}
+    if context_factory is not None:
+        kwargs['contextFactory'] = context_factory
+    agent = agent_class(reactor, **kwargs)
     d = agent.request(method,
                       url,
                       mkheaders(headers),
