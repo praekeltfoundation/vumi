@@ -312,7 +312,9 @@ class SmppService(ReconnectingClientService):
         return split_msg
 
     @inlineCallbacks
-    def submit_csm_sar(self, vumi_message_id, destination_addr, **pdu_params):
+    def submit_csm_sar(
+            self, vumi_message_id, destination_addr,
+            reference_rollover=0x10000, **pdu_params):
         """
         Submit a concatenated SMS to the SMSC using the optional
         SAR parameter names in the various PDUS.
@@ -338,8 +340,8 @@ class SmppService(ReconnectingClientService):
         for i, msg in enumerate(split_msg):
             pdu_params = pdu_params.copy()
             optional_parameters.update({
-                # Reference number must be between 00 & FFFF
-                'sar_msg_ref_num': (ref_num % 0xFFFF),
+                # Reference number must be between 00 & the configure value
+                'sar_msg_ref_num': (ref_num % reference_rollover),
                 'sar_total_segments': len(split_msg),
                 'sar_segment_seqnum': i + 1,
             })
