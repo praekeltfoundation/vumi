@@ -471,9 +471,9 @@ class SubmitShortMessageProcessorConfig(Config):
         "of smaller messages with the user data headers. Default is `False`.",
         default=False, static=True)
     multipart_sar_reference_rollover = ConfigInt(
-        "The maximum value to set for the reference number of a multi part "
-        "SMS. When this value is reached, the number will rollover to 0.",
-        default=0xFFFF, static=True)
+        "The value at which the reference number of a multi part SMS will "
+        "roll over. eg. a value of 2 will result in a series 0, 1, 0, 1 ...",
+        default=0x10000, static=True)
 
     def post_validate(self):
         long_message_params = (

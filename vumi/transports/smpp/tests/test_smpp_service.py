@@ -354,7 +354,7 @@ class TestSmppService(VumiTestCase):
         long_message = 'This is a long message.' * 20
         seq_nums = yield service.submit_csm_sar(
             'abc123', 'dest_addr', short_message=long_message,
-            reference_rollover=0xFF)
+            reference_rollover=0x100)
         pdus = yield self.fake_smsc.await_pdus(4)
         msg_parts = []
         msg_refs = []
