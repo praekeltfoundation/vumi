@@ -234,9 +234,9 @@ class TestHttpUtils(VumiTestCase):
 
         ctxt = WebClientContextFactory()
 
-        def stashing_factory(reactor, contextFactory=None):
+        def stashing_factory(reactor, contextFactory=None, pool=None):
             agent = self.fake_http.get_agent(
-                reactor, contextFactory=contextFactory)
+                reactor, contextFactory=contextFactory, pool=pool)
             agents.append(agent)
             return agent
 
