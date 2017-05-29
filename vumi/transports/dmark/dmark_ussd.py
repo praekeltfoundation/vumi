@@ -175,6 +175,9 @@ class DmarkUssdTransport(HttpRpcTransport):
             provider='dmark',
             session_event=session_event,
             transport_type=self.transport_type,
+            helper_metadata={
+                'session_id': values['transactionId'],
+            },
             transport_metadata={
                 'dmark_ussd': {
                     'transaction_id': values['transactionId'],

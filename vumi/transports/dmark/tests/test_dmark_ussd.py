@@ -41,6 +41,9 @@ class DmarkTestMixin(object):
             'to_addr': self._to_addr,
             'from_addr': self._from_addr,
             'session_event': TransportUserMessage.SESSION_NEW,
+            'helper_metadata': {
+                'session_id': self._request_defaults['transactionId'],
+            },
             'transport_metadata': {
                 'dmark_ussd': {
                     'transaction_id':
