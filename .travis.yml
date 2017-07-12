@@ -3,6 +3,7 @@ sudo: false # We want container builds.
 language: python
 python:
   - "2.7"
+  - "3.6"
 node_js:
   - "0.10"
 matrix:
@@ -20,6 +21,9 @@ matrix:
     # Also, we hit an obscure GC bug in pypy<=2.6.0 so we need at least 2.6.1.
     - python: "pypy"
       env: PYPY_VERSION="5.6.0" NO_COVERAGE=1
+    - python: "3.6"
+  allow_failures:
+    - python: "3.6"
 
 cache:
   directories:
