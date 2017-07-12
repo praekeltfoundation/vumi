@@ -19,7 +19,7 @@ matrix:
     # Test on pypy without coverage, because it's unnecessary and very slow.
     # Also, we hit an obscure GC bug in pypy<=2.6.0 so we need at least 2.6.1.
     - python: "pypy"
-      env: PYPY_VERSION="5.8.0" NO_COVERAGE=1
+      env: PYPY_VERSION="5.7.1" NO_COVERAGE=1
 
 cache:
   directories:
