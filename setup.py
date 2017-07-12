@@ -12,7 +12,7 @@ if platform.python_implementation() == "PyPy":
 
 setup(
     name="vumi",
-    version="0.6.16",
+    version="0.6.17",
     url='http://github.com/praekelt/vumi',
     license='BSD',
     description="Super-scalable messaging engine for the delivery of SMS, "
@@ -40,7 +40,7 @@ setup(
         'txAMQP>=0.6.2',
         'PyYAML',
         'iso8601',
-        'pyOpenSSL',
+        'pyOpenSSL>= 16.0.0',
         'certifi',
         'service_identity',
         'txssmi>=0.3.0',
@@ -50,7 +50,7 @@ setup(
         'python-smpp>=0.1.5',
         'pytz',
         'riak>=2.1',
-        'txJSON-RPC==0.3.1',
+        'txJSON-RPC==0.5',
         'txTwitter>=0.1.4a',
         'treq<16.12.0',
         'confmodel>=0.2.0',
