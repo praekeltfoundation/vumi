@@ -128,7 +128,10 @@ class TestTagpoolApiServer(VumiTestCase):
     def test_purge_pool_with_keys_in_use(self):
         d = self.proxy.callRemote("purge_pool", "pool2")
         yield d.addErrback(lambda f: log.err(f))
-        errors = self.flushLoggedErrors('txjsonrpc.jsonrpclib.Fault')
+        # txJSON-RPC 0.5 adds support for py3 which means
+        # different error classes are being logged, accept both
+        errors = self.flushLoggedErrors('xmlrpclib.Fault',
+                                        'xmlrpc.client.Fault')
         self.assertEqual(len(errors), 1)
         server_errors = self.flushLoggedErrors(
             'vumi.components.tagpool.TagpoolError')

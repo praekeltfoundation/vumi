@@ -10,6 +10,7 @@ eval "$(pyenv init -)"
 eval "$(pyenv virtualenv-init -)"
 
 # Install pypy and make a virtualenv for it.
+pyenv install --list
 pyenv install -s pypy-$PYPY_VERSION
 pyenv global pypy-$PYPY_VERSION
 virtualenv -p $(which python) ~/env-pypy-$PYPY_VERSION
