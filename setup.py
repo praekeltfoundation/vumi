@@ -40,7 +40,7 @@ setup(
         'txAMQP>=0.6.2',
         'PyYAML',
         'iso8601',
-        'pyOpenSSL==17.1.0',
+        'pyOpenSSL>= 16.0.0',
         'certifi',
         'service_identity',
         'txssmi>=0.3.0',
