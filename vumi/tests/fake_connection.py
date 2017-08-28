@@ -271,7 +271,7 @@ class FakeHttpServer(object):
     def endpoint(self):
         return self.fake_server.endpoint
 
-    def get_agent(self, reactor=None, contextFactory=None):
+    def get_agent(self, reactor=None, pool=None, contextFactory=None):
         """
         Returns an IAgent that makes requests to this fake server.
         """
@@ -297,6 +297,7 @@ class HandlerResource(Resource):
 
 
 class ProxyAgentWithContext(ProxyAgent):
-    def __init__(self, endpoint, reactor=None, contextFactory=None):
+    def __init__(self, endpoint, reactor=None, pool=None, contextFactory=None):
         self.contextFactory = contextFactory  # To assert on in tests.
-        super(ProxyAgentWithContext, self).__init__(endpoint, reactor=reactor)
+        super(ProxyAgentWithContext, self).__init__(
+            endpoint, reactor=reactor, pool=pool)
