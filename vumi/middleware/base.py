@@ -171,6 +171,11 @@ class BaseMiddleware(object):
         """
         return failure
 
+    def handle_publish_status(self, status, connector_name):
+        """Called when a status is published.
+        """
+        return status
+
 
 class TransportMiddleware(BaseMiddleware):
     """Message processor middleware for Transports.
