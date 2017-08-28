@@ -26,7 +26,7 @@ from twisted.web.client import WebClientContextFactory, Agent
 
 from OpenSSL.SSL import (
     VERIFY_PEER, VERIFY_FAIL_IF_NO_PEER_CERT, VERIFY_CLIENT_ONCE, VERIFY_NONE,
-    SSLv3_METHOD, SSLv23_METHOD, TLSv1_METHOD)
+    SSLv23_METHOD, TLSv1_METHOD)
 
 from vumi.config import ConfigText, ConfigInt, ConfigList, ConfigDict
 from vumi.application.base import ApplicationWorker
@@ -883,7 +883,6 @@ class HttpClientResource(SandboxResource):
             'VERIFY_FAIL_IF_NO_PEER_CERT': VERIFY_FAIL_IF_NO_PEER_CERT,
         }
         method_map = {
-            'SSLv3': SSLv3_METHOD,
             'SSLv23': SSLv23_METHOD,
             'TLSv1': TLSv1_METHOD,
         }

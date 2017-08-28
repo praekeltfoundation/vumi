@@ -335,7 +335,43 @@ class TestSmppService(VumiTestCase):
             self.assertEqual(4, pdu_opts['sar_total_segments'])
 
         self.assertEqual(long_message, ''.join(msg_parts))
-        self.assertEqual([2, 2, 2, 2], msg_refs)
+        self.assertEqual([1, 1, 1, 1], msg_refs)
+
+        stored_ids = yield self.lookup_message_ids(service, seq_nums)
+        self.assertEqual(['abc123'] * len(seq_nums), stored_ids)
+
+    @inlineCallbacks
+    def test_submit_csm_sar_ref_num_custom_limit(self):
+        """
+        The SAR reference number is set correctly when the generated reference
+        number is larger than the configured limit.
+        """
+        service = yield self.get_service({'send_multipart_sar': True})
+        yield self.fake_smsc.bind()
+        # forward until we go past 0xFF
+        yield self.set_sequence_number(service, 0x100)
+
+        long_message = 'This is a long message.' * 20
+        seq_nums = yield service.submit_csm_sar(
+            'abc123', 'dest_addr', short_message=long_message,
+            reference_rollover=0x100)
+        pdus = yield self.fake_smsc.await_pdus(4)
+        msg_parts = []
+        msg_refs = []
+
+        for i, sm in enumerate(pdus):
+            pdu_opts = unpacked_pdu_opts(sm)
+            mandatory_parameters = sm['body']['mandatory_parameters']
+
+            self.assertEqual('submit_sm', sm['header']['command_id'])
+            msg_parts.append(mandatory_parameters['short_message'])
+            self.assertTrue(len(mandatory_parameters['short_message']) <= 130)
+            msg_refs.append(pdu_opts['sar_msg_ref_num'])
+            self.assertEqual(i + 1, pdu_opts['sar_segment_seqnum'])
+            self.assertEqual(4, pdu_opts['sar_total_segments'])
+
+        self.assertEqual(long_message, ''.join(msg_parts))
+        self.assertEqual([1, 1, 1, 1], msg_refs)
 
         stored_ids = yield self.lookup_message_ids(service, seq_nums)
         self.assertEqual(['abc123'] * len(seq_nums), stored_ids)

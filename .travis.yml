@@ -3,6 +3,7 @@ sudo: false # We want container builds.
 language: python
 python:
   - "2.7"
+  - "3.6"
 node_js:
   - "0.10"
 matrix:
@@ -19,7 +20,12 @@ matrix:
     # Test on pypy without coverage, because it's unnecessary and very slow.
     # Also, we hit an obscure GC bug in pypy<=2.6.0 so we need at least 2.6.1.
     - python: "pypy"
-      env: PYPY_VERSION="4.0.1" NO_COVERAGE=1
+      env: PYPY_VERSION="5.6.0" NO_COVERAGE=1
+    - python: "3.6"
+      env: RUN_TESTS="false"
+  allow_failures:
+    - python: "3.6"
+    - env: RUN_TESTS="true"
 
 cache:
   directories:
@@ -32,6 +38,7 @@ before_install:
   # Default values for our build envvars.
   - export RIAK_VERSION="${RIAK_VERSION-1.4.12}"
   - export TWISTED_VERSION="${TWISTED_VERSION-Twisted}"
+  - export RUN_TESTS="${RUN_TESTS-true}"
   # If necessary, set up an appropriate version of pypy.
   - if [ ! -z "$PYPY_VERSION" ]; then source utils/setup-pypy-travis.sh; fi
   - if [ ! -z "$PYPY_VERSION" ]; then python --version 2>&1 | fgrep "PyPy $PYPY_VERSION"; fi
@@ -52,7 +59,7 @@ before_script:
   - $HOME/riak/bin/riak-admin member-status
 script:
   - if [ -z "$NO_COVERAGE" ]; then COVERAGE_CMD="coverage run --source=vumi"; else COVERAGE_CMD=""; fi
-  - VUMI_TEST_ASSERT_CLOSED=true VUMI_TEST_TIMEOUT=20 VUMITEST_REDIS_DB=1 VUMI_TEST_NODE_PATH="$(which node)" $COVERAGE_CMD `which trial` vumi
+  - if [ "$RUN_TESTS" == "true" ]; then VUMI_TEST_ASSERT_CLOSED=true VUMI_TEST_TIMEOUT=20 VUMITEST_REDIS_DB=1 VUMI_TEST_NODE_PATH="$(which node)" $COVERAGE_CMD `which trial` vumi; fi
 
 after_success:
   - if [ -z "$NO_COVERAGE" ]; then coveralls; fi

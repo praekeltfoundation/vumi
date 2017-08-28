@@ -470,6 +470,10 @@ class SubmitShortMessageProcessorConfig(Config):
         "If `True`, messages longer than 140 bytes will be sent as a series "
         "of smaller messages with the user data headers. Default is `False`.",
         default=False, static=True)
+    multipart_sar_reference_rollover = ConfigInt(
+        "The value at which the reference number of a multi part SMS will "
+        "roll over. eg. a value of 2 will result in a series 0, 1, 0, 1 ...",
+        default=0x10000, static=True)
 
     def post_validate(self):
         long_message_params = (
@@ -543,6 +547,8 @@ class SubmitShortMessageProcessor(object):
             return service.submit_sm_long(**kwargs)
 
         elif self.config.send_multipart_sar:
+            kwargs['reference_rollover'] = (
+                self.config.multipart_sar_reference_rollover)
             return service.submit_csm_sar(**kwargs)
 
         elif self.config.send_multipart_udh:
