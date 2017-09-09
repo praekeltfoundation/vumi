@@ -68,7 +68,7 @@ class FakeVas2NetsHandler(Resource):
         self.receipt_url = receipt_url
 
     def get_sms_id(self):
-        return uuid.uuid4().get_hex()[-8:]
+        return uuid.uuid4().hex[-8:]
 
     def render_POST(self, request):
         request.setResponseCode(http.OK)

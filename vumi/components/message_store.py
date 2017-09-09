@@ -366,7 +366,7 @@ class MessageStore(object):
 
     @Manager.calls_manager
     def batch_start(self, tags=(), **metadata):
-        batch_id = uuid4().get_hex()
+        batch_id = uuid4().hex
         batch = self.batches(batch_id)
         batch.tags.extend(tags)
         for key, value in metadata.iteritems():

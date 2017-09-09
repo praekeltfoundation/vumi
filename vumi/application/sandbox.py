@@ -1118,7 +1118,7 @@ class SandboxApi(object):
 class SandboxCommand(Message):
     @staticmethod
     def generate_id():
-        return uuid4().get_hex()
+        return uuid4().hex
 
     def process_fields(self, fields):
         fields = super(SandboxCommand, self).process_fields(fields)

@@ -167,7 +167,7 @@ class TransportMessage(Message):
         build a complete message. This lets us do that in a consistent
         manner.
         """
-        return uuid4().get_hex()
+        return uuid4().hex
 
     def process_fields(self, fields):
         fields.setdefault('message_version', self.MESSAGE_VERSION)

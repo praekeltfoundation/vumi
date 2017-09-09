@@ -88,7 +88,7 @@ class WindowManager(object):
 
     @inlineCallbacks
     def add(self, window_id, data, key=None):
-        key = key or uuid.uuid4().get_hex()
+        key = key or uuid.uuid4().hex
         # The redis.set() has to complete before redis.lpush(),
         # otherwise the key can be popped from the window before the
         # data is available.

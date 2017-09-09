@@ -13,7 +13,7 @@ from vumi.message import Message as VumiMessage
 
 
 def gen_id(prefix=''):
-    return ''.join([prefix, uuid4().get_hex()])
+    return ''.join([prefix, uuid4().hex])
 
 
 def gen_longlong():

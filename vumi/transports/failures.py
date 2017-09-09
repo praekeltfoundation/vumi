@@ -112,7 +112,7 @@ class FailureWorker(Worker):
         Construct a failure key.
         """
         timestamp = datetime.utcnow()
-        failure_id = uuid4().get_hex()
+        failure_id = uuid4().hex
         timestamp = timestamp.isoformat().split('.')[0]
         return ".".join(("failure", timestamp, failure_id))
 

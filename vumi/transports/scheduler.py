@@ -59,7 +59,7 @@ class Scheduler(object):
         Construct a unique scheduled key.
         """
         timestamp = datetime.utcnow()
-        unique_id = uuid4().get_hex()
+        unique_id = uuid4().hex
         timestamp = timestamp.isoformat().split('.')[0]
         return self.r_key(".".join(("scheduled", timestamp, unique_id)))
 
