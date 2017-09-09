@@ -409,7 +409,7 @@ class ConfigHolder(object):
         self.options = options
 
     def emit(self, s):
-        print s
+        print(s)
 
     def get_utcnow(self):
         return datetime.utcnow()
@@ -426,8 +426,8 @@ if __name__ == '__main__':
         options = Options()
         options.parseOptions()
     except usage.UsageError as errortext:
-        print '%s: %s' % (sys.argv[0], errortext)
-        print '%s: Try --help for usage details.' % (sys.argv[0])
+        print('{0}: {1}'.format(sys.argv[0], errortext))
+        print('{0}: Try --help for usage details.'.format(sys.argv[0]))
         sys.exit(1)
 
     cfg = ConfigHolder(options)

@@ -87,7 +87,7 @@ class ModelCounter(object):
         return TxRiakManager.from_config(riak_config)
 
     def emit(self, s):
-        print s
+        print(s)
 
     def count_keys(self, keys, filter_regex):
         """
@@ -161,8 +161,8 @@ def main(_reactor, name, *args):
         options = Options()
         options.parseOptions(args)
     except usage.UsageError as errortext:
-        print '%s: %s' % (name, errortext)
-        print '%s: Try --help for usage details.' % (name,)
+        print('{0}: {1}'.format(name, errortext))
+        print('{0}: Try --help for usage details.'.format(name))
         sys.exit(1)
 
     model_counter = ModelCounter(options)

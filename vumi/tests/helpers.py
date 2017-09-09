@@ -1477,9 +1477,9 @@ class PersistenceHelper(object):
             for manager in unclosed_managers:
                 stack = self._riak_stacks.get(
                     manager, ["No stack trace found.\n"])
-                print "========= %r =========" % manager
-                print "".join(stack)
-            print "Unclosed Riak managers:", len(unclosed_managers)
+                print("========= %r =========" % manager)
+                print("".join(stack))
+            print("Unclosed Riak managers: {0}".format(len(unclosed_managers)))
             raise PersistenceHelperError(
                 "Unclosed Riak managers found during cleanup: %s %s" % (
                     len(unclosed_managers), unclosed_managers))

@@ -140,7 +140,7 @@ class StartWorkerOptions(VumiOptions):
 
     def emit(self, text):
         # So we can stub it out in tests.
-        print text
+        print(text)
 
     def do_worker_help(self):
         """Print out a usage message for the worker-class and exit"""

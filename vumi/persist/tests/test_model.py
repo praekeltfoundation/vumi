@@ -478,7 +478,8 @@ class ModelTestMixin(object):
             keys.append(obj.key)
 
         end_setup = time.time()
-        print "\n\nSetup time: %s" % (end_setup - start_setup,)
+        setup_time = end_setup - start_setup
+        print("\n\nSetup time: {0}".format(setup_time))
 
         start_mr = time.time()
         self.manager.USE_MAPREDUCE_BUNCH_LOADING = True
@@ -487,7 +488,8 @@ class ModelTestMixin(object):
         for obj_bunch in objs_iter:
             objs.extend((yield obj_bunch))
         end_mr = time.time()
-        print "Mapreduce time: %s" % (end_mr - start_mr,)
+        mapreduce_time = end_mr - start_mr
+        print("Mapreduce time: {0}".format(mapreduce_time))
 
         start_mult = time.time()
         self.manager.USE_MAPREDUCE_BUNCH_LOADING = False
@@ -496,7 +498,8 @@ class ModelTestMixin(object):
         for obj_bunch in objs_iter:
             objs.extend((yield obj_bunch))
         end_mult = time.time()
-        print "Multiple time: %s\n" % (end_mult - start_mult,)
+        multiple_time = end_mult - start_mult
+        print("Multiple time: {0}\n".format(multiple_time))
 
         self.assertEqual(sorted(keys), sorted(obj.key for obj in objs))
     test_load_all_bunches_performance.skip = (

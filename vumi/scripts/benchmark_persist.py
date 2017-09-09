@@ -50,7 +50,7 @@ class WriteReadBenchmark(object):
                 for i in range(num_msgs)]
 
     def write_batch(self, model, msgs):
-        print "  Writing %d messages." % len(msgs)
+        print("  Writing {0} messages.".format(len(msgs)))
         deferreds = []
         for msg in msgs:
             msg_obj = model(key=msg['message_id'], msg=msg)
@@ -58,7 +58,7 @@ class WriteReadBenchmark(object):
         return DeferredList(deferreds)
 
     def read_batch(self, model, msgs):
-        print "  Reading %d messages." % len(msgs)
+        print("  Reading {0} messages.".format(len(msgs)))
         deferreds = []
         for msg in msgs:
             deferreds.append(model.load(msg['message_id']))
@@ -79,8 +79,8 @@ class WriteReadBenchmark(object):
 
         write_done = time.time()
         write_time = write_done - start
-        print "Write took %.2f seconds (%.2f msgs/s)" % (
-                write_time, self.messages / write_time)
+        print("Write took {:.2f} seconds ({:.2f} msgs/s)".format(
+            write_time, self.messages / write_time))
 
         result_batches = []
         for batch in msg_batches:
@@ -89,8 +89,8 @@ class WriteReadBenchmark(object):
 
         read_done = time.time()
         read_time = read_done - write_done
-        print "Read took %.2f seconds (%.2f msgs/s)" % (
-                read_time, self.messages / read_time)
+        print("Read took {:.2f} seconds ({:.2f} msgs/s)".format(
+            read_time, self.messages / read_time))
 
         for batch, result_batch in zip(msg_batches, result_batches):
             for msg, (good, stored_msg) in zip(batch, result_batch):
@@ -101,18 +101,18 @@ class WriteReadBenchmark(object):
                     raise RuntimeError("Message %r does not equal stored"
                                        " message %r" % (msg, stored_msg.msg))
 
-        print "Messages retrieved successfully."
+        print("Messages retrieved successfully.")
 
         yield manager.purge_all()
-        print "Messages purged."
+        print("Messages purged.")
 
 if __name__ == '__main__':
     try:
         options = Options()
         options.parseOptions()
     except usage.UsageError as errortext:
-        print '%s: %s' % (sys.argv[0], errortext)
-        print '%s: Try --help for usage details.' % (sys.argv[0])
+        print('{0}: {1}'.format(sys.argv[0], errortext))
+        print('{0}: Try --help for usage details.'.format(sys.argv[0]))
         sys.exit(1)
 
     bench = WriteReadBenchmark(options)
