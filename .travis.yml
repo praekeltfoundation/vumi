@@ -6,6 +6,8 @@ python:
   - "3.6"
 node_js:
   - "0.10"
+env:
+  - RUN_TESTS=true
 matrix:
   include:
     # Test against the oldest version of Twisted that we claim to support.
@@ -22,10 +24,10 @@ matrix:
     - python: "pypy"
       env: PYPY_VERSION="5.6.0" NO_COVERAGE=1
     - python: "3.6"
-      env: RUN_TESTS="false"
+      env: RUN_TESTS=false
   allow_failures:
     - python: "3.6"
-    - env: RUN_TESTS="true"
+      env: RUN_TESTS=true
 
 cache:
   directories:
