@@ -4,7 +4,7 @@ import json
 from uuid import uuid4
 from datetime import datetime
 
-from errors import MissingMessageField, InvalidMessageField
+from .errors import MissingMessageField, InvalidMessageField
 
 from vumi.utils import to_kwargs
 
