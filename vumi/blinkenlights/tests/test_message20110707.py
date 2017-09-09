@@ -4,8 +4,8 @@ from vumi.blinkenlights import message20110707 as message
 from vumi.tests.helpers import VumiTestCase
 
 
-TIMEOBJ = datetime(2011, 07, 07, 12, 00, 00)
-TIMELIST = [2011, 07, 07, 12, 00, 00]
+TIMEOBJ = datetime(2011, 7, 7, 12, 0, 0)
+TIMELIST = [2011, 7, 7, 12, 0, 0]
 
 
 def mkmsg(message_version, message_type, source_name, source_id, payload,

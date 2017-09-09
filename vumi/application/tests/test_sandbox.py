@@ -391,7 +391,7 @@ class TestSandbox(SandboxTestCaseBase):
 
     def test_sandbox_command_does_not_parse_timestamps(self):
         # We should serialise datetime objects correctly.
-        timestamp = datetime(2014, 07, 18, 15, 0, 0)
+        timestamp = datetime(2014, 7, 18, 15, 0, 0)
         json_cmd = SandboxCommand(cmd='foo', timestamp=timestamp).to_json()
         # We should not parse timestamp-like strings into datetime objects.
         cmd = SandboxCommand.from_json(json_cmd)

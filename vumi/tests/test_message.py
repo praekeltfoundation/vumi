@@ -54,7 +54,7 @@ class ModuleUtilityTest(VumiTestCase):
 
     def test_to_json_supports_vumi_dates(self):
         timestamp = datetime(
-            2015, 1, 2, 12, 01, 02, microsecond=134001)
+            2015, 1, 2, 12, 1, 2, microsecond=134001)
         data = {
             'foo': timestamp,
         }
@@ -64,7 +64,7 @@ class ModuleUtilityTest(VumiTestCase):
 
     def test_from_json_supports_vumi_dates(self):
         timestamp = datetime(
-            2015, 1, 2, 12, 01, 02, microsecond=134002)
+            2015, 1, 2, 12, 1, 2, microsecond=134002)
         data = {
             'foo': '2015-01-02 12:01:02.134002',
         }

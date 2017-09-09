@@ -380,7 +380,7 @@ class TestTimestamp(VumiTestCase):
         self.assertEqual(t.time, now)
 
         t.time = u"2007-01-25T12:00:00Z"
-        self.assertEqual(t.time, datetime(2007, 01, 25, 12, 0))
+        self.assertEqual(t.time, datetime(2007, 1, 25, 12, 0))
 
     @needs_riak
     @Manager.calls_manager
@@ -396,7 +396,7 @@ class TestTimestamp(VumiTestCase):
         m_now = yield timestamp_model.load("m_now")
         self.assertEqual(m_now.time, now)
         m_string = yield timestamp_model.load("m_string")
-        self.assertEqual(m_string.time, datetime(2007, 01, 25, 12, 0))
+        self.assertEqual(m_string.time, datetime(2007, 1, 25, 12, 0))
 
 
 @model_field_tests
