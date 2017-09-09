@@ -116,7 +116,7 @@ class TwitterTransport(Transport):
                 yield self.publish_ack(
                     user_message_id=message['message_id'],
                     sent_message_id=twitter_message['id_str'])
-            except Exception, e:
+            except Exception as e:
                 reason = '%s' % (e,)
                 log.err('Outbound twitter message failed: %s' % (reason,))
 

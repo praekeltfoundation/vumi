@@ -97,7 +97,7 @@ class ModelMigrator(object):
                         obj.save()
                 else:
                     self.emit("Skipping tombstone key %r." % (key,))
-            except Exception, e:
+            except Exception as e:
                 self.emit("Failed to migrate key %r:" % (key,))
                 self.emit("  %s: %s" % (type(e).__name__, e))
             progress.update(i)
@@ -114,7 +114,7 @@ if __name__ == '__main__':
     try:
         options = Options()
         options.parseOptions()
-    except usage.UsageError, errortext:
+    except usage.UsageError as errortext:
         print '%s: %s' % (sys.argv[0], errortext)
         print '%s: Try --help for usage details.' % (sys.argv[0])
         sys.exit(1)

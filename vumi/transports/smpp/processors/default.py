@@ -298,7 +298,7 @@ class DeliverShortMessageProcessor(object):
 
         try:
             return self.codec.decode(obj, codec_name)
-        except UnicodeDecodeError, e:
+        except UnicodeDecodeError as e:
             self.log.msg("Error decoding message with data_coding=%s" % (
                 data_coding,))
             self.log.err(e)

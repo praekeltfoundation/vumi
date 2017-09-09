@@ -155,7 +155,7 @@ class TestRavenUtilityFunctions(VumiTestCase):
         try:
             import raven
             raven  # To keep pyflakes happy.
-        except ImportError, e:
+        except ImportError as e:
             import_skip(e, 'raven')
 
     def mk_sentry_dsn(self):

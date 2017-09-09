@@ -91,7 +91,7 @@ class TestUtils(VumiTestCase):
     def test_redis_from_config_str(self):
         try:
             fake_redis = redis_from_config("FAKE_REDIS")
-        except ImportError, e:
+        except ImportError as e:
             import_skip(e, 'redis')
         self.assertTrue(isinstance(fake_redis, FakeRedis))
 
@@ -99,7 +99,7 @@ class TestUtils(VumiTestCase):
         fake_redis = FakeRedis()
         try:
             self.assertEqual(redis_from_config(fake_redis), fake_redis)
-        except ImportError, e:
+        except ImportError as e:
             import_skip(e, 'redis')
 
     def get_resource(self, path, site):
@@ -151,7 +151,7 @@ class TestHttpUtils(VumiTestCase):
             try:
                 data = f(request)
                 request.setResponseCode(http.OK)
-            except Exception, err:
+            except Exception as err:
                 data = str(err)
                 request.setResponseCode(http.INTERNAL_SERVER_ERROR)
             return data

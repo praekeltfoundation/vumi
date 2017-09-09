@@ -7,7 +7,7 @@ class TestRedisManager(VumiTestCase):
     def setUp(self):
         try:
             from vumi.persist.redis_manager import RedisManager
-        except ImportError, e:
+        except ImportError as e:
             import_skip(e, 'redis')
 
         self.manager = RedisManager.from_config(

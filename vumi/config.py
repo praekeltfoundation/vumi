@@ -24,7 +24,7 @@ class ConfigClassName(ConfigField):
     def clean(self, value):
         try:
             cls = load_class_by_string(value)
-        except (ValueError, ImportError), e:
+        except (ValueError, ImportError) as e:
             # ValueError for empty module name
             self.raise_config_error(str(e))
 

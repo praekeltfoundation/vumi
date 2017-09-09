@@ -153,7 +153,7 @@ class InfobipTransport(HttpRpcTransport):
         try:
             from_addr = req_data["msisdn"]
             content = req_data["text"]
-        except KeyError, e:
+        except KeyError as e:
             self.send_error(msgid, "Missing required JSON field: %r" % (e,))
             return
 
@@ -178,7 +178,7 @@ class InfobipTransport(HttpRpcTransport):
             return
         try:
             content = req_data["text"]
-        except KeyError, e:
+        except KeyError as e:
             self.send_error(msgid, "Missing required JSON field: %r" % (e,))
             return
         message_dict["content"] = content

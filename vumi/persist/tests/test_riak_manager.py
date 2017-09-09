@@ -16,7 +16,7 @@ class TestRiakManager(CommonRiakManagerTests, VumiTestCase):
     def setUp(self):
         try:
             from vumi.persist.riak_manager import flatten_generator
-        except ImportError, e:
+        except ImportError as e:
             import_skip(e, 'riak')
         self.call_decorator = flatten_generator
         self.manager = self.create_riak_manager()

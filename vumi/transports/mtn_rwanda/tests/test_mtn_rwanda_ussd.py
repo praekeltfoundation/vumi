@@ -126,7 +126,7 @@ class TestMTNRwandaUSSDTransport(VumiTestCase):
                 'USSDEncoding': 'GSM0338',
             })
             [msg] = yield self.tx_helper.wait_for_dispatched_inbound(1)
-        except xmlrpclib.Fault, e:
+        except xmlrpclib.Fault as e:
             self.assertEqual(e.faultCode, 8002)
             self.assertEqual(e.faultString, 'error')
         else:
@@ -151,7 +151,7 @@ class TestMTNRwandaUSSDTransport(VumiTestCase):
         self.clock.advance(30)
         try:
             yield x
-        except xmlrpclib.Fault, e:
+        except xmlrpclib.Fault as e:
             self.assertEqual(e.faultCode, 8002)
             self.assertEqual(e.faultString, 'error')
         else:

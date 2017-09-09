@@ -273,7 +273,7 @@ class RapidSMSRelay(ApplicationWorker):
             for to_addr in to_addrs:
                 sends.append(self.send_rapidsms_nonreply(
                     to_addr, content, config, endpoint))
-        except InvalidEndpoint, e:
+        except InvalidEndpoint as e:
             raise BadRequestError(e)
         d = DeferredList(sends, consumeErrors=True)
         d.addCallback(lambda msgs: [msg[1] for msg in msgs if msg[0]])

@@ -68,7 +68,7 @@ class CommonRiakManagerTests(object):
         """
         try:
             from vumi.persist.txriak_manager import TxRiakManager
-        except ImportError, e:
+        except ImportError as e:
             import_skip(e, 'riak', 'riak')
         self.add_cleanup(self.purge_txriak)
         return TxRiakManager.from_config({'bucket_prefix': 'test.'})
@@ -87,7 +87,7 @@ class CommonRiakManagerTests(object):
         """
         try:
             from vumi.persist.riak_manager import RiakManager
-        except ImportError, e:
+        except ImportError as e:
             import_skip(e, 'riak', 'riak')
         self.add_cleanup(self.purge_riak)
         return RiakManager.from_config({'bucket_prefix': 'test.'})
@@ -281,7 +281,7 @@ class CommonRiakManagerTests(object):
 
         try:
             yield self.manager.run_map_reduce(mr, lambda m, l: None)
-        except Exception, err:
+        except Exception as err:
             msg = str(err)[1:-1].decode("string-escape")
             if not all([
                     msg.startswith("Error running MapReduce operation."),
@@ -366,7 +366,7 @@ class CommonRiakManagerTests(object):
         yield self.manager.close_manager()
         try:
             yield self.manager.load(DummyModel, dummy.key)
-        except VumiRiakError, err:
+        except VumiRiakError as err:
             self.assertEqual(err.args[0], "Can't use closed Riak client.")
         else:
             self.fail(

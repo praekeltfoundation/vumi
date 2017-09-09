@@ -18,7 +18,7 @@ try:
         InboundMessage as InboundMessageV5,
         Event as EventV2)
     riak_import_error = None
-except ImportError, e:
+except ImportError as e:
     riak_import_error = e
 
 

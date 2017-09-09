@@ -188,7 +188,7 @@ class XmlOverTcpClient(Protocol):
 
             try:
                 packet_type, params = self.deserialize_body(body)
-            except Exception, e:
+            except Exception as e:
                 log.err("Error parsing packet (%s): %r" % (e, packet))
                 self.disconnect()
                 return

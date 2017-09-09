@@ -286,7 +286,7 @@ class EsmeTransceiver(Protocol):
         else:
             try:
                 return message.decode(codec)
-            except Exception, e:
+            except Exception as e:
                 log.msg("Error decoding message with data_coding=%s" % (
                         data_coding,))
                 log.err(e)

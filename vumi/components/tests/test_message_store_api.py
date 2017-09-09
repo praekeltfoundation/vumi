@@ -20,7 +20,7 @@ class TestMessageStoreAPI(VumiTestCase):
         try:
             from vumi.components.message_store_api import (
                 MatchResource, MessageStoreAPIWorker)
-        except ImportError, e:
+        except ImportError as e:
             import_skip(e, 'riak')
 
         self.msg_helper = self.add_helper(MessageHelper())

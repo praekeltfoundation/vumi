@@ -160,7 +160,7 @@ class SandboxProtocol(ProcessProtocol):
     def _parse_command(self, line):
         try:
             return SandboxCommand.from_json(line)
-        except Exception, e:
+        except Exception as e:
             return SandboxCommand(cmd="unknown", line=line, exception=e)
 
     def outReceived(self, data):
@@ -504,7 +504,7 @@ class RedisResource(SandboxResource):
         amount = command.get('amount', 1)
         try:
             value = yield self.redis.incr(key, amount=amount)
-        except Exception, e:
+        except Exception as e:
             returnValue(self.reply(command, success=False, reason=unicode(e)))
         returnValue(self.reply(command, value=int(value), success=True))
 
@@ -1097,7 +1097,7 @@ class SandboxApi(object):
                                                 self.fallback_resource)
         try:
             reply = yield resource.dispatch_request(self, command)
-        except Exception, e:
+        except Exception as e:
             # errors here are bugs in Vumi so we always log them
             # via Twisted. However, we reply to the sandbox with
             # a failure and log via the sandbox api so that the

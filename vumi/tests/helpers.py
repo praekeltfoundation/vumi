@@ -1542,7 +1542,7 @@ class PersistenceHelper(object):
     def _patch_riak(self):
         try:
             from vumi.persist.riak_manager import RiakManager
-        except ImportError, e:
+        except ImportError as e:
             import_filter(e, 'riak')
             return
 
@@ -1557,7 +1557,7 @@ class PersistenceHelper(object):
     def _patch_txriak(self):
         try:
             from vumi.persist.txriak_manager import TxRiakManager
-        except ImportError, e:
+        except ImportError as e:
             import_filter(e, 'riak')
             return
 
@@ -1577,7 +1577,7 @@ class PersistenceHelper(object):
     def _patch_redis(self):
         try:
             from vumi.persist.redis_manager import RedisManager
-        except ImportError, e:
+        except ImportError as e:
             import_filter(e, 'redis')
             return
 
@@ -1609,7 +1609,7 @@ class PersistenceHelper(object):
         "This is a separate method to allow easy overriding."
         try:
             yield manager._purge_all()
-        except RuntimeError, e:
+        except RuntimeError as e:
             # Ignore managers that are already closed.
             if e.args[0] != 'Not connected':
                 raise
@@ -1648,7 +1648,7 @@ class PersistenceHelper(object):
     def _get_async_riak_manager(self, config):
         try:
             from vumi.persist.txriak_manager import TxRiakManager
-        except ImportError, e:
+        except ImportError as e:
             import_skip(e, 'riak')
 
         return TxRiakManager.from_config(config)
@@ -1656,7 +1656,7 @@ class PersistenceHelper(object):
     def _get_sync_riak_manager(self, config):
         try:
             from vumi.persist.riak_manager import RiakManager
-        except ImportError, e:
+        except ImportError as e:
             import_skip(e, 'riak')
 
         return RiakManager.from_config(config)
@@ -1716,7 +1716,7 @@ class PersistenceHelper(object):
     def _get_sync_redis_manager(self, config):
         try:
             from vumi.persist.redis_manager import RedisManager
-        except ImportError, e:
+        except ImportError as e:
             import_skip(e, 'redis')
 
         return RedisManager.from_config(config)

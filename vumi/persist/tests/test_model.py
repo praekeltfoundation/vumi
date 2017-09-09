@@ -1074,7 +1074,7 @@ class ModelTestMixin(object):
         try:
             yield new_model.load("foo")
             self.fail('Expected ModelMigrationError.')
-        except ModelMigrationError, e:
+        except ModelMigrationError as e:
             self.assertEqual(
                 e.args[0], 'No migrators defined for VersionedModel version 5')
 
@@ -1161,7 +1161,7 @@ class TestModelOnTxRiak(VumiTestCase, ModelTestMixin):
     def setUp(self):
         try:
             from vumi.persist.txriak_manager import TxRiakManager
-        except ImportError, e:
+        except ImportError as e:
             import_skip(e, 'riak')
         self.manager = TxRiakManager.from_config({'bucket_prefix': 'test.'})
         self.add_cleanup(self.cleanup_manager)
@@ -1178,7 +1178,7 @@ class TestModelOnRiak(VumiTestCase, ModelTestMixin):
     def setUp(self):
         try:
             from vumi.persist.riak_manager import RiakManager
-        except ImportError, e:
+        except ImportError as e:
             import_skip(e, 'riak')
 
         self.manager = RiakManager.from_config({'bucket_prefix': 'test.'})

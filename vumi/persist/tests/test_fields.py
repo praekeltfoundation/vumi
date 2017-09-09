@@ -82,7 +82,7 @@ class ModelFieldTestsDecorator(object):
         """
         try:
             from vumi.persist.riak_manager import RiakManager
-        except ImportError, e:
+        except ImportError as e:
             import_skip(e, 'riak')
         self.manager = RiakManager.from_config({'bucket_prefix': 'test.'})
         self.add_cleanup(deco.cleanup_manager, self)
@@ -95,7 +95,7 @@ class ModelFieldTestsDecorator(object):
         """
         try:
             from vumi.persist.txriak_manager import TxRiakManager
-        except ImportError, e:
+        except ImportError as e:
             import_skip(e, 'riak')
         self.manager = TxRiakManager.from_config({'bucket_prefix': 'test.'})
         self.add_cleanup(deco.cleanup_manager, self)

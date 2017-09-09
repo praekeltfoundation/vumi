@@ -100,18 +100,18 @@ class ReceiveSMSResource(Resource):
                 content=request.args['text'][0],
                 )
             log.msg("Enqueued.")
-        except KeyError, e:
+        except KeyError as e:
             request.setResponseCode(http.BAD_REQUEST)
             msg = ("Need more request keys to complete this request. \n\n"
                    "Missing request key: %s" % (e,))
             log.msg('Returning %s: %s' % (http.BAD_REQUEST, msg))
             request.write(msg)
-        except ValueError, e:
+        except ValueError as e:
             request.setResponseCode(http.BAD_REQUEST)
             msg = "ValueError: %s" % e
             log.msg('Returning %s: %s' % (http.BAD_REQUEST, msg))
             request.write(msg)
-        except Exception, e:
+        except Exception as e:
             request.setResponseCode(http.INTERNAL_SERVER_ERROR)
             log.err("Error processing request: %s" % (request,))
         request.finish()
@@ -154,18 +154,18 @@ class DeliveryReceiptResource(Resource):
                     },
                 to_addr=normalize_msisdn(request.args['sender'][0]),
                 )
-        except KeyError, e:
+        except KeyError as e:
             request.setResponseCode(http.BAD_REQUEST)
             msg = ("Need more request keys to complete this request. \n\n"
                    "Missing request key: %s" % (e,))
             log.msg('Returning %s: %s' % (http.BAD_REQUEST, msg))
             request.write(msg)
-        except ValueError, e:
+        except ValueError as e:
             request.setResponseCode(http.BAD_REQUEST)
             msg = "ValueError: %s" % e
             log.msg('Returning %s: %s' % (http.BAD_REQUEST, msg))
             request.write(msg)
-        except Exception, e:
+        except Exception as e:
             request.setResponseCode(http.INTERNAL_SERVER_ERROR)
             log.err("Error processing request: %s" % (request,))
         request.finish()

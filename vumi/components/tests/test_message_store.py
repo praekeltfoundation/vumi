@@ -14,7 +14,7 @@ try:
     from vumi.components.message_store import (
         MessageStore, to_reverse_timestamp, from_reverse_timestamp,
         add_batches_to_event)
-except ImportError, e:
+except ImportError as e:
     import_skip(e, 'riak')
 
 

@@ -427,7 +427,7 @@ def flatten_generator(generator_func):
             except StopIteration:
                 # Fell off the end, or "return" statement.
                 return None
-            except defer._DefGen_Return, e:
+            except defer._DefGen_Return as e:
                 # returnValue() called.
                 return e.value
 

@@ -31,7 +31,7 @@ class TestMessageStoreResource(VumiTestCase):
         try:
             from vumi.components.message_store_resource import (
                 MessageStoreResourceWorker)
-        except ImportError, e:
+        except ImportError as e:
             import_skip(e, 'riak')
 
         config = self.persistence_helper.mk_config({

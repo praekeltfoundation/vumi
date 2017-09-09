@@ -75,7 +75,7 @@ class DeliveryInformation(namedtuple('DeliveryInformation',
         try:
             delivery_status = gettext(
                 root, 'deliveryStatus', parse=DeliveryStatus.lookupByName)
-        except ValueError, e:
+        except ValueError as e:
             raise ValueError(
                 'No such delivery status enumeration value: %r' % (str(e),))
         else:

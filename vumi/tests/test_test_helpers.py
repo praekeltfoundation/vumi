@@ -1904,7 +1904,7 @@ class TestPersistenceHelper(VumiTestCase):
     def _RiakManager(self):
         try:
             from vumi.persist.riak_manager import RiakManager
-        except ImportError, e:
+        except ImportError as e:
             import_skip(e, 'riak')
         return RiakManager
 
@@ -1912,7 +1912,7 @@ class TestPersistenceHelper(VumiTestCase):
     def _TxRiakManager(self):
         try:
             from vumi.persist.txriak_manager import TxRiakManager
-        except ImportError, e:
+        except ImportError as e:
             import_skip(e, 'riak')
         return TxRiakManager
 
@@ -1920,7 +1920,7 @@ class TestPersistenceHelper(VumiTestCase):
     def _RedisManager(self):
         try:
             from vumi.persist.redis_manager import RedisManager
-        except ImportError, e:
+        except ImportError as e:
             import_skip(e, 'redis')
         return RedisManager
 

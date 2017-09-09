@@ -86,7 +86,7 @@ def main(_reactor, name, *args):
     try:
         options = Options()
         options.parseOptions(args)
-    except usage.UsageError, errortext:
+    except usage.UsageError as errortext:
         print '%s: %s' % (name, errortext)
         print '%s: Try --help for usage details.' % (name,)
         sys.exit(1)

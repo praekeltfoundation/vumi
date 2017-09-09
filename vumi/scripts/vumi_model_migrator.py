@@ -116,7 +116,7 @@ class ModelMigrator(object):
                     yield obj.save()
             else:
                 self.emit("Skipping tombstone key %r." % (key,))
-        except Exception, e:
+        except Exception as e:
             self.emit("Failed to migrate key %r:" % (key,))
             self.emit("  %s: %s" % (type(e).__name__, e))
 
@@ -203,7 +203,7 @@ def main(_reactor, name, *args):
     try:
         options = Options()
         options.parseOptions(args)
-    except usage.UsageError, errortext:
+    except usage.UsageError as errortext:
         print '%s: %s' % (name, errortext)
         print '%s: Try --help for usage details.' % (name,)
         sys.exit(1)
