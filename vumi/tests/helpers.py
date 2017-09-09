@@ -358,7 +358,7 @@ class VumiTestCase(TestCase):
               Twisted version (probably 14.0) is released.
         """
         method = getattr(self, self._testMethodName)
-        if method.func_code.co_flags & CO_GENERATOR:
+        if method.__code__.co_flags & CO_GENERATOR:
             # We have a generator that isn't wrapped in @inlineCallbacks
             e = ValueError(
                 "Test method is a generator. Missing @inlineCallbacks?")
