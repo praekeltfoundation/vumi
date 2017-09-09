@@ -1,6 +1,6 @@
 from twisted.internet.defer import inlineCallbacks
 
-from zope.interface import implements
+from zope.interface import implementer
 
 from vumi.dispatchers.base import BaseDispatchWorker
 from vumi.middleware import MiddlewareStack
@@ -36,6 +36,7 @@ class DummyDispatcher(BaseDispatchWorker):
         self._middlewares = MiddlewareStack([])
 
 
+@implementer(IHelper)
 class DispatcherHelper(object):
     """
     Test helper for dispatcher workers.
@@ -55,7 +56,6 @@ class DispatcherHelper(object):
         :class:`~vumi.tests.helpers.MessageHelper`.
     """
 
-    implements(IHelper)
 
     def __init__(self, dispatcher_class, use_riak=False, **msg_helper_args):
         self.dispatcher_class = dispatcher_class

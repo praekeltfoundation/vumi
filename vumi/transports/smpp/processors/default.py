@@ -3,7 +3,7 @@ import json
 from smpp.pdu_inspector import (
     detect_multipart, multipart_key, MultipartMessage)
 from twisted.internet.defer import inlineCallbacks, returnValue, succeed
-from zope.interface import implements
+from zope.interface import implementer
 
 from vumi.config import (
     Config, ConfigDict, ConfigRegex, ConfigText, ConfigInt, ConfigBool)
@@ -64,8 +64,8 @@ class DeliveryReportProcessorConfig(Config):
         default=True, static=True)
 
 
+@implementer(IDeliveryReportProcessor)
 class DeliveryReportProcessor(object):
-    implements(IDeliveryReportProcessor)
     CONFIG_CLASS = DeliveryReportProcessorConfig
 
     STATUS_MAP = {
@@ -220,6 +220,7 @@ class DeliverShortMessageProcessorConfig(Config):
         default=False, static=True)
 
 
+@implementer(IDeliverShortMessageProcessor)
 class DeliverShortMessageProcessor(object):
     """
     Messages can arrive with one of a number of specified
@@ -247,7 +248,6 @@ class DeliverShortMessageProcessor(object):
     Particularly problematic are the "Octet unspecified" encodings.
     """
 
-    implements(IDeliverShortMessageProcessor)
     CONFIG_CLASS = DeliverShortMessageProcessorConfig
 
     def __init__(self, transport, config):
@@ -485,8 +485,8 @@ class SubmitShortMessageProcessorConfig(Config):
                 "The following parameters are mutually exclusive: %s" % params)
 
 
+@implementer(ISubmitShortMessageProcessor)
 class SubmitShortMessageProcessor(object):
-    implements(ISubmitShortMessageProcessor)
     CONFIG_CLASS = SubmitShortMessageProcessorConfig
 
     def __init__(self, transport, config):

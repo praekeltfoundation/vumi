@@ -8,7 +8,7 @@ import pkg_resources
 import warnings
 from functools import wraps
 
-from zope.interface import implements
+from zope.interface import implementer
 from twisted.internet import defer
 from twisted.internet import protocol
 from twisted.internet.defer import succeed
@@ -261,13 +261,13 @@ def normalize_msisdn(raw, country_code=''):
     return raw
 
 
+@implementer(IBodyProducer)
 class StringProducer(object):
     """
     For various twisted.web mechanics we need a producer to produce
     content for HTTP requests, this is a helper class to quickly
     create a producer for a bit of content
     """
-    implements(IBodyProducer)
 
     def __init__(self, body):
         self.body = body

@@ -1,6 +1,6 @@
 from twisted.internet.defer import inlineCallbacks
 
-from zope.interface import implements
+from zope.interface import implementer
 
 from vumi.transports.failures import FailureMessage
 from vumi.tests.helpers import (
@@ -9,6 +9,7 @@ from vumi.tests.helpers import (
 )
 
 
+@implementer(IHelper)
 class TransportHelper(object):
     """
     Test helper for transport workers.
@@ -28,7 +29,6 @@ class TransportHelper(object):
         :class:`~vumi.tests.helpers.MessageHelper`.
     """
 
-    implements(IHelper)
 
     def __init__(self, transport_class, use_riak=False, **msg_helper_args):
         self.transport_class = transport_class

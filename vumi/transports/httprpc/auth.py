@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
 # -*- test-case-name: vumi.transports.httprpc.tests.test_auth -*-
 
-from zope.interface import implements
+from zope.interface import implementer
 
 from twisted.cred import portal, checkers, credentials, error
 from twisted.web import resource
 
 
+@implementer(portal.IRealm)
 class HttpRpcRealm(object):
-    implements(portal.IRealm)
 
     def __init__(self, resource):
         self._resource = resource
@@ -19,11 +19,11 @@ class HttpRpcRealm(object):
         raise NotImplementedError()
 
 
+@implementer(checkers.ICredentialsChecker)
 class StaticAuthChecker(object):
     """Checks that a username and password matches given static values.
     """
 
-    implements(checkers.ICredentialsChecker)
     credentialInterfaces = (credentials.IUsernamePassword,)
 
     def __init__(self, username, password):

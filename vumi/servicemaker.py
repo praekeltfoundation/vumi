@@ -4,7 +4,7 @@ import sys
 import warnings
 
 import yaml
-from zope.interface import implements
+from zope.interface import implementer
 from twisted.python import usage
 from twisted.application.service import IServiceMaker
 from twisted.plugin import IPlugin
@@ -193,8 +193,8 @@ class StartWorkerOptions(VumiOptions):
         self.maxthreads = self.get_maxthreads()
 
 
+@implementer(IServiceMaker, IPlugin)
 class VumiWorkerServiceMaker(object):
-    implements(IServiceMaker, IPlugin)
     # the name of our plugin, this will be the subcommand for twistd
     # e.g. $ twistd -n vumi_worker --option1= ...
     tapname = "vumi_worker"

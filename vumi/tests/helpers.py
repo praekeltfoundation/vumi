@@ -12,7 +12,7 @@ from twisted.python.failure import Failure
 from twisted.python.monkey import MonkeyPatcher
 from twisted.trial.unittest import TestCase, SkipTest, FailTest
 
-from zope.interface import Interface, implements
+from zope.interface import Interface, implementer
 
 from vumi.message import TransportUserMessage, TransportEvent, TransportStatus
 from vumi.service import get_spec
@@ -208,6 +208,7 @@ def get_stack_trace(exclude_last=0):
     return stack[:-(exclude_last + 1)]
 
 
+@implementer(IHelperEnabledTestCase)
 class VumiTestCase(TestCase):
     """
     Base test case class for all things vumi-related.
@@ -235,7 +236,6 @@ class VumiTestCase(TestCase):
        overriding :meth:`tearDown`.
     """
 
-    implements(IHelperEnabledTestCase)
 
     timeout = get_timeout()
     reactor_check_interval = 0.01  # 10ms, no science behind this number.
@@ -367,6 +367,7 @@ class VumiTestCase(TestCase):
         return super(VumiTestCase, self)._runFixturesAndTest(result)
 
 
+@implementer(IHelper)
 class MessageHelper(object):
     """
     Test helper for constructing various messages.
@@ -389,7 +390,6 @@ class MessageHelper(object):
         outbound messages.
     """
 
-    implements(IHelper)
 
     def __init__(self, transport_name='sphex', transport_type='sms',
                  mobile_addr='+41791234567', transport_addr='9292'):
@@ -646,6 +646,7 @@ def _start_and_return_worker(worker):
     return worker.startWorker().addCallback(lambda r: worker)
 
 
+@implementer(IHelper)
 class WorkerHelper(object):
     """
     Test helper for creating workers and dispatching messages.
@@ -665,7 +666,6 @@ class WorkerHelper(object):
         helper create its own broker.
     """
 
-    implements(IHelper)
 
     def __init__(self, connector_name=None, broker=None,
                  status_connector_name=None):
@@ -1149,6 +1149,7 @@ class WorkerHelper(object):
         self.broker.clear_messages('vumi.metrics')
 
 
+@implementer(IHelper)
 class MessageDispatchHelper(object):
     """
     Helper for creating and immediately dispatching messages.
@@ -1164,7 +1165,6 @@ class MessageDispatchHelper(object):
     :param worker_helper: A :class:`WorkerHelper` instance.
     """
 
-    implements(IHelper)
 
     def __init__(self, msg_helper, worker_helper):
         self.msg_helper = msg_helper
@@ -1387,6 +1387,7 @@ class PersistenceHelperError(Exception):
     """
 
 
+@implementer(IHelper)
 class PersistenceHelper(object):
     """
     Test helper for managing persistent storage.
@@ -1409,7 +1410,6 @@ class PersistenceHelper(object):
         from this helper.
     """
 
-    implements(IHelper)
 
     _patches_applied = False
 

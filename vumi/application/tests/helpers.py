@@ -4,7 +4,7 @@ import os
 
 from twisted.internet.defer import inlineCallbacks
 from twisted.trial.unittest import SkipTest
-from zope.interface import implements
+from zope.interface import implementer
 
 from vumi.tests.helpers import (
     MessageHelper, WorkerHelper, MessageDispatchHelper, PersistenceHelper,
@@ -12,6 +12,7 @@ from vumi.tests.helpers import (
 )
 
 
+@implementer(IHelper)
 class ApplicationHelper(object):
     """
     Test helper for application workers.
@@ -31,7 +32,6 @@ class ApplicationHelper(object):
         :class:`~vumi.tests.helpers.MessageHelper`.
     """
 
-    implements(IHelper)
 
     def __init__(self, application_class, use_riak=False, **msg_helper_args):
         self.application_class = application_class

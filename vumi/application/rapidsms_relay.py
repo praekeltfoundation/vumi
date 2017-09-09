@@ -2,7 +2,7 @@
 import json
 from base64 import b64encode
 
-from zope.interface import implements
+from zope.interface import implementer
 from twisted.internet.defer import (
     inlineCallbacks, returnValue, DeferredList)
 from twisted.web import http
@@ -75,8 +75,8 @@ class BadRequestError(Exception):
     """Raised when an invalid request was received from RapidSMS."""
 
 
+@implementer(portal.IRealm)
 class RapidSMSRelayRealm(object):
-    implements(portal.IRealm)
 
     def __init__(self, resource):
         self.resource = resource
@@ -87,8 +87,8 @@ class RapidSMSRelayRealm(object):
         raise NotImplementedError()
 
 
+@implementer(checkers.ICredentialsChecker)
 class RapidSMSRelayAccessChecker(object):
-    implements(checkers.ICredentialsChecker)
     credentialInterfaces = (credentials.IUsernamePassword,
                             credentials.IAnonymous)
 

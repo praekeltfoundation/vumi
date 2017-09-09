@@ -5,7 +5,7 @@ import sys
 
 from vumi.codecs.ivumi_codecs import IVumiCodec
 
-from zope.interface import implements
+from zope.interface import implementer
 
 
 class VumiCodecException(Exception):
@@ -116,8 +116,8 @@ class UCS2Codec(codecs.Codec):
         return codecs.utf_16_be_decode(input, errors)
 
 
+@implementer(IVumiCodec)
 class VumiCodec(object):
-    implements(IVumiCodec)
 
     custom_codecs = {
         'gsm0338': GSM7BitCodec(),

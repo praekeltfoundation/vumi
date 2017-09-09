@@ -3,7 +3,7 @@ from twisted.internet.endpoints import TCP4ServerEndpoint, TCP4ClientEndpoint
 from confmodel import Config
 from confmodel.errors import ConfigError
 from confmodel.fields import ConfigInt, ConfigText
-from zope.interface import Interface, implements
+from zope.interface import Interface, implementer
 
 from vumi.config import (
     ConfigClassName, ConfigServerEndpoint, ConfigClientEndpoint,
@@ -17,8 +17,8 @@ class ITestConfigInterface(Interface):
         """This should be implemented"""
 
 
+@implementer(ITestConfigInterface)
 class TestConfigClassName(object):
-    implements(ITestConfigInterface)
 
     def implements_this(self, foo):
         pass

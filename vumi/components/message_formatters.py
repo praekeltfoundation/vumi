@@ -2,7 +2,7 @@
 
 from csv import writer
 
-from zope.interface import Interface, implements
+from zope.interface import Interface, implementer
 
 
 class IMessageFormatter(Interface):
@@ -27,10 +27,9 @@ class IMessageFormatter(Interface):
         """
 
 
+@implementer(IMessageFormatter)
 class JsonFormatter(object):
     """ Formatter for writing messages to requests as JSON. """
-
-    implements(IMessageFormatter)
 
     def add_http_headers(self, request):
         resp_headers = request.responseHeaders
@@ -45,10 +44,9 @@ class JsonFormatter(object):
         request.write('\n')
 
 
+@implementer(IMessageFormatter)
 class CsvFormatter(object):
     """ Formatter for writing messages to requests as CSV. """
-
-    implements(IMessageFormatter)
 
     FIELDS = (
         'timestamp',
@@ -88,10 +86,9 @@ class CsvFormatter(object):
         return message['timestamp'].isoformat()
 
 
+@implementer(IMessageFormatter)
 class CsvEventFormatter(CsvFormatter):
     """ Formatter for writing messages to requests as CSV. """
-
-    implements(IMessageFormatter)
 
     FIELDS = (
         'timestamp',
