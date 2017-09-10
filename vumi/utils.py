@@ -312,7 +312,7 @@ def build_web_site(resources, site_class=None):
             return new_node
 
     for path, resource in resources:
-        request_path = filter(None, path.split('/'))
+        request_path = list(filter(None, path.split('/')))
         nodes, leaf = request_path[0:-1], request_path[-1]
         parent = reduce(create_node, nodes, root)
         parent.putChild(leaf, resource)
