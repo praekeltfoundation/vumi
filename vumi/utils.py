@@ -6,7 +6,7 @@ import sys
 import base64
 import pkg_resources
 import warnings
-from functools import wraps
+from functools import reduce, wraps
 
 from zope.interface import implementer
 from twisted.internet import defer
