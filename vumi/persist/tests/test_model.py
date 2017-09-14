@@ -2,6 +2,8 @@
 
 """Tests for vumi.persist.model."""
 
+from __future__ import print_function
+
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.persist.model import (

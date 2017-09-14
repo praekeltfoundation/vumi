@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # -*- test-case-name: vumi.scripts.tests.test_vumi_list_messages -*-
+from __future__ import print_function
 
 import sys
 

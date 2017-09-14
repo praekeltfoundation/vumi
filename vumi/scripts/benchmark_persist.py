@@ -1,4 +1,6 @@
 # -*- test-case-name: vumi.scripts.tests.test_benchmark_persist -*-
+from __future__ import print_function
+
 import sys
 import time
 from twisted.python import usage

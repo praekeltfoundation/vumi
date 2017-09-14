@@ -1,4 +1,6 @@
 # -*- test-case-name: vumi.scripts.tests.test_inject_messages -*-
+from __future__ import print_function
+
 import sys
 import json
 from twisted.python import usage

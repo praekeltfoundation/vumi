@@ -1,4 +1,6 @@
 # -*- test-case-name: vumi.scripts.tests.test_parse_log_messages -*-
+from __future__ import print_function
+
 import sys
 import re
 import json

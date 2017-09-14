@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 # -*- test-case-name: vumi.scripts.tests.test_vumi_model_migrator -*-
+from __future__ import print_function
+
 import sys
 
 from twisted.internet.defer import inlineCallbacks, gatherResults, succeed

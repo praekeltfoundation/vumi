@@ -1,4 +1,6 @@
 # -*- test-case-name: vumi.scripts.tests.test_db_backup -*-
+from __future__ import print_function
+
 import sys
 import json
 import pkg_resources

@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 # -*- test-case-name: vumi.scripts.tests.test_vumi_tagpools -*-
+from __future__ import print_function
+
 import sys
 import re
 import itertools

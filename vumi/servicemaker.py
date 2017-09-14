@@ -1,4 +1,6 @@
 # -*- test-case-name: vumi.tests.test_servicemaker -*-
+from __future__ import print_function
+
 import os
 import sys
 import warnings

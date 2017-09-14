@@ -1,4 +1,6 @@
 # -*- test-case-name: vumi.scripts.tests.test_model_migrator -*-
+from __future__ import print_function
+
 import sys
 
 from twisted.python import usage
