@@ -27,3 +27,4 @@ dropin.cache
 /pep8.txt
 /.tox
 /.cache/
+.vscode

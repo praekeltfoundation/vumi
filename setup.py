@@ -41,7 +41,7 @@ setup(
         'PyYAML',
         'iso8601',
         'pyOpenSSL>= 16.0.0',
-        'certifi',
+        'certifi==2018.4.16',
         'service_identity',
         'txssmi>=0.3.0',
         'wokkel',
