@@ -52,7 +52,7 @@ setup(
         'riak>=2.1',
         'txJSON-RPC==0.5',
         'txTwitter>=0.1.4a',
-        'treq<16.12.0',
+        'treq<20.4.1',  # https://github.com/twisted/treq/issues/303
         'confmodel>=0.2.0',
         'hyperloglog',
     ],
