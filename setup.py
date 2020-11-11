@@ -45,7 +45,7 @@ setup(
         'service_identity',
         'txssmi>=0.3.0',
         'wokkel',
-        'redis>=2.10.0',
+        'redis>=2.10.0,<3.0.0',  # 3.x has a new api.
         'txredis',
         'python-smpp>=0.1.5',
         'pytz',
