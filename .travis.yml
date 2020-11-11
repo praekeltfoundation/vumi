@@ -1,4 +1,5 @@
-sudo: false # We want container builds.
+# Default (xenial) has antique openssl that cryptography no longer supports.
+dist: focal
 
 language: python
 python:
