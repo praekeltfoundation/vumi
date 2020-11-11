@@ -231,11 +231,7 @@ class GoConversationTransport(GoConversationTransportBase):
             self.redis.close_manager()
 
     def setup_cacerts(self):
-        # TODO: This installs an older CA certificate chain that allows
-        #       some weak CA certificates. We should switch to .where() when
-        #       Vumi Go's certificate doesn't rely on older intermediate
-        #       certificates.
-        os.environ["SSL_CERT_FILE"] = certifi.old_where()
+        os.environ["SSL_CERT_FILE"] = certifi.where()
 
     def get_transport_url(self, suffix=''):
         """
