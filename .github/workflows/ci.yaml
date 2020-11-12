@@ -42,4 +42,7 @@ jobs:
           VUMI_TEST_TIMEOUT: '20'
           VUMITEST_REDIS_DB: '1'
         run: |
+          export VUMI_TEST_NODE_PATH="$(which node)"
+          echo "node path: ${VUMI_TEST_NODE_PATH}"
+          echo "node version: $(${VUMI_TEST_NODE_PATH} --version)"
           trial vumi
