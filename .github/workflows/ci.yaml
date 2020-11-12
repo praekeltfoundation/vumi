@@ -33,8 +33,8 @@ jobs:
       - name: check riak
         # Hopefully enough time has passed that riak is now up and running.
         run: |
-          $HOME/bin/riak version
-          $HOME/bin/riak-admin member-status
+          $HOME/riak/bin/riak version
+          $HOME/riak/bin/riak-admin member-status
       - name: run tests
         env:
           VUMI_TEST_ASSERT_CLOSED: 'true'
