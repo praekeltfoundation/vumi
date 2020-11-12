@@ -1,5 +1,5 @@
 # Default (xenial) has antique openssl that cryptography no longer supports.
-dist: focal
+dist: bionic
 
 language: python
 python:
