@@ -29,6 +29,7 @@ jobs:
           node-version: '8'
       - name: install deps
         run: |
+          pip install wheel
           pip install -r requirements.pip
       - name: check riak
         # Hopefully enough time has passed that riak is now up and running.
