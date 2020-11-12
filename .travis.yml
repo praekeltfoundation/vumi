@@ -17,9 +17,10 @@ matrix:
     - python: "2.7"
       env: TWISTED_VERSION="Twisted==13.2.0" RIAK_VERSION="2.1.1" PYCRYPTO_VERSION="PyCrypto==2.6.1"
     # Test on pypy without coverage, because it's unnecessary and very slow.
-    # Also, we hit an obscure GC bug in pypy<=2.6.0 so we need at least 2.6.1.
-    - python: "pypy"
-      env: PYPY_VERSION="5.6.0" NO_COVERAGE=1
+    # The exact versions of pypy available seem to change over time, so just
+    # use whatever version pypy2 gets us.
+    - python: "pypy2"
+      env: NO_COVERAGE=1
     - python: "3.6"
       env: RUN_TESTS="false"
   allow_failures:
@@ -39,9 +40,6 @@ before_install:
   - export TWISTED_VERSION="${TWISTED_VERSION-Twisted}"
   - export NODEJS_VERSION="${NODEJS_VERSION-lts/carbon}"
   - export RUN_TESTS="${RUN_TESTS-true}"
-  # If necessary, set up an appropriate version of pypy.
-  - if [ ! -z "$PYPY_VERSION" ]; then source utils/setup-pypy-travis.sh; fi
-  - if [ ! -z "$PYPY_VERSION" ]; then python --version 2>&1 | fgrep "PyPy $PYPY_VERSION"; fi
   # Set up an appropriate version of Riak.
   - utils/setup_travis_riak.sh "${RIAK_VERSION}"
   # Set up an appropriate version of nodejs.
