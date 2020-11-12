@@ -36,7 +36,7 @@ setup(
     install_requires=[
         cryptography,  # See above for pypy-version-dependent requirement.
         'zope.interface',
-        'Twisted>=13.2.0',
+        'Twisted>=16.4.0',  # Minimum version supported by recent treq.
         'txAMQP>=0.6.2',
         'PyYAML',
         'iso8601',
