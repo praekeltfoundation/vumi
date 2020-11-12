@@ -8,6 +8,7 @@ jobs:
     name: tests
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         python-version: ['2.x', 'pypy2']
     steps:
@@ -26,7 +27,7 @@ jobs:
       - name: setup nodejs
         uses: actions/setup-node@v1
         with:
-          node-version: '6'
+          node-version: '8'
       - name: install deps
         run: |
           pip install wheel
