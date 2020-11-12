@@ -26,7 +26,7 @@ jobs:
       - name: setup nodejs
         uses: actions/setup-node@v1
         with:
-          node-version: '8'
+          node-version: '6'
       - name: install deps
         run: |
           pip install wheel
