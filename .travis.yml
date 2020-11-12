@@ -8,13 +8,13 @@ python:
 matrix:
   include:
     # Test against the oldest version of Twisted that we claim to support.
-    # Also test against Riak 2.1.1.
+    # Also test against Riak 1.4.12.
     # This is a separate matrix inclusion to avoid spawning unnecessary builds.
     # Although there are two different things we're testing against here, they
     # are orthogonal and any failures should be easily attributable to either
     # Twisted version or Riak version without adding an additional build job.
     - python: "2.7"
-      env: TWISTED_VERSION="Twisted==16.4.0" RIAK_VERSION="2.1.1"
+      env: TWISTED_VERSION="Twisted==16.4.0" RIAK_VERSION="1.4.12"
     # Test on pypy without coverage, because it's unnecessary and very slow.
     # The exact versions of pypy available seem to change over time, so just
     # use whatever version pypy2 gets us.
@@ -35,7 +35,7 @@ services:
 
 before_install:
   # Default values for our build envvars.
-  - export RIAK_VERSION="${RIAK_VERSION-1.4.12}"
+  - export RIAK_VERSION="${RIAK_VERSION-2.1.1}"
   - export TWISTED_VERSION="${TWISTED_VERSION-Twisted}"
   - export NODEJS_VERSION="${NODEJS_VERSION-lts/carbon}"
   - export RUN_TESTS="${RUN_TESTS-true}"
