@@ -5,8 +5,6 @@ language: python
 python:
   - "2.7"
   - "3.6"
-node_js:
-  - "0.10"
 matrix:
   include:
     # Test against the oldest version of Twisted that we claim to support.
@@ -39,12 +37,15 @@ before_install:
   # Default values for our build envvars.
   - export RIAK_VERSION="${RIAK_VERSION-1.4.12}"
   - export TWISTED_VERSION="${TWISTED_VERSION-Twisted}"
+  - export NODEJS_VERSION="${NODEJS_VERSION-lts/carbon}"
   - export RUN_TESTS="${RUN_TESTS-true}"
   # If necessary, set up an appropriate version of pypy.
   - if [ ! -z "$PYPY_VERSION" ]; then source utils/setup-pypy-travis.sh; fi
   - if [ ! -z "$PYPY_VERSION" ]; then python --version 2>&1 | fgrep "PyPy $PYPY_VERSION"; fi
   # Set up an appropriate version of Riak.
   - utils/setup_travis_riak.sh "${RIAK_VERSION}"
+  # Set up an appropriate version of nodejs.
+  - nvm install $NODEJS_VERSION
 install:
   # Travis seems to have pip 6.x, which doesn't build and cache wheels.
   - "pip install 'pip>=7.1.0'"
