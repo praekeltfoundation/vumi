@@ -770,7 +770,7 @@ class TestRedisResource(ResourceTestCaseBase):
 
     @inlineCallbacks
     def test_handle_delete(self):
-        self.create_metric('foo', json.dumps('bar'))
+        yield self.create_metric('foo', json.dumps('bar'))
         yield self.r_server.set('count#test_id', '1')
         reply = yield self.dispatch_command('delete', key='foo')
         self.check_reply(reply, success=True, existed=True)
@@ -790,14 +790,14 @@ class TestRedisResource(ResourceTestCaseBase):
 
     @inlineCallbacks
     def test_handle_incr_existing(self):
-        self.create_metric('foo', '2')
+        yield self.create_metric('foo', '2')
         reply = yield self.dispatch_command('incr', key='foo', amount=2)
         self.check_reply(reply, success=True, value=4)
         yield self.check_metric('foo', '4', 1)
 
     @inlineCallbacks
     def test_handle_incr_existing_non_int(self):
-        self.create_metric('foo', 'a')
+        yield self.create_metric('foo', 'a')
         reply = yield self.dispatch_command('incr', key='foo', amount=2)
         self.check_reply(reply, success=False)
         self.assertTrue(reply['reason'])
