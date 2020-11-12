@@ -1,0 +1,44 @@
+name: continuous integration
+on:
+  - push
+  - pull_request
+
+jobs:
+  tests:
+    name: tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['2.x', 'pypy2']
+    steps:
+      - uses: actions/checkout@v2
+      - name: setup python
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: setup riak
+        run: |
+          utils/setup_travis_riak.sh 2.1.1
+      - name: setup redis
+        uses: shogo82148/actions-setup-redis@v1
+        with:
+          redis-version: '6.x'
+      - name: setup nodejs
+        uses: actions/setup-node@v2
+        with:
+          node-version: '8'
+      - name: install deps
+        run: |
+          pip install -r requirements.pip
+      - name: check riak
+        # Hopefully enough time has passed that riak is now up and running.
+        run: |
+          $HOME/bin/riak version
+          $HOME/bin/riak-admin member-status
+      - name: run tests
+        env:
+          VUMI_TEST_ASSERT_CLOSED: 'true'
+          VUMI_TEST_TIMEOUT: '20'
+          VUMITEST_REDIS_DB: '1'
+        run: |
+          trial vumi
