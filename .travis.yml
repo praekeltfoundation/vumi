@@ -16,9 +16,10 @@ matrix:
     - python: "2.7"
       env: TWISTED_VERSION="Twisted==16.4.0" RIAK_VERSION="1.4.12"
     # Test on pypy without coverage, because it's unnecessary and very slow.
-    # The exact versions of pypy available seem to change over time, so just
-    # use whatever version pypy2 gets us.
-    - python: "pypy2"
+    # The exact versions of pypy available seem to change over time, but pypy2
+    # gets us an older version. Hopefully pypy2-7.3.1 will continue working for
+    # a while.
+    - python: "pypy2-7.3.1"
       env: NO_COVERAGE=1
     - python: "3.6"
       env: RUN_TESTS="false"
