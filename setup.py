@@ -36,7 +36,7 @@ setup(
     install_requires=[
         cryptography,  # See above for pypy-version-dependent requirement.
         'zope.interface',
-        'Twisted>=13.2.0',
+        'Twisted>=16.4.0',  # Minimum version supported by recent treq.
         'txAMQP>=0.6.2',
         'PyYAML',
         'iso8601',
@@ -45,14 +45,14 @@ setup(
         'service_identity',
         'txssmi>=0.3.0',
         'wokkel',
-        'redis>=2.10.0',
+        'redis>=2.10.0,<3.0.0',  # 3.x has a new api.
         'txredis',
         'python-smpp>=0.1.5',
         'pytz',
         'riak>=2.1',
         'txJSON-RPC==0.5',
         'txTwitter>=0.1.4a',
-        'treq<16.12.0',
+        'treq<20.4.1',  # https://github.com/twisted/treq/issues/303
         'confmodel>=0.2.0',
         'hyperloglog',
     ],

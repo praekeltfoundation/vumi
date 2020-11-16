@@ -384,7 +384,9 @@ class XmlOverTcpClient(Protocol):
             root.appendChild(el)
 
         data = root.toxml()
-        return data.decode('utf8').encode(cls.ENCODING, 'xmlcharrefreplace')
+        if not isinstance(data, unicode):
+            data = data.decode('utf8')
+        return data.encode(cls.ENCODING, 'xmlcharrefreplace')
 
     @classmethod
     def serialize_packet(cls, session_id, packet_type, params):

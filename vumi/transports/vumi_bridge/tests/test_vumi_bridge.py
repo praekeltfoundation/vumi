@@ -179,9 +179,9 @@ class TestGoConversationTransport(TestGoConversationTransportBase):
         self.assertEquals(status['message'], 'Bad event received from Vumi Go')
 
     @inlineCallbacks
-    def test_weak_cacerts_installed(self):
+    def test_cacerts_installed(self):
         yield self.get_configured_transport()
-        self.assertEqual(os.environ["SSL_CERT_FILE"], certifi.old_where())
+        self.assertEqual(os.environ["SSL_CERT_FILE"], certifi.where())
 
     @inlineCallbacks
     def test_sending_messages(self):

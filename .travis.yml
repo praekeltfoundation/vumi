@@ -1,26 +1,26 @@
-sudo: false # We want container builds.
+# Default (xenial) has antique openssl that cryptography no longer supports.
+dist: bionic
 
 language: python
 python:
   - "2.7"
   - "3.6"
-node_js:
-  - "0.10"
 matrix:
   include:
     # Test against the oldest version of Twisted that we claim to support.
-    # Also test against Riak 2.1.1.
+    # Also test against Riak 1.4.12.
     # This is a separate matrix inclusion to avoid spawning unnecessary builds.
     # Although there are two different things we're testing against here, they
     # are orthogonal and any failures should be easily attributable to either
     # Twisted version or Riak version without adding an additional build job.
-    # Twisted 13.2 requires PyCrypto for twisted.conch.ssh support.
     - python: "2.7"
-      env: TWISTED_VERSION="Twisted==13.2.0" RIAK_VERSION="2.1.1" PYCRYPTO_VERSION="PyCrypto==2.6.1"
+      env: TWISTED_VERSION="Twisted==16.4.0" RIAK_VERSION="1.4.12"
     # Test on pypy without coverage, because it's unnecessary and very slow.
-    # Also, we hit an obscure GC bug in pypy<=2.6.0 so we need at least 2.6.1.
-    - python: "pypy"
-      env: PYPY_VERSION="5.6.0" NO_COVERAGE=1
+    # The exact versions of pypy available seem to change over time, but pypy2
+    # gets us an older version. Hopefully pypy2.7-7.3.1 will continue working
+    # for a while.
+    - python: "pypy2.7-7.3.1"
+      env: NO_COVERAGE=1
     - python: "3.6"
       env: RUN_TESTS="false"
   allow_failures:
@@ -36,24 +36,26 @@ services:
 
 before_install:
   # Default values for our build envvars.
-  - export RIAK_VERSION="${RIAK_VERSION-1.4.12}"
+  - export RIAK_VERSION="${RIAK_VERSION-2.1.1}"
   - export TWISTED_VERSION="${TWISTED_VERSION-Twisted}"
+  - export NODEJS_VERSION="${NODEJS_VERSION-lts/carbon}"
   - export RUN_TESTS="${RUN_TESTS-true}"
-  # If necessary, set up an appropriate version of pypy.
-  - if [ ! -z "$PYPY_VERSION" ]; then source utils/setup-pypy-travis.sh; fi
-  - if [ ! -z "$PYPY_VERSION" ]; then python --version 2>&1 | fgrep "PyPy $PYPY_VERSION"; fi
   # Set up an appropriate version of Riak.
   - utils/setup_travis_riak.sh "${RIAK_VERSION}"
+  # Set up an appropriate version of nodejs.
+  - nvm install $NODEJS_VERSION
 install:
   # Travis seems to have pip 6.x, which doesn't build and cache wheels.
   - "pip install 'pip>=7.1.0'"
   - "pip install ${TWISTED_VERSION}"
-  # If requested, install PyCrypto
-  - if [ ! -z "$PYCRYPTO_VERSION" ]; then pip install "$PYCRYPTO_VERSION"; fi
   - "pip install -r requirements.pip"
   - "pip install coveralls"
 
 before_script:
+  # Dump the riak console log in case in contains anything we need to see.
+  - echo '   vvv riak console log vvv'
+  - cat $HOME/riak/log/console.log
+  - echo '   ^^^ riak console log ^^^'
   # To see what version of Riak we're running and check that it's happy.
   - $HOME/riak/bin/riak version
   - $HOME/riak/bin/riak-admin member-status

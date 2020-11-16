@@ -16,4 +16,10 @@ fi
 
 tar xjf $RIAK_DOWNLOAD -C $HOME/
 
+# Fix jvm opts if necessary.
+if [ -f $HOME/riak/etc/riak.conf ]; then
+    sed -i'.bak' 's/^search.solr.jvm_options = .*$/search.solr.jvm_options = -Xms1g -Xmx1g -XX:+UseCompressedOops/' $HOME/riak/etc/riak.conf
+    rm $HOME/riak/etc/riak.conf.bak
+fi
+
 $HOME/riak/bin/riak start
